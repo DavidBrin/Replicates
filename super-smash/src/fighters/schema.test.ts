@@ -231,7 +231,9 @@ describe("projectiles", () => {
   it.each(each)("%s gives every projectile a positive radius and damage", (_name, fighter) => {
     for (const { slot, projectile } of everyProjectile(fighter)) {
       expect(projectile.hitbox.radius, `${fighter.name} ${slot}`).toBeGreaterThan(0);
-      expect(projectile.hitbox.damage, `${fighter.name} ${slot}`).toBeGreaterThan(0);
+      // A windbox (Plan 5: F.L.U.D.D.'s water) pushes and deals nothing.
+      if (projectile.hitbox.windbox === true) expect(projectile.hitbox.damage).toBe(0);
+      else expect(projectile.hitbox.damage, `${fighter.name} ${slot}`).toBeGreaterThan(0);
     }
   });
 
@@ -247,8 +249,14 @@ describe("projectiles", () => {
   });
 
   it.each(each)("%s gives every projectile a unique id within its fighter", (_name, fighter) => {
-    const ids = everyProjectile(fighter).map((p) => p.projectile.id);
-    expect(new Set(ids).size).toBe(ids.length);
+    // One definition may be fired on several frames (Plan 5: F.L.U.D.D.'s seven
+    // pumps): an id repeats only for the same projectile at another frame.
+    const byId = new Map<string, string>();
+    for (const { projectile } of everyProjectile(fighter)) {
+      const shape = JSON.stringify({ ...projectile, spawnFrame: 0 });
+      expect(byId.get(projectile.id) ?? shape, `${fighter.name} ${projectile.id}`).toBe(shape);
+      byId.set(projectile.id, shape);
+    }
   });
 
   it("puts a projectile on exactly the specials the spec says have one", () => {
@@ -317,6 +325,14 @@ describe("projectiles", () => {
 });
 
 describe("hitbox values", () => {
+  it.each(each)("%s deals nothing with any windbox, on a move or a projectile", (_name, fighter) => {
+    // Plan 5, Task 6: the engine's push (`applyWindbox`) deals no damage, which
+    // is right only for a 0% windbox (F.L.U.D.D.'s, SmashWiki "Mario
+    // (SSBU)/Down special"). A damaging one would lose its damage silently.
+    const boxes = [...everyHitbox(fighter).map((h) => h.hitbox), ...everyProjectile(fighter).map((p) => p.projectile.hitbox)];
+    for (const hb of boxes.filter((b) => b.windbox === true)) expect(hb.damage, `${fighter.name} hitbox ${hb.id}`).toBe(0);
+  });
+
   it.each(each)("%s gives every hitbox a non-negative damage", (_name, fighter) => {
     for (const { slot, hitbox } of everyHitbox(fighter)) {
       expect(hitbox.damage, `${fighter.name} ${slot} hitbox ${hitbox.id}`).toBeGreaterThanOrEqual(0);

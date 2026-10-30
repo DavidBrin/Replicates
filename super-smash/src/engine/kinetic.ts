@@ -331,6 +331,24 @@ export function kineticTurnLaunch(f: FighterState, dx: number, dy: number): void
   kineticSum(f);
 }
 
+/**
+ * A windbox's push (Plan 5, Task 6), on the DAMAGE energy: (vx, vy) at `speed`.
+ * Unlike `kineticLaunch` it leaves every other energy as it was, so the push
+ * rides on top of whatever the fighter is doing and decays as a launch does
+ * (`kineticDecayDamage`). SmashWiki "Windbox" (https://www.ssbwiki.com/Windbox):
+ * "Since it is a form of knockback, its effect stacks with all other forms of
+ * movement (e.g fall speed or running), and cannot be directly opposed, instead
+ * decaying over time." It arms neither the balloon speed-up nor set weight's
+ * fall: a push has no hitstun to speed up.
+ */
+export function kineticPush(f: FighterState, vx: number, vy: number, speed: number): void {
+  const k = f.kinetic;
+  k.damageX = vx;
+  k.damageY = vy;
+  f.launchSpeed = speed;
+  kineticSum(f);
+}
+
 /* ---------------------------------------------------------- kinetic types -- */
 
 /**

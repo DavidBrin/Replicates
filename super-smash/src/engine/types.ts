@@ -262,6 +262,15 @@ export interface Hitbox {
   /** `collision_attr_turn` (SmashWiki "Reverse"): the victim is turned round (Plan 5: Cape). */
   readonly reverse?: boolean;
   /**
+   * A windbox (Plan 5, Task 6: F.L.U.D.D.): smash-script `Flinchless=true,
+   * DisableHitlag=true`. SmashWiki "Windbox" (https://www.ssbwiki.com/Windbox):
+   * "hitboxes that deal knockback, but cause no hitstun". It pushes by its
+   * knockback and does nothing else (no damage, hitstun, hitlag, stale entry or
+   * hit event), and a raised shield, a ledge and a counter do not take it the
+   * way they take a hit (`applyWindbox`, `simulate.ts`).
+   */
+  readonly windbox?: boolean;
+  /**
    * `AttackModule::set_force_reaction(id, true, …)`: the hit goes through super
    * armour as if there were none (Plan 5, Task 5 fix round 1: Marth's
    * counterattack, SmashWiki "the hitboxes ignore most kinds of armor").
@@ -332,9 +341,11 @@ export interface ProjectileDef {
   /**
    * What a full charge launches instead (Plan 5): the hitbox it interpolates
    * towards (`chargedHitbox`) and its speed. Samus's Charge Shot is SSBU's
-   * `ATTACK_SET_LERP` between an uncharged and a full-charge box.
+   * `ATTACK_SET_LERP` between an uncharged and a full-charge box. `vy`, when a
+   * shot aimed off the flat speeds up along its aim (F.L.U.D.D.'s 12°, Task 6);
+   * absent, `vy` stays as uncharged.
    */
-  readonly charged?: { readonly hitbox: ChargedHitbox; readonly vx: number; readonly partial?: PartialCharge };
+  readonly charged?: { readonly hitbox: ChargedHitbox; readonly vx: number; readonly vy?: number; readonly partial?: PartialCharge };
   /** Drawing hint for the renderer. */
   readonly visual: "arrow" | "bomb" | "boomerang" | "energy" | "fire" | "spark" | "missile";
   /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */

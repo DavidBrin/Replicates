@@ -1703,17 +1703,23 @@ const upB: PoseClip = {
  * had both hands out at hip height in front of a nozzle drawn over his
  * shoulder, so the two never met and the water appeared to come out of his
  * face. Here both hands accumulate to about 75° at the wrist — 2.7 units
- * forward of the shoulder and 2.5 above it — which is exactly beside the head
- * and exactly where `fx.ts` draws the grip.
+ * forward of the shoulder and 2.5 above it — which is exactly beside the head.
+ * `fx.ts` drew the nozzle's grip there until Plan 5 put its muzzle on the
+ * pumps' spawn point (P5-R6: 8 in front and 6.5 up, UNVERIFIED in `mario.ts`),
+ * which brings the grip about three units below these hands. One of the two
+ * moves when that spawn point is settled.
  *
- * `strike` is 21/48. For a move with no hitbox that is a literal fraction and
+ * `strike` is 21/67 (Plan 5: the move is now 67 frames — a 19-frame charge
+ * entry and 49 after release — and the first pump still leaves on frame 21).
+ * For a move with no hitbox that is a literal fraction and
  * it has to be the same frame `fx.ts` opens the water on; the reference puts
  * the first pump on frame 21, and round one had the brace at 0.52 — four
  * frames early, which read as a flinch before anything happened.
  */
 const downB: PoseClip = {
   loop: false,
-  strike: 0.4375,
+  strike: 21 / 67,
+  // Plan 5: keys re-timed to the 67-frame move at their old frames (×48/67).
   keys: [
     {
       t: 0,
@@ -1728,7 +1734,7 @@ const downB: PoseClip = {
     },
     // Charging. Hunched over the pack, both hands low on it, knees soft.
     {
-      t: 0.26,
+      t: 12.5 / 67,
       pose: P({
         torso: 30, head: -24, hip: -6,
         thighR: 140, shinR: 72, footR: -82,
@@ -1740,7 +1746,7 @@ const downB: PoseClip = {
       ease: "hold",
     },
     {
-      t: 0.38,
+      t: 18.2 / 67,
       pose: P({
         torso: 30, head: -24, hip: -6,
         thighR: 140, shinR: 72, footR: -82,
@@ -1756,7 +1762,7 @@ const downB: PoseClip = {
     // foot and leaning *away* from the muzzle. This is recoil, not a lunge:
     // a full-charge shot shoves him backwards faster than he can fly forwards.
     {
-      t: 0.4375,
+      t: 21 / 67,
       pose: P({
         torso: -12, head: 12, hip: 8,
         thighR: 126, shinR: 44, footR: -80,
@@ -1770,7 +1776,7 @@ const downB: PoseClip = {
       ease: "hold",
     },
     {
-      t: 0.78,
+      t: 37.4 / 67,
       pose: P({
         torso: -10, head: 10, hip: 8,
         thighR: 128, shinR: 44, footR: -80,
@@ -1784,7 +1790,7 @@ const downB: PoseClip = {
       ease: "out",
     },
     {
-      t: 0.94,
+      t: 45.1 / 67,
       pose: P({
         torso: 4, head: -2,
         thighR: 146, shinR: 20, footR: -88,

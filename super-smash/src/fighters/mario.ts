@@ -42,7 +42,7 @@
  */
 
 import { fx } from "@/engine/fixed";
-import type { FighterDef } from "@/engine/types";
+import type { FighterDef, ProjectileDef } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { MARIO } from "./acmd/generated/mario";
 import { FIGHTER_PARAMS } from "./params";
@@ -55,6 +55,63 @@ import { FIGHTER_PARAMS } from "./params";
  * radius of 11, and his jab sits at chest height y 6.3). */
 const HEIGHT = 11.0;
 const HALF_WIDTH = 2.0;
+
+/**
+ * One F.L.U.D.D. pump (Plan 5, Task 6), a windbox projectile.
+ *
+ * - The box: rubendal Data Viewer 13.0.1, `mario_pumpwater` `Regular`
+ *   (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Mario/data.json):
+ *   `Damage=0.0, Angle=55, KBG=100, FKB=70, BKB=0, Size=4.0`,
+ *   `Clang_Rebound=ATTACK_SETOFF_KIND_OFF` (transcendent), `Reflectable=true`,
+ *   `Flinchless=true, DisableHitlag=true` (a windbox). SmashWiki "Mario
+ *   (SSBU)/Down special" (https://www.ssbwiki.com/Mario_(SSBU)/Down_special)
+ *   has the same row (`fkv=70`, `clang=f`, `flinchless=t`, `reflectable=t`).
+ * - The charge (P5-R5): the row's note, "Base knockback can increase up to 55
+ *   depending on charge", is base knockback beside the set knockback, which the
+ *   set-knockback formula adds (`computeKnockback`). The same page: "Initial
+ *   speed 4.3", "Maximum additional speed 4.3", "Minimum size multiplier 0.8",
+ *   "Maximum size multiplier 1.2" (radius 4 × 0.8 to × 1.2). UNVERIFIED: that
+ *   all three grow linearly with the charge, and that the added speed is along
+ *   the aim, so `vy` grows with `vx`.
+ * - The flight: "Default shot angle 12°", "Lifetime 12 frames", "Gravity 0.17".
+ *   Its "Falling speed 3" is never reached in 12 frames (0.894 − 12 × 0.17).
+ * - UNVERIFIED: the spawn point (8 in front, 6.5 up), and that a pump is gone
+ *   after its first hit. Not modelled: the stick's aim ("Maximum upward
+ *   deviation 50°", "Maximum downward deviation 18°", "Deviation per frame
+ *   1.9°").
+ */
+function waterPump(spawnFrame: number): ProjectileDef {
+  return {
+    id: "water",
+    spawnFrame,
+    offsetX: fx(8.0),
+    offsetY: fx(6.5),
+    vx: fx(4.206), // 4.3 · cos 12°
+    vy: fx(0.894), // 4.3 · sin 12°
+    gravity: fx(0.17),
+    lifetime: 12,
+    destroyOnHit: true,
+    visual: "spark",
+    reflectable: true,
+    // 8.6 along 12°: 8.6 · cos 12°, 8.6 · sin 12°.
+    charged: { vx: fx(8.412), vy: fx(1.788), hitbox: { baseKnockback: fx(55), radius: fx(4.8) } },
+    hitbox: {
+      id: 0,
+      startFrame: 0,
+      endFrame: 12,
+      x: fx(0),
+      y: fx(0),
+      radius: fx(3.2),
+      damage: fx(0),
+      angle: fx(55),
+      baseKnockback: fx(0),
+      knockbackGrowth: fx(100),
+      fixedKnockback: fx(70),
+      transcendent: true,
+      windbox: true,
+    },
+  };
+}
 
 /** The hand-authored moveset; `mario` below runs its root-bone moves from the imported scripts. */
 const legacy: FighterDef = {
@@ -817,12 +874,30 @@ const legacy: FighterDef = {
     downB: {
       slot: "downB",
       name: "F.L.U.D.D.",
-      totalFrames: 48,
-      // Deals no damage at all — it charges, then pushes. The push scales with
-      // charge and is pure horizontal velocity applied to anyone in the stream,
-      // which is engine behaviour with no hitbox to hang it on. The empty array
-      // is correct and deliberate, not an omission.
+      // Deals no damage at all — it charges, then pumps water that pushes (Plan
+      // 5, Task 6). SmashWiki "Mario (SSBU)/Down special"
+      // (https://www.ssbwiki.com/Mario_(SSBU)/Down_special): "Charges between
+      // 19-20", "Total charge time 80 frames"; on release, "Number of pumps shot
+      // 7", "Delay between pumps 5 frames", pumps "21-32, 26-37, …, 51-62"
+      // (from release "2-13, …, 32-43"), "Interruptible (from release) 68 (49)".
+      // UltimateFrameData (https://ultimateframedata.com/mario): "Entering charge
+      // state takes 19 frames"; "Down B, Fully Charged": startup 21, total 67, so
+      // a stored full charge plays its entry and fires on reaching the loop.
+      //
+      // Store mode: SmashWiki "Charge" (https://www.ssbwiki.com/Charge) lists it
+      // as an "Auto-charge special", shield-cancellable; "F.L.U.D.D."
+      // (https://www.ssbwiki.com/F.L.U.D.D.): "pressing a shield button while
+      // charging will cancel and save the charge", and "getting hit during
+      // charging period will lose said charge". Published, not modelled: "Recoil
+      // speed on release per charge frame 0.02" (Mario "will be pushed
+      // backward"), and the heavier shoot animation from 70 charge frames.
+      //
+      // The move's own hitboxes stay empty, deliberately: everything it does,
+      // the pumps do.
+      totalFrames: 67,
+      specialCharge: { mode: "store", frames: 80, loopFrame: 19, fromStore: { start: "entry", interruptible: 68 } },
       hitboxes: [],
+      projectiles: [waterPump(21), waterPump(26), waterPump(31), waterPump(36), waterPump(41), waterPump(46), waterPump(51)],
     },
 
     grab: {

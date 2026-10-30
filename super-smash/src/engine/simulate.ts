@@ -136,6 +136,7 @@ import {
   kineticClear,
   kineticDisarmLaunch,
   kineticLaunch,
+  kineticPush,
   kineticTurnLaunch,
   kineticSet,
   kineticSetX,
@@ -1245,8 +1246,12 @@ function resolveHits(
       hurtboxes.some((h) => sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, h)) &&
       (reachOf(c).depth >= GLANCING_BLOW_DEPTH || c.hitbox.grabbing === true || hitReachesShield(victim, defs[v], c));
     // A counter out (Plan 5, Task 5): its bubble catches whatever reaches it but
-    // a grab, which goes through to the body (`counter.ts`). `caught` holds the
-    // candidates that reached the bubble, whether or not they reach the body.
+    // a grab, which goes through to the body (`counter.ts`), and a windbox (Task
+    // 6), which pushes the countering fighter as it would anyone. UNVERIFIED for
+    // the windbox: no source says either way (SmashWiki "Windbox", "F.L.U.D.D.",
+    // "Mario (SSBU)/Down special" and "Counterattack" are silent), and a 0% push
+    // has nothing for a counter to return. `caught` holds the candidates that
+    // reached the bubble, whether or not they reach the body.
     const counter = activeCounter(victim, defs[v]);
     const bubble = counter === null ? null : counterBubble(victim, counter);
     const caught = new Set<Candidate>();
@@ -1261,13 +1266,19 @@ function resolveHits(
       if (c.hitbox.situation === "ground" && !victim.grounded) continue;
       if (c.hitbox.situation === "air" && victim.grounded) continue;
       if (c.projectile !== null && destroyed.has(c.projectile.instanceId)) continue;
+      // A windbox leaves a fighter on a ledge alone (Plan 5, Task 6): SmashWiki
+      // "Windbox" (https://www.ssbwiki.com/Windbox), "characters hanging from a
+      // ledge are not affected". It is not spent on them, and passes on.
+      // UNVERIFIED: the ledge's getup, roll, attack and jump too, which hold the
+      // ledge (`ledge`) until they end, pinned to it as the hang is.
+      if (c.hitbox.windbox === true && victim.ledge !== null) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
       if (c.onlyPort !== null) {
         // Catch-only (a pummel, a throw): the fighter held, wherever the box is.
         // Not geometry-tested: the game holds the victim at the box, and a legacy
         // box sits there only for some of the roster (Plan 3, Task 14).
         if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
-      } else if (bubble !== null && !c.hitbox.grabbing && sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, bubble)) {
+      } else if (bubble !== null && !c.hitbox.grabbing && c.hitbox.windbox !== true && sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, bubble)) {
         caught.add(c);
       } else if (!reachesBody(c)) continue;
       const key = candidateKey(c);
@@ -1327,9 +1338,12 @@ function resolveHits(
       // Where the box met the body, for the spark: on the capsule it reached
       // deepest (ruling R9). A catch-only box is not tested, but it has one too.
       const contact = contactPoint(capsuleOf(c), hurtboxes[reachOf(c).index]);
+      // A windbox only pushes (Plan 5, Task 6: `applyWindbox`), invincible victim
+      // and raised shield included, so it goes first.
+      if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c);
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
-      if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
+      else if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
       else if (c.slot === "pummel" && c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
         applyHit(s, attacker, victim, defs[v], c, contact, intents[v], events);
@@ -2367,6 +2381,71 @@ function applyHit(
     angle: linkAngle ?? launchWorldAngle(victim.pendingAngle, victim.pendingFacing),
     hitboxId: hb.id,
   });
+}
+
+/**
+ * A windbox's push (Plan 5, Task 6: F.L.U.D.D.). SmashWiki "Windbox"
+ * (https://www.ssbwiki.com/Windbox): "From a physics standpoint, pushing is
+ * simply knockback without flinching". So the push is the hit's knockback, by
+ * the same formula and at the same angle as a launch, put on the DAMAGE energy
+ * (`kineticPush`), where it stacks with the fighter's own movement and decays as
+ * a launch does. Nothing else: no damage, hitstun, hitlag for either fighter
+ * (`DisableHitlag=true`), status change, stale entry or hit event (the hitbox
+ * row's `nogfx=t`, SmashWiki "Mario (SSBU)/Down special"). The fighter goes on
+ * with what it was doing, and a helpless one stays helpless: SmashWiki
+ * "F.L.U.D.D." (https://www.ssbwiki.com/F.L.U.D.D.), it "can push opponents away
+ * from the stage during their recovery without giving them another chance to
+ * use it". The air dodge and the special stall a hit gives back stay spent too
+ * (UNVERIFIED for those two: the page names the recovery).
+ *
+ * - On the ground it only slides the fighter: "windboxes cannot lift opponents
+ *   off the ground, but can push them off edges". UNVERIFIED: the slide is the
+ *   push's horizontal part, at that part's speed.
+ * - A raised shield takes nothing: "Pushing attacks that do not deal damage are
+ *   ineffective against shielding opponents". Nor does an invincible fighter
+ *   (`FighterState.invincible`: the hit connects and transfers nothing). Either
+ *   way the hit is spent, as a hit is. UNVERIFIED: that it is spent.
+ * - Against a launch still flying in its hitstun, knockback stacking decides,
+ *   as it does for a hit (SmashWiki "Knockback",
+ *   https://www.ssbwiki.com/Knockback): a push under 0.5× of the launch does
+ *   nothing, one of 0.5×–0.9× turns it toward the sum, a faster one takes over
+ *   its velocity, and the hitstun runs on. UNVERIFIED: the page's stacking
+ *   names launches, not pushes.
+ *
+ * Every windbox on this roster deals 0% (`schema.test.ts`), the case the shield
+ * rule names, so no damage is dealt here.
+ */
+function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate): void {
+  recordHit(c, attacker, victim.port);
+  if (victim.invincible > 0 || hitReachesShield(victim, victimDef, c)) return;
+  // A launch parked in its freeze replaces any push when it fires
+  // (`releasePendingLaunch`), and a frozen fighter does not move before then,
+  // so nothing is left of a push on one.
+  if (victim.pendingFacing !== 0) return;
+  const hb = c.hitbox;
+  // F.L.U.D.D. is set knockback, which reads neither rage nor crouch cancel
+  // (`computeKnockback`); a windbox without one is a launch's knockback.
+  const kb = computeKnockback({
+    percent: victim.damage,
+    damage: mul(hb.damage, c.chargeScale),
+    weight: victimDef.attributes.weight,
+    baseKnockback: hb.baseKnockback,
+    knockbackGrowth: hb.knockbackGrowth,
+    rage: computeRage(attacker.damage),
+    crouchCancel: isCrouching(victim),
+    fixedKnockback: hb.fixedKnockback,
+    setWeight: hb.setWeight,
+  });
+  const push = knockbackToVelocity(kb, resolveAngle(hb, victim.grounded, kb), launchSourceFacing(c, attacker, victim));
+  const vy = victim.grounded ? 0 : push.vy;
+  const speed = victim.grounded ? abs(push.vx) : push.speed;
+  const verdict = knockbackStack(speed, victim.hitstun > 0 ? victim.launchSpeed : 0);
+  if (verdict === "armour") return;
+  if (verdict === "keep") {
+    kineticTurnLaunch(victim, victim.kinetic.damageX + push.vx, victim.kinetic.damageY + vy);
+    return;
+  }
+  kineticPush(victim, push.vx, vy, speed);
 }
 
 /* ----------------------------------------------------------- smash ball -- */

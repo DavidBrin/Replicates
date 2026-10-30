@@ -9,6 +9,7 @@ import { LEGACY_BONE_TABLE } from "./bones";
 import { scriptHitboxes } from "./hitboxes";
 import { runScript } from "./interpreter";
 import { SLOT_MOTION, attackFromHitbox, gameScriptFor, legacyGameScript } from "./legacy";
+import type { AcmdScript } from "./types";
 
 /** A hitbox with its defaults spelled out, so "absent" and "explicitly the default" compare equal. */
 function canonical(hb: Hitbox) {
@@ -29,6 +30,7 @@ function canonical(hb: Hitbox) {
     shieldstunMultiplier: hb.shieldstunMultiplier ?? ONE,
     meteor: hb.meteor === true,
     grabbing: hb.grabbing === true,
+    windbox: hb.windbox === true,
   };
 }
 
@@ -134,5 +136,47 @@ describe("a legacy hitbox with a far end", () => {
 
   it("compiles a sphere as it always did", () => {
     expect(attackFromHitbox(sphere)).toMatchObject({ id: 3, size: ONE });
+  });
+});
+
+// Plan 5, Task 6: a windbox is smash-script `Flinchless=true, DisableHitlag=true`
+// (rubendal Data Viewer 13.0.1, `mario_pumpwater` `Regular`), both ways.
+describe("a windbox through the legacy compile", () => {
+  const box: Hitbox = {
+    id: 0,
+    startFrame: 2,
+    endFrame: 3,
+    x: ONE,
+    y: ONE,
+    radius: ONE,
+    damage: 0,
+    angle: 55 * ONE,
+    baseKnockback: 0,
+    knockbackGrowth: 100 * ONE,
+    fixedKnockback: 70 * ONE,
+    windbox: true,
+  };
+  const move = (hb: Hitbox): MoveDef => ({ slot: "jab1", name: "stand-in", totalFrames: 10, hitboxes: [hb] });
+  const live = (m: MoveDef) => {
+    const script = legacyGameScript(m);
+    return scriptHitboxes(runScript(script, 2), "mario", script.motion, 2, LEGACY_BONE_TABLE);
+  };
+
+  it("compiles to both flags, and reads back as a windbox", () => {
+    expect(attackFromHitbox(box)).toMatchObject({ flinchless: true, noHitlag: true });
+    expect(live(move(box))[0].windbox).toBe(true);
+  });
+
+  it("is neither flag for an ordinary box, and an ordinary box reads back as one", () => {
+    const plain: Hitbox = { ...box, windbox: undefined };
+    expect(attackFromHitbox(plain)).toMatchObject({ flinchless: false, noHitlag: false });
+    expect(live(move(plain))[0].windbox).toBeUndefined();
+  });
+
+  it("needs both: `DisableHitlag` alone (Donkey Kong's, Kirby's imported boxes) or `Flinchless` alone is a hit", () => {
+    for (const flags of [{ flinchless: false, noHitlag: true }, { flinchless: true, noHitlag: false }]) {
+      const script: AcmdScript = { name: "game_test", motion: "attack_11", commands: [{ op: "frame", frame: 1 }, { op: "attack", params: { ...attackFromHitbox(box), ...flags } }] };
+      expect(scriptHitboxes(runScript(script, 1), "mario", "attack_11", 1, LEGACY_BONE_TABLE)[0].windbox, JSON.stringify(flags)).toBeUndefined();
+    }
   });
 });

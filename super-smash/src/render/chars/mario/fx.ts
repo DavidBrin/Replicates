@@ -21,8 +21,27 @@ import {
   type FxFn,
 } from "../../fxKit";
 import { withAlpha } from "../../rigKit";
-import type { MoveSlot } from "@/engine/types";
+import { toFloat } from "@/engine/fixed";
+import type { FighterDef, MoveSlot } from "@/engine/types";
 import type { ProjectilePainter } from "../../fxKit";
+
+/** F.L.U.D.D.'s nozzle, grip to muzzle, in world units. */
+const NOZZLE = 3.8;
+
+/**
+ * Where F.L.U.D.D.'s pumps leave, in world units from his feet, and the angle
+ * they leave at: read off the move's own pump (`mario.ts`), so the drawn
+ * nozzle cannot drift from the simulated water (P5-R6). Null for a fighter
+ * whose down special pumps nothing.
+ */
+function muzzleOf(def: FighterDef): { x: number; y: number; angle: number } | null {
+  const pump = def.moves.downB?.projectiles?.[0];
+  if (pump === undefined) return null;
+  return { x: toFloat(pump.offsetX), y: toFloat(pump.offsetY), angle: Math.atan2(toFloat(pump.vy), toFloat(pump.vx)) };
+}
+
+/** A pump's life (SmashWiki "Mario (SSBU)/Down special": "Lifetime 12 frames"). */
+const WATER_LIFETIME = 12;
 
 /**
  * A lobed blob, for fire.
@@ -479,37 +498,37 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
   },
 
   /**
-   * Down special, F.L.U.D.D.
+   * Down special, F.L.U.D.D.: the pack and the nozzle. The water is the
+   * pumps' own painter (`projectiles.water`, below: P5-R6), drawn where the
+   * simulation has each pump and sized by its charge; this paints what Mario
+   * wears and holds.
    *
-   * Three graphics, and round one had the most important one flatly wrong.
-   *
-   * **The water is not a cone.** F.L.U.D.D. fires **seven discrete pumps, one
-   * every five frames, each living twelve** — so at most three globs are in the
-   * air at once and what you see is a broken, dashed line of water, not a jet.
-   * Every parameter below is from SmashWiki's own table for the move: initial
-   * speed 4.3, default angle 12° *above* horizontal, gravity 0.17, size
-   * multiplier 0.8–1.2 per glob. Working those through gives about fifty units
-   * of travel ending a unit and a half below where it left — a long, nearly
-   * flat spray that dies about a third of the way across Battlefield, which is
-   * what the move actually covers. The translucent triangle that was here read
-   * as a beam attack, and F.L.U.D.D. **deals no damage at all**: it pushes. A
-   * player who learns to respect a beam will lose stocks to that lie.
-   *
-   * **He is holding the nozzle beside his head.** Round one drew it over his
-   * shoulder, where it was hidden behind him for the whole move and the water
-   * appeared to come out of his face. The reference is specific — in *Smash*,
-   * unlike *Sunshine*, the nozzle is pulled up **next to his head**, gripped in
-   * one hand with the other on a handle — so it is drawn `over`, in front of
-   * the body, ending where his gloves are and where the water starts.
+   * **The nozzle ends where the water starts.** Its muzzle is the pumps' spawn
+   * point, aimed along their 12° (SmashWiki "Mario (SSBU)/Down special",
+   * "Default shot angle 12°"), both read off the pump itself (`muzzleOf`), so
+   * the first glob leaves its mouth rather than appearing in the air beside it
+   * (P5-R6; it was drawn level with the top of his head, three units above
+   * where the water spawns). It is drawn `over`, in front of the body, and it
+   * is *stowed* until he brings it up: the pack is on his back from frame 1,
+   * but the nozzle only exists once the pose has hands to put it in.
    *
    * The tank stays *under* the fighter, which suits a backpack exactly: it
    * wants to be behind him. It is the graphic that tells you which special he
    * threw from the very first frame, long before any water exists.
    */
-  downB: ({ ctx, x, y, u, dir, frame, total, over }) => {
+  downB: ({ ctx, def, x, y, u, dir, frame, total, over }) => {
+    const muzzle = muzzleOf(def);
+    if (muzzle === null) return NOTHING;
     const appear = Math.min(1, frame / 5);
     const leave = Math.min(1, (total - frame) / 6);
     const alpha = Math.min(appear, leave);
+
+    // The muzzle: the pumps' spawn offset, and the nozzle's length back along
+    // the aim to the grip.
+    const ox = x + u * muzzle.x * dir;
+    const oy = y - u * muzzle.y;
+    const gx = ox - dir * u * NOZZLE * Math.cos(muzzle.angle);
+    const gy = oy + u * NOZZLE * Math.sin(muzzle.angle);
 
     // The tank, behind the shoulders. Water tank, two handles, yellow nozzle,
     // and it only exists while the move is out.
@@ -537,43 +556,33 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       ctx.fill();
       ctx.fillStyle = "#8FB6E8";
       circle(ctx, tx + u * 0.2 * dir, ty - th * 0.55, u * 0.42);
-      // The hose. Without it the tank is a white box parked behind a man
-      // rather than a thing he is wearing, and the nozzle in his hands is
-      // connected to nothing.
+      // The hose, to the nozzle's grip. Without it the tank is a white box
+      // parked behind a man rather than a thing he is wearing, and the nozzle
+      // in his hands is connected to nothing.
       ctx.strokeStyle = "#2A1810";
       ctx.lineWidth = Math.max(1, u * 0.42);
       ctx.beginPath();
       ctx.moveTo(tx + u * 0.9 * dir, ty - th * 0.8);
-      ctx.quadraticCurveTo(x + u * 0.4 * dir, y - u * 10.6, x + u * 2.6 * dir, y - u * 9.1);
+      ctx.quadraticCurveTo(x + u * 0.4 * dir, y - u * 9.6, gx, gy);
       ctx.stroke();
       ctx.restore();
     };
     tank();
 
-    // Where the nozzle points, and therefore where the water leaves: the
-    // muzzle, 12° above horizontal, level with the top of his head.
-    const ANGLE = (12 * Math.PI) / 180;
-    const ox = x + u * 6.5 * dir;
-    const oy = y - u * 9.7;
-
-    // The nozzle itself, in his hands and in front of him. It is *stowed*
-    // until he brings it up: the pack is on his back from frame 1, but the
-    // nozzle only exists once the pose has hands to put it in, or it hangs in
-    // the air beside a man hunched over a pump.
     const raise = Math.min(1, Math.max(0, (frame - 16) / 5));
     if (raise > 0) over(() => {
       ctx.save();
       ctx.globalAlpha = alpha * raise;
-      ctx.translate(x + u * 2.9 * dir, y - u * 8.9);
+      ctx.translate(gx, gy);
       ctx.scale(dir, 1);
-      ctx.rotate(-ANGLE);
+      ctx.rotate(-muzzle.angle);
       ctx.fillStyle = "#2A1810";
       ctx.beginPath();
-      ctx.roundRect(-u * 0.7, -u * 0.82, u * 4.4, u * 1.64, u * 0.6);
+      ctx.roundRect(-u * 0.7, -u * 0.82, u * (NOZZLE + 0.86), u * 1.64, u * 0.6);
       ctx.fill();
       ctx.fillStyle = "#E4ECF2";
       ctx.beginPath();
-      ctx.roundRect(-u * 0.54, -u * 0.66, u * 4.1, u * 1.32, u * 0.5);
+      ctx.roundRect(-u * 0.54, -u * 0.66, u * (NOZZLE + 0.54), u * 1.32, u * 0.5);
       ctx.fill();
       ctx.fillStyle = "#3B7BD9";
       ctx.beginPath();
@@ -581,56 +590,20 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       ctx.fill();
       ctx.fillStyle = "#FFCC00";
       ctx.beginPath();
-      ctx.roundRect(u * 2.9, -u * 0.56, u * 0.9, u * 1.12, u * 0.24);
+      ctx.roundRect(u * (NOZZLE - 0.9), -u * 0.56, u * 0.9, u * 1.12, u * 0.24);
       ctx.fill();
       ctx.restore();
     });
 
-    // The pumps. Seven of them on a five-frame cadence from frame 21, which is
-    // where the reference has the water start; the last two are cut off by the
-    // end of a 48-frame uncharged animation, exactly as they are in the
-    // original when the move is not charged.
-    over(() => {
+    // Spatter at the muzzle while it pumps: from the first pump on frame 21
+    // (SmashWiki: "Pumps 21-32, …") to the last one's leaving on 51.
+    if (frame >= 21 && frame <= 51) over(() => {
       ctx.save();
-      for (let i = 0; i < 7; i++) {
-        const born = 21 + i * 5;
-        const age = frame - born;
-        if (age < 0 || age > 12) continue;
-        // Deterministic per-pump scale in the documented 0.8–1.2 band. Nothing
-        // here may call Math.random(): the renderer can be asked to draw the
-        // same simulation frame twice, and a glob that resizes between the two
-        // flickers.
-        const size = 0.8 + 0.4 * (((i * 7) % 5) / 4);
-        const px = ox + dir * u * 4.3 * Math.cos(ANGLE) * age;
-        const py = oy - u * (4.3 * Math.sin(ANGLE) * age - 0.5 * 0.17 * age * age);
-        const fade = Math.min(1, (12 - age) / 4) * alpha;
-        // Sized against the windbox, which is radius 4 before the multiplier —
-        // nearly a Mario-height across. Drawn any smaller and three globs 21
-        // units apart read as a dotted line rather than as a spray, which is
-        // the mistake the first pass at this made.
-        const r = u * 2.8 * size;
-        ctx.globalAlpha = 0.5 * fade;
-        glow(ctx, px, py, r * 1.7, "rgba(150,215,255,0.55)", "rgba(96,178,255,0)");
-        ctx.globalAlpha = 0.82 * fade;
-        ctx.fillStyle = "#8FD0FF";
-        // Stretched along its own flight, which is what a thrown blob of water
-        // does and what stops seven circles reading as a string of beads.
-        ctx.beginPath();
-        ctx.ellipse(px, py, r * 1.35, r * 0.88, -ANGLE * dir, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#EAF7FF";
-        ctx.beginPath();
-        ctx.ellipse(px - dir * r * 0.3, py - r * 0.22, r * 0.6, r * 0.4, -ANGLE * dir, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Spatter at the muzzle while it is firing.
-      if (frame >= 21) {
-        ctx.globalAlpha = 0.45 * alpha;
-        ctx.fillStyle = "#EAF6FF";
-        for (let i = 0; i < 3; i++) {
-          const a = (frame * 0.4 + i * 2.1) % 6.283;
-          circle(ctx, ox + Math.cos(a) * u * 0.9, oy + Math.sin(a) * u * 0.9, u * 0.34);
-        }
+      ctx.globalAlpha = 0.45 * alpha;
+      ctx.fillStyle = "#EAF6FF";
+      for (let i = 0; i < 3; i++) {
+        const a = (frame * 0.4 + i * 2.1) % 6.283;
+        circle(ctx, ox + Math.cos(a) * u * 0.9, oy + Math.sin(a) * u * 0.9, u * 0.34);
       }
       ctx.restore();
     });
@@ -640,6 +613,46 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 
 /** Painters for this fighter’s own projectiles, keyed by projectile def id. */
 export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
+  /**
+   * F.L.U.D.D.'s water, one pump (Plan 5, Task 6; P5-R6: without it a pump
+   * fell back to the shared yellow spark).
+   *
+   * **The water is not a cone.** F.L.U.D.D. fires seven discrete pumps, one
+   * every five frames, each living twelve (SmashWiki "Mario (SSBU)/Down
+   * special": "Delay between pumps 5 frames", "Lifetime 12 frames"), so at most
+   * three are in the air at once and what you see is a broken, dashed line of
+   * water, not a jet. A translucent cone reads as a beam attack, and F.L.U.D.D.
+   * deals no damage at all: it pushes. A player who learns to respect a beam
+   * will lose stocks to that lie.
+   *
+   * Drawn where the simulation has the pump, so the water is where the push
+   * comes from, and sized by how charged it left (`fraction`): the page's
+   * "Minimum size multiplier 0.8" to "Maximum size multiplier 1.2" on the
+   * windbox's radius 4 (`mario.ts`), against an earlier glob that ignored the
+   * charge. Stretched along its own heading, which is what a thrown blob of
+   * water does and what stops the pumps reading as a string of beads; the
+   * heading tips down as gravity takes it.
+   */
+  water: ({ ctx, u, age, dir, heading, fraction }) => {
+    const size = 0.8 + 0.4 * Math.min(1, Math.max(0, fraction));
+    // Fading over its last four frames.
+    const fade = Math.max(0, Math.min(1, (WATER_LIFETIME - age) / 4));
+    const r = u * 2.8 * size;
+    ctx.save();
+    ctx.globalAlpha = 0.5 * fade;
+    glow(ctx, 0, 0, r * 1.7, "rgba(150,215,255,0.55)", "rgba(96,178,255,0)");
+    ctx.globalAlpha = 0.82 * fade;
+    ctx.fillStyle = "#8FD0FF";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.35, r * 0.88, heading, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#EAF7FF";
+    ctx.beginPath();
+    ctx.ellipse(-dir * r * 0.3, -r * 0.22, r * 0.6, r * 0.4, heading, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  },
+
   /**
    * The Fireball.
    *

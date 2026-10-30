@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { toFloat } from "@/engine/fixed";
 import { actionFrameOf } from "@/engine/hitbox";
 import { deg } from "../../skeleton";
 import type { BoneName, PoseAngles } from "../../skeleton";
@@ -607,33 +608,79 @@ describe("the coins are a hit effect, not a timeline", () => {
 
 describe("F.L.U.D.D. is water, on the frame the brace happens", () => {
   /*
-   * The move has no hitbox, so `strike` is a literal fraction of its 48 frames
-   * rather than a hint, and it has to be the same frame `fx.ts` opens the water
-   * on. They were 0.46 and 0.52 for a while and the brace arrived six frames
-   * before the water, which reads as a flinch. The reference puts the first
-   * pump on frame 21.
+   * The move has no hitbox, so `strike` is a literal fraction of its 67 frames
+   * rather than a hint, and it has to be the same frame the water opens on.
+   * They were 0.46 and 0.52 for a while and the brace arrived six frames before
+   * the water, which reads as a flinch. The reference puts the first pump on
+   * frame 21, and so does the move (`mario.ts`).
    */
   it("braces and fires on the same frame", () => {
-    const total = mario.moves.downB!.totalFrames;
-    const braceFrame = Math.round((poses.downB!.strike as number) * total);
+    const move = mario.moves.downB!;
+    const braceFrame = Math.round((poses.downB!.strike as number) * move.totalFrames);
     expect(braceFrame).toBe(21);
+    expect(move.projectiles![0].spawnFrame).toBe(braceFrame);
     const before = countOf(paint("downB", braceFrame - 2).ctx, "fill");
     const after = countOf(paint("downB", braceFrame + 1).ctx, "fill");
     expect(after, "no more is painted once the water is meant to be out").toBeGreaterThan(before);
   });
 
+  /** One pump, painted by its own painter at the origin. */
+  function pump(fraction: number, age = 3): MockContext {
+    const ctx = createMockContext();
+    projectiles.water({ ctx, u: 12, age, dir: 1, heading: -0.2, charge: 1, fraction, returning: false, frame: 3 });
+    return ctx;
+  }
+
   /*
    * Seven discrete pumps on a five-frame cadence, each living twelve frames, so
-   * at most three are ever in the air. Round one drew a translucent cone, which
-   * reads as a beam attack — and F.L.U.D.D. deals **no damage at all**. A
-   * player who learns to respect a beam loses stocks to that lie.
+   * at most three are ever in the air (the engine's `fludd.test.ts`). Round one
+   * drew a translucent cone, which reads as a beam attack — and F.L.U.D.D.
+   * deals **no damage at all**. Each pump is its own projectile now, drawn by
+   * its own painter where the simulation has it (P5-R6), so the move's effect
+   * paints no water: a pump is never drawn twice, or as the shared yellow spark.
    */
-  it("throws globs rather than a jet", () => {
-    const globs = (frame: number) =>
-      countOf(paint("downB", frame).ctx, "ellipse") / 2; // body and highlight per glob
-    expect(globs(21), "nothing comes out on the first firing frame").toBeGreaterThan(0);
-    for (const frame of [21, 26, 31, 36, 41]) {
-      expect(globs(frame), `frame ${frame} has more than three globs in the air`).toBeLessThanOrEqual(3);
+  it("throws globs rather than a jet: one per pump, and none from the move", () => {
+    // A body and a highlight.
+    expect(countOf(pump(0), "ellipse")).toBe(2);
+    for (const frame of [21, 26, 31, 36, 41, 51]) {
+      expect(countOf(paint("downB", frame).ctx, "ellipse"), `the move paints water on frame ${frame}`).toBe(0);
     }
+  });
+
+  it("grows the glob with the charge it left with, × 0.8 to × 1.2 as the windbox does", () => {
+    const body = (fraction: number) => Number(pump(fraction).calls.find((c) => c.method === "ellipse")!.args[2]);
+    expect(body(1) / body(0)).toBeCloseTo(1.2 / 0.8, 6);
+    expect(body(0.5) / body(0)).toBeCloseTo(1 / 0.8, 6);
+    // ...as the hitbox itself does (SmashWiki "Mario (SSBU)/Down special": size multiplier 0.8 to 1.2).
+    const def = mario.moves.downB!.projectiles![0];
+    expect(def.charged!.hitbox.radius! / def.hitbox.radius).toBeCloseTo(1.2 / 0.8, 3);
+  });
+
+  it("fades out over the last four of its twelve frames", () => {
+    const alphas = (age: number) => assignmentsTo(pump(0, age), "globalAlpha").map(Number);
+    expect(Math.max(...alphas(8))).toBeCloseTo(0.82, 6);
+    expect(Math.max(...alphas(10))).toBeCloseTo(0.82 * 0.5, 6);
+    expect(Math.max(...alphas(12))).toBe(0);
+  });
+
+  it("spatters at the muzzle only while it pumps, frames 21 to 51", () => {
+    // The tank's one round porthole is the only other circle.
+    const circles = (frame: number) => countOf(paint("downB", frame).ctx, "arc");
+    expect(circles(30)).toBe(circles(19) + 3);
+    expect(circles(51)).toBe(circles(19) + 3);
+    expect(circles(52)).toBe(circles(19));
+  });
+
+  it("puts the nozzle's muzzle on the pumps' spawn point, along their 12° (P5-R6)", () => {
+    // `paint` draws Mario's feet at (900, 700) facing right, 12 pixels to the unit.
+    const p = paint("downB", 24);
+    const def = mario.moves.downB!.projectiles![0];
+    const grip = p.ctx.calls.find((c, i) => i >= p.drainedAt && c.method === "translate")!;
+    const angle = (12 * Math.PI) / 180;
+    expect(Number(grip.args[0]) + 12 * 3.8 * Math.cos(angle)).toBeCloseTo(900 + 12 * toFloat(def.offsetX), 2);
+    expect(Number(grip.args[1]) - 12 * 3.8 * Math.sin(angle)).toBeCloseTo(700 - 12 * toFloat(def.offsetY), 2);
+    // The yellow tip, the nozzle's last shape, ends at its mouth, 3.8 along from the grip.
+    const tip = p.ctx.calls.filter((c, i) => i >= p.drainedAt && c.method === "roundRect").at(-1)!;
+    expect(Number(tip.args[0]) + Number(tip.args[2])).toBeCloseTo(12 * 3.8, 6);
   });
 });

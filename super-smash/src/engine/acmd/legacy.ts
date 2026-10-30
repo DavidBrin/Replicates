@@ -89,8 +89,9 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     rehit: 0,
     reflectable: false,
     absorbable: false,
-    flinchless: false,
-    noHitlag: false,
+    // Plan 5, Task 6: a windbox is `Flinchless=true, DisableHitlag=true`.
+    flinchless: hb.windbox === true,
+    noHitlag: hb.windbox === true,
     direct: true,
     situation: "COLLISION_SITUATION_MASK_GA",
     // Plan 5: a turning hit is SSBU's `collision_attr_turn` (Mario's Cape).

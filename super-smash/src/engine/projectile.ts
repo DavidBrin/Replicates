@@ -100,6 +100,8 @@ export function spawnProjectile(
   // A full-charge variant interpolates its speed (Plan 5); otherwise the
   // multiplier scales it, as it scales the damage.
   const vx = def.charged !== undefined ? def.vx + Math.trunc(((def.charged.vx - def.vx) * charge) / ONE) : mul(def.vx, chargeScale);
+  const fullVy = def.charged?.vy;
+  const vy = fullVy !== undefined ? def.vy + Math.trunc(((fullVy - def.vy) * charge) / ONE) : def.vy;
   return {
     instanceId,
     defId: def.id,
@@ -107,7 +109,7 @@ export function spawnProjectile(
     x: owner.x + facing * def.offsetX,
     y: owner.y + def.offsetY,
     vx: facing * vx,
-    vy: def.vy,
+    vy,
     facing,
     age: 0,
     bouncesLeft: def.bounces ?? 0,

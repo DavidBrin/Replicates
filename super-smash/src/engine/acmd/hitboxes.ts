@@ -116,6 +116,10 @@ function attackHitbox(
     ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
     ...(a.collisionAttr === "collision_attr_turn" ? { reverse: true } : {}),
     ...(a.forceReaction === true ? { forceReaction: true } : {}),
+    // Plan 5, Task 6: `Flinchless=true, DisableHitlag=true` is a windbox
+    // (F.L.U.D.D.'s `mario_pumpwater`). No imported box is flinchless; the ones
+    // with `DisableHitlag` alone (Donkey Kong's, Kirby's) stay hits.
+    ...(a.flinchless && a.noHitlag ? { windbox: true } : {}),
   };
 }
 
