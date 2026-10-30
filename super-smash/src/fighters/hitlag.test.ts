@@ -5,8 +5,10 @@
  *
  * Sources, every one read for this task:
  * - SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag): Ultimate's
- *   `⌊⌊⌊(d×0.65+6)×h×e×s⌋×p⌋×c⌋`; "The 1v1 multiplier and shield damage are not
- *   factored"; the attacker is frozen "in the frame when they landed the hit".
+ *   `⌊⌊⌊(d×0.65+6)×h×e×s⌋×p⌋×c⌋`, d "the amount of damage an attack would deal":
+ *   "Stale/fresh damage, equipment, spirits, etc. are factored. The 1v1 multiplier
+ *   and shield damage are not factored"; the attacker is frozen "in the frame when
+ *   they landed the hit".
  * - SmashWiki "Marth (SSBU)/Forward throw"
  *   (https://www.ssbwiki.com/Marth_(SSBU)/Forward_throw): "During frame 14, the move
  *   inflicts 4 frames of hitlag", with its timing "without the hitlag" (release 15,
@@ -19,11 +21,26 @@
  * - SmashWiki "Pummel" (https://www.ssbwiki.com/Pummel): totals are "the combined
  *   total frames of both the pummels' coded duration and the amount of hitlag they
  *   inflict" and "do not account for the 1v1 multiplier": Mario 19, Donkey Kong 21,
- *   Link 19, Samus 19, Kirby 15, Fox 15, Pikachu 16, Marth 19.
+ *   Link 19, Samus 19, Kirby 15, Fox 15, Pikachu 16 ("18 prior to version 2.0.0"),
+ *   Marth 19.
+ * - SmashWiki "Donkey Kong (SSBU)/Pummel"
+ *   (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Pummel): 1.6%, hitlag ×2.3, hitbox
+ *   2, interruptible 8. SmashWiki "Pikachu (SSBU)/Pummel"
+ *   (https://www.ssbwiki.com/Pikachu_(SSBU)/Pummel): 1.0%, ×1.3, electric,
+ *   interruptible 6; 2.0.0 "Pummel deals less hitlag (14 frames → 12)".
+ * - SmashWiki "Stale Moves" (https://www.ssbwiki.com/Stale_Moves): in Training
+ *   Mode with staling off moves "deal their base damage", and in single-player
+ *   "the freshness bonus is also ignored, so attacks always do their base damage".
  * - UltimateFrameData (https://ultimateframedata.com/<fighter>), fetched
  *   2026-10-30: Mario "Jab 1" startup 2, total 19, shield stun 3, advantage −14,
  *   and "Pummel" 19, "Total frames includes 14 frames of hitlag"; Fox "Jab 1"
- *   startup 2, total 17, shield stun 3, advantage −12; Pikachu "Down Throw" 29 / 51;
+ *   startup 2, total 17, shield stun 3, advantage −12; Mario "Forward Tilt" startup
+ *   5, total 25, shield stun 7, advantage −13; Marth "Jab 1" startup 5, total 25,
+ *   shield stun 4/6, advantage −16/−14 (close/tipper); Pikachu "Down Throw" 29 / 51;
+ *   its definitions (https://ultimateframedata.com/smash): "Shield Lag is just extra
+ *   freeze frames that both the attacker and defender suffer, so it does not affect
+ *   frame advantage", "Shield Stun is the amount of frames that the defender is
+ *   stuck after Shield Lag ends";
  *   pummels Mario 19, Donkey Kong 21, Link 18, Samus 19, Kirby 15, Fox 15,
  *   Pikachu 16, Marth 19.
  *
@@ -167,7 +184,9 @@ describe("pummels against SmashWiki \"Pummel\": coded frames and hitlag, less th
   }
 
   // Six of the eight. UFD agrees on five of these; it lists Link at 18 ("Total frames
-  // includes 13 frames of hitlag"), SmashWiki at 19.
+  // includes 13 frames of hitlag"), SmashWiki at 19. UFD's hitlag notes cannot settle
+  // n against n − 1: they say 14 for Mario and Samus and 13 for Marth and Link, on
+  // the same 1.3% ×2.1.
   it.each([
     ["mario", 19],
     ["link", 19],
@@ -184,12 +203,18 @@ describe("pummels against SmashWiki \"Pummel\": coded frames and hitlag, less th
   });
 
   // The two that are not, each one frame over, neither for the freeze's count:
-  // - Donkey Kong (21): the script's own length is 7 (`totalFrames`), where UFD's 21
-  //   less its "15 frames of hitlag" leaves 6. His freeze, fresh ⌊(1.68 × 0.65 + 6) ×
-  //   2.3⌋ = 16, is the one UFD counts (16 − 1).
-  // - Pikachu (16; 17 before 2.0.0): the engine's freeze reads the fresh-move bonus,
-  //   ⌊(1.05 × 0.65 + 6) × 1.3 × 1.5⌋ = 13, where the published total's 1% gives
-  //   ⌊(0.65 + 6) × 1.3 × 1.5⌋ = 12 (UFD: "includes 11 frames of hitlag").
+  // - Donkey Kong: UNVERIFIED, the sources disagree. SmashWiki "Donkey Kong
+  //   (SSBU)/Pummel" gives interruptible 8 and ×2.3 on 1.6%: 7 coded frames
+  //   (`totalFrames`) and a fresh ⌊(1.68 × 0.65 + 6) × 2.3⌋ = 16 make 7 + 16 − 1 =
+  //   22 under the convention the other six match. SmashWiki "Pummel"'s table and
+  //   UFD give 21. No source gives him a 6-frame pummel.
+  // - Pikachu: not an engine fault. Its freeze is the published formula's, d with
+  //   "Stale/fresh damage ... factored" (SmashWiki "Hitlag"): fresh (×1.05),
+  //   ⌊(1.05 × 0.65 + 6) × 1.3 × 1.5⌋ = 13, so 5 + 13 − 1 = 17. The published 16
+  //   (18 before 2.0.0, SmashWiki "Pummel") is the base-damage figure: SmashWiki
+  //   "Pikachu (SSBU)/Pummel", 2.0.0 "Pummel deals less hitlag (14 frames → 12)",
+  //   ⌊(1 × 0.65 + 6) × 1.3 × 1.5⌋ = 12; the freshness bonus is ignored where frame
+  //   data is measured (SmashWiki "Stale Moves").
   it("Donkey Kong's lasts 22 and Pikachu's 17, a frame over the published 21 and 16", () => {
     expect(pummel("donkeyKong", false)).toEqual({ frames: 22, n: 16, coded: 7 });
     expect(pummel("pikachu", false)).toEqual({ frames: 17, n: 13, coded: 5 });
@@ -197,23 +222,30 @@ describe("pummels against SmashWiki \"Pummel\": coded frames and hitlag, less th
   });
 });
 
-describe("the frame advantage on a shield does not move with the freeze's count", () => {
-  // Both fighters freeze alike, so a freeze one frame shorter frees both a frame
-  // sooner. UFD's advantages (Mario's jab 1 −14, Fox's −12) are shieldstun less the
-  // frames after the hit (3 − (19 − 2), 3 − (17 − 2)). The replica's are one frame
-  // worse, before this convention and after it: its shieldstun of 3 lets the
-  // defender act on the third frame after the freeze, where UFD's count has him act
-  // on the fourth. That count is shieldstun's, not hitlag's (carried, Plan 5 Task 7b).
+describe("the frame advantage on a shield is UltimateFrameData's, whatever the freeze", () => {
+  // Both fighters freeze alike, so the freeze moves neither's first free frame
+  // against the other's (UFD: shield lag "does not affect frame advantage"). UFD's
+  // advantage is the shield stun less the frames after the hit: 3 − (19 − 2) = −14
+  // for Mario's jab 1. Each side is timed by its first actionable frame:
+  // - the attacker's is the frame its move hands off (`handOff`), the first frame it
+  //   is out of `attack`;
+  // - the defender's is the frame after `shieldStun` ends: a status entered on
+  //   contact ends through `endStatus` on its *last* frame, and the fighter acts on
+  //   the next (`states.ts`). His shield stun of 3 holds him 3 frames after the
+  //   freeze, as UFD's "stuck after Shield Lag ends" counts.
   it.each([
-    { id: "mario", gap: 10, ufd: -14 },
-    { id: "fox", gap: 10, ufd: -12 },
-  ] as const)("$id's jab 1: UFD's $ufd less that frame", ({ id, gap, ufd }) => {
-    const { states, events } = run(duel(id, "fox", gap, false), 80, press(Btn.Attack, 10), () => Btn.Shield);
+    { name: "Mario's jab 1", id: "mario", keys: Btn.Attack, gap: 10, hitFrame: 2, stun: 3, ufd: -14 },
+    { name: "Fox's jab 1", id: "fox", keys: Btn.Attack, gap: 10, hitFrame: 2, stun: 3, ufd: -12 },
+    { name: "Mario's forward tilt", id: "mario", keys: Btn.Right | Btn.Soft | Btn.Attack, gap: 12, hitFrame: 5, stun: 7, ufd: -13 },
+    { name: "Marth's jab 1, close", id: "marth", keys: Btn.Attack, gap: 14, hitFrame: 5, stun: 4, ufd: -16 },
+  ] as const)("$name: UFD's $ufd", ({ id, keys, gap, hitFrame, stun, ufd }) => {
+    const { states, events } = run(duel(id, "fox", gap, false), 80, press(keys, 10), () => Btn.Shield);
     const hit = events.findIndex((e) => e.shieldHits.length > 0);
-    expect(moveFrameOf(states[hit].fighters[0].actionFrame)).toBe(2);
-    expect(states[hit].fighters[1].hitstun).toBe(3);
-    const attackerFree = states.findIndex((s, i) => i > hit && s.fighters[0].action !== "attack");
-    const defenderFree = states.findIndex((s, i) => i > hit && s.fighters[1].action !== "shieldStun");
-    expect(defenderFree - attackerFree).toBe(ufd - 1);
+    expect(moveFrameOf(states[hit].fighters[0].actionFrame)).toBe(hitFrame);
+    expect(states[hit].fighters[1].hitstun).toBe(stun);
+    const attackerActs = states.findIndex((s, i) => i > hit && s.fighters[0].action !== "attack");
+    const stunEnds = states.findIndex((s, i) => i > hit && s.fighters[1].action !== "shieldStun");
+    const defenderActs = stunEnds + 1;
+    expect(defenderActs - attackerActs).toBe(ufd);
   });
 });

@@ -43,6 +43,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { restEcb } from "@/engine/acmd/hurtboxes";
 import { fx, mul, toFloat } from "@/engine/fixed";
+import { STALE_FRESH_BONUS, computeHitlag, computeKnockback, computeStaleness } from "@/engine/knockback";
 import { hashState } from "@/engine/hash";
 import { kineticSet } from "@/engine/kinetic";
 import { moveFrameOf } from "@/engine/hitbox";
@@ -52,7 +53,7 @@ import type { SimContext } from "@/engine/simulate";
 import { GRAB_MIN_FRAMES, GRAB_RELEASE_IMMUNITY } from "@/engine/states";
 import { CARGO_WALK } from "@/engine/status/cargo";
 import { Btn } from "@/engine/types";
-import type { GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
+import type { FighterDef, GameState, Hitbox, InputFrame, MatchRules, StepEvents } from "@/engine/types";
 import { bakedContext } from "@/game/bake";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { STAGES } from "@/stages";
@@ -66,8 +67,31 @@ const BAKED: SimContext = bakedContext(
   readBakeFromDisk(),
 );
 
+/**
+ * A stand-in attacker for the armour's edge (not a published move): Fox with his
+ * jab script dropped (it would replace the legacy move) and a jab whose one box,
+ * live on frames 2-4, carries `over`. Built as `specialFall.test.ts`'s `PUNCHER`.
+ */
+function standIn(id: string, over: Partial<Hitbox>): FighterDef {
+  const fox = FIGHTERS.find((f) => f.id === "fox")!;
+  const box: Hitbox = { id: 0, startFrame: 2, endFrame: 4, x: fx(6), y: fx(8), radius: fx(7), damage: fx(3), angle: fx(361), baseKnockback: 0, knockbackGrowth: 0, ...over };
+  return {
+    ...fox,
+    id,
+    scripts: Object.fromEntries(Object.entries(fox.scripts ?? {}).filter(([slot]) => slot !== "jab1")),
+    moves: { ...fox.moves, jab1: { slot: "jab1", name: "Stand-in jab", totalFrames: 20, hitboxes: [box] } },
+  };
+}
+// Growth 0: the knockback is the base exactly, at any percent (`knockbackFormula`),
+// and rage is 1 at the attacker's 0%.
+const AT_16 = standIn("armourEdge", { baseKnockback: fx(16) });
+const OVER_16 = standIn("armourEdgeOver", { baseKnockback: fx(16) + 1 });
+// 10% at growth 60 and no base: under 16 units from Donkey Kong's 10.5% after the
+// hit, over it from the 12.6% and 12.18 d a 1v1 bonus would give the formula.
+const ONE_V_ONE = standIn("armourOneOnOne", { damage: fx(10), knockbackGrowth: fx(60) });
+
 beforeAll(() => {
-  registerFighters(FIGHTERS);
+  registerFighters([...FIGHTERS, AT_16, OVER_16, ONE_V_ONE]);
   registerStages(STAGES);
 });
 
@@ -350,8 +374,9 @@ describe("Donkey Kong's cargo throws", () => {
   // (https://www.ssbwiki.com/Armor): armour is "sustaining hitlag and damage, but
   // not sustaining any ... knockback". Pikachu's jab is 15.6 units on Donkey Kong
   // at 0%; Mario's forward smash about 43.
-  function hitMidThrow(attacker: string, keys: InputFrame, x: number) {
+  function hitMidThrow(attacker: string, keys: InputFrame, x: number, oneOnOne = false) {
     const s = holding(0, [attacker]);
+    if (oneOnOne) s.rules = { ...s.rules, oneOnOne: true };
     const { states } = run(s, [...LIFT, 0, Btn.Attack, ...idle(2)]);
     const at = cloneState(states.at(-1)!);
     expect(at.fighters[0]).toMatchObject({ action: "throw", move: "cargoFthrow" });
@@ -381,6 +406,61 @@ describe("Donkey Kong's cargo throws", () => {
     expect(["hitstun", "tumble"]).toContain(states[at].fighters[0].action);
     expect(states[at].fighters[0].grabbing).toBe(-1);
     expect(states[at].fighters[1].grabbedBy).toBe(-1);
+  });
+
+  // The threshold's edge, and the freeze both sides take (Plan 5, Task 7b fix round
+  // 1, ruling R-7b-c): SmashWiki "Armor", "Armor is the concept of sustaining hitlag
+  // and damage, but not sustaining any (or sustaining reduced) knockback".
+  it("armours a hit of exactly 16 units and launches one a Q12 unit over", () => {
+    // The stand-in's fresh 3%: ⌊3.15 × 0.65 + 6⌋ = 8 frames, counted from the hit's.
+    const n = computeHitlag(mul(fx(3), STALE_FRESH_BONUS));
+    expect(n).toBe(8);
+    const at = hitMidThrow("armourEdge", Btn.Attack, -9);
+    const i = at.events.findIndex((e) => e.hits.some((h) => h.victim === 0 && h.attacker === 2));
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(at.events[i].hits.find((h) => h.victim === 0)!.knockback).toBe(0);
+    expect(at.states[i].fighters[0]).toMatchObject({ action: "throw", move: "cargoFthrow", grabbing: 1, hitlag: n - 1 });
+    expect(at.states[i].fighters[2].hitlag).toBe(n - 1);
+    expect(at.states[i].fighters[1].grabbedBy).toBe(0);
+
+    const over = hitMidThrow("armourEdgeOver", Btn.Attack, -9);
+    const j = over.events.findIndex((e) => e.hits.some((h) => h.victim === 0 && h.attacker === 2));
+    expect(over.events[j].hits.find((h) => h.victim === 0)!.knockback).toBe(fx(16) + 1);
+    expect(["hitstun", "tumble"]).toContain(over.states[j].fighters[0].action);
+    expect(over.states[j].fighters[0].grabbing).toBe(-1);
+    expect(over.states[j].fighters[1].grabbedBy).toBe(-1);
+  });
+
+  // Ruling R-7b-b: the 1v1 multiplier is on the damage alone. SmashWiki "Armor"
+  // (https://www.ssbwiki.com/Armor): "In Ultimate, given that knockback is calculated
+  // before the 1v1 multiplier is applied to damage, knockback-based armor is
+  // unaffected by it." The flag is the match's, read per hit, so a third fighter can
+  // land it here.
+  it("armours, in a 1v1, a hit under 16 units that the bonus would have put over", () => {
+    const pctAfter = mul(fx(10), STALE_FRESH_BONUS);
+    const d = mul(fx(10), computeStaleness([], "jab1").knockback);
+    const at = (percent: number, damage: number) =>
+      computeKnockback({ percent, damage, weight: DK.attributes.weight, baseKnockback: 0, knockbackGrowth: fx(60) });
+    expect(at(pctAfter, d)).toBeLessThanOrEqual(fx(16));
+    expect(at(mul(pctAfter, fx(1.2)), mul(d, fx(1.2)))).toBeGreaterThan(fx(16));
+    const n = computeHitlag(pctAfter);
+    const { states, events } = hitMidThrow("armourOneOnOne", Btn.Attack, -9, true);
+    const i = events.findIndex((e) => e.hits.some((h) => h.victim === 0 && h.attacker === 2));
+    const hit = events[i].hits.find((h) => h.victim === 0)!;
+    expect(hit.damage).toBe(mul(pctAfter, fx(1.2)));
+    expect(hit.knockback).toBe(0);
+    expect(states[i].fighters[0]).toMatchObject({ action: "throw", move: "cargoFthrow", grabbing: 1, hitlag: n - 1 });
+  });
+
+  it("re-simulates hash-equal from any frame across an armoured freeze", () => {
+    const { states } = hitMidThrow("armourEdge", Btn.Attack, -9);
+    const keys = (i: number): readonly InputFrame[] => [0, 0, i === 0 ? Btn.Attack : 0];
+    const hit = states.findIndex((s) => s.fighters[0].hitlag > 0);
+    expect(hit).toBeGreaterThan(0);
+    for (let k = 0; k < hit + 9; k++) {
+      const again = play(cloneState(states[k]), states.length - 1 - k, (i) => keys(i + k + 1), undefined, keys(k));
+      again.states.forEach((st, j) => expect(hashState(st), `snapshot ${k}, step ${k + 1 + j}`).toBe(hashState(states[k + 1 + j])));
+    }
   });
 
   it("keeps the fighter thrown on his shoulders until the release", () => {

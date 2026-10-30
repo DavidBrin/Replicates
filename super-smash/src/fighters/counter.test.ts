@@ -349,9 +349,15 @@ describe("the riposte", () => {
     const caught = mul(fx(17.8), fx(1.2));
     expect(toFloat(hit.damage)).toBeCloseTo(17.8 * 1.2 * 1.05 * 1.2, 2);
     // The knockback formula's `d` is staled only 30% (`computeStaleness`): fresh, ×1.015.
-    const kbDamage = mul(mul(caught, computeStaleness([], "counterAttack").knockback), ONE_ON_ONE_MULTIPLIER);
+    // The one-on-one bonus is on the damage alone (ruling R-7b-b; SmashWiki "Armor",
+    // https://www.ssbwiki.com/Armor: "knockback is calculated before the 1v1 multiplier
+    // is applied to damage"): not in `d`, and not in the percent, which is Mario's
+    // before the hit and the hit's damage without the bonus.
+    const kbDamage = mul(caught, computeStaleness([], "counterAttack").knockback);
+    const dealtBefore1v1 = mul(caught, computeStaleness([], "counterAttack").damage);
+    expect(hit.damage).toBe(mul(dealtBefore1v1, ONE_ON_ONE_MULTIPLIER));
     const kb = computeKnockback({
-      percent: victim.damage,
+      percent: victim.damage - hit.damage + dealtBefore1v1,
       damage: kbDamage,
       weight: mario.attributes.weight,
       baseKnockback: fx(90),

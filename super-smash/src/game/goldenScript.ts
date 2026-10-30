@@ -163,11 +163,30 @@
  * 280, not 289. He stands until 290 and walks from there as he did, and from 274 on
  * both are where they were: every event from 300 on keeps its frame.
  *
+ * Plan 5 Task 7b (a freeze of n frames counts its own frame, so every freeze is a
+ * frame shorter) re-tuned nothing, and four named events moved: Mario is back in
+ * the hold on 236, not 237, Fox techs on 780 and 1027, not 783 and 1029, and lies
+ * down on 1668, not 1670. Its fix round 1 (the 1v1 bonus is on the damage alone,
+ * not on the knockback, ruling R-7b-b; SmashWiki "1v1 multiplier",
+ * https://www.ssbwiki.com/1v1_multiplier) re-tuned two steps. Every launch in this
+ * one-on-one is shorter: the throw leaves Fox 0.9 units nearer (his hitstun ends on
+ * 279, not 280), which puts the forward smash's far box in reach (22.4%, not
+ * 18.5%), and the smash and the forward tilt carry him 4 and 6 units less far
+ * (x 1 and 32, not -3 and 26). So his step in ahead of the fireball is 4 frames,
+ * not 12, which puts him where he was for the fireball (1577) and the walk-in to
+ * the short-hop neutral air (1635). That nair is 77.5 units now, not 81.6, under
+ * tumble's 80: Fox reels (`hitstun`, not `tumble`) and lands on his feet on 1674,
+ * so the script no longer reaches `tumbleFall`, `downed` or `getUp`; four CPU
+ * matches and the states lab do. Standing nearer the ledge, Fox takes it from
+ * Mario on 1783, not 1786, so Mario's jump back is pressed 3 frames sooner (1816,
+ * the third frame after the trump ends on 1813, as before), and he lands on 1848.
+ * Fox's KO is on 1857 and the respawn on 1931; time up stays on 2014.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
  * (Fox breaking free on 140, the pummel on 217, the throw on 250, the shield break
- * on 649, the techs on 783 and 1029, the hangs on 861, 1193, 1299, 1400 and 1781,
- * the trump on 1786, the hits on 747, 1006, 1577 and 1635, Fox down on 1670, time
- * up on 2014). All were checked against a run after Plan 5 Task 7.
+ * on 649, the techs on 780 and 1027, the hangs on 861, 1193, 1299, 1400 and 1781,
+ * the trump on 1783, the hits on 747, 1006, 1577 and 1635, Fox's KO on 1857, time
+ * up on 2014). All were checked against a run after Plan 5 Task 7b's fix round 1.
  */
 
 import { Btn } from "@/engine/types";
@@ -230,14 +249,14 @@ const STEPS: readonly ScriptStep[] = [
   // through the throw; it does not tumble, so (Task 4) the stick bends nothing.
   [1, G, 0], //                   201: grab
   [15, 0, 0],
-  [1, A, 0], //                   217: pummel (it lands), then back to grabHold on 237
+  [1, A, 0], //                   217: pummel (it lands), then back to grabHold on 236
   [20, 0, 0],
   [1, R, SOFT | U], //            238: forward throw: Fox is thrown, then launched
   [35, 0, SOFT | U],
   // Task 3: the smash below launches a grounded Fox at 38°, so the fight moves to
   // the left of the stage. Mario still walks in to about 8 for the jabs, past Fox,
   // who walks back toward the middle and turns round to shield from him.
-  [16, R | SOFT, 0], //           274: Mario walks in; Fox stands (from 280, when his hitstun ends)
+  [16, R | SOFT, 0], //           274: Mario walks in; Fox stands (from 279, when his hitstun ends)
   [17, R | SOFT, L | SOFT], //    290: Fox walks left
   [1, R | SOFT, R | SOFT], //     307: Fox turns back to face Mario
   [5, R | SOFT, 0],
@@ -261,8 +280,8 @@ const STEPS: readonly ScriptStep[] = [
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
   [46, 0, SOFT | U], //           734: tumble (747); Mario can walk again on 800
-  [1, 0, S | SOFT | U], //        780: Fox presses shield 3 frames before he lands...
-  [19, 0, SOFT | U], //           781: ...and techs in place on 783 (his launch is slow enough, under 3), then stands
+  [1, 0, S | SOFT | U], //        780: Fox presses shield as he lands, and techs in place on 780...
+  [19, 0, SOFT | U], //           781: ...(his launch is slow enough, under 3), then stands
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
@@ -280,8 +299,8 @@ const STEPS: readonly ScriptStep[] = [
   [1, L | SOFT, 0], //           1001: facing left since the ledge
   [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006
   [21, 0, 0],
-  [1, 0, S], //                  1024: Fox presses shield 5 frames before he lands...
-  [18, 0, 0], //                 1025: ...and techs in place on 1029 (slow enough, under 3), then stands
+  [1, 0, S], //                  1024: Fox presses shield 3 frames before he lands...
+  [18, 0, 0], //                 1025: ...and techs in place on 1027 (slow enough, under 3), then stands
   [12, D, 0], //                 1043: crouchStart, crouch
   [12, 0, 0], //                 1055: crouchEnd
   [30, L, 0], //                 1067: walk, dashStart, run
@@ -304,8 +323,8 @@ const STEPS: readonly ScriptStep[] = [
   [17, R | SOFT, 0], //          1385: back onto the ledge (the hang begins on 1400)
   [13, 0, 0],
   [1, S, 0], //                  1415: ledgeRoll
-  [12, 0, R | SOFT], //          1416: Fox steps in, ahead of the fireball (12 frames, not 4: he is further left)
-  [38, 0, 0],
+  [4, 0, R | SOFT], //           1416: Fox steps in, ahead of the fireball (4 frames: Task 7b's fix round left him nearer)
+  [46, 0, 0],
   [1, J, 0], //                  1466: a tap is a short hop
   [6, 0, 0],
   [1, S, 0], //                  1473: airDodge, landing inside it: landingLag
@@ -330,10 +349,10 @@ const STEPS: readonly ScriptStep[] = [
   // his death, as he used to after a full hop.
   [8, R, 0], //                  1752: Mario runs right...
   [22, R, R], //                 1760: ...and Fox after him; Mario hangs on 1781
-  [37, 0, R], //                 1782: Fox takes the ledge on 1786: Mario is ledgeTrumped; Fox lets go on 1790
-  [1, J | L, R], //              1819: Mario, falling since 1816, jumps back...
-  [40, L, R], //                 1820: ...and lands on the stage (1851); Fox, a KO through the bottom on 1860: dead
-  [100, 0, 0], //                1860: respawnPlatform from 1934
+  [34, 0, R], //                 1782: Fox takes the ledge on 1783: Mario is ledgeTrumped; Fox lets go on 1787
+  [1, J | L, R], //              1816: Mario, falling since 1813, jumps back...
+  [43, L, R], //                 1817: ...and lands on the stage (1848); Fox, a KO through the bottom on 1857: dead
+  [100, 0, 0], //                1860: respawnPlatform from 1931
   [1, 0, D], //                  1960: step off the platform
   [60, 0, 0],
 ];

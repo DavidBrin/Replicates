@@ -208,6 +208,13 @@ const MATCHES: readonly Match[] = [
  * golden CPU inhales (a CPU fires specials only to recover), and the states lab
  * must stay as it is (ruling R-T8e), so an eighth match, the Inhale lab, has Kirby
  * spit Mario as a star and then swallow him for a Copy Ability.
+ * Plan 5 Task 7b's fix round 1 (the 1v1 bonus on the damage alone, not the
+ * knockback) moved all four CPU matches again: they reach 39 between them, newly
+ * pummelling and teching in place, and no longer trumping a ledge, ledge-attacking,
+ * ledge-rolling, tech-rolling, throwing, being thrown or being shield-stunned; the
+ * script, re-tuned, still trumps Mario (`goldenScript.ts`), and its nair no longer
+ * tumbles Fox, so `tumbleFall`, `downed` and `getUp` are the four CPU matches' and
+ * the states lab's. All 55 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -563,6 +570,19 @@ describe("engine golden trace", () => {
   // the swallow's 12% and two copied Fireballs of 7.20%), no shield hits, no KO. So
   // now: hits 19/16/21/21, 6, 0, 1 and 4; shield hits 0/0/1/0, 3, 0, 0 and 0; KOs
   // 3/2/0/0, 1, 2, 0 and 0.
+  // Plan 5 Task 7b's fix round 1 (ruling R-7b-b: the 1v1 bonus scales the damage
+  // dealt and no longer the knockback, `d` or the percent; R-7b-c: an armoured
+  // fighter freezes too, which no match reaches) moved seven, every match with a
+  // launch in a one-on-one: mario-fox from the 801-900 sample, the other three CPU
+  // matches from the first, the script from 201-300 (the forward throw launches Fox
+  // less far; two steps re-tuned, `goldenScript.ts`), the states lab from 201-300
+  // (the cargo up throw's launch) and the Inhale lab from 301-400 (the star's and the
+  // copied Fireballs'). The tech lab lands no hit and holds. Hits 32, 20, 18 and 21;
+  // shield hits 0 in all four; KOs 1, 2, 1 and 0. So now: hits 32/20/18/21, 6, 0, 1
+  // and 4; shield hits 0/0/0/0, 3, 0, 0 and 0; KOs 1/2/1/0, 1, 2, 0 and 0. One is by
+  // a hit (Samus in link-samus, tumbling at 104%); the rest are self-destructs:
+  // Mario during a Cape, Donkey Kong and Pikachu in special fall, Fox in the script,
+  // and the tech lab's two.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

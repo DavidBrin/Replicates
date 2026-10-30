@@ -476,7 +476,14 @@ export interface StepOptions {
   readonly ctx?: SimContext;
 }
 
-/** Frames the whole game freezes for on a KO, for the drama. */
+/**
+ * Frames the whole game freezes for on a KO, for the drama. UNVERIFIED: no source
+ * gives a whole-game pause on a KO; SmashWiki "KO" (https://www.ssbwiki.com/KO) and
+ * "Blast line" (https://www.ssbwiki.com/Blast_line) give none, and "Special Zoom"
+ * (https://www.ssbwiki.com/Special_Zoom) is a slowdown at the hit, of a factor the
+ * page itself marks unknown, not a pause on the KO. Not a hitlag, so not counted
+ * through `framesAfterHit` (Plan 5, Task 7b): the KO's frame runs, then these.
+ */
 export const KO_FREEZE_FRAMES = 14;
 /** The Smash Ball's radius, and how hard it drifts. */
 export const SMASH_BALL_RADIUS = fx(6);
@@ -1665,7 +1672,11 @@ function swingStaleness(attacker: FighterState, slot: MoveSlot) {
  * What a swing is worth once its charge, a short hop and staleness have
  * applied, before the one-on-one bonus: the damage a freeze reads (Plan 5, Task
  * 7b). SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag), of the formula's
- * damage: "The 1v1 multiplier and shield damage are not factored".
+ * damage: "Stale/fresh damage, equipment, spirits, etc. are factored. The 1v1
+ * multiplier and shield damage are not factored". So a fresh move's ×1.05 is in
+ * it (`computeStaleness`), and a pummel's freeze is a frame longer than the
+ * base-damage figure frame data measures (SmashWiki "Stale Moves": the freshness
+ * bonus "is also ignored" in single-player and practice).
  *
  * Shared between an ordinary hit and one that lands on an invincible fighter,
  * because the two must agree: the attacker's freeze cannot depend on the state
@@ -2338,21 +2349,29 @@ function applyHit(
     ? mul(mul(hb.damage, c.chargeScale), SHORT_HOP_DAMAGE)
     : mul(hb.damage, c.chargeScale);
   let damage = mul(baseDamage, staleness.damage);
-  let kbDamage = mul(baseDamage, staleness.knockback);
+  // The knockback formula's `d`, staled its own way, and never the 1v1 bonus.
+  const kbDamage = mul(baseDamage, staleness.knockback);
   // What every freeze below reads: the damage before the one-on-one bonus
   // (`swingDamage`; SmashWiki "Hitlag", https://www.ssbwiki.com/Hitlag: "The 1v1
   // multiplier and shield damage are not factored"; Plan 5, Task 7b).
   const lagDamage = damage;
-  if (s.rules.oneOnOne) {
-    damage = mul(damage, ONE_ON_ONE_MULTIPLIER);
-    kbDamage = mul(kbDamage, ONE_ON_ONE_MULTIPLIER);
-  }
+  // The one-on-one bonus scales the damage dealt and nothing else (Plan 5, Task 7b
+  // fix round 1, ruling R-7b-b): the knockback is reckoned without it, `d` and the
+  // percent alike (below). SmashWiki "Armor" (https://www.ssbwiki.com/Armor): "In
+  // Ultimate, given that knockback is calculated before the 1v1 multiplier is
+  // applied to damage, knockback-based armor is unaffected by it"; SmashWiki "1v1
+  // multiplier" (https://www.ssbwiki.com/1v1_multiplier): "It does not affect the
+  // amount of damage needed to KO an opponent".
+  if (s.rules.oneOnOne) damage = mul(damage, ONE_ON_ONE_MULTIPLIER);
   // Kirby's Copy Ability (Plan 5, Task 9): ×1.2 on the damage dealt, a shield's
   // included, and not on knockback's `d` (SmashWiki "Copy Ability": "knockback is
   // not affected"; "Inhale (Kirby)": it "raises damage percent, but knockback only
   // reflects the change in percent"; Rollout "instantly break[s] a shield" with
   // it). UNVERIFIED: that hitlag leaves it out, as it leaves the 1v1 bonus out.
   damage = mul(damage, c.damageMul);
+  // This hit's damage as the knockback formula's percent counts it: the Copy
+  // Ability's ×1.2 in, the 1v1 bonus out (ruling R-7b-b, above).
+  const kbPercentDamage = mul(lagDamage, c.damageMul);
 
   // A move joins the staleness queue once per swing, on its first connection —
   // a shield hit included, marked so it stales at 0.85 (SmashWiki "Stale-move
@@ -2420,6 +2439,9 @@ function applyHit(
   }
 
   /* ---- the damage path ---- */
+  // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback): p is "counted after
+  // the attack's damage is added", the damage before the 1v1 bonus (R-7b-b).
+  const kbPercent = victim.damage + kbPercentDamage;
   victim.damage += damage;
   // A Kirby hit may lose his Copy Ability (Plan 5, Task 9: `maybeLoseCopy`).
   maybeLoseCopy(s, victim, damage);
@@ -2433,13 +2455,21 @@ function applyHit(
   // than at the top with the intangibility checks. The damage was added once,
   // above; adding it again here doubled every armoured hit (Plan 3, Task 1).
   // A box that forces its reaction goes through armour (`Hitbox.forceReaction`).
-  // The attacker still freezes. Hitting armour should feel like hitting
-  // something solid, and a hit that reports nothing back reads as a whiff.
+  // Both fighters freeze, as for any hit (Plan 5, Task 7b fix round 1, ruling
+  // R-7b-c): SmashWiki "Armor" (https://www.ssbwiki.com/Armor), "Armor is the
+  // concept of sustaining hitlag and damage, but not sustaining any (or sustaining
+  // reduced) knockback"; SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag), "both
+  // the attacker and target are frozen in place". The armoured move stands the
+  // freeze out on its frame, as any frozen move does, and never has a freeze it is
+  // already in cut short (its own hit may have landed this frame). UNVERIFIED:
+  // that it can SDI in the freeze, as the victim of any hit can; no source names
+  // armour. A projectile's owner is not at the hit and does not freeze.
   const armoured = (): void => {
     const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
       moveMultiplier: hb.hitlagMultiplier,
     });
+    freezeVictim(victim, lag, victim.hitlag);
     if (!fromProjectile) freezeFighter(attacker, lag);
     events.hits.push({
       attacker: attacker.port,
@@ -2464,7 +2494,7 @@ function applyHit(
   // Set knockback runs the formula on the box's `fkb` with the victim's weight;
   // set weight makes that weight 100, in either formula (Plan 3, Task 16b).
   const kb = computeKnockback({
-    percent: victim.damage,
+    percent: kbPercent,
     damage: kbDamage,
     weight: victimDef.attributes.weight,
     baseKnockback: hb.baseKnockback,
@@ -2480,10 +2510,8 @@ function applyHit(
   // one; a harder one launches as usual. Measured on this hit's own knockback,
   // the one it launches with: SmashWiki's "Units of Knockback" are the knockback
   // formula's (SmashWiki "Knockback", https://www.ssbwiki.com/Knockback), which
-  // `computeKnockback` is. UNVERIFIED: SmashWiki "Armor" says knockback-based
-  // armour is "unaffected by" the 1v1 multiplier, and this hit's knockback is
-  // reckoned from damage with it in (Plan 3), so in a one-on-one a hit breaks
-  // the armour a little sooner than in the game.
+  // `computeKnockback` is, reckoned without the 1v1 bonus, so the armour is
+  // "unaffected by" it (SmashWiki "Armor"; ruling R-7b-b).
   const heavy = heavyArmourOf(victim, victimDef);
   if (heavy !== null && kb <= heavy && hb.forceReaction !== true) {
     armoured();

@@ -58,6 +58,7 @@ import {
   computeHitlag,
   computeHitstun,
   computeKnockback,
+  computeShieldstun,
   computeStaleness,
   damageSpeedUpMaxMag,
   effectiveHitstun,
@@ -283,7 +284,11 @@ describe("super armour counts the damage once (Plan 3, Task 1)", () => {
   // Armour has no say in who threw the hit: a projectile meets the same branch.
   // The damage lands once, the victim stays in its move, and, as for any
   // projectile, nobody freezes (the owner is not at the hit).
-  it("a projectile on an armoured victim adds the damage once, launches nothing and freezes nobody", () => {
+  // The armoured fighter freezes (Plan 5, Task 7b fix round 1): SmashWiki "Armor"
+  // (https://www.ssbwiki.com/Armor), "Armor is the concept of sustaining hitlag and
+  // damage, but not sustaining any (or sustaining reduced) knockback". The
+  // pellet's owner, as for any projectile, does not (the owner is not at the hit).
+  it("a projectile on an armoured victim adds the damage once, launches nothing, and freezes the victim alone", () => {
     const ctx = ctxFor(pelletShooter());
     const s = standing(ctx);
     const v = s.fighters[1];
@@ -298,10 +303,13 @@ describe("super armour counts the damage once (Plan 3, Task 1)", () => {
     expect(hits[0].knockback).toBe(0);
     expect(after.fighters[1].hitstun).toBe(0);
     expect(after.fighters[1].action).toBe("special");
-    // On the frame the pellet lands (a hitlag would run out well before the end).
+    // On the frame the pellet lands (a hitlag would run out well before the end):
+    // the projectile's 6%, which no staleness touches, ⌊6 × 0.65 + 6⌋ = 9, counted
+    // from that frame.
     const landed = frames[frames.findIndex((f) => f.events.hits.length > 0)].state;
+    expect(computeHitlag(fx(6))).toBe(9);
     expect(landed.fighters[0].hitlag).toBe(0);
-    expect(landed.fighters[1].hitlag).toBe(0);
+    expect(landed.fighters[1].hitlag).toBe(9 - 1);
   });
 
   it("control: the same pellet on an unarmoured victim launches it", () => {
@@ -6668,6 +6676,69 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
     expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, LAG - 1]);
   });
 
+  // The 1v1 multiplier scales the damage dealt and nothing else (Plan 5, Task 7b fix
+  // round 1, ruling R-7b-b). SmashWiki "Armor" (https://www.ssbwiki.com/Armor): "In
+  // Ultimate, given that knockback is calculated before the 1v1 multiplier is applied
+  // to damage, knockback-based armor is unaffected by it"; SmashWiki "1v1 multiplier"
+  // (https://www.ssbwiki.com/1v1_multiplier): "It does not affect the amount of damage
+  // needed to KO an opponent", nor "the length of hitstun". The percent the knockback
+  // formula reads is the one before the hit plus the hit's damage before the bonus.
+  it("launches a 1v1 hit as the same hit outside one, from the same percent: the multiplier is on the damage alone", () => {
+    const free = play(standing(), 20, JAB);
+    const one = play(oneOnOne(standing()), 20, JAB);
+    const h = firstHit(free);
+    expect(firstHit(one)).toBe(h);
+    const [a, b] = [free[h], one[h]];
+    expect(b.events.hits[0].damage).toBe(mul(a.events.hits[0].damage, fx(1.2)));
+    expect(b.state.fighters[1].damage).toBe(mul(JAB_DMG, fx(1.2)));
+    expect(b.events.hits[0].knockback).toBe(a.events.hits[0].knockback);
+    expect(b.events.hits[0].knockback).toBeGreaterThan(0);
+    for (const k of ["pendingKnockback", "pendingAngle", "hitstun"] as const) expect(b.state.fighters[1][k], k).toBe(a.state.fighters[1][k]);
+  });
+
+  it("KOs at the same percent in a 1v1 as outside one (SmashWiki \"1v1 multiplier\")", () => {
+    // A 20% hit straight up, mid-stage, toward the top blast line at 192: it KOs, or
+    // the fighter comes back down onto the stage.
+    const smasher = jabWith({ damage: fx(20), angle: fx(90), baseKnockback: fx(30), knockbackGrowth: fx(100) });
+    const ctx = ctxFor(smasher);
+    const kos = (percent: number, oneVsOne: boolean): boolean => {
+      const s = standing(ctx);
+      if (oneVsOne) oneOnOne(s);
+      s.fighters[1].damage = fx(percent);
+      return play(s, 300, JAB, ctx).some((f) => f.events.kos.length > 0);
+    };
+    const koPercent = (oneVsOne: boolean): number => {
+      let [lo, hi] = [0, 400];
+      expect([kos(lo, oneVsOne), kos(hi, oneVsOne)]).toEqual([false, true]);
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (kos(mid, oneVsOne)) hi = mid;
+        else lo = mid;
+      }
+      return hi;
+    };
+    const free = koPercent(false);
+    expect(free).toBeGreaterThan(20);
+    expect(koPercent(true)).toBe(free);
+  });
+
+  // SmashWiki "Smash directional influence" (https://www.ssbwiki.com/Smash_directional_influence):
+  // SDI works "during the 2nd hitlag frame and onward", and it is "impossible to SDI if
+  // it has less than two frames of hitlag". A freeze of 2 has its second frame, the
+  // last, which is where ASDI shifts (`applyAsdi`).
+  it("shifts the victim of a two-frame electric freeze on its last frame (ASDI)", () => {
+    const zap = jabWith({ hitlagMultiplier: fx(0.13), effect: "electric", angle: fx(361) });
+    expect(computeHitlag(JAB_DMG, { moveMultiplier: fx(0.13), electric: true })).toBe(2);
+    const ctx = ctxFor(zap);
+    const frames = play(standing(ctx), 12, (i) => [i === 0 ? Btn.Attack : 0, Btn.Up], ctx);
+    const h = firstHit(frames);
+    expect(frames[h].state.fighters[1]).toMatchObject({ hitlag: 1 });
+    expect(frames[h].state.fighters[1].combat.asdi).toBe(true);
+    // The freeze's last frame: shifted up by the ASDI distance, the launch fired.
+    expect(frames[h + 1].state.fighters[1].y - frames[h].state.fighters[1].y).toBe(ASDI_DISTANCE);
+    expect(frames[h + 1].state.fighters[1].combat.asdi).toBe(false);
+  });
+
   it("treats a freeze of 1 as none: every frame hashes as a freeze of 0's does, an electric hit's too", () => {
     for (const effect of [undefined, "electric"] as const) {
       const one = jabWith({ hitlagMultiplier: fx(0.1), ...(effect ? { effect } : {}) });
@@ -6720,6 +6791,23 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
       }
     });
 
+    // As the controller ruled (Task 7b fix round 1): shieldstun and the pushback read
+    // the damage dealt, the 1v1 bonus in. SmashWiki "Shieldstun"
+    // (https://www.ssbwiki.com/Shieldstun): d "is the damage the attack would deal if
+    // not shielded". UNVERIFIED against SmashWiki "1v1 multiplier"
+    // (https://www.ssbwiki.com/1v1_multiplier), which says it does "not affect the
+    // length of hitstun, hitlag or shieldstun". 12.6% stuns 12 where 10.5% stuns 10.
+    it("a shield in a 1v1: the shieldstun and the pushback read the damage dealt, the bonus in", () => {
+      const dealt = mul(JAB_DMG, fx(1.2));
+      expect([computeShieldstun(JAB_DMG), computeShieldstun(dealt)]).toEqual([10, 12]);
+      const frames = play(oneOnOne(standing()), 20, JAB_INTO_SHIELD);
+      const h = firstHit(frames);
+      const defender = frames[h].state.fighters[1];
+      expect(defender.hitstun).toBe(computeShieldstun(dealt));
+      expect(defender.vx).toBe(shieldPushback(shieldstunExact(dealt)));
+      expect(defender.vx).not.toBe(shieldPushback(shieldstunExact(JAB_DMG)));
+    });
+
     // Both freeze alike, so the freeze moves neither's first free frame against the
     // other's: the advantage is the freeze-free hit's. (UltimateFrameData's
     // advantages, https://ultimateframedata.com, leave hitlag out for this reason.)
@@ -6734,14 +6822,75 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
       expect(advantage(BASE_DEF)).toBe(advantage(jabWith({ hitlagMultiplier: 0 })));
     });
 
-    it("super armour: the attacker n − 1, the 1v1 multiplier left out", () => {
-      const s = oneOnOne(standing());
-      Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
-      const frames = play(s, 12, JAB);
+    // Both freeze (fix round 1): SmashWiki "Armor" (https://www.ssbwiki.com/Armor),
+    // "Armor is the concept of sustaining hitlag and damage, but not sustaining any
+    // (or sustaining reduced) knockback"; SmashWiki "Hitlag", "both the attacker and
+    // target are frozen in place". The armoured move stands its freeze out on its frame.
+    it("super armour: both n − 1, the 1v1 multiplier left out, and the move stands the freeze out", () => {
+      const armoured = (): GameState => {
+        const s = oneOnOne(standing());
+        Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
+        return s;
+      };
+      const frames = play(armoured(), 60, JAB);
       const h = firstHit(frames);
       expect(frames[h].events.hits[0].knockback).toBe(0);
       expect(frames[h].state.fighters[1].action).toBe("special");
-      expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, 0]);
+      expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, LAG - 1]);
+      // Held on its frame through the freeze, then on: the move ends n − 1 later
+      // than the same move left alone.
+      const frame = frames[h].state.fighters[1].actionFrame;
+      for (let i = h + 1; i <= h + LAG - 1; i++) expect(frames[i].state.fighters[1].actionFrame, `step ${i}`).toBe(frame);
+      expect(frames[h + LAG].state.fighters[1].actionFrame).toBe(frame + 1);
+      const alone = play(armoured(), 60, () => [0, 0]).findIndex((f) => f.state.fighters[1].action !== "special");
+      expect(frames.findIndex((f) => f.state.fighters[1].action !== "special")).toBe(alone + LAG - 1);
+    });
+
+    it("super armour: re-simulates hash-equal from any frame across the armoured freeze", () => {
+      const s = oneOnOne(standing());
+      Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
+      const frames = play(s, 30, JAB);
+      expect(frames[firstHit(frames)].state.fighters[1].hitlag).toBe(LAG - 1);
+      for (let k = 0; k < 29; k++) {
+        const again = play(cloneState(frames[k].state), 29 - k, (i) => JAB(i + k + 1));
+        again.forEach((f, j) => expect(hashState(f.state), `snapshot ${k}, frame ${k + 1 + j}`).toBe(hashState(frames[k + 1 + j].state)));
+      }
+    });
+
+    // UNVERIFIED (no source names armour): the armoured fighter's freeze is a hit's
+    // victim's, so it can SDI in it, as anyone hit can (SmashWiki "Smash directional
+    // influence", https://www.ssbwiki.com/Smash_directional_influence: SDI moves a
+    // fighter "during hitlag").
+    it("super armour: the armoured fighter can SDI in its freeze (UNVERIFIED)", () => {
+      const s = standing();
+      Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
+      const mash = (v: FighterState): InputFrame => (v.hitlag > 0 && v.hitlag % 4 === 0 ? Btn.Right : 0);
+      const { frames, hit, fired } = jabbedWhile(s, ctxFor(), mash);
+      expect(frames[hit].state.fighters[1]).toMatchObject({ action: "special", hitlag: LAG - 1 });
+      expect(frames[hit].state.fighters[1].combat.victimFreeze).toBe(true);
+      expect(frames[fired].state.fighters[1].x).toBeGreaterThan(frames[hit].state.fighters[1].x);
+    });
+
+    // UNVERIFIED (no source orders a trade): an armoured fighter whose own hit lands
+    // on the same frame keeps the longer of the two freezes, as knockback stacking
+    // and a throw's freezes do (`freezeFighter`'s `atLeast`).
+    it("super armour: a fighter armouring a jab as his own 20% hit lands keeps his longer freeze (UNVERIFIED)", () => {
+      const puncher: FighterDef = {
+        ...BASE_DEF,
+        moves: {
+          ...BASE_DEF.moves,
+          // Transcendent, so the two boxes trade rather than clank.
+          downB: move("downB", { totalFrames: 40, hitboxes: [hitbox({ damage: fx(20), transcendent: true })], superArmourFrames: [1, 30] }),
+        },
+      };
+      const ctx = ctxFor(puncher);
+      const frames = play(standing(ctx), 12, (i) => (i === 0 ? [Btn.Attack, Btn.Down | Btn.Special] : [0, 0]), ctx);
+      const h = frames.findIndex((f) => f.events.hits.length === 2);
+      expect(h).toBeGreaterThan(0);
+      const theirs = computeHitlag(mul(fx(20), STALE_FRESH_BONUS));
+      expect(theirs).toBe(19);
+      expect(frames[h].events.hits.find((x) => x.victim === 1)!.knockback).toBe(0);
+      expect(frames[h].state.fighters[1]).toMatchObject({ action: "special", hitlag: theirs - 1 });
     });
 
     it("an invincible fighter: the attacker n − 1, the 1v1 multiplier left out", () => {
