@@ -33,9 +33,9 @@ import { STATES_LAB } from "./goldenStatesLab";
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
  * CPU ever takes, a 100-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
  * three fighters launched by hand into the floor, the wall and the underside,
- * and a 400-frame states lab (`goldenStatesLab.ts`, Plan 5 Task 8, ruling
+ * and a 600-frame states lab (`goldenStatesLab.ts`, Plan 5 Task 8, ruling
  * P5-R14): scripted keys for the Plan 5 states nothing else reaches, Donkey
- * Kong's cargo first, and a 400-frame Inhale lab (`goldenInhaleLab.ts`, Task 9,
+ * Kong's cargo first and the footstools after (Task 11), and a 400-frame Inhale lab (`goldenInhaleLab.ts`, Task 9,
  * ruling R-T8e): Kirby against Mario, the spit and the swallow.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
@@ -157,7 +157,7 @@ const MATCHES: readonly Match[] = [
 ];
 
 /**
- * Every `ActionState` the eight matches must visit between them: all 55. A
+ * Every `ActionState` the eight matches must visit between them: all 56. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
@@ -215,6 +215,12 @@ const MATCHES: readonly Match[] = [
  * script, re-tuned, still trumps Mario (`goldenScript.ts`), and its nair no longer
  * tumbles Fox, so `tumbleFall`, `downed` and `getUp` are the four CPU matches' and
  * the states lab's. All 55 are visited.
+ * Plan 5 Task 11 added `footstooled`, a fighter stood on by a footstool jump. No
+ * golden match footstools (all eight traces were byte-identical with footstools
+ * on), so the states lab appends 200 frames after its 400 (ruling R-T11a: its
+ * earlier steps and samples untouched): Mario jumps off Donkey Kong's head
+ * standing (`footstooled`) and then in the air (his tumble down and lie-down).
+ * All 56 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -266,6 +272,7 @@ const MUST_VISIT: Record<ActionState, true> = {
   ledgeTrumped: true,
   cargoCarry: true,
   cargoHeld: true,
+  footstooled: true,
   inhaleHold: true,
   swallowed: true,
   spatStar: true,
@@ -596,6 +603,10 @@ describe("engine golden trace", () => {
   // 649, and one step is re-tuned (`goldenScript.ts`). Still six hits there, three
   // on the shield and one KO; the other seven are byte-identical, so the counts are
   // as above.
+  // Plan 5 Task 11 (footstool jumps) left all eight traces byte-identical as they
+  // were (no CPU or scripted match footstools) and appended frames 401-600 to the
+  // states lab (ruling R-T11a), whose first four samples are unchanged: two
+  // footstools, neither a hit (a footstool deals none), so the counts are as above.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

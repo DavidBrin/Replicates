@@ -113,13 +113,16 @@ function airDodgeSuffix(charge: number): string {
  * fighter carried plays the grab's; their own motions baked byte for byte the
  * same frames. An authored carry clip will be a motion of its own. Task 9:
  * Kirby's mouthful plays the walk's, and the fighter swallowed and the one spat
- * the tumble's (`poseNameFor` gives them those clips).
+ * the tumble's (`poseNameFor` gives them those clips). Task 11: the fighter
+ * footstooled plays the grab's (`poseNameFor`'s clip; its own motion would bake
+ * the grab's frames byte for byte).
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   specialFall: "fall",
   specialLanding: "landingLag",
   cargoCarry: "walk",
   cargoHeld: "grabbed",
+  footstooled: "grabbed",
   inhaleHold: "walk",
   swallowed: "tumble",
   spatStar: "tumble",

@@ -1,6 +1,7 @@
 /**
  * Reeling statuses: DAMAGE, DAMAGE_FLY, DAMAGE_FALL, DOWN_WAIT, DOWN_STAND
- * (Plan 2, Task 6; DAMAGE_FALL Plan 3, Task 12).
+ * (Plan 2, Task 6; DAMAGE_FALL Plan 3, Task 12), and TREAD_DAMAGE (Plan 5,
+ * Task 11).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim.
  */
@@ -12,6 +13,7 @@ import {
   HITSTUN_CANCEL_AIR_DODGE_SPEED,
   TUMBLE_HITSTUN,
 } from "../constants";
+import { FOOTSTOOL_GROUND_FRAMES } from "../footstool";
 import {
   DOWNED_FRAMES,
   GETUP_FRAMES,
@@ -164,7 +166,26 @@ export const STATUS_DOWN_STAND: FighterStatus = {
   },
 };
 
+/**
+ * Stood on by a footstool jump, on the ground (Plan 5, Task 11: `footstool.ts`):
+ * "it briefly freezes the opponent while they are in an animation of the player
+ * bouncing off their head" (SmashWiki "Footstool Jump"). Entered on contact,
+ * after the state machines (`applyFootstools`), so it ends as a landing or a
+ * reel does (`endStatus`): on its last frame, keeping a press made there for
+ * the next. UNVERIFIED: its length, `FOOTSTOOL_GROUND_FRAMES`.
+ */
+export const STATUS_TREAD_DAMAGE: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_TREAD_DAMAGE",
+  action: "footstooled",
+  kineticType: "GROUND_STOP",
+  main(f, intent, ctx) {
+    if (f.actionFrame >= FOOTSTOOL_GROUND_FRAMES) endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
+  },
+};
+
 export const DAMAGE_STATUSES: readonly FighterStatus[] = [
+  STATUS_TREAD_DAMAGE,
   STATUS_DAMAGE,
   STATUS_DAMAGE_FLY,
   STATUS_DAMAGE_FALL,

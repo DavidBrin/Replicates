@@ -77,6 +77,10 @@ export type StatusKind =
   // and the fighter carried is in the common SHOULDERED_DONKEY.
   | "FIGHTER_DONKEY_STATUS_KIND_SHOULDER_WAIT"
   | "FIGHTER_STATUS_KIND_SHOULDERED_DONKEY"
+  // Plan 5, Task 11: stood on, on the ground (skyline-smash `lua_const.rs`
+  // TREAD_DAMAGE). An airborne victim tumbles here, where SSBU has its own
+  // TREAD_DAMAGE_AIR and TREAD_FALL.
+  | "FIGHTER_STATUS_KIND_TREAD_DAMAGE"
   // Plan 5, Task 9: Kirby's mouthful is his own SPECIAL_N_EAT_WAIT (with its
   // _WALK, _TURN, _JUMP and _FALL family, one replica status); the fighter in his
   // mouth is in the common SWALLOWED, and one he spat in SWALLOWED_THROWN_STAR.
@@ -138,6 +142,7 @@ export const STATUS_KIND_OF_ACTION: Readonly<Record<ActionState, StatusKind>> = 
   ledgeTrumped: "FIGHTER_STATUS_KIND_CLIFF_ROBBED",
   cargoCarry: "FIGHTER_DONKEY_STATUS_KIND_SHOULDER_WAIT",
   cargoHeld: "FIGHTER_STATUS_KIND_SHOULDERED_DONKEY",
+  footstooled: "FIGHTER_STATUS_KIND_TREAD_DAMAGE",
   inhaleHold: "FIGHTER_KIRBY_STATUS_KIND_SPECIAL_N_EAT_WAIT",
   swallowed: "FIGHTER_STATUS_KIND_SWALLOWED",
   spatStar: "FIGHTER_STATUS_KIND_SWALLOWED_THROWN_STAR",

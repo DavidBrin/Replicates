@@ -75,6 +75,7 @@ import { fighterParams } from "./params";
 import { STATUS_TABLE, changeStatus } from "./status/kind";
 import type { StatusTable } from "./status/kind";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
+import type { Footstool, FootstoolHead } from "./footstool";
 import type {
   ActionState,
   BufferedAction,
@@ -368,6 +369,14 @@ export interface StateContext {
    * writes to it. See `releaseGrab`.
    */
   readonly fighters: readonly FighterState[];
+  /**
+   * Everybody's head as it was before this frame's state machines ran (Plan 5,
+   * Task 11: `footstoolHeads`), so a footstool reads the same heads whichever
+   * port runs first. Absent outside `step`.
+   */
+  readonly heads?: readonly FootstoolHead[];
+  /** Footstools decided this frame, applied to their victims after every state machine has run (`applyFootstools`). */
+  readonly footstools?: Footstool[];
 }
 
 /** Change status through the StatusModule (`status/kind.ts`): end, reset, pre. */
@@ -906,6 +915,25 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   return false;
 }
 
+/**
+ * Would `handleActionable` start a special, an air dodge or an aerial for this
+ * airborne fighter this frame (a press or the buffer's, read without spending
+ * it)? Its airborne branch, before the midair jump, answered ahead of it. The
+ * game tries those before a footstool and a wall jump: the vanilla
+ * `sub_air_check_fall_common` order, special, item throw, lasso, air dodge,
+ * attack, footstool, wall jump, midair jump, as WuBor Patch reimplements it (a
+ * mod, not first-party: `fighters/common/src/status/sub_transitions.rs`
+ * L486-519 at
+ * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/sub_transitions.rs#L486-L519).
+ * An attack press takes the frame even with no aerial to start, as there.
+ */
+export function airActionFirst(f: FighterState, intent: Intent, ctx: StateContext): boolean {
+  const b = peekBuffer(f, ctx.frame);
+  if ((intent.shieldPressed || intent.shieldHeld || b === "shield") && !f.airDodged) return true;
+  if ((intent.specialPressed || b === "special") && hasMove(ctx, specialSlot(intent))) return true;
+  return intent.attackPressed || b === "attack";
+}
+
 /* ------------------------------------------------------ the state machine -- */
 
 /**
@@ -1389,6 +1417,9 @@ export function grabLedge(
   f.combat.wallJumps = 0;
   f.combat.wallSide = 0;
   f.combat.wallFrames = 0;
+  // Plan 5, Task 11: and the run of footstools (`footstool.ts`), likewise.
+  // UNVERIFIED: no source says what starts that run again but the ground.
+  f.combat.footstools = 0;
   f.fastFalling = false;
   f.shortHop = false;
   f.ledgeRegrabs += 1;

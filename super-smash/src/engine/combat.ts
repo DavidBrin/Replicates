@@ -189,7 +189,23 @@ export interface CombatState {
    * a tech, being held over it), a ledge and a KO; not by a hit or a grab.
    */
   wallJumps: number;
+  /**
+   * Plan 5, Task 11: frames since this fighter last attacked (in `attack` or
+   * `special`), counted from the move's end however it ends, up to
+   * `SINCE_ATTACK_CAP`; a footstool waits 16 (`footstool.ts`). A KO sets it to
+   * the cap: a new stock has attacked nobody. Nothing else touches it.
+   */
+  sinceAttack: number;
+  /**
+   * Plan 5, Task 11: footstool jumps since this fighter last touched the ground,
+   * each bouncing 0.75× as fast as the one before (`footstool.ts`). Reset by the
+   * ground (any grounded frame), a ledge and a KO; not by a hit or a grab.
+   */
+  footstools: number;
 }
+
+/** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
+export const SINCE_ATTACK_CAP = 999;
 
 export function emptyCombat(): CombatState {
   return {
@@ -226,6 +242,8 @@ export function emptyCombat(): CombatState {
     wallSide: 0,
     wallFrames: 0,
     wallJumps: 0,
+    sinceAttack: SINCE_ATTACK_CAP,
+    footstools: 0,
   };
 }
 
@@ -264,5 +282,7 @@ export function cloneCombat(c: CombatState): CombatState {
     wallSide: c.wallSide,
     wallFrames: c.wallFrames,
     wallJumps: c.wallJumps,
+    sinceAttack: c.sinceAttack,
+    footstools: c.footstools,
   };
 }

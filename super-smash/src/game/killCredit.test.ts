@@ -47,6 +47,13 @@ describe("kill credit", () => {
     expect(t).toMatchObject({ kos: [1, 0], falls: [0, 2], sds: [0, 1] });
   });
 
+  it("counts a footstool as a hit (SmashWiki \"Footstool Jump\": \"it will count as a KO for the footstooling player\")", () => {
+    const t = createTracker(2);
+    trackFrame(t, 50, events({ footstools: [{ jumper: 0, victim: 1 }] }));
+    trackFrame(t, 50 + KILL_CREDIT_FRAMES, events({ kos: [ko(1)] }));
+    expect(t).toMatchObject({ kos: [1, 0], falls: [0, 1], sds: [0, 0] });
+  });
+
   it("credits Mario when F.L.U.D.D. pushes a recovering Fox out, with no hit at all", () => {
     // Mario at the edge; Fox helpless off it, falling past into the water.
     const play = (fire: boolean) => {

@@ -72,8 +72,9 @@ describe("the status alias table", () => {
   it("names an SSBU-style kind for every replica action, one-to-one", () => {
     const actions = Object.keys(STATUS_KIND_OF_ACTION) as ActionState[];
     // 50 through Plan 5 Task 4b; Task 8 adds Donkey Kong's carry and the carried,
-    // and Task 9 Kirby's mouthful, the swallowed and the spat.
-    expect(actions).toHaveLength(55);
+    // Task 9 Kirby's mouthful, the swallowed and the spat, and Task 11 the
+    // footstooled.
+    expect(actions).toHaveLength(56);
     const kinds = new Set(actions.map((a) => STATUS_KIND_OF_ACTION[a]));
     expect(kinds.size).toBe(actions.length);
     for (const a of actions) expect(ACTION_OF_STATUS_KIND[STATUS_KIND_OF_ACTION[a]]).toBe(a);

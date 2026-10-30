@@ -10,6 +10,7 @@ import { JUMP_SQUAT_FRAMES } from "../constants";
 import { kineticGroundJump, kineticSetY } from "../kinetic";
 import { fighterParams } from "../params";
 import { fastFallVelocity } from "../physics";
+import { tryFootstool } from "../footstool";
 import { tryWallJump } from "../wallJump";
 import {
   LANDING_ANIMATION_FRAMES,
@@ -62,6 +63,10 @@ export function airMain(f: FighterState, intent: Intent, ctx: StateContext): voi
     startAction(f, "land");
     return;
   }
+  // A jump over somebody's head (Plan 5, Task 11: `footstool.ts`), which the game
+  // tries before a wall jump, and after a special, an air dodge or an aerial
+  // pressed with it (`airActionFirst`).
+  if (tryFootstool(f, intent, ctx)) return;
   // A fresh press away from a wall just touched (Plan 5, Task 10: `wallJump.ts`).
   if (tryWallJump(f, intent, ctx)) return;
   if (handleActionable(f, intent, ctx)) return;

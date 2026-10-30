@@ -305,8 +305,10 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "techCeiling":
       return "tumble";
     case "grabbed":
-    // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held.
+    // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held. Task 11:
+    // stood on, held still under the jumper's feet.
     case "cargoHeld":
+    case "footstooled":
       return "grabbed";
     // ...and Donkey Kong carrying: no clip has the carry's raised arms, and his
     // walk reads as the carry (it walks). Plan 5, Task 9: Kirby walking with a

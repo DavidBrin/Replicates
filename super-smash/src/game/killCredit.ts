@@ -43,10 +43,13 @@ export function createTracker(count: number): StatTracker {
  * windbox's push touches as a hit does (Plan 5, Task 6 fix round 1): SmashWiki
  * "Windbox" (https://www.ssbwiki.com/Windbox), "if a player is hit with a
  * non-damaging windbox by an opponent, and then promptly SDs, it will count as
- * a KO for the opponent".
+ * a KO for the opponent". So does a footstool (Plan 5, Task 11): SmashWiki
+ * "Footstool Jump" (https://www.ssbwiki.com/Footstool_Jump), "if this results in
+ * a Fall, it will count as a KO for the footstooling player".
  */
-export function trackFrame(tracker: StatTracker, frame: number, events: Pick<StepEvents, "hits" | "pushes" | "kos">): void {
-  for (const touch of [...events.hits, ...events.pushes]) {
+export function trackFrame(tracker: StatTracker, frame: number, events: Pick<StepEvents, "hits" | "pushes" | "footstools" | "kos">): void {
+  const stoodOn = events.footstools.map((s) => ({ attacker: s.jumper, victim: s.victim }));
+  for (const touch of [...events.hits, ...events.pushes, ...stoodOn]) {
     if (touch.attacker === touch.victim) continue;
     tracker.lastHitBy[touch.victim] = touch.attacker;
     tracker.lastHitFrame[touch.victim] = frame;

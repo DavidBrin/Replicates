@@ -144,6 +144,8 @@ export type ActionState =
   // carried (Plan 5, Task 8): Donkey Kong's cargo, and the fighter on his shoulders
   | "cargoCarry"
   | "cargoHeld"
+  // stood on by a footstool jump, on the ground (Plan 5, Task 11)
+  | "footstooled"
   // Kirby's Inhale (Plan 5, Task 9): the mouthful, the fighter inside him, and the
   // fighter he spat flying as his star
   | "inhaleHold"
@@ -1283,6 +1285,14 @@ export interface StepEvents {
    * (`killCredit.ts`; SmashWiki "Windbox").
    */
   pushes: { attacker: number; victim: number }[];
+  /**
+   * Footstool jumps that reached their victim this frame, who stood on whom
+   * (Plan 5, Task 11): a phantom one (`footstool.ts`) reaches nobody. The results
+   * screen credits a KO through one as through a hit (`killCredit.ts`; SmashWiki
+   * "Footstool Jump": "if this results in a Fall, it will count as a KO for the
+   * footstooling player").
+   */
+  footstools: { jumper: number; victim: number }[];
 }
 
 export function emptyEvents(): StepEvents {
@@ -1299,5 +1309,6 @@ export function emptyEvents(): StepEvents {
     reflects: [],
     counters: [],
     pushes: [],
+    footstools: [],
   };
 }

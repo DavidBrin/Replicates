@@ -101,6 +101,7 @@ import { reflectProjectiles } from "./reflect";
 import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import { pinHeldFighters, ridesCaptor } from "./held";
 import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
+import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -166,7 +167,7 @@ import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { LEGACY_BAKE, type BakeTables } from "./acmd/bakeTables";
 import { bakedEcb, fighterHurtboxes, restEcb } from "./acmd/hurtboxes";
 import { launchBefore, techOrBounce, updateTechInput } from "./tech";
-import { cloneCombat, emptyCombat } from "./combat";
+import { SINCE_ATTACK_CAP, cloneCombat, emptyCombat } from "./combat";
 import type { CombatState } from "./combat";
 import {
   attackerShieldPushback,
@@ -628,11 +629,21 @@ export function step(
     intents.push(interpretInput(f, input, prev));
   }
 
+  // Who can be stood on, read before anybody moves (Plan 5, Task 11:
+  // `footstool.ts`): each head is its ECB's top, the bones' with a bake (Plan 4).
+  const heads = footstoolHeads(
+    s.fighters,
+    defs,
+    s.fighters.map((f, i) => ecbFor(i, f)),
+  );
+  const footstools: Footstool[] = [];
   const stateCtx = (i: number): StateContext => ({
     def: defs[i],
     stage,
     frame: s.frame,
     fighters: s.fighters,
+    heads,
+    footstools,
   });
 
   /* -- 3. action state machines ------------------------------------------- */
@@ -658,6 +669,9 @@ export function step(
     // A wall touch counts for a few frames, and not at all on the ground (Plan 5,
     // Task 10: `wallJump.ts`). Through a freeze too, as the tech input does.
     ageWallContact(f);
+    // So does the wait after an attack, and the ground ends a run of footstools
+    // (Task 11: `footstool.ts`).
+    ageFootstool(f);
 
     // Before the hitlag branch on purpose: these count down through a freeze,
     // so a fighter hit off a ledge serves its lockout during the hitlag too.
@@ -741,6 +755,10 @@ export function step(
     // Task 9 fix round 2).
     if (f.combat.copy !== copyBefore) defs[i] = defOf(f);
   }
+
+  // Whoever was stood on this frame feels it now, after every state machine, so
+  // the outcome is the same whichever port is which (Plan 5, Task 11).
+  applyFootstools(s.fighters, defs, footstools, events);
 
   // A fighter whose status is not a holding one has let go, whatever its link
   // says: a clank cancels a pummel and leaves `grabbing` set, and carrying the
@@ -953,6 +971,10 @@ export function step(
     f.combat.specialStall = false;
     forgetWallContact(f);
     f.combat.wallJumps = 0;
+    // ...nor footstooled anyone, and has attacked nobody (Task 11; UNVERIFIED for
+    // the count, as for the wall jumps').
+    f.combat.footstools = 0;
+    f.combat.sinceAttack = SINCE_ATTACK_CAP;
     // A KO costs Kirby his Copy Ability (Plan 5, Task 9: SmashWiki "Copy Ability",
     // "he will also lose it upon being KO'd").
     loseCopy(f);
