@@ -40,8 +40,8 @@ export function sideCameraPose(cam: Pick<Camera, "x" | "y" | "zoom" | "shakeX" |
     y: cam.y + cam.shakeY / cam.zoom,
     z,
     fov: fovDeg,
-    // UNVERIFIED (tuning): the clip planes are set by eye, not measured; the test
-    // only pins that they bracket the z = 0 plane with room to spare.
+    // UNVERIFIED (tuning): the clip planes are tuning values, not derived; the
+    // test only pins that they bracket the z = 0 plane with room to spare.
     near: Math.max(0.5, z * 0.25),
     far: z + 800,
   };

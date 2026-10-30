@@ -76,6 +76,8 @@ describe("the 3D side camera", () => {
 
   it("still lines up when the three.js camera's fov is not the default", () => {
     const cam = { ...createCamera(null), x: 12, y: 30, zoom: 7.5, shakeX: 14, shakeY: -9 };
+    // The pose carries the fov it was asked for: at the default both are 26, so only another fov can tell (Task 15 re-review).
+    expect(sideCameraPose(cam, 40).fov).toBe(40);
     const three = createSideCamera();
     three.fov = 40;
     applySideCamera(three, cam);

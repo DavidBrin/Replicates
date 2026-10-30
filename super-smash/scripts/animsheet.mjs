@@ -16,7 +16,9 @@
  * match's own pose, with the sim's hitboxes (red) and hurtboxes (yellow) over
  * each cell. It needs the models built locally (`pnpm models`); without them the
  * sheet is drawn with the stand-ins and says so. (The 2D sheet and its
- * `--view`/`--playback` flags went with the 2D figure in Plan 4, Task 23.)
+ * `--view`/`--playback` flags went with the 2D figure in Plan 4, Task 23; an
+ * old command line that still passes either is refused, exit 2, rather than
+ * quietly given the 3D sheet.)
  *
  * Without --out the PNG goes to the git-ignored test-results/anim/, never the
  * repo root, so a capture cannot ride along in a commit. A picture of a model
@@ -30,6 +32,10 @@ import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const argv = process.argv.slice(2);
+if (argv.some((a) => /^--(view|playback)(=|$)/.test(a))) {
+  console.error("animsheet: --view and --playback were removed in Plan 4 (Task 23): the contact sheet is the 3D one. Run it without them.");
+  process.exit(2);
+}
 const action = argv.find((a) => !a.startsWith("--")) ?? "land";
 const flag = (name, fallback) => {
   const i = argv.indexOf(`--${name}`);

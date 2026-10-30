@@ -12,8 +12,9 @@ import { describe, expect, it } from "vitest";
  * the same match end differently forty frames later:
  *
  * 1. **A forbidden import.** Reaching into `render/`, `render3d/`, `net/`,
- *    `components/`, `app/`, `audio/`, React, Next or three.js drags a browser API, a
- *    module-level singleton, a render-time value or (`render3d/`) float matrix
+ *    `components/`, `app/`, `audio/`, React, Next or three.js (its add-ons and
+ *    React Three Fiber too) drags a browser API, a module-level singleton, a
+ *    render-time value or (`render3d/`) float matrix
  *    and quaternion maths into the simulation. Re-simulating a frame
  *    then depends on something that is not in `GameState`.
  * 2. **A banned call.** `Math.random` is unseedable. `Date.now` and
@@ -36,6 +37,18 @@ const ENGINE_DIR = join(process.cwd(), "src", "engine") + "/";
 
 /** Package names the simulation may not reach for. */
 const BANNED_PACKAGES = ["react", "react-dom", "next", "three"];
+
+/**
+ * Package families the simulation may not reach for, by prefix: three.js's add-ons (`three-mesh-bvh`,
+ * `three-stdlib`) and React Three Fiber's scope (`@react-three/fiber`, `@react-three/drei`), which an exact
+ * match on "three" or "react" would miss.
+ */
+const BANNED_PACKAGE_PREFIXES = ["three-", "@react-three/"];
+
+/** Whether an import specifier names a banned package: its first path segment is one, or it starts with a banned prefix. */
+function bannedPackage(spec: string): boolean {
+  return BANNED_PACKAGES.includes(spec.split("/")[0]) || BANNED_PACKAGE_PREFIXES.some((prefix) => spec.startsWith(prefix));
+}
 
 /**
  * Sibling layers the simulation may not reach for, by first path segment.
@@ -188,8 +201,7 @@ describe("engine layering", () => {
       // would report itself. Its own imports are pinned by the next case.
       if (relative(file) === "layering.test.ts") continue;
       for (const spec of importSpecifiers(SOURCES.get(file) as string)) {
-        const bare = spec.split("/")[0];
-        if (BANNED_PACKAGES.includes(bare)) {
+        if (bannedPackage(spec)) {
           violations.push(`${relative(file)} imports ${spec}`);
           continue;
         }
@@ -290,7 +302,7 @@ describe("engine layering", () => {
 
     it("catches a React import", () => {
       const spec = importSpecifiers('import { useState } from "react";')[0];
-      expect(BANNED_PACKAGES).toContain(spec.split("/")[0]);
+      expect(bannedPackage(spec)).toBe(true);
     });
 
     it("catches a three.js import, bare, namespaced or from its examples", () => {
@@ -303,7 +315,7 @@ describe("engine layering", () => {
       const violations: string[] = [];
       for (const [src, spec] of fixtures) {
         expect(importSpecifiers(src)).toEqual([spec]);
-        if (BANNED_PACKAGES.includes(spec.split("/")[0])) violations.push(`probe.ts imports ${spec}`);
+        if (bannedPackage(spec)) violations.push(`probe.ts imports ${spec}`);
       }
       expect(violations).toEqual(fixtures.map(([, spec]) => `probe.ts imports ${spec}`));
     });
@@ -311,7 +323,17 @@ describe("engine layering", () => {
     it("allows a sibling engine import", () => {
       const spec = importSpecifiers('import { fx } from "./fixed";')[0];
       expect(layerOf(spec)).toBeNull();
-      expect(BANNED_PACKAGES).not.toContain(spec);
+      expect(bannedPackage(spec)).toBe(false);
+    });
+
+    it("catches three.js's add-on packages and React Three Fiber's scope, not just three itself (Task 15 review)", () => {
+      const banned = ["three-mesh-bvh", "three-stdlib/loaders/GLTFLoader", "@react-three/fiber", "@react-three/drei/core/Html"];
+      for (const src of banned.map((spec) => `import x from "${spec}";`)) {
+        const spec = importSpecifiers(src)[0];
+        expect(bannedPackage(spec), spec).toBe(true);
+      }
+      // Names that only start alike are not those packages: a sibling file, another scope, another word.
+      for (const spec of ["./three-way", "threes", "@react-threeish/x", "@reactthree/fiber"]) expect(bannedPackage(spec), spec).toBe(false);
     });
 
     it("catches a banned call in live code", () => {

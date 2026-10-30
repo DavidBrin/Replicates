@@ -1,6 +1,7 @@
 // @vitest-environment node
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -44,4 +45,25 @@ describe("where the capture scripts write by default", () => {
     expect(ignored("anim-mario-land.png")).toBe(true);
     expect(ignored("fight-mario-fsmash.png")).toBe(true);
   });
+});
+
+describe("animsheet.mjs's removed flags", () => {
+  it("refuses --view and --playback with a message, before it opens a browser (both went with the 2D views, Plan 4 Task 23)", () => {
+    const out = mkdtempSync(join(tmpdir(), "animsheet-flags-"));
+    try {
+      for (const args of [["land", "--view", "2d"], ["--playback", "land"], ["land", "--view=3d"], ["attack", "--move", "ftilt", "--playback=on"]]) {
+        // A base nothing listens on and an --out of its own, so a run that ignored the flag could reach no server and write nowhere else.
+        const r = spawnSync(process.execPath, [join(ROOT, "scripts", "animsheet.mjs"), ...args, "--base", "http://127.0.0.1:9", "--out", join(out, "x.png")], {
+          cwd: ROOT,
+          encoding: "utf8",
+          timeout: 30_000,
+        });
+        expect(r.status, args.join(" ")).toBe(2);
+        expect(r.stderr, args.join(" ")).toContain("animsheet: --view and --playback were removed in Plan 4 (Task 23): the contact sheet is the 3D one. Run it without them.");
+      }
+      expect(readdirSync(out)).toEqual([]);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

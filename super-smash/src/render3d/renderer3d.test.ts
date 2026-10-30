@@ -44,7 +44,7 @@ import { createVfx, hitFlashAmount, HIT_FLASH_FRAMES, type Particle } from "@/re
 import { STAGES } from "@/stages";
 import { MAX_TRIANGLES } from "../../scripts/models/glb.mjs";
 import { fighterPoser } from "./bake/bake";
-import { MAX_DRAW_CALLS, MAX_FIGHTER_PRIMITIVES, MAX_TRIANGLES_PER_FRAME } from "./budget";
+import { BATCH_CALLS, MAX_DRAW_CALLS, MAX_FIGHTER_PRIMITIVES, MAX_TRIANGLES_PER_FRAME } from "./budget";
 import { createFighter3D } from "./fighter3d";
 import { LOST_CONTEXT_ERROR, claimContext } from "./fakeContext";
 import { createModelCache, parseModelIndex, type ModelCache, type ModelIndexEntry } from "./models/loader";
@@ -245,8 +245,11 @@ describe("the 3D presenter", () => {
     expect(instanceAt(scene, "shields", 0).count).toBe(MAX_SHIELDS);
     expect(instanceAt(scene, "shadows", 0).count).toBe(4);
     const { calls, triangles } = presenter.info();
-    expect(calls).toBeGreaterThanOrEqual(4 * MAX_FIGHTER_PRIMITIVES + 3);
+    expect(calls).toBeGreaterThanOrEqual(4 * MAX_FIGHTER_PRIMITIVES + BATCH_CALLS);
     expect(calls).toBeLessThan(MAX_DRAW_CALLS);
+    // The batches are the scene's only instanced meshes, and there are BATCH_CALLS of them (sparks, shields, shadows).
+    expect([...resourcesOf(scene).instanced].map((m) => m.name).sort()).toEqual(["shadows", "shields", "sparks"]);
+    expect(resourcesOf(scene).instanced.size).toBe(BATCH_CALLS);
     expect(triangles).toBeGreaterThanOrEqual(4 * MAX_TRIANGLES);
     expect(triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
     // One skeleton per fighter, however many parts it has: one bone texture to upload, not twelve (Task 17 carry).
@@ -264,8 +267,8 @@ describe("the 3D presenter", () => {
     const parts = [...resourcesOf(gl().scene!).materials].filter((m) => m.type === "MeshToonMaterial");
     expect(parts).toHaveLength(4 * MAX_FIGHTER_PRIMITIVES);
     expect(parts.every((m) => m.transparent && m.side === DoubleSide)).toBe(true);
-    // Two passes each would be 4 × 12 × 2 + 7 = 103.
-    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + 7);
+    // One pass each: 4 × 12, Battlefield's 4 platforms and the 3 batches. Two passes each would be 4 × 12 × 2 + 7 = 103.
+    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + stage.platforms.length + BATCH_CALLS);
     expect(presenter.info().calls).toBeLessThanOrEqual(MAX_DRAW_CALLS);
     expect(presenter.info().triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
   });
