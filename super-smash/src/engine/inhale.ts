@@ -31,9 +31,11 @@
  * not affected"; "anything spawned by the ability will vanish if Kirby loses it".
  *
  * UNVERIFIED, the replica's readings:
- * - The swallow lets its fighter out where Kirby is, standing or falling. SSBU
- *   flies it out on a small star of its own ("The copy star spawns 7 units above
- *   Kirby ... 3.4 ... 62°", the page's parameters), which is not modelled.
+ * - The swallow flies its fighter out on a star of its own (fix round 1: "Star Y
+ *   offset 7u", "Star duration 10 frames", "Star initial speed 3.4", "Star travel
+ *   angle 62°", "Star friction 0.17"; `carryOutStarRiders`), with no box: the
+ *   page's "Star hitbox 8-17" has no published damage. Forward is UNVERIFIED, and
+ *   so is the rider leaving it from rest.
  * - The swallow's and the spit's damage take no staleness.
  * - The star's damage is its rider's weight's row; a weight between published
  *   rows takes the row below (the table skips 69 - 74, 114 - 115 and 119 - 126).
@@ -43,11 +45,12 @@
  * - A projectile the ability spawned vanishes with it unless reflected away.
  */
 
-import { ONE, fx, mul, randomInt } from "./fixed";
+import { ONE, cosDeg, fx, mul, randomInt, sinDeg } from "./fixed";
 import { ONE_ON_ONE_MULTIPLIER } from "./constants";
 import { gameScriptFor } from "./acmd/legacy";
 import { moveFrameOf } from "./hitbox";
 import { kineticSet } from "./kinetic";
+import { HARD_PLATFORM_DEPTH, platformCentreX } from "./physics";
 import { inhaleHoldFrames, leaveStar, starFrames } from "./status/inhale";
 import { releaseGrab, startAction } from "./states";
 import type { FighterDef, FighterState, GameState, MoveDef, ProjectileState, StageDef, StepEvents } from "./types";
@@ -60,6 +63,11 @@ export const COPY_DAMAGE = fx(1.2);
 export const HOLD_BLAST_REACH = fx(4);
 /** The star's speed, `2.8 + 0.008(t − k)`: its base (SmashWiki, above). */
 const STAR_BASE_SPEED = fx(2.8);
+/**
+ * `CombatState.copyFrames` while a Copy Ability already lost waits for the copied
+ * special under way to end (ruling R-T9d, `maybeLoseCopy`): never a count.
+ */
+export const COPY_LOSS_PENDING = -1;
 
 /** The spit star's damage by the spat fighter's weight (SmashWiki's table; gaps UNVERIFIED, above). */
 export function starDamage(weight: number): number {
@@ -81,10 +89,13 @@ export function starDamage(weight: number): number {
 
 /**
  * Is `f` a Kirby with someone in his mouth: holding (`inhaleHold`), or in the
- * swallow or the spit before its release (the link still whole)?
+ * swallow or the spit before its release (a move with a `release`, the link still
+ * whole), as `isHolding` reads them? Not any other special that holds someone.
  */
-export function holdsMouthful(f: Pick<FighterState, "action" | "grabbing">): boolean {
-  return f.grabbing >= 0 && (f.action === "inhaleHold" || f.action === "special");
+export function holdsMouthful(f: Pick<FighterState, "action" | "grabbing" | "move">, def: FighterDef): boolean {
+  if (f.grabbing < 0) return false;
+  if (f.action === "inhaleHold") return true;
+  return f.action === "special" && f.move !== null && def.moves[f.move]?.release !== undefined;
 }
 
 /**
@@ -109,8 +120,8 @@ export function swallowVictim(kirby: FighterState, victim: FighterState): void {
  * hanging fighter, D56), not another Kirby with someone in his mouth (SmashWiki
  * "Inhale (Kirby)"), and only with an empty mouth of its own (one link a captor).
  */
-export function inhaleMayCatch(attacker: FighterState, victim: FighterState): boolean {
-  return victim.ledge === null && !holdsMouthful(victim) && attacker.grabbing < 0 && attacker.grabbedBy < 0;
+export function inhaleMayCatch(attacker: FighterState, victim: FighterState, victimDef: FighterDef): boolean {
+  return victim.ledge === null && !holdsMouthful(victim, victimDef) && attacker.grabbing < 0 && attacker.grabbedBy < 0;
 }
 
 /** The Copy Ability a swallow of `victim` gives: their neutral special's, or a Kirby's own copy, stolen. */
@@ -158,7 +169,8 @@ export function withCopyAbility(def: FighterDef, copy: FighterDef | null): Fight
  * - Its damage lands, with the 1v1 multiplier, and is reported as a hit that
  *   launches nothing.
  * - A swallow gives Kirby the fighter's neutral special (`abilityFromSwallow`;
- *   from a Kirby, his copy, which he loses) and lets them out where he is.
+ *   from a Kirby, his copy, which he loses), with no stored charge carried into
+ *   it (ruling R-T9e), and flies them out on its star (`release.star`).
  * - A spit puts them on the star this move spawned this very frame, found by its
  *   definition and its age, never by its place in the list: its damage is their
  *   weight's (the box carries 1%, `chargeScale` the rest), its speed `2.8 +
@@ -202,14 +214,11 @@ export function resolveInhaleReleases(
     if (release.kind === "swallow") {
       const ability = abilityFromSwallow(fighterOf(victim.defId), victim);
       if (ability !== "") {
-        kirby.combat.copy = ability;
-        kirby.combat.copyFrames = 0;
-        if (ability === victim.combat.copy) {
-          victim.combat.copy = "";
-          victim.combat.copyFrames = 0;
-        }
+        if (ability === victim.combat.copy) loseCopy(victim);
+        takeCopy(kirby, ability);
       }
-      startAction(victim, victim.grounded ? "stand" : "fall");
+      if (release.star === undefined) startAction(victim, victim.grounded ? "stand" : "fall");
+      else rideOutStar(victim, kirby, release.star);
       continue;
     }
 
@@ -242,6 +251,77 @@ function rideAt(f: FighterState, star: ProjectileState): void {
   f.jumpsUsed = Math.max(f.jumpsUsed, 1);
   f.intangible = Math.max(f.intangible, 1);
   kineticSet(f, 0, 0);
+}
+
+/**
+ * `ride` on a fighter flying out of Kirby on his swallow's star, which is no
+ * projectile (its box is unpublished): −1 − the swallowing Kirby's port, whose
+ * definition holds the star (`release.star`). A spit star's rider holds its
+ * projectile's instance id, which is positive.
+ */
+function outStarRide(kirby: FighterState): number {
+  return -1 - kirby.port;
+}
+
+type OutStar = NonNullable<NonNullable<MoveDef["release"]>["star"]>;
+
+/** The swallow's star, from the definition that inhaled (`InhaleDef.swallow`'s `release.star`). */
+function outStarOf(def: FighterDef): OutStar | undefined {
+  const slot = def.moves.neutralB?.inhale?.swallow;
+  return slot === undefined ? undefined : def.moves[slot]?.release?.star;
+}
+
+/**
+ * The swallowed fighter flies out on the swallow's star (Plan 5, Task 9 fix round
+ * 1; SmashWiki "Kirby (SSBU)/Neutral special", "Star Y offset 7u", "Star duration
+ * 10 frames"): from `offsetY` above Kirby, for its frames, the way he faces; and
+ * intangible, as a spit star's rider is (UNVERIFIED).
+ */
+function rideOutStar(f: FighterState, kirby: FighterState, star: OutStar): void {
+  startAction(f, "spatStar");
+  f.combat.ride = outStarRide(kirby);
+  f.grabTimer = star.frames;
+  f.facing = kirby.facing;
+  rideAt(f, { x: kirby.x, y: kirby.y + star.offsetY } as ProjectileState);
+}
+
+/**
+ * Phase 6: every fighter on a swallow's star moves along it (`release.star`):
+ * frame k of the ride at `speed − k × friction` along `angle`, the way it faces
+ * ("Star initial speed 3.4", "Star travel angle 62°", "Star friction 0.17"). The
+ * star stops, and lets its rider go, short of the stage's solid body
+ * (UNVERIFIED, as a spit star dies at a wall). UNVERIFIED: that 62° points
+ * forward and up; that friction slows it before it moves, as the spit star's
+ * does.
+ */
+export function carryOutStarRiders(s: GameState, fighterOf: (id: string) => FighterDef, stage: StageDef): void {
+  for (const f of s.fighters) {
+    if (f.action !== "spatStar" || f.combat.ride >= 0) continue;
+    const kirby = s.fighters[-1 - f.combat.ride];
+    const star = kirby === undefined ? undefined : outStarOf(fighterOf(kirby.defId));
+    if (star === undefined) {
+      leaveStar(f);
+      continue;
+    }
+    // Placed on the frame of the swallow (`rideOutStar`); it moves from the next.
+    if (f.actionFrame === 0) continue;
+    const speed = Math.max(0, star.speed - star.friction * f.actionFrame);
+    const x = f.x + f.facing * mul(speed, cosDeg(star.angle));
+    const y = f.y + mul(speed, sinDeg(star.angle));
+    if (insideSolid(stage, s.frame, x, y)) {
+      leaveStar(f);
+      continue;
+    }
+    f.x = x;
+    f.y = y;
+  }
+}
+
+/** Is (x, y) strictly inside a solid platform's body (`stateInvariants`' own test)? */
+function insideSolid(stage: StageDef, frame: number, x: number, y: number): boolean {
+  return stage.platforms.some(
+    (p) => !p.soft && Math.abs(x - platformCentreX(p, frame)) < p.halfWidth && y < p.y && y > p.y - HARD_PLATFORM_DEPTH,
+  );
 }
 
 /** The fighter riding `p`, if one is. */
@@ -287,13 +367,37 @@ export function maybeLoseCopy(s: GameState, f: FighterState, damage: number): vo
   if (f.combat.copy === "" || f.combat.copyFrames < COPY_GRACE_FRAMES || damage <= 0) return;
   const r = randomInt(s.rngSeed, 100 * ONE);
   s.rngSeed = r.seed;
-  if (r.value < damage) loseCopy(f);
+  if (r.value >= damage) return;
+  // Lost mid-way through the copied special itself: the move keeps the definition
+  // it started with, and the loss lands when it ends (ruling R-T9d;
+  // `landPendingCopyLoss`). UNVERIFIED: no source says what a copy lost mid-move
+  // does to the move. So Kirby never runs his Inhale's frames, or its catch, on a
+  // copied move's timing.
+  if (f.action === "special" && f.move === "neutralB") f.combat.copyFrames = COPY_LOSS_PENDING;
+  else loseCopy(f);
 }
 
-/** The Copy Ability goes (a KO, a hit's chance). What it spawned goes too (`dropLostCopies`). */
+/** A loss that waited for the copied special (`COPY_LOSS_PENDING`) lands: the special status's `end`. */
+export function landPendingCopyLoss(f: FighterState): void {
+  if (f.combat.copyFrames === COPY_LOSS_PENDING) loseCopy(f);
+}
+
+/**
+ * The Copy Ability goes (a KO, a hit's chance, a Kirby's theft). What it spawned
+ * goes too (`dropLostCopies`), and so does a charge it stored (ruling R-T9e,
+ * UNVERIFIED: no source says a charge outlives the ability that stored it).
+ */
 export function loseCopy(f: FighterState): void {
   f.combat.copy = "";
   f.combat.copyFrames = 0;
+  f.combat.storedCharge = 0;
+}
+
+/** A swallow gives Kirby `ability`: its grace starts, and no stored charge crosses into it (ruling R-T9e, UNVERIFIED). */
+function takeCopy(kirby: FighterState, ability: string): void {
+  kirby.combat.copy = ability;
+  kirby.combat.copyFrames = 0;
+  kirby.combat.storedCharge = 0;
 }
 
 /**

@@ -8,12 +8,14 @@
  *
  * Kirby (port 0) against Mario (port 1) on Final Destination, a stock match.
  * They start a little apart, facing each other, so the steps below are about
- * the moves, not the walk to them; Mario's one key is a walk:
+ * the moves, not the walk to them; Mario never presses a key:
  * - the spit: Kirby inhales Mario (`inhaleHold`, `swallowed`), walks a few steps
  *   with his mouthful, and spits him (`spatStar`): Mario rides the star across
  *   the stage, is let go and lands;
- * - the swallow: Kirby walks back up to him, inhales him again, swallows him for
- *   his Fireball (the Copy Ability), and throws two copied Fireballs at him, ×1.2.
+ * - the swallow: Kirby runs back towards him, inhales with B held, pulling him
+ *   in before the catch, swallows him for his Fireball (the Copy Ability), which
+ *   flies him out on the swallow's star, and throws two copied Fireballs at him,
+ *   ×1.2 (Task 9 fix round 1: the pull, the held loop and the star).
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added (Plan 5, Task 9); the pins
@@ -42,17 +44,15 @@ const STEPS: readonly ScriptStep[] = [
   [1, A, 0], //                    41: spit, released on 48 (7.20%); Mario rides the
   [119, 0, 0], //                      star to 75, falls from 76 and lands on 134
   // The swallow.
-  [40, R, 0], //                  161: runs back up to Mario, standing from 205
-  [10, 0, 0],
-  [1, B, 0], //                   211: Inhale again; Mario is caught on 220
-  [19, 0, 0],
-  [1, B, 0], //                   231: swallow, released on 238 (12%): Mario's Fireball
-  [20, 0, 0],
-  [12, 0, R], //                  252: Mario walks off ahead of him
-  [7, 0, 0],
-  [1, B, 0], //                   271: a copied Fireball, out on 287, hits on 299 (7.20%)
+  [32, R, 0], //                  161: runs back towards Mario, standing from 197
+  [18, 0, 0],
+  [25, B, 0], //                  211: Inhale, held: it pulls Mario on 221 and 231,
+  [10, 0, 0], //                       and catches him on 233
+  [1, B, 0], //                   246: swallow, released on 253 (12%): Mario's Fireball;
+  [24, 0, 0], //                       its star carries Mario out to 262, and he falls
+  [1, B, 0], //                   271: a copied Fireball, out on 287, hits him (7.20%)
   [49, 0, 0],
-  [1, B, 0], //                   321: and another, out on 337, hits on 349
+  [1, B, 0], //                   321: and another, out on 337, hits on 341
   [79, 0, 0],
 ];
 

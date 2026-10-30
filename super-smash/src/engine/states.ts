@@ -631,7 +631,13 @@ function releasingStoredFull(f: FighterState, move: MoveDef | undefined): StoreC
  */
 export function moveEndFrame(f: FighterState, move: MoveDef): number {
   const sc = releasingStoredFull(f, move);
-  return sc === null ? move.totalFrames : storedFullStart(sc) + sc.fromStore.interruptible - 1;
+  if (sc !== null) return storedFullStart(sc) + sc.fromStore.interruptible - 1;
+  // An aerial length of its own (Plan 5, Task 9 fix round 1: Kirby's spit, 38),
+  // read where the fighter is on the frames it could end on. UNVERIFIED: the page
+  // gives the two lengths, not when one is chosen; a spit begun on the ground
+  // that leaves it plays the aerial one.
+  if (!f.grounded && move.aerialTotalFrames !== undefined) return move.aerialTotalFrames;
+  return move.totalFrames;
 }
 
 /**
@@ -1223,7 +1229,7 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // SPECIAL_N_EAT_LANDING motion's length is unpublished, and no source says what a
   // landing does to an aerial swallow or spit.
   if (f.action === "cargoCarry" || f.action === "throw" || f.action === "inhaleHold") return;
-  if (f.action === "special" && f.grabbing >= 0) return;
+  if (f.action === "special" && f.grabbing >= 0 && f.move !== null && ctx.def.moves[f.move]?.release !== undefined) return;
   // A tumble that reaches the floor lies down: in hitstun, one too slow to
   // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
   // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").

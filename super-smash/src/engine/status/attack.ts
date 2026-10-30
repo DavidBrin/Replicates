@@ -14,7 +14,8 @@
  */
 
 import { SMASH_CHARGE_MAX } from "../constants";
-import { chargeHoldFrame, clearHitRecord } from "../hitbox";
+import { actionFrameOf, chargeHoldFrame, clearHitRecord, moveFrameOf } from "../hitbox";
+import { landPendingCopyLoss } from "../inhale";
 import { specialChargeMain } from "../specialCharge";
 import { reflectorMain, specialStallExec } from "../reflect";
 import { liftCargo } from "./cargo";
@@ -34,7 +35,7 @@ import {
   startSpecialFall,
 } from "../states";
 import type { Intent, StateContext } from "../states";
-import type { FighterState, MoveSlot } from "../types";
+import type { FighterState, MoveDef, MoveSlot } from "../types";
 import type { FighterStatus } from "./kind";
 
 /** ATTACK and SPECIAL run the same body: the move in `f.move` decides everything. */
@@ -50,6 +51,8 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.action === "special" && move.specialCharge !== undefined && specialChargeMain(f, intent, ctx, move.specialCharge)) {
     return;
   }
+  // A special that loops while B is held (Plan 5, Task 9 fix round 1: Kirby's Inhale).
+  if (f.action === "special" && move.holdLoop !== undefined) holdLoopMain(f, intent, move.holdLoop);
   // Charging a smash holds the animation on the frame before its earliest
   // hitbox goes live (`chargeHoldFrame`), so nothing can be hit while it charges.
   if (f.action === "attack" && move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
@@ -99,6 +102,36 @@ export const STATUS_ATTACK: FighterStatus = {
 };
 
 /**
+ * One frame of a move's held loop (`MoveDef.holdLoop`). Its first time round is
+ * the move's own frames, `from`..`to`, held or not; then, while B is held as it
+ * steps past `to`, it goes back to `from`, and B let go on a later time round
+ * sends it straight on to `to + 1`. `charge` counts the extra times round (the
+ * move has no charge of its own), so the two are told apart.
+ *
+ * Kirby's Inhale (SmashWiki "Inhale (Kirby)", https://www.ssbwiki.com/Inhale_(Kirby):
+ * "Kirby will not stop inhaling until the button is released"; SmashWiki "Kirby
+ * (SSBU)/Neutral special", https://www.ssbwiki.com/Kirby_(SSBU)/Neutral_special:
+ * "Loop 11-44", "Minimum inhale duration 34 frames", "Interruptible (from release)
+ * 64 (20)"): the loop's 34 frames always play, and Kirby acts 20 frames after B
+ * comes up past them. UNVERIFIED: that a held loop repeats frames 35-44 (the
+ * page's "loop points 34-35"); no maximum hold is published.
+ */
+function holdLoopMain(f: FighterState, intent: Intent, loop: NonNullable<MoveDef["holdLoop"]>): void {
+  const frame = moveFrameOf(f.actionFrame);
+  if (frame === loop.to + 1) {
+    if (intent.specialHeld) {
+      f.actionFrame = actionFrameOf(loop.from);
+      f.charge += 1;
+    } else f.charge = 0;
+    return;
+  }
+  if (f.charge > 0 && !intent.specialHeld && frame >= loop.from && frame <= loop.to) {
+    f.actionFrame = actionFrameOf(loop.to + 1);
+    f.charge = 0;
+  }
+}
+
+/**
  * A special's per-move bookkeeping (Plan 5): nothing of one special rides into
  * the next status. A counter that catches something starts its counterattack
  * through here too (`triggerCounter`), and sets the counterattack's damage after.
@@ -124,8 +157,12 @@ export const STATUS_SPECIAL: FighterStatus = {
     if (stall !== undefined) specialStallExec(f, ctx, stall);
   },
   // ...and ends clean, however the special ends: its own end, a hit, a grab, a
-  // ledge, a landing or a KO.
-  end: clearSpecialMove,
+  // ledge, a landing or a KO. A Copy Ability lost during the copied special goes
+  // now, with the move (Plan 5, Task 9 fix round 1, ruling R-T9d).
+  end(f) {
+    clearSpecialMove(f);
+    landPendingCopyLoss(f);
+  },
 };
 
 export const STATUS_CATCH: FighterStatus = {

@@ -75,6 +75,18 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
 };
 
 /**
+ * A legacy box's `Hitbox.situation` as the mask an `ATTACK` or `CATCH` takes:
+ * ground-only `_G`, air-only `_A`, else both (Plan 5, Task 9 fix round 1: Kirby's
+ * Inhale, whose 5.3 catch box takes airborne fighters only and whose far pull
+ * takes grounded ones only). No other legacy box sets it.
+ */
+function situationOf(hb: Hitbox): AttackParams["situation"] {
+  if (hb.situation === "ground") return "COLLISION_SITUATION_MASK_G";
+  if (hb.situation === "air") return "COLLISION_SITUATION_MASK_A";
+  return "COLLISION_SITUATION_MASK_GA";
+}
+
+/**
  * A legacy hitbox as `ATTACK` arguments on the root bone. A legacy hitbox is a
  * sphere: one with a far end (`x2`/`y2`) is refused rather than compiled to a
  * sphere, which would quietly shrink the move; a capsule is scripted with
@@ -112,7 +124,7 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     flinchless: hb.windbox === true,
     noHitlag: hb.windbox === true,
     direct: true,
-    situation: "COLLISION_SITUATION_MASK_GA",
+    situation: situationOf(hb),
     // Plan 5: a turning hit is SSBU's `collision_attr_turn` (Mario's Cape).
     collisionAttr: hb.reverse === true ? "collision_attr_turn" : ATTR_OF_EFFECT[hb.effect ?? "normal"],
     region: "ATTACK_REGION_NONE",
@@ -165,7 +177,7 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
           y: hb.y,
           z: hb.x,
           status: "FIGHTER_STATUS_KIND_CAPTURE_PULLED",
-          situation: "COLLISION_SITUATION_MASK_GA",
+          situation: situationOf(hb),
         },
       });
       at(hb.endFrame + 1).close.push({ op: "catchClear", id: hb.id });

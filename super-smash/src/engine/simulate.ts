@@ -103,6 +103,7 @@ import { pinHeldFighters, ridesCaptor } from "./held";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
+  carryOutStarRiders,
   carryStarRider,
   dropLostCopies,
   dropRiderlessStars,
@@ -657,8 +658,9 @@ export function step(
     // so a fighter hit off a ledge serves its lockout during the hitlag too.
     if (f.intangible > 0) f.intangible -= 1;
     if (f.combat.grabImmune > 0) f.combat.grabImmune -= 1;
-    // The Copy Ability's grace counts up to its end and stops (Plan 5, Task 9).
-    if (f.combat.copy !== "" && f.combat.copyFrames < COPY_GRACE_FRAMES) f.combat.copyFrames += 1;
+    // The Copy Ability's grace counts up to its end and stops (Plan 5, Task 9); a
+    // loss waiting on the copied special (`COPY_LOSS_PENDING`, negative) does not count.
+    if (f.combat.copy !== "" && f.combat.copyFrames >= 0 && f.combat.copyFrames < COPY_GRACE_FRAMES) f.combat.copyFrames += 1;
     if (f.invincible > 0) f.invincible -= 1;
     if (f.ledgeLockout > 0) f.ledgeLockout -= 1;
 
@@ -789,7 +791,7 @@ export function step(
     // no ledge (Plan 5, Task 8; a throw on the ground never reaches here); nor does
     // a full mouth, or the one held would be left in it on the ledge (Task 9).
     // UNVERIFIED: no source says whether any of them can take one.
-    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw" && !holdsMouthful(f)) {
+    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw" && !holdsMouthful(f, defs[i])) {
       const grab = findLedgeGrab(f, stage, s.frame, ecb.half, s.fighters);
       if (grab !== null) {
         const pos = ledgePosition(stage, grab, s.frame);
@@ -853,6 +855,7 @@ export function step(
   // A swallow or a spit lets its mouthful out, onto this frame's star for a spit,
   // and a star nobody rides is gone (Plan 5, Task 9).
   resolveInhaleReleases(s, defs, (id) => ctx.fighter(id), frozen, beforeActionFrame, events);
+  carryOutStarRiders(s, (id) => ctx.fighter(id), stage);
   dropRiderlessStars(s, (p) => projectileDefOf(ctx, p)?.ridden === true);
 
   const destroyed = new Set<number>();
@@ -897,7 +900,7 @@ export function step(
     if (f.action === "dead" || f.hitlag > 0) continue;
     // A Kirby with a mouthful meets his blast lines 4 units sooner, ahead and below
     // (Plan 5, Task 9: SmashWiki "Kirby (SSBU)/Neutral special"), so in a Kirbycide he goes first.
-    const ko = blastZoneKO(f, stage, holdsMouthful(f) ? HOLD_BLAST_REACH : 0);
+    const ko = blastZoneKO(f, stage, holdsMouthful(f, defs[f.port]) ? HOLD_BLAST_REACH : 0);
     if (ko === null) continue;
     events.kos.push({ port: f.port, x: f.x, y: f.y, kind: ko });
     f.stocks -= 1;
@@ -1352,8 +1355,8 @@ function resolveHits(
       // Kirby's Inhale catches nobody on a ledge (ruling P5-R11: the Inhale alone; an
       // ordinary grab still pulls a hanging fighter off, D56), no Kirby with someone
       // in his mouth, and nobody once its own mouth is full (Plan 5, Task 9: `inhaleMayCatch`).
-      if (c.hitbox.grabbing === true && isInhale(defs[c.attacker], c) && !inhaleMayCatch(s.fighters[c.attacker], victim)) continue;
-      if (recordSaysAlreadyHit(s, c, victim.port)) continue;
+      if (c.hitbox.grabbing === true && isInhale(defs[c.attacker], c) && !inhaleMayCatch(s.fighters[c.attacker], victim, defs[v])) continue;
+      if (!unrecorded(c) && recordSaysAlreadyHit(s, c, victim.port)) continue;
       // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
       // holds alone, and hits anyone else it reaches. SmashWiki "Throw"
       // (https://www.ssbwiki.com/Throw): "a few throws such as Mario's back throw
@@ -1582,6 +1585,20 @@ function isInvincible(f: FighterState, def: FighterDef): boolean {
   const script = gameScriptFor(def, f.move);
   const release = script === null ? null : throwStrikeFrame(script);
   return release !== null && moveFrameOf(f.actionFrame) <= release;
+}
+
+/**
+ * A fighter's own windbox leaves no mark on its swing's hit record (Plan 5, Task 9
+ * fix round 1): it pushes on each frame it is out, and its move times its rehits
+ * with boxes one frame long (Kirby's Inhale pull, `Rehit=10`: frames 11, 21, 31,
+ * 41). Marked, a pull would spend the swing on its victim, and the Inhale's catch,
+ * the same swing in the replica's one record, could never take them; SSBU keeps
+ * catches (`CatchModule`) and attacks (`AttackModule`) apart. UNVERIFIED: the rehit
+ * timed from the box's frames, where SSBU times it from each victim's last hit. A
+ * projectile's windbox (F.L.U.D.D.'s water) marks its own record, as before.
+ */
+function unrecorded(c: Candidate): boolean {
+  return c.hitbox.windbox === true && c.projectile === null;
 }
 
 /** Is `c` a box of a move that inhales (`MoveDef.inhale`, Plan 5, Task 9: Kirby's neutral special)? */
@@ -2746,7 +2763,7 @@ function applyHit(
  * rule names, so no damage is dealt here.
  */
 function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate, events: StepEvents): void {
-  recordHit(c, attacker, victim.port);
+  if (!unrecorded(c)) recordHit(c, attacker, victim.port);
   if (isInvincible(victim, victimDef) || hitReachesShield(victim, victimDef, c)) return;
   // It reached the body: who pushed whom, for the results screen's kill credit
   // (`StepEvents.pushes`), whatever the push then does.

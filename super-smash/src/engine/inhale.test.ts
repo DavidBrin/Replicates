@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
 import { gameScriptFor } from "./acmd/legacy";
 import { ONE, fx, randomInt } from "./fixed";
 import { emptyCombat } from "./combat";
-import { COPY_DAMAGE, COPY_GRACE_FRAMES, abilityFromSwallow, maybeLoseCopy, starDamage, swallowVictim, withCopyAbility } from "./inhale";
+import { COPY_DAMAGE, COPY_GRACE_FRAMES, abilityFromSwallow, holdsMouthful, maybeLoseCopy, starDamage, swallowVictim, withCopyAbility } from "./inhale";
 import "./status";
 import { STAR_MAX_FRAMES, inhaleHoldFrames, starFrames } from "./status/inhale";
 import type { FighterDef, FighterState, GameState, MoveDef } from "./types";
@@ -83,6 +83,24 @@ describe("the catch", () => {
     expect(victim.combat.grabLength).toBe(victim.grabTimer);
     expect(victim).toMatchObject({ action: "swallowed", actionFrame: 0 });
     expect(kirby).toMatchObject({ action: "inhaleHold", actionFrame: 0, move: null });
+  });
+});
+
+describe("a mouthful", () => {
+  const def = {
+    moves: {
+      inhaleSwallow: { slot: "inhaleSwallow", release: { frame: 8, kind: "swallow", damage: fx(10) } },
+      upB: { slot: "upB" },
+    },
+  } as unknown as FighterDef;
+  const f = (action: string, move: string | null, grabbing: number) => ({ action, move, grabbing }) as unknown as FighterState;
+
+  it("is the hold, or a swallow or spit (a move with a release) still holding, and no other special that holds", () => {
+    expect(holdsMouthful(f("inhaleHold", null, 1), def)).toBe(true);
+    expect(holdsMouthful(f("special", "inhaleSwallow", 1), def)).toBe(true);
+    expect(holdsMouthful(f("special", "inhaleSwallow", -1), def)).toBe(false);
+    expect(holdsMouthful(f("special", "upB", 1), def)).toBe(false);
+    expect(holdsMouthful(f("grabHold", null, 1), def)).toBe(false);
   });
 });
 

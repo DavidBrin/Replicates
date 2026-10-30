@@ -750,6 +750,9 @@ export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs
   for (const f of state.fighters) {
     if (f.action !== "attack" && f.action !== "special") continue;
     if (f.charge <= 0) continue;
+    // A held loop counts its times round in `charge` (Plan 5, Task 9 fix round 1:
+    // Kirby's Inhale, `MoveDef.holdLoop`): no charge, no glow.
+    if (f.move !== null && defs?.[f.port]?.moves[f.move]?.holdLoop !== undefined) continue;
     const hold = moveTimingFor(defs?.[f.port], f.move)?.chargeHold;
     if (hold !== undefined && f.actionFrame > hold) continue;
     if (v.frame % 2 !== 0) continue;

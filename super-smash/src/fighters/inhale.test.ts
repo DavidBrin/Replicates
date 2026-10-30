@@ -57,13 +57,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ONE, fx, mul, randomInt, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
-import { COPY_DAMAGE, COPY_GRACE_FRAMES } from "@/engine/inhale";
+import { COPY_DAMAGE, COPY_GRACE_FRAMES, COPY_LOSS_PENDING } from "@/engine/inhale";
 import { computeHitlag, computeKnockback, framesAfterHit } from "@/engine/knockback";
 import { fighterParams } from "@/engine/params";
 import { shieldDamage } from "@/engine/shield";
 import { KO_FREEZE_FRAMES, cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
-import { GRAB_RELEASE_IMMUNITY } from "@/engine/states";
+import { GRAB_RELEASE_IMMUNITY, onLanded } from "@/engine/states";
+import type { StateContext } from "@/engine/states";
 import {
   INHALE_MIN_FRAMES,
   INHALE_WALK,
@@ -83,6 +84,8 @@ const FREE_FOR_ALL: MatchRules = { ...ONE_V_ONE, oneOnOne: false };
 const KIRBY = FIGHTERS.find((f) => f.id === "kirby")!;
 const BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
 const FD = STAGES.find((s) => s.id === "finalDestination")!;
+/** As the game plays: the committed bake's bones, hurtboxes and ECB. */
+const BAKED: SimContext = bakedContext({ fighter: (id) => BY_ID.get(id)!, stage: (id) => STAGES.find((s) => s.id === id)! }, readBakeFromDisk());
 const INHALE_STATES = ["inhaleHold", "swallowed", "spatStar"];
 
 beforeAll(() => {
@@ -330,6 +333,37 @@ describe("holding a mouthful", () => {
     expect(states.every((st) => st.fighters[0].ledge === null)).toBe(true);
   });
 
+  it("keeps the 4-unit reach and the closed ledge through a swallow or spit before its release", () => {
+    // The swallow pressed at the blast line: still holding, so the reach still counts.
+    const b = FD.blastZone;
+    const s = holdingMario();
+    Object.assign(s.fighters[0], { x: b.right - fx(3), y: fx(20), grounded: false, platform: -1, facing: 1 });
+    expect(run(s, 1, () => [Btn.Special, 0]).events[0].kos.map((k) => k.port)).toEqual([0]);
+    // Falling past the right ledge, facing it: a free Kirby takes it at once; one
+    // spitting does not before the spit's release on its frame 8 (step 7).
+    const place = (st: GameState) => Object.assign(st.fighters[0], { x: fx(83), y: fx(-2), grounded: false, platform: -1, facing: -1 });
+    const free = lineUp(["mario"], 60);
+    place(free);
+    free.fighters[0].action = "fall";
+    expect(run(free, 3, () => [0, 0]).states.some((st) => st.fighters[0].ledge !== null)).toBe(true);
+    const spitting = holdingMario();
+    place(spitting);
+    const { states } = run(spitting, 8, (i) => [i === 0 ? Btn.Attack : 0, 0]);
+    expect(states.slice(0, 7).every((st) => st.fighters[0].ledge === null && st.fighters[0].action === "special")).toBe(true);
+  });
+
+  it("lands a special that holds someone but lets nobody out (no `release`), as any special lands (forged: none does today)", () => {
+    const s = holdingMario();
+    const kirby = s.fighters[0];
+    const ctx = { def: KIRBY, stage: FD, frame: 1, fighters: s.fighters } as StateContext;
+    Object.assign(kirby, { action: "special", move: "upB", grounded: true, platform: 0 });
+    onLanded(kirby, ctx);
+    expect(kirby.action).toBe("land");
+    Object.assign(kirby, { action: "special", move: "inhaleSwallow", actionFrame: 3 });
+    onLanded(kirby, ctx);
+    expect(kirby).toMatchObject({ action: "special", move: "inhaleSwallow" });
+  });
+
   it("extends Kirby's blast lines forward and down by 4 while he holds someone", () => {
     const b = FD.blastZone;
     const at = (x: number, y: number, facing: number, holding: boolean): boolean => {
@@ -400,7 +434,7 @@ describe("the mash out of Kirby's mouth", () => {
 });
 
 describe("the swallow", () => {
-  it("deals 10% on its frame 8, gives Kirby Mario's neutral special, and lets Mario out", () => {
+  it("deals 10% on its frame 8, gives Kirby Mario's neutral special, and flies Mario out on its star", () => {
     const s = holdingMario([], FREE_FOR_ALL);
     const { states, events } = run(s, 20, (i) => [i === 0 ? Btn.Special : 0, 0]);
     const out = states.findIndex((st) => st.fighters[1].action !== "swallowed");
@@ -409,8 +443,12 @@ describe("the swallow", () => {
     expect(events[out].hits).toEqual([expect.objectContaining({ attacker: 0, victim: 1, damage: fx(10), knockback: 0 })]);
     expect(states[out].fighters[0].combat.copy).toBe("mario");
     expect(states[out].fighters[0].combat.copyFrames).toBe(0);
-    expectNothingHeld(states[out].fighters[1], "the swallowed");
     expectNothingHeld(states[out].fighters[0], "Kirby");
+    // Out of the mouth and on the swallow's star: the link is gone, 7 above Kirby.
+    const kirby = states[out].fighters[0];
+    expect(states[out].fighters[1]).toMatchObject({ action: "spatStar", grabbedBy: -1, x: kirby.x, y: kirby.y + fx(7) });
+    expect(states[out].fighters[1].combat.ride).toBeLessThan(0);
+    expect(states[out].fighters[1].combat).toMatchObject({ mash: 0, grabLength: 0 });
     // The swallow's own length: interruptible on 21.
     expect(states[19].fighters[0].action).toBe("special");
     expect(states[19].fighters[0].move).toBe("inhaleSwallow");
@@ -435,16 +473,17 @@ describe("the swallow", () => {
     expect(states[7].fighters[0].combat.copy).toBe("mario");
   });
 
-  it("in the air lets Mario out where Kirby is, falling, and nothing is held", () => {
+  it("in the air flies Mario out on its star from where Kirby is, then lets him fall, nothing held", () => {
     const s = holdingMario();
     Object.assign(s.fighters[0], { y: fx(60), grounded: false, platform: -1 });
-    const { states } = run(s, 12, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const { states } = run(s, 20, (i) => [i === 0 ? Btn.Special : 0, 0]);
     const out = states[7];
-    expect(out.fighters[1].action).toBe("fall");
-    expect(out.fighters[1].x).toBe(out.fighters[0].x);
-    expectNothingHeld(out.fighters[1], "the swallowed");
+    expect(out.fighters[1]).toMatchObject({ action: "spatStar", x: out.fighters[0].x, y: out.fighters[0].y + fx(7) });
     expectNothingHeld(out.fighters[0], "Kirby");
     expect(out.fighters[0].combat.copy).toBe("mario");
+    expect(states[16].fighters[1].action).toBe("spatStar");
+    expect(states[17].fighters[1].action).toBe("fall");
+    expectNothingHeld(states[17].fighters[1], "the swallowed");
   });
 
   it("takes a swallowed Kirby's Copy Ability from him", () => {
@@ -588,6 +627,67 @@ describe("the spit and the star", () => {
     expect(states.slice(at, at + 28).every((st) => st.fighters[1].action === "spatStar" && st.fighters[1].y === starY)).toBe(true);
   });
 
+  it("leaves no mash credit on its rider, however the ride ends (forged)", () => {
+    const { states } = spat();
+    const at = states.findIndex((st) => st.fighters[1].action === "spatStar");
+    const s = cloneState(states[at]);
+    s.fighters[1].combat.mash = 6;
+    const after = run(s, 40, () => [0, 0]).states;
+    const off = after.findIndex((st) => st.fighters[1].action !== "spatStar");
+    expect(off).toBeGreaterThan(0);
+    expect(after[off - 1].fighters[1].combat.mash).toBe(6);
+    expect(after[off].fighters[1].combat.mash).toBe(0);
+  });
+
+  it("carries its rider past the top line if it climbs there, which takes them (forged: no move sends a star up)", () => {
+    const b = FD.blastZone;
+    const { states } = spat();
+    const at = states.findIndex((st) => st.fighters[1].action === "spatStar");
+    const s = cloneState(states[at]);
+    const star = s.projectiles[0];
+    Object.assign(star, { y: b.top - fx(1), vy: fx(3) });
+    Object.assign(s.fighters[1], { y: b.top - fx(1) });
+    const { events, states: after } = run(s, 1, () => [0, 0]);
+    expect(events[0].kos.map((k) => k.port)).toEqual([1]);
+    expect(after[0].fighters[1].action).toBe("dead");
+  });
+
+  it("is the published star: its box, its flight and its rules (SmashWiki's star parameters and hitbox table)", () => {
+    const star = KIRBY.moves.inhaleSpit!.projectiles![0];
+    expect(star).toMatchObject({
+      id: "star",
+      spawnFrame: 8,
+      offsetX: fx(7),
+      offsetY: fx(7),
+      vx: fx(2.8),
+      vy: 0,
+      gravity: 0,
+      lifetime: 60,
+      destroyOnHit: false,
+      drag: { perFrame: fx(0.05), minSpeed: fx(0.4) },
+      ridden: true,
+      reflectable: true,
+    });
+    expect(star.hitbox).toMatchObject({ radius: fx(2.5), angle: fx(45), baseKnockback: fx(70), knockbackGrowth: fx(78), hitlagMultiplier: fx(2), transcendent: true });
+    expect(KIRBY.moves.inhaleSwallow!.release).toEqual({
+      frame: 8,
+      kind: "swallow",
+      damage: fx(10),
+      star: { offsetY: fx(7), speed: fx(3.4), angle: fx(62), friction: fx(0.17), frames: 10 },
+    });
+    expect(KIRBY.moves.inhaleSpit!).toMatchObject({ totalFrames: 30, aerialTotalFrames: 38, release: { frame: 8, kind: "spit", damage: fx(6) } });
+  });
+
+  it("is sent back by a reflector, its rider still aboard", () => {
+    const s = holdingMario(["fox"], FREE_FOR_ALL);
+    Object.assign(s.fighters[2], { x: fx(10), facing: -1 });
+    const { states } = run(s, 40, (i) => [i === 0 ? Btn.Attack : 0, 0, i === 6 ? Btn.Down | Btn.Special : 0]);
+    const at = states.findIndex((st) => st.projectiles.some((p) => p.reflected > 0));
+    expect(at).toBeGreaterThan(7);
+    expect(states[at].projectiles[0]).toMatchObject({ owner: 2, defId: "star" });
+    expect(states[at].fighters[1].action).toBe("spatStar");
+  });
+
   it("dies against a wall and lets its rider go where it last was", () => {
     // Below Final Destination's floor, off its right side, spitting back at it.
     const { states } = spat(0, () => 0, 40, (s) => Object.assign(s.fighters[0], { x: fx(100), y: fx(-20), grounded: false, platform: -1, facing: -1 }));
@@ -680,6 +780,50 @@ describe("the Copy Ability", () => {
     expect(kept).toBeGreaterThan(0);
   });
 
+  it("draws on a pummel too, and on a spit's release, as on any damage taken", () => {
+    // A pummel: Mario grabs Kirby (copying Fox, grace over) and pummels him.
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const s = lineUp(["mario"], 8);
+      s.rngSeed = seed;
+      Object.assign(s.fighters[0].combat, { copy: "fox", copyFrames: COPY_GRACE_FRAMES });
+      const { states, events } = run(s, 40, (i) => [0, i === 0 ? Btn.Grab : i === 20 ? Btn.Attack : 0]);
+      const at = events.findIndex((e) => e.hits.some((h) => h.attacker === 1 && h.victim === 0));
+      expect(at, `seed ${seed}: the pummel`).toBeGreaterThan(0);
+      expect(states[at].fighters[0].action, `seed ${seed}`).toBe("grabbed");
+      const draw = randomInt(seed, 100 * ONE);
+      expect(states[at].rngSeed, `seed ${seed}`).toBe(draw.seed);
+      expect(states[at].fighters[0].combat.copy, `seed ${seed}`).toBe(draw.value < events[at].hits[0].damage ? "" : "fox");
+    }
+    // A spit: one Kirby spits another, who is copying Fox past the grace.
+    for (const seed of [1, 2, 3]) {
+      const s = lineUp(["kirby"]);
+      s.rngSeed = seed;
+      Object.assign(s.fighters[1].combat, { copy: "fox", copyFrames: COPY_GRACE_FRAMES });
+      const { states, events } = run(s, 50, (i) => [i === 0 ? Btn.Special : i === 20 ? Btn.Attack : 0, 0]);
+      const at = states.findIndex((st) => st.fighters[1].action === "spatStar");
+      expect(at, `seed ${seed}: the spit`).toBeGreaterThan(0);
+      const draw = randomInt(seed, 100 * ONE);
+      expect(states[at].rngSeed, `seed ${seed}`).toBe(draw.seed);
+      const damage = events[at].hits.find((h) => h.victim === 1)!.damage;
+      expect(states[at].fighters[1].combat.copy, `seed ${seed}`).toBe(draw.value < damage ? "" : "fox");
+    }
+  });
+
+  it("leaves a copied Fireball reflected away when Kirby loses the copy: it is the reflector's (UNVERIFIED)", () => {
+    const s = lineUp(["fox"], 30);
+    s.fighters[0].combat.copy = "mario";
+    const { states } = run(s, 30, (i) => [i === 0 ? Btn.Special : 0, i === 10 ? Btn.Down | Btn.Special : 0]);
+    const at = states.findIndex((st) => st.projectiles.some((p) => p.reflected > 0));
+    expect(at).toBeGreaterThan(0);
+    expect(states[at].projectiles[0]).toMatchObject({ owner: 1, source: "mario", damageMul: COPY_DAMAGE });
+    const ko = cloneState(states[at]);
+    Object.assign(ko.fighters[0], { x: fx(-400), grounded: false, platform: -1, action: "fall" });
+    const after = run(ko, 1, () => [0, 0]).states[0];
+    expect(after.fighters[0]).toMatchObject({ action: "dead" });
+    expect(after.fighters[0].combat.copy).toBe("");
+    expect(after.projectiles.map((p) => p.owner)).toEqual([1]);
+  });
+
   it("re-simulates hash-equal across the draw", () => {
     const s = lineUp(["mario"]);
     s.rngSeed = 3;
@@ -721,6 +865,33 @@ describe("every way out of a mouthful clears it", () => {
     expectNothingHeld(states[hit + 1].fighters[1], "Mario");
   });
 
+  it("Kirby grabbed while holding lets Mario out", () => {
+    const s = holdingMario(["fox"], FREE_FOR_ALL);
+    Object.assign(s.fighters[2], { x: fx(-14), facing: -1 });
+    const { states } = run(s, 30, (i) => [0, 0, i === 1 ? Btn.Grab : 0]);
+    const grabbed = states.findIndex((st) => st.fighters[0].grabbedBy === 2);
+    expect(grabbed).toBeGreaterThan(0);
+    expect(states[grabbed].fighters[1]).toMatchObject({ grabbedBy: -1, grabTimer: 0 });
+    expect(states[grabbed].fighters[1].combat).toMatchObject({ mash: 0, grabLength: 0 });
+    expectNothingHeld(states[grabbed + 1].fighters[1], "Mario");
+  });
+
+  it("Kirby hit in the swallow before its frame 8 lets Mario out unswallowed and uncopied", () => {
+    const s = holdingMario(["fox"], FREE_FOR_ALL);
+    Object.assign(s.fighters[2], { x: fx(-15), facing: -1 });
+    // Fox's forward smash, pressed first, lands on the swallow's frame 5.
+    const { states, events } = run(s, 30, (i) => [i === 8 ? Btn.Special : 0, 0, i === 0 ? Btn.Attack | Btn.Left : 0]);
+    const hit = events.findIndex((e) => e.hits.some((h) => h.victim === 0));
+    expect(hit).toBeGreaterThan(8);
+    expect(states[hit - 1].fighters[0]).toMatchObject({ action: "special", move: "inhaleSwallow" });
+    expect(states[hit - 1].fighters[0].actionFrame + 1).toBeLessThan(8);
+    expectNothingHeld(states[hit].fighters[0], "Kirby");
+    expectNothingHeld(states[hit + 1].fighters[1], "Mario");
+    // No swallow's 10% from Kirby, and no copy.
+    expect(events.flatMap((e) => e.hits).filter((h) => h.attacker === 0 && h.victim === 1)).toEqual([]);
+    expect(states[states.length - 1].fighters[0].combat.copy).toBe("");
+  });
+
   it("the mouthful mashing out", () => {
     const { states } = inhaled(["mario"], () => 0, 200, (i) => (i > 12 && i % 2 === 0 ? Btn.Attack : 0));
     const at = caughtAt(states);
@@ -756,24 +927,217 @@ describe("every way out of a mouthful clears it", () => {
     for (const f of states[states.length - 1].fighters) expectNothingHeld(f, "the end");
   });
 
-  it("a match whose time runs out mid-swallow ends there, and the next starts empty", () => {
+  it("a match whose time runs out mid-swallow ends there whole, and replays to the same end", () => {
     // `timeLimit` is in frames.
     const rules: MatchRules = { mode: "time", stocks: 0, timeLimit: 3600, smashBall: false, oneOnOne: true };
     const s = holdingMario([], rules);
     s.timeRemaining = 5;
     // Not a tie, or the clock would call sudden death.
     s.fighters[1].damage = fx(10);
-    const { states } = run(s, 5, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const script = (i: number): InputFrame[] => [i === 0 ? Btn.Special : 0, 0];
+    const { states } = run(s, 5, script);
     const end = states[states.length - 1];
-    expect(end.outcome?.kind).toBe("timeUp");
-    expect(end.fighters[1].action).toBe("swallowed");
+    expect(end.outcome).toEqual({ kind: "timeUp", placings: [0, 1] });
+    // Ended mid-swallow (frame 5 of 8), the link whole at both ends.
+    expect(end.fighters[0]).toMatchObject({ action: "special", move: "inhaleSwallow", grabbing: 1 });
+    expect(end.fighters[1]).toMatchObject({ action: "swallowed", grabbedBy: 0 });
+    expect(end.fighters[1].grabTimer).toBeGreaterThan(0);
     expect(hashState(cloneState(end))).toBe(hashState(end));
-    const next = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "mario" }], rules, 9);
-    for (const f of next.fighters) {
-      expectNothingHeld(f, "the rematch");
-      expect(f.combat.copy).toBe("");
-      expect(f.combat.copyFrames).toBe(0);
+    // A rollback across the last frame (as an online match's confirmation may run)
+    // reaches the same end, hash for hash.
+    expectRollbackSafe(s, 5, script, [0, 1, 2, 3]);
+  });
+});
+
+describe("Inhale's own published shape (Task 9 fix round 1, ruling R-T9f)", () => {
+  it("tapped, lasts 63 frames: Kirby acts on frame 64", () => {
+    const { states } = run(lineUp(["mario"], 60), 66, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    expect(states[62].fighters[0].action).toBe("special");
+    expect(states[63].fighters[0].action).toBe("stand");
+  });
+
+  it("held, goes round frames 35-44 until B comes up, and acts on the 20th frame from the release", () => {
+    const { states } = run(lineUp(["mario"], 60), 125, (i) => [i < 100 ? Btn.Special : 0, 0]);
+    for (let i = 44; i < 100; i++) {
+      expect(states[i].fighters[0].action, `step ${i}`).toBe("special");
+      const frame = states[i].fighters[0].actionFrame + 1;
+      expect(frame >= 35 && frame <= 44, `step ${i}: move frame ${frame}`).toBe(true);
     }
+    expect(states[118].fighters[0].action).toBe("special");
+    expect(states[119].fighters[0].action).toBe("stand");
+  });
+
+  it("held, still catches whoever comes into reach after its 63 frames", () => {
+    const s = lineUp(["mario"], 60);
+    const held = run(s, 80, () => [Btn.Special, 0]).states[79];
+    Object.assign(held.fighters[1], { x: held.fighters[0].x + fx(10) });
+    const { states } = run(held, 12, () => [Btn.Special, 0]);
+    expect(states.some((st) => st.fighters[1].action === "swallowed")).toBe(true);
+  });
+
+  it("catches with 6.0 on frame 10, then 5.8, and 5.3 further out for airborne fighters only", () => {
+    const caught = (gap: number, air: boolean) => {
+      const s = lineUp(["mario"], gap);
+      if (air) Object.assign(s.fighters[1], { y: fx(9), grounded: false, platform: -1, action: "fall" });
+      const { states, events } = run(s, 30, (i) => [i === 0 ? Btn.Special : 0, 0]);
+      return { at: caughtAt(states), pulled: events.findIndex((e) => e.pushes.length > 0) };
+    };
+    // Frame 10's box (step 9), then the loop's from 11.
+    expect(caught(13, false).at).toBe(9);
+    expect(caught(14, false).at).toBe(10);
+    // 16 apart: the air-only 5.3 box takes an airborne Mario on 11, unpulled; on the
+    // ground he is pulled on 11 and caught after.
+    expect(caught(16, true)).toEqual({ at: 10, pulled: -1 });
+    const ground = caught(16, false);
+    expect(ground.pulled).toBe(10);
+    expect(ground.at).toBeGreaterThan(10);
+  });
+
+  it("pulls on frames 11, 21, 31 and 41, at 160°, and a pulled fighter can still be caught", () => {
+    const s = lineUp(["mario"], 18);
+    const { states, events } = run(s, 40, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const pulls = events.map((e, i) => (e.pushes.some((p) => p.attacker === 0 && p.victim === 1) ? i : -1)).filter((i) => i >= 0);
+    expect(pulls).toEqual([10, 20]);
+    // Towards Kirby (160° from the way he faces), then into his mouth.
+    expect(states[10].fighters[1].vx).toBeLessThan(0);
+    expect(caughtAt(states)).toBe(21);
+    // The far pull takes grounded fighters only: airborne beyond the near one's reach, none.
+    const air = lineUp(["mario"], 21);
+    Object.assign(air.fighters[1], { y: fx(9), grounded: false, platform: -1, action: "fall" });
+    expect(run(air, 12, (i) => [i === 0 ? Btn.Special : 0, 0]).events[10].pushes).toEqual([]);
+    expect(run(lineUp(["mario"], 21), 12, (i) => [i === 0 ? Btn.Special : 0, 0]).events[10].pushes).toHaveLength(1);
+  });
+
+  it("spits for 30 frames on the ground and 38 in the air", () => {
+    const ground = run(holdingMario(), 34, (i) => [i === 0 ? Btn.Attack : 0, 0]).states;
+    expect(ground[29].fighters[0].action).toBe("special");
+    expect(ground[30].fighters[0].action).toBe("stand");
+    const high = holdingMario();
+    Object.assign(high.fighters[0], { y: fx(150), grounded: false, platform: -1 });
+    const air = run(high, 42, (i) => [i === 0 ? Btn.Attack : 0, 0]).states;
+    expect(air[37].fighters[0].action).toBe("special");
+    expect(air[38].fighters[0].action).toBe("fall");
+  });
+
+  it("flies the swallowed out 10 frames along 62°, from 3.4 slowing 0.17 a frame", () => {
+    const { states } = run(holdingMario(), 20, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const from = states[7].fighters[1];
+    const to = states[16].fighters[1];
+    expect(to.action).toBe("spatStar");
+    // Nine frames of flight: Σ (3.4 − 0.17k), k = 1..9, along 62°, the way Kirby faces.
+    const path = 9 * 3.4 - 0.17 * 45;
+    expect(toFloat(to.x - from.x)).toBeCloseTo(path * Math.cos((62 * Math.PI) / 180), 1);
+    expect(toFloat(to.y - from.y)).toBeCloseTo(path * Math.sin((62 * Math.PI) / 180), 1);
+    // Off it, from rest: the spit star's escape speed is published for that star alone
+    // (UNVERIFIED), so only the frame's own gravity moves Mario.
+    const off = states[17].fighters[1];
+    expect(off.action).toBe("fall");
+    expect(off.vx).toBe(0);
+    expect(off.vy).toBeLessThanOrEqual(0);
+    expect(off.vy).toBeGreaterThan(-fx(0.2));
+  });
+
+  it("lets no mash shorten the swallow's star: no mash is published for it (UNVERIFIED)", () => {
+    const { states } = run(holdingMario(), 20, (i) => [i === 0 ? Btn.Special : 0, i >= 8 && i % 2 === 0 ? Btn.Attack : 0]);
+    expect(states[16].fighters[1].action).toBe("spatStar");
+    expect(states[17].fighters[1].action).toBe("fall");
+  });
+
+  it("stops the swallow's star short of the stage's solid body, and lets its rider go there", () => {
+    // Off Final Destination's right side, below its floor, facing it: the star climbs into the side.
+    const s = holdingMario();
+    Object.assign(s.fighters[0], { x: fx(90), y: fx(-30), grounded: false, platform: -1, facing: -1 });
+    const { states } = run(s, 20, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const out = states.findIndex((st, i) => i > 7 && st.fighters[1].action !== "spatStar");
+    expect(out).toBeGreaterThan(7);
+    expect(out).toBeLessThan(17);
+    for (const st of states) {
+      const m = st.fighters[1];
+      expect(Math.abs(toFloat(m.x)) < 80 && toFloat(m.y) < 0 && toFloat(m.y) > -60, `frame ${st.frame}: Mario inside the stage`).toBe(false);
+    }
+  });
+});
+
+describe("a Copy Ability's end (Task 9 fix round 1)", () => {
+  /** Kirby copying Donkey Kong, a full punch stored, grace over: Mario forward-smashes into its armour. */
+  function armouredPunch(seed: number) {
+    const s = lineUp(["mario"], 12);
+    s.rngSeed = seed;
+    Object.assign(s.fighters[0].combat, { copy: "donkeyKong", copyFrames: COPY_GRACE_FRAMES, storedCharge: 110 });
+    return run(s, 100, (i) => [i === 0 ? Btn.Special : 0, i === 0 ? Btn.Left | Btn.Attack : 0]).states;
+  }
+
+  it("lost mid-copied special, waits for that move's end: Kirby finishes the punch, then has no copy and no Inhale (ruling R-T9d)", () => {
+    // Seed 7 loses the copy to Mario's hit inside the armour; seed 6 keeps it.
+    const lost = armouredPunch(7);
+    const kept = armouredPunch(6);
+    const pending = lost.findIndex((st) => st.fighters[0].combat.copyFrames === COPY_LOSS_PENDING);
+    expect(pending).toBe(14);
+    expect(lost[pending].fighters[0]).toMatchObject({ action: "special", move: "neutralB" });
+    expect(kept.every((st) => st.fighters[0].combat.copyFrames === COPY_GRACE_FRAMES)).toBe(true);
+    // The punch runs on Donkey Kong's timing to its end, frame for frame as when kept.
+    const end = kept.findIndex((st, i) => i > 0 && st.fighters[0].action !== "special");
+    expect(end).toBeGreaterThan(pending);
+    for (let i = 0; i <= end; i++) {
+      expect([lost[i].fighters[0].action, lost[i].fighters[0].actionFrame], `step ${i}`).toEqual([kept[i].fighters[0].action, kept[i].fighters[0].actionFrame]);
+      expect(lost[i].fighters[0].combat.copy, `step ${i}`).toBe(i < end ? "donkeyKong" : "");
+    }
+    expect(lost[end].fighters[0].combat).toMatchObject({ copy: "", copyFrames: 0, storedCharge: 0 });
+    expect(lost.every((st) => st.fighters[1].action !== "swallowed")).toBe(true);
+  });
+
+  it("takes no stored charge across: a full Charge Shot stored under a Samus copy is no full Giant Punch under a Donkey Kong copy (ruling R-T9e)", () => {
+    /** Kirby copying Samus, a full charge stored, grace over, jabbed by Donkey Kong. */
+    const jabbed = (seed: number) => {
+      const s = lineUp(["donkeyKong"], 10);
+      s.rngSeed = seed;
+      Object.assign(s.fighters[0].combat, { copy: "samus", copyFrames: COPY_GRACE_FRAMES, storedCharge: 112 });
+      return run(s, 30, (i) => [0, i === 0 ? Btn.Attack : 0]).states;
+    };
+    let seed = 1;
+    while (jabbed(seed)[29].fighters[0].combat.copy !== "") seed += 1;
+    const after = jabbed(seed)[29];
+    expect(after.fighters[0].combat).toMatchObject({ copy: "", storedCharge: 0 });
+    // ...and a new copy starts with none either, whatever was stored.
+    Object.assign(after.fighters[0], { action: "stand", actionFrame: 0, hitstun: 0, x: fx(-20), facing: 1, grounded: true, platform: 0, y: 0 });
+    Object.assign(after.fighters[1], { action: "stand", actionFrame: 0, hitstun: 0, x: fx(-10), facing: -1, grounded: true, platform: 0, y: 0 });
+    after.fighters[0].combat.storedCharge = 112;
+    after.fighters[0].hitlag = 0;
+    after.fighters[1].hitlag = 0;
+    const { states } = run(after, 80, (i) => [i === 0 || i === 30 || i === 60 ? Btn.Special : 0, 0]);
+    expect(states[50].fighters[0].combat).toMatchObject({ copy: "donkeyKong", storedCharge: 0 });
+    // B under the new copy winds a punch up from nothing, on its loop frame.
+    const punch = states[61].fighters[0];
+    expect(punch).toMatchObject({ action: "special", move: "neutralB" });
+    expect(punch.charge).toBeLessThan(110);
+  });
+
+  /** `attacker` (or Kirby copying it) hits Fox with its neutral special, in the baked world, outside a 1v1. */
+  function neutralSpecial(attacker: string, copying: boolean, keys: (i: number) => InputFrame) {
+    const s = createInitialState("finalDestination", [{ defId: copying ? "kirby" : attacker }, { defId: "fox" }], FREE_FOR_ALL, 9, BAKED);
+    s.fighters.forEach((f, i) =>
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-20 + i * 12), y: 0, facing: i === 0 ? 1 : -1, intangible: 0, invincible: 0 }),
+    );
+    if (copying) s.fighters[0].combat.copy = attacker;
+    const { states, events } = run(s, 90, (i) => [keys(i), 0], BAKED);
+    const at = events.findIndex((e) => e.hits.length > 0);
+    return { hit: events[at].hits[0], hitlag: states[at].fighters[1].hitlag };
+  }
+
+  it("hurts ×1.2 with a copied melee special, and freezes as the owner's own hit does", () => {
+    // Shield Breaker, uncharged: 9 × 1.05 fresh = 9.45, copied 11.34.
+    const sb = (copying: boolean) => neutralSpecial("marth", copying, (i) => (i === 0 ? Btn.Special : 0));
+    expect(toFloat(sb(false).hit.damage)).toBeCloseTo(9.45, 2);
+    expect(sb(true).hit.damage).toBe(mul(sb(false).hit.damage, COPY_DAMAGE));
+    expect(toFloat(sb(true).hit.damage)).toBeCloseTo(11.34, 2);
+    // Giant Punch, wound 13 frames: 12 × 1.05 = 12.6, copied 15.12.
+    const gp = (copying: boolean) => neutralSpecial("donkeyKong", copying, (i) => (i === 0 || i === 20 ? Btn.Special : 0));
+    expect(toFloat(gp(false).hit.damage)).toBeCloseTo(12.6, 2);
+    expect(toFloat(gp(true).hit.damage)).toBeCloseTo(15.12, 2);
+    // UNVERIFIED reading: the ×1.2 is left out of hitlag, as the 1v1 bonus is (here
+    // it would cross a frame: 12.6 freezes 13, 15.12 would freeze 14).
+    expect(gp(true).hitlag).toBe(gp(false).hitlag);
+    expect(sb(true).hitlag).toBe(sb(false).hitlag);
   });
 });
 
@@ -830,7 +1194,6 @@ describe("Review Focus: Inhale at the ledge", () => {
 });
 
 describe("every neutral special on the roster, as Kirby's Copy Ability, in the baked world", () => {
-  const BAKED: SimContext = bakedContext({ fighter: (id) => BY_ID.get(id)!, stage: (id) => STAGES.find((s) => s.id === id)! }, readBakeFromDisk());
   const OTHERS = FIGHTERS.filter((f) => f.id !== "kirby");
 
   it.each(OTHERS.map((d) => [d.id, d] as const))("Kirby runs %s's neutral special as his own", (id, copied) => {

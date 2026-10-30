@@ -690,8 +690,31 @@ export interface MoveDef {
   /**
    * The move frame on which the fighter in Kirby's mouth comes out, how, and for
    * what damage (Plan 5, Task 9: the swallow and the spit; `resolveInhaleReleases`).
+   * `star` is the star a swallow carries its fighter out on (Task 9 fix round 1):
+   * it flies `frames` frames from `offsetY` above Kirby, at `speed` along `angle`
+   * (degrees, the way he faces), losing `friction` a frame. It has no box: its
+   * damage is unpublished. All Q12 but `frames`.
    */
-  readonly release?: { readonly frame: number; readonly kind: "swallow" | "spit"; readonly damage: number };
+  readonly release?: {
+    readonly frame: number;
+    readonly kind: "swallow" | "spit";
+    readonly damage: number;
+    readonly star?: { readonly offsetY: number; readonly speed: number; readonly angle: number; readonly friction: number; readonly frames: number };
+  };
+  /**
+   * While B is held as the move steps past `to`, it goes back to `from`, and from
+   * there round again; let go after the first time round, it goes straight on to
+   * `to + 1` (Plan 5, Task 9 fix round 1: Kirby's Inhale, "Kirby will not stop
+   * inhaling until the button is released"). Move frames, quoted from one.
+   */
+  readonly holdLoop?: { readonly from: number; readonly to: number };
+  /**
+   * In the air the move ends on this frame instead of `totalFrames`: its
+   * "Interruptible (aerial)" − 1 (Plan 5, Task 9 fix round 1: Kirby's spit, 38).
+   * Not `airTotalFrames`, which plays an aerial animation out past an
+   * interruptible frame the air shares with the ground.
+   */
+  readonly aerialTotalFrames?: number;
   /** A jab that loops until the button is released. */
   readonly rapid?: boolean;
   /** Which move follows this one if the button is pressed again in time. */

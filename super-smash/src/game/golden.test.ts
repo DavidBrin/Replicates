@@ -583,6 +583,12 @@ describe("engine golden trace", () => {
   // a hit (Samus in link-samus, tumbling at 104%); the rest are self-destructs:
   // Mario during a Cape, Donkey Kong and Pikachu in special fall, Fox in the script,
   // and the tech lab's two.
+  // Plan 5 Task 9's fix round 1 (the Inhale's published boxes, 63 frames, held
+  // loop and pull; the swallow's star; copies that end cleanly) moved only the
+  // Inhale lab, from its 101-200 sample, where its steps are re-tuned
+  // (`goldenInhaleLab.ts`: the second inhale pulls Mario in, held, and the swallow's
+  // star carries him out). Still four hits there, no shield hit, no KO; the other
+  // seven are byte-identical, so the counts are as above.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

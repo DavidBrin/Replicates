@@ -162,7 +162,9 @@ export interface CombatState {
   /**
    * Plan 5, Task 9: frames the Copy Ability has been held, counting up to its
    * 1200-frame grace and stopping there (`COPY_GRACE_FRAMES`). 0 with no copy;
-   * cleared with it.
+   * cleared with it. −1 (`COPY_LOSS_PENDING`, fix round 1, ruling R-T9d) while a
+   * copy lost to a hit waits for the copied special under way to end, which the
+   * special status's `end` makes good.
    */
   copyFrames: number;
   /**

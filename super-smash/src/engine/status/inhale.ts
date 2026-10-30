@@ -55,7 +55,12 @@ import type { FighterState, MoveSlot } from "../types";
 import { releaseHeld } from "./grab";
 import type { FighterStatus } from "./kind";
 
-/** ×1.08 walk speed and acceleration with a mouthful (SmashWiki, above). */
+/**
+ * ×1.08 walk speed with a mouthful (SmashWiki, above: "Walk speed multiplier with
+ * inhaled opponent 1.08"). UNVERIFIED: that it scales the walk's acceleration too;
+ * the page names the speed alone, and the status's `walkMul` scales both, as Donkey
+ * Kong's carry's published ×1.1 "walk speed and acceleration" does.
+ */
 export const INHALE_WALK = fx(1.08);
 /** Mashing out of the mouth, in tenths of a frame: on the ground and in the air (SmashWiki, above). */
 export const INHALE_MASH_BUTTON = 216;
@@ -92,17 +97,22 @@ function releaseMoves(ctx: StateContext): { swallow: MoveSlot; spit: MoveSlot } 
 /**
  * A spat fighter leaves its star (its flight is over, or the star is gone): it
  * falls, flying off at the published escape speed, the 0.73 the way the star
- * flew. `STATUS_SPAT_STAR`'s `end` clears what the ride kept.
+ * flew. One the swallow's star carried out (`ride` negative) falls from rest:
+ * the page publishes that escape speed for the spit's star alone (UNVERIFIED).
+ * `STATUS_SPAT_STAR`'s `end` clears what the ride kept.
  */
 export function leaveStar(f: FighterState): void {
+  const outStar = f.combat.ride < 0;
   startAction(f, "fall");
-  kineticSet(f, f.facing * STAR_ESCAPE_X, STAR_ESCAPE_Y);
+  if (outStar) kineticSet(f, 0, 0);
+  else kineticSet(f, f.facing * STAR_ESCAPE_X, STAR_ESCAPE_Y);
 }
 
 export const STATUS_INHALE_HOLD: FighterStatus = {
   kind: "FIGHTER_KIRBY_STATUS_KIND_SPECIAL_N_EAT_WAIT",
   action: "inhaleHold",
   kineticType: "WALK",
+  // Speed ×1.08 (published) and acceleration ×1.08 (UNVERIFIED: `INHALE_WALK`).
   walkMul: INHALE_WALK,
   main(f, intent, ctx) {
     // The mouthful is gone when the link is broken (the held fighter got out, a
@@ -182,10 +192,15 @@ export const STATUS_SPAT_STAR: FighterStatus = {
   kineticType: "NONE",
   main(f, intent) {
     f.intangible = Math.max(f.intangible, 1);
-    // `grabTimer` holds what is left of the flight; mashing shortens it.
+    // `grabTimer` holds what is left of the flight; mashing shortens a spit star's
+    // (`ride` its instance id). The swallow's star (`ride` negative,
+    // `carryOutStarRiders`) flies its 10 frames: no mash is published for it
+    // (UNVERIFIED).
+    const outStar = f.combat.ride < 0;
     const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
-    f.grabTimer -= 1 + mashFrames(f.combat, buttonPresses(intent), sticks, STAR_MASH_BUTTON, STAR_MASH_STICK);
-    if (f.combat.ride === 0 || (f.grabTimer <= 0 && f.actionFrame >= STAR_MIN_FRAMES)) leaveStar(f);
+    const mashed = outStar ? 0 : mashFrames(f.combat, buttonPresses(intent), sticks, STAR_MASH_BUTTON, STAR_MASH_STICK);
+    f.grabTimer -= 1 + mashed;
+    if (f.combat.ride === 0 || (f.grabTimer <= 0 && (outStar || f.actionFrame >= STAR_MIN_FRAMES))) leaveStar(f);
   },
   // Nothing of the ride outlives it, however it ends: its flight, its star, a KO.
   end(f) {

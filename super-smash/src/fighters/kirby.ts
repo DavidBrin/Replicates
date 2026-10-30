@@ -18,7 +18,7 @@
  */
 
 import { fx } from "@/engine/fixed";
-import type { FighterDef } from "@/engine/types";
+import type { FighterDef, Hitbox } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { KIRBY } from "./acmd/generated/kirby";
 import { FIGHTER_PARAMS } from "./params";
@@ -30,6 +30,19 @@ const HEIGHT = 6.6;
 const HALF_WIDTH = 1.9;
 
 /** The hand-authored moveset; `kirby` below runs its root-bone moves from the imported scripts. */
+/**
+ * The Inhale's two pull windboxes, out for one frame on `frame` (Plan 5, Task 9 fix
+ * round 1; `neutralB` gives their source): the far one for grounded fighters
+ * only, the near one for all, both pulling at 160°.
+ */
+function inhalePull(frame: number, id: number): Hitbox[] {
+  const pull = { startFrame: frame, endFrame: frame, damage: fx(0), angle: fx(160), baseKnockback: fx(0), knockbackGrowth: fx(100), windbox: true, transcendent: true } as const;
+  return [
+    { ...pull, id, x: fx(15.5), y: fx(7.0), radius: fx(8.5), fixedKnockback: fx(30), situation: "ground" },
+    { ...pull, id: id + 1, x: fx(9.7), y: fx(7.0), radius: fx(7.8), fixedKnockback: fx(25) },
+  ];
+}
+
 const legacy: FighterDef = {
   id: "kirby",
   name: "Kirby",
@@ -664,36 +677,51 @@ const legacy: FighterDef = {
     neutralB: {
       slot: "neutralB",
       name: "Inhale",
-      totalFrames: 67,
+      // SmashWiki "Kirby (SSBU)/Neutral special"
+      // (https://www.ssbwiki.com/Kirby_(SSBU)/Neutral_special), 6.0.0: "Inhale has
+      // less startup (frame 14 → 10) with its total duration reduced as well (FAF 68
+      // → 64)"; "Loop 11-44", "Interruptible (from release) 64 (20)". So 63, the
+      // loop's last frame and 19 (Plan 5, Task 9 fix round 1). UltimateFrameData's
+      // 67 (https://ultimateframedata.com/kirby) is the pre-6.0.0 total.
+      totalFrames: 63,
       // Plan 5, Task 9: the catch puts the fighter caught in his mouth
       // (`swallowed`, Kirby `inhaleHold`), from which B or down swallows
       // (`inhaleSwallow`) and attack spits (`inhaleSpit`): SmashWiki "Inhale
       // (Kirby)" (https://www.ssbwiki.com/Inhale_(Kirby)), "Kirby can swallow the
       // victim by pressing down or the special move button", and "spit them out
-      // as a star ... by pressing the attack button". UNVERIFIED-simplified: the
-      // loop's pull (`game_specialnloop`'s windboxes; SmashWiki "Vacuum speed 0.9,
-      // 1.2") and holding the inhale past frame 44 with B held are not modelled.
+      // as a star ... by pressing the attack button".
       inhale: { swallow: "inhaleSwallow", spit: "inhaleSpit" },
-      // Not a damaging move — a grab. Suction is active frames 10-44 (longer
-      // if held) and pulls anyone caught into Kirby's mouth, from which he can
-      // either **swallow** (10%, and he takes the victim's neutral special as
-      // a Copy Ability) or **spit** them out as a star projectile (6%; the star
-      // itself launches at 45 degrees with BKB 70 / KBG 78). It also eats
-      // projectiles outright, in a 51-frame animation.
+      // Held, the loop goes on (`holdLoop`, Task 9 fix round 1): "Kirby will not stop
+      // inhaling until the button is released" (SmashWiki "Inhale (Kirby)"); its 34
+      // frames ("Minimum inhale duration 34 frames") always play. UNVERIFIED: that a
+      // held loop repeats 35-44 (the page's "loop points 34-35").
+      holdLoop: { from: 35, to: 44 },
+      // Not a damaging move: a catch, and a pull. Boxes from rubendal SSBU Data
+      // Viewer 13.0.1 (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Kirby/data.json),
+      // Z forward and Y up as `x`/`y` (Task 9 fix round 1):
+      // - `SpecialNStart`: `CATCH(ID=0, Size=6.0, Y=6.0, Z=5.0, …_GA)` on motion
+      //   frame 18 at `FT_MOTION_RATE(0.5)`, game frame 10 ("Start 10"); the loop
+      //   takes over on 11;
+      // - `SpecialNLoop`, frames 11-44: `CATCH(ID=1, Size=5.8, Y=6.4, Z=6.2, …_GA)`
+      //   and `CATCH(ID=0, Size=5.3, Y=6.4, Z=10.2, …_A)`, airborne fighters only;
+      // - the pull, `ATTACK(ID=0, Size=8.5, Y=7.0, Z=15.5, …_G_d)`, grounded
+      //   fighters only, and `ATTACK(ID=1, Size=7.8, Y=7.0, Z=9.7, …_GA_d)`: Angle 160,
+      //   KBG 100, FKB 30 / 25, BKB 0, `Flinchless=true` (a windbox),
+      //   `DisableHitlag=true`, `Clang_Rebound=ATTACK_SETOFF_KIND_OFF`, `Rehit=10`.
+      //   The rehit is the boxes' own: out one frame on 11, 21, 31 and 41 (and, held,
+      //   on 41 each time round), leaving no mark on the swing's record
+      //   (`simulate.ts` `unrecorded`). UNVERIFIED: SSBU times a rehit from each
+      //   victim's last hit; SmashWiki's "Opponent vacuum speed 0.9, 1.2" is not
+      //   matched to the pull's knockback.
+      // The catch boxes have the lower ids, so a fighter both reach is caught. The
+      // pulls are listed first, as the compiled script lists attacks before catches.
+      // Published, not modelled: "Minimum opponent vacuum time before they are
+      // inhaled 4 frames", and inhaling projectiles and items.
       hitboxes: [
-        {
-          id: 0,
-          startFrame: 10,
-          endFrame: 44,
-          x: fx(4.6),
-          y: fx(3.4),
-          radius: fx(4.0),
-          damage: fx(0),
-          angle: fx(0),
-          baseKnockback: fx(0),
-          knockbackGrowth: fx(0),
-          grabbing: true,
-        },
+        ...[11, 21, 31, 41].flatMap((frame, k) => inhalePull(frame, 3 + 2 * k)),
+        { id: 0, startFrame: 10, endFrame: 10, x: fx(5.0), y: fx(6.0), radius: fx(6.0), damage: fx(0), angle: fx(0), baseKnockback: fx(0), knockbackGrowth: fx(0), grabbing: true },
+        { id: 1, startFrame: 11, endFrame: 44, x: fx(6.2), y: fx(6.4), radius: fx(5.8), damage: fx(0), angle: fx(0), baseKnockback: fx(0), knockbackGrowth: fx(0), grabbing: true },
+        { id: 2, startFrame: 11, endFrame: 44, x: fx(10.2), y: fx(6.4), radius: fx(5.3), damage: fx(0), angle: fx(0), baseKnockback: fx(0), knockbackGrowth: fx(0), grabbing: true, situation: "air" },
       ],
     },
 
@@ -706,17 +734,28 @@ const legacy: FighterDef = {
       // H× 0.0×: the damage lands and nothing launches or freezes. The fighter
       // swallowed's neutral special becomes his Copy Ability (`engine/inhale.ts`).
       totalFrames: 20,
-      release: { frame: 8, kind: "swallow", damage: fx(10.0) },
+      // The swallowed fighter flies out of him on a star (Task 9 fix round 1;
+      // SmashWiki's Swallow and Copy Ability parameters): "Star Y offset 7u", "Star
+      // duration 10 frames", "Star initial speed 3.4", "Star travel angle 62°",
+      // "Star friction 0.17". Its box ("Star hitbox 8-17") has no published damage,
+      // so it hits nothing here. UNVERIFIED: that the 62° points forward.
+      release: {
+        frame: 8,
+        kind: "swallow",
+        damage: fx(10.0),
+        star: { offsetY: fx(7.0), speed: fx(3.4), angle: fx(62), friction: fx(0.17), frames: 10 },
+      },
       hitboxes: [],
     },
 
     inhaleSpit: {
       slot: "inhaleSpit",
       name: "Inhale (spit)",
-      // SmashWiki, Spit: "Throw release frame 8", grounded "Interruptible 31";
-      // its throw 6.0%, BK 0, KS 0, H× 0.0×. UNVERIFIED-simplified: the aerial
-      // spit's own "Interruptible 39" is not modelled (it ends as the grounded one).
+      // SmashWiki, Spit: "Throw release frame 8", "Interruptible 31" on the ground
+      // and "Interruptible (aerial) 39" in the air (Task 9 fix round 1:
+      // `aerialTotalFrames`); its throw 6.0%, BK 0, KS 0, H× 0.0×.
       totalFrames: 30,
+      aerialTotalFrames: 38,
       release: { frame: 8, kind: "spit", damage: fx(6.0) },
       hitboxes: [],
       projectiles: [
