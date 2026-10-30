@@ -676,7 +676,14 @@ const legacy: FighterDef = {
       name: "Spin Attack",
       totalFrames: 76,
       momentum: [{ frame: 6, x: fx(0.35), y: fx(2.5), hold: 13 }],
-      landingLag: 30,
+      // Ends helpless in the air (Plan 5, Task 4b): SmashWiki "Link (SSBU)/Up
+      // special" (https://www.ssbwiki.com/Link_(SSBU)/Up_special): "Air speed
+      // multiplier ... 0.909 (helpless)", "Landing lag 30 frames" (the landing's
+      // "Interruptible 31"; UltimateFrameData's aerial Spin Attack, landing lag 30,
+      // https://ultimateframedata.com/link). Not modelled: its "Additional air
+      // acceleration ... 0.025 (helpless)", as no source says which of the two air
+      // accelerations (`air_accel_x_add`, `air_accel_x_mul`) it replaces.
+      helpless: { landingLag: 30, airSpeed: fx(0.909) },
       hitboxes: [
         {
           id: 0,

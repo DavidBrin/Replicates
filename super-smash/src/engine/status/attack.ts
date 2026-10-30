@@ -35,6 +35,7 @@ import {
   releaseGrab,
   startAction,
   startMove,
+  startSpecialFall,
 } from "../states";
 import type { Intent, StateContext } from "../states";
 import type { FighterState, MoveSlot } from "../types";
@@ -94,6 +95,13 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     // interrupts it too, as at any other interruptible frame (`handleActionable`).
     if (!f.grounded && move.airTotalFrames !== undefined && f.actionFrame < move.airTotalFrames) {
       handleActionable(f, intent, ctx);
+      return;
+    }
+    // A move that ends helpless leaves its fighter in special fall when it ends
+    // in the air (Plan 5, Task 4b; `MoveDef.helpless`).
+    const slot = f.move;
+    if (!f.grounded && move.helpless !== undefined && slot !== null) {
+      startSpecialFall(f, slot);
       return;
     }
     handOff(f, f.grounded ? "stand" : "fall", intent, ctx);

@@ -15,6 +15,7 @@ import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { SLOT_MOTION } from "./legacy";
 import {
+  MOTION_OF_ACTION,
   OPEN_ENDED_FRAMES,
   SCALED_FRAMES,
   STRIDE_UNITS,
@@ -75,8 +76,26 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
     expect(statusMotion({ action: "stand", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_stand");
     expect(statusMotion({ action: "jump", jumpsUsed: 2, fastFalling: false, charge: 0 })).toBe("status_jump_aerial");
     expect(statusMotion({ action: "fall", jumpsUsed: 1, fastFalling: true, charge: 0 })).toBe("status_fall_fast");
-    const all = ACTIONS.map((action) => statusMotion({ action, jumpsUsed: 1, fastFalling: false, charge: 0 }));
+    const own = ACTIONS.filter((action) => MOTION_OF_ACTION[action] === undefined);
+    const all = own.map((action) => statusMotion({ action, jumpsUsed: 1, fastFalling: false, charge: 0 }));
     expect(new Set(all).size).toBe(all.length);
+  });
+
+  // Plan 5, Task 4b: the helpless fall plays the fall's motion, fast fall
+  // included, and its special landing the landing lag's, on its own lag.
+  it("plays the helpless fall as a fall and its landing as landing lag, sharing their motions", () => {
+    expect(MOTION_OF_ACTION).toEqual({ specialFall: "fall", specialLanding: "landingLag" });
+    for (const fastFalling of [false, true]) {
+      expect(statusMotion({ action: "specialFall", jumpsUsed: 1, fastFalling, charge: 0 })).toBe(
+        statusMotion({ action: "fall", jumpsUsed: 1, fastFalling, charge: 0 }),
+      );
+    }
+    expect(statusMotion({ action: "specialLanding", jumpsUsed: 1, fastFalling: false, charge: 24 })).toBe("status_landingLag");
+    const c = clocks({ status_landingLag: { kind: "scaled", frames: SCALED_FRAMES } });
+    expect(poseIndexOf(DEF, fighter({ action: "specialLanding", actionFrame: 12, charge: 24 }), 0, c)).toEqual({
+      motion: "status_landingLag",
+      frame: SCALED_FRAMES / 2 + 1,
+    });
   });
 
   it("runs a fixed-length state once, frame for frame, and holds its last frame", () => {
@@ -198,9 +217,11 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
       for (const charge of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         for (const jumpsUsed of [1, 2])
           for (const fastFalling of [false, true]) names.add(statusMotion({ action, jumpsUsed, fastFalling, charge }));
-    // 48 actions, the second jump, two fast falls, five directional air dodges and the back roll.
-    expect(names.size).toBe(ACTIONS.length + 1 + 2 + 5 + 1);
-    expect(ACTIONS.length).toBe(48);
+    // 48 actions of their own (the two helpless ones share the fall's and the
+    // landing lag's), the second jump, two fast falls, five directional air
+    // dodges and the back roll.
+    expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
+    expect(ACTIONS.length).toBe(50);
   });
 
   it.each(FIGHTERS.map((d) => [d.id, d] as const))("%s: spot dodge, rolls, air dodges and techs last the engine's own lengths", (_id, def) => {

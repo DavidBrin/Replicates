@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_AIR_DODGE, airDodgeCharge } from "@/engine/airDodge";
 import { SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
-import { fx, toFloat } from "@/engine/fixed";
+import { fx, mul, toFloat } from "@/engine/fixed";
+import { fighterParams } from "@/engine/params";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
 import { emptyCombat } from "@/engine/combat";
 import { emptyKinetic } from "@/engine/kinetic";
@@ -23,6 +24,7 @@ import {
   sideDodgeTravel,
   edgeguard,
   fullHopPulse,
+  isHelpless,
   isOffstage,
   isStunned,
   meleeReachFromDef,
@@ -31,14 +33,18 @@ import {
   platformMove,
   pulse,
   recover,
+  recoveryFromDef,
   shield,
   shortHopPulse,
   stageViewFromDef,
   survive,
   towardX,
+  upBReach,
   type BehaviourContext,
   type LevelTuning,
+  type RecoveryMove,
 } from "./behaviours";
+import { getFighter } from "@/fighters";
 import { tuningForLevel } from "./cpu";
 
 /* --------------------------------------------------------------- fixtures -- */
@@ -127,6 +133,7 @@ function context(
     meleeReach: MELEE_RANGE,
     airBrake: 0,
     airDodge: DEFAULT_AIR_DODGE,
+    recovery: null,
     rolls,
   };
 }
@@ -402,6 +409,90 @@ describe("recover", () => {
     const side = airDodgeCharge(-1, 0);
     expect(recover(context(dodging(DEFAULT_AIR_DODGE.sideFrames - 13, side), L9)).input).toBe(Btn.Right);
     expect(recover(context(dodging(DEFAULT_AIR_DODGE.sideFrames - 10, side), L9)).score).toBe(0);
+  });
+});
+
+/* ---------------------------------------------------------- special fall -- */
+
+describe("recover, now that the up special leaves the fighter helpless (Plan 5, Task 4b)", () => {
+  /**
+   * A made-up up special, chosen so its path is exact in Q12: 3 up and 0.5
+   * forward for its first ten frames, then gravity 0.125 for the other twenty.
+   * It gains 30 + (2.875 + ... + 0.5) = 63.75 and goes 15 forward; helpless, it
+   * drifts at 0.6.
+   */
+  const UP_B: RecoveryMove = {
+    totalFrames: 30,
+    momentum: [{ frame: 1, x: fx(0.5), y: fx(3), hold: 9 }],
+    gravity: fx(0.125),
+    fallSpeed: fx(1.5),
+    helplessDrift: fx(0.6),
+  };
+  const withUpB = (state: GameState, tuning = L9): BehaviourContext => ({ ...context(state, tuning), recovery: UP_B });
+  /** Out of jumps (one, spent) off the left of the default stage, whose ledge is at x -80, y 0. */
+  const spent = (over: Partial<FighterState> = {}) =>
+    gameState([fighter(0, { x: fx(-160), y: 0, vy: 0, grounded: false, platform: -1, jumpsUsed: 1, action: "fall", ...over })]);
+  const pressesOver = (ctx: (f: number) => BehaviourContext): number[] => Array.from({ length: 12 }, (_, f) => recover(ctx(f)).input);
+  const fires = (inputs: number[]) => inputs.some((i) => held(i, Btn.Special) && held(i, Btn.Up));
+
+  it("reads where the up special goes off the move's own momentum and the fighter's gravity", () => {
+    expect(upBReach(UP_B, 0)).toEqual({ rise: fx(63.75), across: fx(15) });
+    // From a fall already under way, the same move gains less.
+    expect(upBReach({ ...UP_B, momentum: [{ frame: 5, x: 0, y: fx(3), hold: 5 }] }, -fx(1)).rise).toBeLessThan(fx(63.75));
+  });
+
+  it("takes each fighter's own up special, and its helpless drift at the published multiplier", () => {
+    const mario = getFighter("mario")!;
+    const r = recoveryFromDef(mario);
+    expect(r).toMatchObject({ totalFrames: mario.moves.upB!.totalFrames, momentum: mario.moves.upB!.momentum });
+    // SmashWiki "Mario (SSBU)/Up special": "Helplessness air speed multiplier 0.6".
+    expect(r!.helplessDrift).toBe(mul(fighterParams(mario).air_speed_x_stable, fx(0.6)));
+  });
+
+  it("drifts closer rather than spend the up special where it would come down short of the ledge", () => {
+    const inputs = pressesOver((f) => withUpB(gameState(spent().fighters, { frame: f })));
+    expect(inputs.every((i) => held(i, Btn.Right))).toBe(true);
+    expect(fires(inputs)).toBe(false);
+  });
+
+  it("spends it once the ledge is in its reach", () => {
+    // 30 short of the ledge, 15 of which the move covers: the drift does the rest.
+    expect(fires(pressesOver((f) => withUpB(gameState(spent({ x: fx(-110) }).fighters, { frame: f }))))).toBe(true);
+  });
+
+  it("counts the move's sideways travel the way the fighter faces", () => {
+    // The same spot facing away: the move carries it 15 further off.
+    expect(fires(pressesOver((f) => withUpB(gameState(spent({ x: fx(-110), facing: -1 }).fighters, { frame: f }))))).toBe(false);
+  });
+
+  it("spends it anyway once a few more frames of falling would put the ledge out of its rise", () => {
+    expect(fires(pressesOver((f) => withUpB(gameState(spent({ y: fx(-70) }).fighters, { frame: f }))))).toBe(true);
+  });
+
+  it("jumps instead while it still has one and the up special is out of reach", () => {
+    const inputs = pressesOver((f) => withUpB(gameState(spent({ y: fx(-30), jumpsUsed: 0 }).fighters, { frame: f })));
+    expect(fires(inputs)).toBe(false);
+    expect(inputs.some((i) => held(i, Btn.Jump))).toBe(true);
+  });
+
+  it("only drifts home while helpless: no button, at every level, and no other behaviour acts", () => {
+    const helpless = (x: number, y: number) =>
+      gameState([fighter(0, { x: fx(x), y: fx(y), grounded: false, platform: -1, action: "specialFall" }), fighter(1, { x: fx(x + 10), y: fx(y - 20) })]);
+    for (const tuning of [L9, L1]) {
+      for (const [x, y, home] of [
+        [-100, -10, Btn.Right],
+        [100, 20, Btn.Left],
+        [-60, 20, Btn.Right],
+        [-60, -20, Btn.Left],
+      ] as const) {
+        const ctx = withUpB(helpless(x, y), tuning);
+        expect(isHelpless(ctx.view.self)).toBe(true);
+        const r = recover({ ...ctx, rolls: [0, 0, 0, 0.99, 0, 0] });
+        expect([r.score > 0, r.input], `${x}, ${y}`).toEqual([true, home]);
+        expect(canAct(ctx.view.self)).toBe(false);
+        for (const b of BEHAVIOURS) if (b.name !== "recover" && b.name !== "idle") expect(b.run(ctx).score, b.name).toBe(0);
+      }
+    }
   });
 });
 

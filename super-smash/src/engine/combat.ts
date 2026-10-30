@@ -8,6 +8,8 @@
  * the reflective tests in `simulate.test.ts` and `hash.test.ts` walk it.
  */
 
+import type { MoveSlot } from "./types";
+
 export interface CombatState {
   /**
    * Parallel to `FighterState.staleQueue`: entry i landed on a shield, so it
@@ -123,6 +125,14 @@ export interface CombatState {
   specialStall: boolean;
   /** Plan 5: the current move is the one stalling (it took the airtime's stall). Per move, as `reflectHold`. */
   stalling: boolean;
+  /**
+   * Plan 5, Task 4b: the move whose ending left this fighter helpless, whose
+   * `HelplessDef` sets the fall's drift and its landing's lag; null when not
+   * helpless. Set on entering `specialFall`, carried into `specialLanding`, and
+   * cleared by either status's `end` however it is left: the landing's end, a
+   * ledge, a hit, a grab or a KO.
+   */
+  helplessMove: MoveSlot | null;
 }
 
 export function emptyCombat(): CombatState {
@@ -151,6 +161,7 @@ export function emptyCombat(): CombatState {
     reflectHold: 0,
     specialStall: false,
     stalling: false,
+    helplessMove: null,
   };
 }
 
@@ -180,5 +191,6 @@ export function cloneCombat(c: CombatState): CombatState {
     reflectHold: c.reflectHold,
     specialStall: c.specialStall,
     stalling: c.stalling,
+    helplessMove: c.helplessMove,
   };
 }

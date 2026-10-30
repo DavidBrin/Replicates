@@ -277,6 +277,7 @@ describe("cloneState", () => {
       f.bufferedAction = { kind: "jump", frame: 3 };
       f.staleQueue = ["jab1", "fair"];
       f.combat.staleShield = [true, false];
+      f.combat.helplessMove = "upB";
       f.hitThisMove = [1, 2];
     }
     s.projectiles = [

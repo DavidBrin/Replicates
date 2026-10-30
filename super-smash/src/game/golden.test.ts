@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
 import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { launchWorldAngle } from "@/engine/knockback";
@@ -110,6 +110,7 @@ function cpuMatch(name: string, stage: string, fighters: readonly [string, strin
           meleeReach: meleeReachFromDef(def),
           airBrake: airBrakeFromDef(def),
           airDodge: airDodgeFromDef(def),
+          recovery: recoveryFromDef(def),
         };
       });
       let cpuSeed = seed ^ 0x1f2e3d4c;
@@ -146,7 +147,7 @@ const MATCHES: readonly Match[] = [
 ];
 
 /**
- * Every `ActionState` the six matches must visit between them: all 48. A
+ * Every `ActionState` the six matches must visit between them: all 50. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
@@ -174,7 +175,11 @@ const MATCHES: readonly Match[] = [
  * ledge-rolls or breaks a shield. Its fix round 1 (the Cape's aerial motion, a
  * backward side-B turning): 34 — donkeyKong-pikachu tech-rolls and ledge-rolls, and
  * none trumps a ledge any more; none grabs, spot-dodges, ledge-attacks or breaks a
- * shield.
+ * shield. Plan 5 Task 4b added `specialFall` and `specialLanding`: 36 — mario-fox,
+ * link-samus and kirby-marth each fall helpless after an up special and land into
+ * the special landing, and donkeyKong-pikachu techs; none ledge-rolls any more, and
+ * none crouches, grabs, spot-dodges, ledge-attacks, breaks a shield or trumps a
+ * ledge.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -191,6 +196,8 @@ const MUST_VISIT: Record<ActionState, true> = {
   fall: true,
   land: true,
   landingLag: true,
+  specialFall: true,
+  specialLanding: true,
   attack: true,
   special: true,
   grab: true,
@@ -466,9 +473,19 @@ describe("engine golden trace", () => {
   // (that Cape now restricts Mario's drift for its 58 frames), and donkeyKong-pikachu
   // from 1401-1500 and link-samus from 2501-2600 (a side-B pressed backward now turns
   // the fighter round first): hits 14, 34 and 18; shield hits 0, 1 and 0; KOs 2, 1
-  // and 4. So now: hits 14/34/18/13, 6 and 0; shield hits 0/1/0/1, 3 and 0; KOs
-  // 2/1/4/2, 1 and 2. Every KO in the six matches is a self-destruct: on the frame
-  // before it the fighter was in no hitstun and had no launch left.
+  // and 4. Then: hits 14/34/18/13, 6 and 0; shield hits 0/1/0/1, 3 and 0; KOs
+  // 2/1/4/2, 1 and 2, every one a self-destruct: on the frame before it the
+  // fighter was in no hitstun and had no launch left.
+  // Plan 5 Task 4b (an up special ends helpless, so no CPU up-Bs twice in one
+  // airtime, and the CPU spends it by where it goes) moved all four CPU matches:
+  // mario-fox from the 201-300 sample, link-samus from 101-200, kirby-marth from
+  // 301-400 and donkeyKong-pikachu from 1301-1400: hits 17, 24, 19 and 40; shield
+  // hits 0, 1, 0 and 0; KOs 1, 2, 1 and 1. So now: hits 17/40/24/19, 6 and 0;
+  // shield hits 0/0/1/0, 3 and 0; KOs 1/1/2/1, 1 and 2. Two are the first KOs by a
+  // hit in these matches (Donkey Kong in donkeyKong-pikachu and Samus in
+  // link-samus, each still tumbling from a hit); the rest are still
+  // self-destructs, none of them in special fall (Mario during a Cape, Samus
+  // during a Missile, Marth during Dolphin Slash).
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

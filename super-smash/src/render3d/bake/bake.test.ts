@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { airDodgeCharge, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
 import { BONE_POSE_STRIDE } from "@/engine/acmd/bones";
-import { clipTimeOfFrame, OPEN_ENDED_FRAMES, statusDuration, statusMotion } from "@/engine/acmd/poseClock";
+import { clipTimeOfFrame, MOTION_OF_ACTION, OPEN_ENDED_FRAMES, statusDuration, statusMotion } from "@/engine/acmd/poseClock";
 import { dodgeIntangible, groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from "@/engine/groundDodge";
 import { STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
 import type { ActionState, FighterDef } from "@/engine/types";
@@ -66,7 +66,7 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 57 over the 48 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 57 over the 50 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
@@ -76,10 +76,12 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
       }
     }
     const specs = statusMotionSpecs();
-    expect(ACTIONS).toHaveLength(48);
+    expect(ACTIONS).toHaveLength(50);
     expect(named.size).toBe(57);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
-    expect(new Set(specs.map((s) => s.action))).toEqual(new Set(ACTIONS));
+    // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their
+    // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`).
+    expect(new Set(specs.map((s) => s.action))).toEqual(new Set(ACTIONS.filter((a) => MOTION_OF_ACTION[a] === undefined)));
     expect(specs.map((s) => s.motion)).toContain("status_tumbleFall");
     for (const s of specs) expect(statusMotion(s)).toBe(s.motion);
   });

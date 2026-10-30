@@ -751,7 +751,15 @@ const legacy: FighterDef = {
         { frame: 3, x: fx(0.2), y: fx(3.2), hold: 12 },
         { frame: 24, x: fx(0.2), y: fx(-3.4), hold: 14 },
       ],
-      landingLag: 30,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Helpless"
+      // (https://www.ssbwiki.com/Helpless) lists Final Cutter, whose helplessness
+      // shows "only when landing on the ground", for the lag of SmashWiki "Kirby
+      // (SSBU)/Up special" (https://www.ssbwiki.com/Kirby_(SSBU)/Up_special),
+      // "Landing (cutter)": "Interruptible 31"; UltimateFrameData's landing lag 30
+      // (https://ultimateframedata.com/kirby). UNVERIFIED: the drift, as no
+      // multiplier is published (his own air speed); in the game the move falls on
+      // until he lands, and here it ends in the air after its 60 frames.
+      helpless: { landingLag: 30, airSpeed: fx(1) },
       hitboxes: [
         {
           id: 0,

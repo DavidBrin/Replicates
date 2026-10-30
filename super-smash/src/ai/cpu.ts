@@ -38,6 +38,7 @@ import {
   type BehaviourContext,
   type BehaviourName,
   type LevelTuning,
+  type RecoveryMove,
   type StageView,
   observe,
 } from "./behaviours";
@@ -69,6 +70,12 @@ export interface CpuWorld {
    * dodge drifts it (Plan 3, Task 20c). Defaults to Mario's (`DEFAULT_AIR_DODGE`).
    */
   readonly airDodge?: AirDodgeAttributes;
+  /**
+   * Where this fighter's up special goes, from `recoveryFromDef`, for when to
+   * spend it now that it leaves the fighter helpless (Plan 5, Task 4b).
+   * Defaults to none: the CPU spends it as soon as it is needed.
+   */
+  readonly recovery?: RecoveryMove | null;
 }
 
 /**
@@ -164,6 +171,7 @@ export function decideCpu(
     meleeReach: world.meleeReach ?? MELEE_RANGE,
     airBrake: world.airBrake ?? 0,
     airDodge: world.airDodge ?? DEFAULT_AIR_DODGE,
+    recovery: world.recovery ?? null,
     rolls,
   };
 

@@ -733,7 +733,11 @@ const legacy: FighterDef = {
       // supposed to save you from, and at 42 Fox reached the ground before the
       // burst ever fired.
       momentum: [{ frame: 20, x: fx(1.3), y: fx(4.3), hold: 16 }],
-      landingLag: 20,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Fox (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Fox_(SSBU)/Up_special): "Helplessness air speed
+      // multiplier 0.85", "Landing lag 20 frames"; UltimateFrameData's 20
+      // (https://ultimateframedata.com/fox).
+      helpless: { landingLag: 20, airSpeed: fx(0.85) },
       hitboxes: [
         {
           // Seven charging hits while he ignites, then the launch.

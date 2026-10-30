@@ -102,6 +102,9 @@ export type ActionState =
   | "fall"
   | "land"
   | "landingLag"
+  // helpless after a recovery move, and its landing (Plan 5, Task 4b)
+  | "specialFall"
+  | "specialLanding"
   // offence
   | "attack"
   | "special"
@@ -402,6 +405,26 @@ export interface StallDef {
   readonly everyUse?: boolean;
 }
 
+/**
+ * How a move that ends helpless leaves its fighter (Plan 5, Task 4b): SmashWiki
+ * "Helpless" (https://www.ssbwiki.com/Helpless), "unable to take any action, with
+ * the exception of grabbing a ledge, maneuvering left/right, fastfalling ...
+ * until they land on the ground". Each fighter cites its move's page.
+ */
+export interface HelplessDef {
+  /**
+   * Frames of `specialLanding` when the fall lands: the page's "Landing lag"
+   * (SmashWiki "Lag", https://www.ssbwiki.com/Lag, "Special landing": "a
+   * specific amount of landing lag, dependent on the move that initiated it").
+   */
+  readonly landingLag: number;
+  /**
+   * The page's "Helplessness air speed multiplier", Q12: the fall drifts no
+   * faster than the fighter's air speed times this.
+   */
+  readonly airSpeed: number;
+}
+
 /** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */
 export type ChargedHitbox = Partial<Pick<Hitbox, "damage" | "angle" | "baseKnockback" | "knockbackGrowth" | "radius">>;
 
@@ -517,6 +540,11 @@ export interface MoveDef {
   readonly reflector?: ReflectorDef;
   /** The move stalls a fall in the air (Plan 5). See `StallDef`. */
   readonly stall?: StallDef;
+  /**
+   * The move leaves its fighter helpless (`specialFall`) when it ends in the air
+   * (Plan 5, Task 4b). See `HelplessDef`.
+   */
+  readonly helpless?: HelplessDef;
   /**
    * In the air, the move's animation runs to this frame (Plan 5: Mario's Cape,
    * SmashWiki's "Animation length"). It is interruptible from `totalFrames` + 1

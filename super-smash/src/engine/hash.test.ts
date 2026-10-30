@@ -215,6 +215,8 @@ describe("hashState", () => {
       ["fighter.kinetic.fallFrames", (s) => (s.fighters[0].kinetic.fallFrames += 1)],
       ["fighter.kinetic.jumpInitial", (s) => (s.fighters[0].kinetic.jumpInitial += 1)],
       ["fighter.combat.staleShield", (s) => s.fighters[0].combat.staleShield.push(true)],
+      // Plan 5, Task 4b: null to a move, which the walk below cannot reach from null.
+      ["fighter.combat.helplessMove", (s) => (s.fighters[0].combat.helplessMove = "upB")],
       ["projectiles", (s) => s.projectiles.push(projectile())],
     ];
     for (const [name, mutate] of mutations) {
@@ -241,6 +243,7 @@ describe("hashState", () => {
       move: "jab1",
       ledge: { platform: 0, side: 1 },
       bufferedAction: { kind: "jump", frame: 3 },
+      combat: { ...emptyCombat(), helplessMove: "upB" },
     };
     /** Arrays `mixFighter` hashes element by element, each with an explicit case in the list above. */
     const HANDLED_ARRAYS = new Set(["staleQueue", "hitThisMove", "combat.staleShield"]);

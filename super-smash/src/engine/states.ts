@@ -21,7 +21,7 @@
  * SPEC §6 is the contract for the interpretation half; §4 for the frame counts.
  */
 
-import { ONE, fx, clamp } from "./fixed";
+import { ONE, fx, clamp, mul } from "./fixed";
 import {
   airDodgeCharge,
   airDodgeFrames,
@@ -81,6 +81,7 @@ import type {
   FighterAttributes,
   FighterDef,
   FighterState,
+  HelplessDef,
   InputFrame,
   MoveDef,
   MoveSlot,
@@ -782,6 +783,40 @@ export function startRoll(f: FighterState, x: number, ctx: StateContext): void {
   kineticSetX(f, x * Math.trunc(ROLL_DISTANCE / frames), "stop");
 }
 
+/* ---------------------------------------------------------- special fall -- */
+
+/**
+ * Leave `f` helpless after `slot`, a move that ends in special fall (Plan 5,
+ * Task 4b; `MoveDef.helpless`). The move is remembered after the change, which
+ * the statuses' `end` would clear (`CombatState.helplessMove`).
+ */
+export function startSpecialFall(f: FighterState, slot: MoveSlot): void {
+  startAction(f, "specialFall");
+  f.combat.helplessMove = slot;
+}
+
+/** The `HelplessDef` of the move that left `f` helpless, or undefined when it is not. */
+export function helplessOf(f: FighterState, def: FighterDef): HelplessDef | undefined {
+  const slot = f.combat.helplessMove;
+  return slot === null ? undefined : def.moves[slot]?.helpless;
+}
+
+/**
+ * A helpless fighter landed: the special landing, for its move's own lag
+ * (SmashWiki "Lag", https://www.ssbwiki.com/Lag, "Special landing": "Characters
+ * that land while in their helpless state undergo a specific amount of landing
+ * lag, dependent on the move that initiated it"). `charge` carries it, as it
+ * does an aerial's (`landingLag`). A fall whose move is unknown (a state built
+ * by hand) lands for the legacy four frames.
+ */
+export function landFromSpecialFall(f: FighterState, def: FighterDef): void {
+  const slot = f.combat.helplessMove;
+  const lag = helplessOf(f, def)?.landingLag ?? LANDING_ANIMATION_FRAMES;
+  startAction(f, "specialLanding");
+  f.combat.helplessMove = slot;
+  f.charge = lag;
+}
+
 /**
  * Everything a fighter who is free to act might do, in priority order.
  *
@@ -1092,11 +1127,15 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   // the stick's drift away while its physics run (`StallDef`, `specialStallExec`).
   const stall = f.action === "special" && f.move !== null ? ctx.def.moves[f.move]?.stall : undefined;
   const restricted = stall?.airFriction !== undefined && (stall.everyUse === true || f.combat.stalling);
+  // A helpless fall drifts no faster than its move allows (Plan 5, Task 4b:
+  // `HelplessDef.airSpeed`, each page's "Helplessness air speed multiplier").
+  const helpless = f.action === "specialFall" ? helplessOf(f, ctx.def) : undefined;
   kineticExec(f, type, {
     stickX: intent.x,
     stickMag: intent.soft ? ONE >> 1 : ONE,
     params,
     ...(restricted ? { airFriction: stall.airFriction } : {}),
+    ...(helpless !== undefined ? { airSpeedMax: mul(params.air_speed_x_stable, helpless.airSpeed) } : {}),
   });
   status.exec?.(f, intent, ctx);
 }
@@ -1136,6 +1175,10 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
     return;
   }
   if (f.hitstun > 0) return; // still reeling; the landing does not interrupt it
+  if (f.action === "specialFall") {
+    landFromSpecialFall(f, ctx.def);
+    return;
+  }
   if (f.action === "attack" && f.move !== null) {
     const move = ctx.def.moves[f.move];
     if (move?.landingLag !== undefined) {
@@ -1199,6 +1242,16 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
 export function onLeftGround(f: FighterState): void {
   if (f.action === "jumpSquat") return;
   f.jumpsUsed = Math.max(f.jumpsUsed, 1);
+  // Off the ground during the special landing (slid or carried off it), the
+  // fighter is helpless again (Plan 5, Task 4b). UNVERIFIED for any move:
+  // SmashWiki "Helpless" (https://www.ssbwiki.com/Helpless) says it of the moves
+  // whose helplessness shows only on landing ("If the character is somehow
+  // pushed off the stage before exiting landing lag, they will retain their
+  // helpless state"), and of no other.
+  if (f.action === "specialLanding" && f.combat.helplessMove !== null) {
+    startSpecialFall(f, f.combat.helplessMove);
+    return;
+  }
   if (isActionable(f)) startAction(f, "fall");
 }
 

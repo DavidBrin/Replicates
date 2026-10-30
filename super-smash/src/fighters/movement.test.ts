@@ -435,12 +435,17 @@ describe("leaving the ground any way but a jump spends the ground jump (Task 20b
     expect(s.fighters[0].jumpsUsed).toBe(1);
   });
 
-  it("Mario, once his rising special is over, has his midair jump and no extra", () => {
+  it("Mario, once his rising special is over, keeps his midair jump and no extra, though helpless", () => {
     // Kirby's Final Cutter ends on the floor, so only Mario is still airborne to count.
     const s = holdUntil(standing("mario"), Btn.Up | Btn.Special, (f) => !f.grounded);
     const over = holdUntil(s, 0, (f) => f.action !== "special", 200);
     expect(over.fighters[0].grounded, "still airborne when the special ends").toBe(false);
-    expect(midairJumps(over)).toBe(expected("mario"));
+    // Super Jump Punch leaves him helpless (Plan 5, Task 4b; SmashWiki "Helpless",
+    // https://www.ssbwiki.com/Helpless): only the ground jump is spent, but no
+    // jump can be taken until the fall ends.
+    expect(over.fighters[0].action).toBe("specialFall");
+    expect(over.fighters[0].jumpsUsed).toBe(FIGHTER_PARAMS.mario.jump_count_max - expected("mario"));
+    expect(midairJumps(over)).toBe(0);
   });
 
   it.each(TWO_AND_SIX)("%s launched off the ground by a hit keeps its midair jumps, and no extra", (id) => {

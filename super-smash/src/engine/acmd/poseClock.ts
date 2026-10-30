@@ -104,12 +104,26 @@ function airDodgeSuffix(charge: number): string {
 }
 
 /**
+ * The actions that play another action's motion: the same clip on the same
+ * clock, so nothing of their own is baked. Plan 5, Task 4b: the helpless fall
+ * is the fall's (the plan's rule: "helpless uses the fall clip unless a
+ * published or plan clip exists"; none does), fast fall included, and its
+ * special landing is the landing lag's, scaled across the move's own lag.
+ */
+export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
+  specialFall: "fall",
+  specialLanding: "landingLag",
+};
+
+/**
  * The status motion for every non-move frame. The air dodge and the roll read
  * `charge` (ruling R4): each direction class has its own length
  * (`airDodgeFrames`: a left and a right diagonal last the same; `rollOf`), so
  * each is its own motion, baked once at that length.
  */
 export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling" | "charge">): MotionKind {
+  const shared = MOTION_OF_ACTION[f.action];
+  if (shared !== undefined) return statusMotion({ ...f, action: shared });
   if (f.action === "jump" && f.jumpsUsed >= 2) return "status_jump_aerial";
   if ((f.action === "fall" || f.action === "dead") && f.fastFalling) return `status_${f.action}_fast`;
   if (f.action === "airDodge") return `status_airDodge${airDodgeSuffix(f.charge)}`;
@@ -122,7 +136,7 @@ export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fas
  * rather than a constant: the bake scales these. The dodges are not among them:
  * their lengths are the fighter's own and fixed per motion (R4).
  */
-export const VARIABLE_LENGTH_ACTIONS: ReadonlySet<ActionState> = new Set<ActionState>(["jump", "land", "landingLag", "hitstun"]);
+export const VARIABLE_LENGTH_ACTIONS: ReadonlySet<ActionState> = new Set<ActionState>(["jump", "land", "landingLag", "specialLanding", "hitstun"]);
 
 /** Every kind of jump's rise for one fighter, from `jumpRiseSpeeds`. */
 interface Rises {
@@ -195,9 +209,11 @@ export function statusDuration(
       return ENTRY_FRAMES;
     case "jumpSquat":
       return JUMP_SQUAT_FRAMES;
-    // `charge` carries a landing's length; see `onLanded`.
+    // `charge` carries a landing's length; see `onLanded` (and
+    // `landFromSpecialFall` for the special landing, Plan 5 Task 4b).
     case "land":
     case "landingLag":
+    case "specialLanding":
       return f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES;
     case "crouchStart":
       return CROUCH_START_FRAMES;

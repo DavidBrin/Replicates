@@ -248,10 +248,14 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "fall":
     case "dead":
     case "ledgeTrumped":
+    // Helpless (Plan 5, Task 4b) has no clip of its own: the fall's, as the
+    // bake's motion is (`MOTION_OF_ACTION`), and its landing the landing lag's.
+    case "specialFall":
       return f.fastFalling ? "fastFall" : "fall";
     case "land":
       return "land";
     case "landingLag":
+    case "specialLanding":
       return "landingLag";
     case "attack":
     case "special":
@@ -336,6 +340,7 @@ export function actionDurationFor(
       return f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES;
     // `charge` carries the remaining lag for a landing; see `onLanded`.
     case "landingLag":
+    case "specialLanding":
       return f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES;
     case "crouchStart":
       return CROUCH_START_FRAMES;

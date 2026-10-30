@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
 import { createInitialState, step, type SimContext } from "@/engine/simulate";
 import type { InputFrame, MatchRules } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
@@ -40,7 +40,14 @@ function sweep(ctx: SimContext, a: string, b: string, stageId: string, smashBall
   const view = stageViewFromDef(stage);
   const worlds: CpuWorld[] = [a, b].map((id) => {
     const def = ctx.fighter(id);
-    return { stage: view, jumps: def.attributes.jumps, meleeReach: meleeReachFromDef(def), airBrake: airBrakeFromDef(def), airDodge: airDodgeFromDef(def) };
+    return {
+      stage: view,
+      jumps: def.attributes.jumps,
+      meleeReach: meleeReachFromDef(def),
+      airBrake: airBrakeFromDef(def),
+      airDodge: airDodgeFromDef(def),
+      recovery: recoveryFromDef(def),
+    };
   });
   let cpuSeed = seed ^ 0x1f2e3d4c;
   let prev: readonly InputFrame[] = [0, 0];

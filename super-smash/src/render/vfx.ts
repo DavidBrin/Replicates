@@ -652,8 +652,10 @@ export function trackGroundFx(v: VfxState, state: GameState): void {
         break;
 
       // Landing lag is a *heavier* landing than the one `events.lands` already
-      // drew, so this is the difference rather than the whole puff.
+      // drew, so this is the difference rather than the whole puff. A helpless
+      // fall's special landing (Plan 5, Task 4b) is one too.
       case "landingLag":
+      case "specialLanding":
         if (f.actionFrame === 0) spawnDust(v, x, y, 8, 1.3);
         break;
 

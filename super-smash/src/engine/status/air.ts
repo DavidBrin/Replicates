@@ -1,6 +1,7 @@
 /**
  * Jump and landing statuses: JUMP_SQUAT, JUMP, FALL, LANDING,
- * LANDING_ATTACK_AIR (Plan 2, Task 11).
+ * LANDING_ATTACK_AIR (Plan 2, Task 11), and the helpless FALL_SPECIAL and its
+ * LANDING_FALL_SPECIAL (Plan 5, Task 4b).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim.
  */
@@ -14,6 +15,7 @@ import {
   bufferPress,
   endStatus,
   handleActionable,
+  landFromSpecialFall,
   peekBuffer,
   startAction,
 } from "../states";
@@ -60,13 +62,19 @@ export function airMain(f: FighterState, intent: Intent, ctx: StateContext): voi
     return;
   }
   if (handleActionable(f, intent, ctx)) return;
-  // Fast fall is only available after the apex, which makes it a read on the
-  // defender rather than a free way to shorten every jump.
+  fastFallOnPress(f, intent, ctx);
+  if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");
+}
+
+/**
+ * Fast fall is only available after the apex, which makes it a read on the
+ * defender rather than a free way to shorten every jump.
+ */
+function fastFallOnPress(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (intent.downPressed && !f.fastFalling && f.vy <= 0 && f.hitstun === 0) {
     f.fastFalling = true;
     kineticSetY(f, fastFallVelocity(ctx.def.attributes));
   }
-  if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");
 }
 
 export const STATUS_JUMP: FighterStatus = {
@@ -108,10 +116,64 @@ export const STATUS_LANDING_ATTACK_AIR: FighterStatus = {
   },
 };
 
+/** Both helpless statuses forget their move however they are left (`CombatState.helplessMove`). */
+function forgetHelplessMove(f: FighterState): void {
+  f.combat.helplessMove = null;
+}
+
+/**
+ * FALL_SPECIAL (Plan 5, Task 4b): helpless, after a move that ends so
+ * (`MoveDef.helpless`, `startSpecialFall`). SmashWiki "Helpless"
+ * (https://www.ssbwiki.com/Helpless): "unable to take any action, with the
+ * exception of grabbing a ledge, maneuvering left/right, fastfalling ... until
+ * they land on the ground or pass a blast line". So no press is read or
+ * buffered here but the fast fall's. The rest is other phases': the drift is
+ * `applyMovement`'s, at the move's own top speed (`HelplessDef.airSpeed`); the
+ * ledge is `findLedgeGrab`'s, as any falling fighter's; the landing is
+ * `onLanded`'s (`specialLanding`); and a hit's reel ends it, as the page says a
+ * flinch does ("it also ends if characters flinch, allowing them to attack").
+ */
+export const STATUS_FALL_SPECIAL: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_FALL_SPECIAL",
+  action: "specialFall",
+  kineticType: "FALL",
+  main(f, intent, ctx) {
+    // Never grounded here: touching the floor lands it (`onLanded`). A state
+    // built so lands on its first frame.
+    if (f.grounded) {
+      landFromSpecialFall(f, ctx.def);
+      return;
+    }
+    fastFallOnPress(f, intent, ctx);
+  },
+  end: forgetHelplessMove,
+};
+
+/**
+ * LANDING_FALL_SPECIAL (Plan 5, Task 4b): the special landing, for the lag of
+ * the move that left the fighter helpless (`landFromSpecialFall`), timed as an
+ * aerial's landing lag is: `charge` carries it, and a press made during it
+ * fires once it is over.
+ */
+export const STATUS_LANDING_FALL_SPECIAL: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_LANDING_FALL_SPECIAL",
+  action: "specialLanding",
+  kineticType: "GROUND_STOP",
+  main(f, intent, ctx) {
+    if (f.actionFrame >= f.charge) {
+      f.charge = 0;
+      endStatus(f, "stand", intent, ctx);
+    } else bufferPress(f, intent, ctx.frame);
+  },
+  end: forgetHelplessMove,
+};
+
 export const AIR_STATUSES: readonly FighterStatus[] = [
   STATUS_JUMP_SQUAT,
   STATUS_JUMP,
   STATUS_FALL,
   STATUS_LANDING,
   STATUS_LANDING_ATTACK_AIR,
+  STATUS_FALL_SPECIAL,
+  STATUS_LANDING_FALL_SPECIAL,
 ];

@@ -114,6 +114,9 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   techCeiling: "GROUND_STOP",
   // Plan 3, Task 12 fix round 1: tumbling after the hitstun drifts like a fall.
   tumbleFall: "FALL",
+  // Plan 5, Task 4b: helpless drifts like a fall; its landing stops like a landing's.
+  specialFall: "FALL",
+  specialLanding: "GROUND_STOP",
 };
 
 /** Every action migrated so far; each status-group task extends this list first. */
@@ -175,6 +178,9 @@ const MIGRATED = [
   "techCeiling",
   // Plan 3, Task 12 fix round 1
   "tumbleFall",
+  // Plan 5, Task 4b
+  "specialFall",
+  "specialLanding",
 ];
 
 describe("migrated statuses", () => {

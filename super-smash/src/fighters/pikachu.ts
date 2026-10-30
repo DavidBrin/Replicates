@@ -716,7 +716,11 @@ const legacy: FighterDef = {
         { frame: 8, x: fx(0.9), y: fx(4.6), hold: 6 },
         { frame: 20, x: fx(4.4), y: fx(1.4), hold: 6 },
       ],
-      landingLag: 24,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Pikachu (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Pikachu_(SSBU)/Up_special): "Helplessness air speed
+      // multiplier 0.4", "Landing lag 24 frames" (the landing's "Interruptible 25";
+      // UltimateFrameData's 24, https://ultimateframedata.com/pikachu).
+      helpless: { landingLag: 24, airSpeed: fx(0.4) },
       // **Two segments.** He zips once in the direction held, then immediately
       // zips again in a second, independently aimed direction. The second dash
       // only comes out if its angle differs from the first by at least thirty

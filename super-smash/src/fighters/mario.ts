@@ -759,7 +759,11 @@ const legacy: FighterDef = {
       name: "Super Jump Punch",
       totalFrames: 55,
       momentum: [{ frame: 4, x: fx(0.5), y: fx(2.9), hold: 12 }],
-      landingLag: 30,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Mario (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Mario_(SSBU)/Up_special): "Helplessness air speed
+      // multiplier 0.6", "Landing lag 30 frames" (the landing's "Interruptible 31";
+      // UltimateFrameData's landing lag 30, https://ultimateframedata.com/mario).
+      helpless: { landingLag: 30, airSpeed: fx(0.6) },
       hitboxes: [
         {
           // Coins. The first hit is the only one that matters for damage; the

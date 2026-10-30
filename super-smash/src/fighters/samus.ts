@@ -748,7 +748,11 @@ const legacy: FighterDef = {
       name: "Screw Attack",
       totalFrames: 56,
       momentum: [{ frame: 4, x: fx(0.45), y: fx(2.9), hold: 16 }],
-      landingLag: 24,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Samus (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Samus_(SSBU)/Up_special): "Landing lag 24 frames"
+      // (the landing's "Interruptible 25"; UltimateFrameData's 24,
+      // https://ultimateframedata.com/samus), "Helplessness air speed multiplier 0.66".
+      helpless: { landingLag: 24, airSpeed: fx(0.66) },
       hitboxes: [
         {
           id: 0,

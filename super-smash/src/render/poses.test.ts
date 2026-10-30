@@ -335,6 +335,14 @@ describe("state to pose", () => {
     expect(poseNameFor({ action: "ledgeTrumped", move: "jab1", jumpsUsed: 1, fastFalling: true })).toBe("fastFall");
   });
 
+  // Plan 5, Task 4b: helpless has no clip of its own (none is published), so it
+  // falls as a fall does, and its special landing is a landing lag.
+  it("draws a helpless fighter falling, and its special landing as landing lag", () => {
+    expect(poseNameFor({ action: "specialFall", move: null, jumpsUsed: 1, fastFalling: false })).toBe("fall");
+    expect(poseNameFor({ action: "specialFall", move: null, jumpsUsed: 1, fastFalling: true })).toBe("fastFall");
+    expect(poseNameFor({ action: "specialLanding", move: null, jumpsUsed: 1, fastFalling: false })).toBe("landingLag");
+  });
+
   const SLOTS: MoveSlot[] = [
     "jab1", "jab2", "jab3", "rapidJab", "ftilt", "utilt", "dtilt", "dashAttack",
     "fsmash", "usmash", "dsmash", "nair", "fair", "bair", "uair", "dair",

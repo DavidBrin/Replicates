@@ -860,7 +860,11 @@ const legacy: FighterDef = {
       name: "Dolphin Slash",
       totalFrames: 55,
       momentum: [{ frame: 5, x: fx(0.6), y: fx(3.5), hold: 11 }],
-      landingLag: 24,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Marth (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Marth_(SSBU)/Up_special): "Helplessness air speed
+      // multiplier 0.4", "Landing lag 24 frames" (the landing's "Interruptible 25";
+      // UltimateFrameData's 24, https://ultimateframedata.com/marth).
+      helpless: { landingLag: 24, airSpeed: fx(0.4) },
       // Frame 5, and intangible on frames 4-5 grounded, 1-5 airborne — one of
       // the best out-of-shield options in the game. No tipper on this one.
       hitboxes: [

@@ -578,7 +578,13 @@ const legacy: FighterDef = {
       name: "Spinning Kong",
       totalFrames: 104,
       momentum: [{ frame: 6, x: fx(0.85), y: fx(1.9), hold: 18 }],
-      landingLag: 38,
+      // Ends helpless (Plan 5, Task 4b): SmashWiki "Donkey Kong (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_special): "Helplessness
+      // landing lag 38 frames" (the landing's "Interruptible 39"). UNVERIFIED: the
+      // drift; the page publishes no helplessness multiplier, so his own air speed.
+      // Not modelled: "If Donkey Kong lands from the aerial version before undergoing
+      // helplessness, he transitions to frame 63 of the grounded version."
+      helpless: { landingLag: 38, airSpeed: fx(1) },
       hitboxes: [
         {
           id: 0,

@@ -393,6 +393,11 @@ export interface KineticInput {
    * 0 by this instead. Absent: ordinary air control (`airControlX`).
    */
   readonly airFriction?: number;
+  /**
+   * A top drift speed below the fighter's own air speed (Plan 5, Task 4b: a
+   * helpless fall's, `HelplessDef.airSpeed`). Absent: `air_speed_x_stable`.
+   */
+  readonly airSpeedMax?: number;
 }
 
 /** One frame of gravity toward `terminal`, which is a positive speed. */
@@ -412,13 +417,16 @@ export function gravityStep(vy: number, g: number, terminal: number): number {
  * on its own energy, which is Ultimate's model. The legacy single-velocity rule
  * (`airDrift`) capped drift against the launch itself and never decayed a
  * launch after hitstun, so this is a visible change from it (D55, Launches).
+ *
+ * `max` is the top speed: the fighter's air speed, or a helpless fall's lower
+ * one (Plan 5, Task 4b).
  */
-export function airControlX(vx: number, stickX: number, p: FighterParams): number {
+export function airControlX(vx: number, stickX: number, p: FighterParams, max: number = p.air_speed_x_stable): number {
   if (stickX === 0) return approach(vx, 0, p.air_brake_x);
   const accel = p.air_accel_x_add + p.air_accel_x_mul;
-  if (stickX > 0 && vx >= p.air_speed_x_stable) return vx;
-  if (stickX < 0 && vx <= -p.air_speed_x_stable) return vx;
-  return approach(vx, stickX > 0 ? p.air_speed_x_stable : -p.air_speed_x_stable, accel);
+  if (stickX > 0 && vx >= max) return vx;
+  if (stickX < 0 && vx <= -max) return vx;
+  return approach(vx, stickX > 0 ? max : -max, accel);
 }
 
 /**
@@ -466,7 +474,7 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
         ? approach(k.controlX, 0, p.ground_brake)
         : input.airFriction !== undefined
           ? approach(k.controlX, 0, input.airFriction)
-          : airControlX(k.controlX, input.stickX, p);
+          : airControlX(k.controlX, input.stickX, p, input.airSpeedMax);
       break;
     case "GROUND_STOP":
       k.stopX = approach(k.stopX, 0, f.grounded ? p.ground_brake : p.air_brake_x);
