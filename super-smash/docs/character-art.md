@@ -51,8 +51,8 @@ size and hash, is a manifest file's, and any in a pipeline format or starting
 with a model's or texture's magic number; and, since a compressed or
 re-encoded model shows none of its own bytes, any binary file in this package
 outside `BINARY_ALLOW` (the bake and `docs/screenshots/*.png`) and any
-compressed file in the repo but the listed ones
-(`scripts/models/rippedFormats.mjs`).
+compressed file in it but the bake (`scripts/models/rippedFormats.mjs`); the
+sibling projects keep the name, magic and manifest checks.
 
 **Without `pnpm models`, every fighter is a stand-in**: their own hurtbox
 capsules on the same bones, in their port's colour, posed exactly as the model

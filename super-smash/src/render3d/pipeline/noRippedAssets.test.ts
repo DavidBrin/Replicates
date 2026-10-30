@@ -28,13 +28,16 @@ import { parseManifest, type ModelManifest } from "./manifest";
  * `scripts/models/rippedFormats.mjs`, the list the deploy guard refuses too.
  *
  * A model compressed, archived or re-encoded keeps none of its own first bytes
- * (codex re-confirm, P2), so two rules do not ask what a file holds: any
- * compressed file anywhere in the repo is refused unless `COMPRESSED_ALLOW`
- * lists it, and any binary file in this package unless `BINARY_ALLOW` does.
- * The binary rule stops at this package: the sibling projects commit their own
- * screenshots, research captures, icons and sounds (about 500 binary files),
- * which are theirs to vet; the rules above, and the compression rule, still
- * cover them.
+ * (codex re-confirm, P2), so two rules do not ask what a file holds: in this
+ * package, any compressed file is refused unless `COMPRESSED_ALLOW` lists it,
+ * and any binary file unless `BINARY_ALLOW` does. A text file that is not UTF-8
+ * (Latin-1, say) counts as binary here, refused as "not UTF-8 text": save it as
+ * UTF-8, or list it in `BINARY_ALLOW` with its reason. Both rules stop at this
+ * package (round 3b ruling): the sibling projects, which other sessions work
+ * on, commit their own screenshots, captures, icons, sounds and archives (about
+ * 500 binary files), and a new one there must not turn this package's tests
+ * red. The rules above (names, magic numbers, manifest bytes) still cover them,
+ * and the controller's pre-push scan backs this package's pushes.
  *
  * The scan is the whole repo (`:/`), not just `super-smash/`: a file in `Risk/`
  * takes the same repo down. Paths are NUL-separated (`-z`) because git quotes a
@@ -67,17 +70,8 @@ const CAPTURE_PNG = /(^|\/)(anim|fight)-[^/]*\.png$/i;
 const GITLINK = "160000";
 /** This package's folder in the repo (`super-smash/`), which the binary allowlist's paths are relative to. */
 const PACKAGE = execFileSync("git", ["rev-parse", "--show-prefix"], { cwd: ROOT, encoding: "utf8" }).trim();
-/**
- * The compressed files the repo may hold, anywhere, from the repo root, each with why. Every other compressed file
- * is refused, in any project: listed from every staged blob on 2026-10-29, these were the only two.
- */
-const COMPRESSED_ALLOW: ReadonlyMap<string, string> = new Map([
-  [PACKAGE + BAKE_PATH, "the bone bake (BINARY_ALLOW)"],
-  [
-    "Risk/research/map-data/naturalearth/ne_110m_admin_0_countries.zip",
-    "Risk's map source: Natural Earth's 1:110m countries shapefile, public domain (its .LICENSE.txt sits beside it)",
-  ],
-]);
+/** The compressed files this package may hold, from the repo root, each with why. Every other one in the package is refused. */
+const COMPRESSED_ALLOW: ReadonlyMap<string, string> = new Map([[PACKAGE + BAKE_PATH, "the bone bake (BINARY_ALLOW)"]]);
 const MAX_BUFFER = 1 << 30;
 
 /** A path in the index and the blob git would commit for it. */
@@ -113,8 +107,9 @@ export function rippedAssets(
       const magic = modelMagic(first);
       // Only a blob of exactly a manifest size can have a manifest hash.
       const shas = bySize.get(size(id));
-      const compressed = compressedKind(first);
-      const binary = path.startsWith(PACKAGE) && !binaryAllowed(path.slice(PACKAGE.length)) ? binaryKind(first) : null;
+      const inPackage = path.startsWith(PACKAGE);
+      const compressed = inPackage ? compressedKind(first) : null;
+      const binary = inPackage && !binaryAllowed(path.slice(PACKAGE.length)) ? binaryKind(first) : null;
       if (magic !== null) out.push(`${path} (model bytes: ${magic})`);
       else if (shas?.has(hash(id))) out.push(`${path} (manifest file bytes)`);
       else if (compressed !== null && !COMPRESSED_ALLOW.has(path)) out.push(`${path} (compressed: ${compressed}; a compressed file hides what it holds, and only the listed ones may be)`);
@@ -190,7 +185,8 @@ describe("the ripped-asset rule", () => {
     "art/fox.glb.gz": gzipSync("glTF a glb, compressed"),
     "super-smash/public/bake/roster.bin.gz": gzipSync("the bake"),
     "Risk/public/bake/roster.bin.gz": gzipSync("another package's file of the same name"),
-    "docs/not-gzip.bin": Buffer.from([0x1f, 0x00, 0x8b, 0x08]),
+    "super-smash/docs/not-gzip.txt": Buffer.from([0x1f, 0x41, 0x42, 0x43]),
+    "super-smash/art/fox.glb.gz": gzipSync("glTF a glb, compressed"),
     // Binary under this package's paths, and the same kinds elsewhere (codex re-confirm, P2).
     "super-smash/src/data.bin": deflateSync(Buffer.concat([Buffer.from("glTF"), Buffer.alloc(64, 0x41)])),
     "super-smash/public/pack.dat": Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("a zip entry")]),
@@ -254,31 +250,35 @@ describe("the ripped-asset rule", () => {
     expect(run(["sounds/hit.wav", "docs/short.txt"])).toEqual([]);
   });
 
-  it("catches a gzip file anywhere but the bake: compression hides a model's own first bytes (fw2 re-review)", () => {
-    // gzip is both bytes, 1f 8b: one alone is not.
-    expect(run(["art/fox.glb.gz", "super-smash/public/bake/roster.bin.gz", "Risk/public/bake/roster.bin.gz", "docs/not-gzip.bin"])).toEqual([
-      "art/fox.glb.gz (compressed: gzip; a compressed file hides what it holds, and only the listed ones may be)",
-      "Risk/public/bake/roster.bin.gz (compressed: gzip; a compressed file hides what it holds, and only the listed ones may be)",
+  it("catches a gzip file in this package but the bake: compression hides a model's own first bytes (fw2 re-review)", () => {
+    // gzip is both bytes, 1f 8b: 1f alone (text after it) is not.
+    expect(run(["super-smash/art/fox.glb.gz", "super-smash/public/bake/roster.bin.gz", "super-smash/docs/not-gzip.txt"])).toEqual([
+      "super-smash/art/fox.glb.gz (compressed: gzip; a compressed file hides what it holds, and only the listed ones may be)",
     ]);
   });
 
-  it("catches any compressed file in the repo but the listed ones, and any binary file in this package but the allowlist (codex re-confirm, P2)", () => {
+  it("keeps the compression and binary rules to this package: a sibling project's archive or picture is its own (round 3b ruling)", () => {
+    // Other sessions work on the siblings; a new zip there must not turn this package's tests red.
+    expect(run(["art/fox.glb.gz", "Risk/public/bake/roster.bin.gz", "Risk/frame.bin", "Risk/research/map-data/naturalearth/ne_110m_admin_0_countries.zip", "Risk/docs/screenshots/board.png"])).toEqual([]);
+    expect(run(["super-smash/art/fox.glb.gz", "super-smash/public/pack.dat"])).toEqual([
+      "super-smash/art/fox.glb.gz (compressed: gzip; a compressed file hides what it holds, and only the listed ones may be)",
+      "super-smash/public/pack.dat (compressed: zip; a compressed file hides what it holds, and only the listed ones may be)",
+    ]);
+  });
+
+  it("catches any compressed or binary file in this package but the listed ones (codex re-confirm, P2)", () => {
     expect(
       run([
         "super-smash/src/data.bin",
         "super-smash/public/pack.dat",
-        "Risk/frame.bin",
         "super-smash/README.bin",
         "super-smash/src/notes.md",
         "super-smash/public/icons/logo.png",
         "super-smash/docs/screenshots/new.png",
-        "Risk/docs/screenshots/board.png",
-        "Risk/research/map-data/naturalearth/ne_110m_admin_0_countries.zip",
       ]),
     ).toEqual([
       "super-smash/src/data.bin (compressed: zlib; a compressed file hides what it holds, and only the listed ones may be)",
       "super-smash/public/pack.dat (compressed: zip; a compressed file hides what it holds, and only the listed ones may be)",
-      "Risk/frame.bin (compressed: zstd; a compressed file hides what it holds, and only the listed ones may be)",
       "super-smash/README.bin (binary outside the allowlist: a NUL byte)",
       "super-smash/src/notes.md (binary outside the allowlist: not UTF-8 text)",
       "super-smash/public/icons/logo.png (binary outside the allowlist: PNG image)",
@@ -408,28 +408,32 @@ describe("no Nintendo-ripped asset is tracked", () => {
       const planted: [string, Buffer][] = [
         ["super-smash/src/data.bin", deflateSync(Buffer.concat([Buffer.from("glTF"), Buffer.alloc(64, 0x41)]))],
         ["super-smash/docs/archive.txt", Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("a zip entry")])],
-        ["Risk/frame.bin", Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from("a zstd frame")])],
+        ["super-smash/src/frame.bin", Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from("a zstd frame")])],
         ["super-smash/public/blob.json", Buffer.from("text, then a NUL\0")],
       ];
       for (const [path, bytes] of planted) s.plant(path, s.blob(bytes));
-      // A new README screenshot is allowed, as another project's own picture is.
+      // A new README screenshot is allowed; a sibling project's own picture and archive are its own (round 3b ruling).
       const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("a picture")]);
       s.plant("super-smash/docs/screenshots/new.png", s.blob(png));
       s.plant("Risk/docs/screenshots/new.png", s.blob(png));
+      s.plant("Risk/frame.bin", s.blob(Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from("a zstd frame")])));
+      s.plant("Risk/research/new-map.zip", s.blob(Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("a zip entry")])));
       expect(scan(s.env).map((f) => f.slice(0, f.indexOf(" ("))).sort()).toEqual(planted.map(([path]) => path).sort());
     } finally {
       s.cleanup();
     }
   });
 
-  it("sees a gzip staged anywhere in the repo but the bake: a glb compressed hides its own magic (fw2 re-review)", () => {
+  it("sees a gzip staged in this package but the bake: a glb compressed hides its own magic (fw2 re-review)", () => {
     const s = scratch();
     try {
       expect(scan(s.env)).toEqual([]);
-      const planted = ["super-smash/public/fox.glb.gz", "super-smash/docs/screenshots/match.png", "Risk/assets.tar.gz"];
-      for (const path of planted) s.plant(path, s.blob(gzipSync(Buffer.concat([Buffer.from("glTF"), Buffer.from("a glb")]))));
-      // A new bake staged over the committed one is the one gzip allowed.
+      const glb = gzipSync(Buffer.concat([Buffer.from("glTF"), Buffer.from("a glb")]));
+      const planted = ["super-smash/public/fox.glb.gz", "super-smash/docs/screenshots/match.png", "super-smash/assets.tar.gz"];
+      for (const path of planted) s.plant(path, s.blob(glb));
+      // A new bake staged over the committed one is the one gzip allowed; a sibling's archive is the sibling's.
       s.plant("super-smash/public/bake/roster.bin.gz", s.blob(gzipSync("a new bake")));
+      s.plant("Risk/assets.tar.gz", s.blob(glb));
       const flagged = scan(s.env);
       expect(flagged.every((f) => f.includes(" (compressed: gzip; "))).toBe(true);
       expect(flagged.map((f) => f.slice(0, f.indexOf(" (compressed: "))).sort()).toEqual([...planted].sort());

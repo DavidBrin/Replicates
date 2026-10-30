@@ -2859,9 +2859,10 @@ format by its name and a model's or texture's magic number under any name; and, 
 compressed, archived or re-encoded keeps none of its own first bytes, any binary file outside an
 explicit allowlist (`BINARY_ALLOW` in `scripts/models/rippedFormats.mjs`: the bake and the
 README's stand-in screenshots, plus, for the deploy, the glbs `index.json` names), and any
-compressed file anywhere in the repo but the bake and Risk's Natural Earth map data. No render
-or screenshot of a real model is committed either: the repo is public, and a picture of a model
-is a derivative of the ripped files. Captures go to the git-ignored `test-results/anim/`. The
+compressed file but the bake. The commit guard applies those two rules to this package only:
+the sibling projects, which other sessions work on, keep the name, magic and manifest checks.
+No render or screenshot of a real model is committed either: the repo is public, and a picture
+of a model is a derivative of the ripped files. Captures go to the git-ignored `test-results/anim/`. The
 deployed site serves the glbs built on the deploying machine; a checkout without `pnpm models`
 plays with capsule stand-ins.
 
