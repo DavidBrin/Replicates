@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "./acmd/bones";
@@ -1482,13 +1485,16 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     expect(defender.vx).not.toBe(byRatio(fx(1.3), [3, 20]));
   });
 
+  // Each total is a freeze of its own, counted from the hit's frame (Plan 5, Task
+  // 7b), so what is left after that frame is the total less one.
   it("freezes a direct melee attacker 14 frames and the defender 11 beyond the hit", () => {
     const at = parried(BASE_DEF, (i) => (i === 0 ? Btn.Attack : 0), 8);
     const [attacker, defender] = at.state.fighters;
     expect(defender.action).toBe("shieldRelease");
     expect(at.events.shieldHits).toHaveLength(1);
-    expect(attacker.hitlag).toBe(JAB_LAG + 14);
-    expect(defender.hitlag).toBe(JAB_LAG + 11);
+    expect(JAB_LAG).toBe(8);
+    expect(attacker.hitlag).toBe(JAB_LAG + 14 - 1);
+    expect(defender.hitlag).toBe(JAB_LAG + 11 - 1);
     // 0.15 inside the pushback formula, away from the attacker.
     expect(defender.vx).toBe(shieldPushback(shieldstunExact(JAB_DMG), true));
     // No shield damage and no shieldstun.
@@ -1522,7 +1528,8 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     const [owner, defender] = at.state.fighters;
     expect(at.events.shieldHits).toHaveLength(1);
     expect(owner.hitlag).toBe(0);
-    expect(defender.hitlag).toBe(PELLET_LAG - 1);
+    // A freeze of PELLET_LAG − 1, counted from the hit's frame.
+    expect(defender.hitlag).toBe(PELLET_LAG - 1 - 1);
     expect(defender.hitstun).toBe(0);
   });
 
@@ -1536,12 +1543,13 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     const direct = parried(shooterOf({ direct: true }), (i) => (i === 0 ? Btn.Special : 0), 40);
     expect(direct.events.shieldHits).toHaveLength(1);
     expect(direct.state.fighters[0].hitlag).toBe(0);
-    expect(direct.state.fighters[1].hitlag).toBe(PELLET_LAG + 8);
+    // Freezes of PELLET_LAG + 8 and PELLET_LAG − 1, each counted from the hit's frame.
+    expect(direct.state.fighters[1].hitlag).toBe(PELLET_LAG + 8 - 1);
     expect(direct.state.fighters[1].hitstun).toBe(0);
 
     const indirect = parried(shooterOf({ direct: false }), (i) => (i === 0 ? Btn.Special : 0), 40);
     expect(indirect.state.fighters[0].hitlag).toBe(0);
-    expect(indirect.state.fighters[1].hitlag).toBe(PELLET_LAG - 1);
+    expect(indirect.state.fighters[1].hitlag).toBe(PELLET_LAG - 1 - 1);
     expect(indirect.state.fighters[1].hitstun).toBe(0);
   });
 
@@ -1567,14 +1575,15 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     });
     const attack = (i: number): InputFrame => (i === 0 ? Btn.Attack : 0);
 
+    // Each total counted from the hit's frame (Plan 5, Task 7b): stored less one.
     const indirect = parried(jabOf(false), attack, 8);
     expect(indirect.events.shieldHits).toHaveLength(1);
-    expect(indirect.state.fighters[0].hitlag).toBe(JAB_LAG + 14);
-    expect(indirect.state.fighters[1].hitlag).toBe(JAB_LAG + 2);
+    expect(indirect.state.fighters[0].hitlag).toBe(JAB_LAG + 14 - 1);
+    expect(indirect.state.fighters[1].hitlag).toBe(JAB_LAG + 2 - 1);
 
     const direct = parried(jabOf(true), attack, 8);
-    expect(direct.state.fighters[0].hitlag).toBe(JAB_LAG + 14);
-    expect(direct.state.fighters[1].hitlag).toBe(JAB_LAG + 11);
+    expect(direct.state.fighters[0].hitlag).toBe(JAB_LAG + 14 - 1);
+    expect(direct.state.fighters[1].hitlag).toBe(JAB_LAG + 11 - 1);
   });
 
   // A hit with no hitlag of its own (0× multiplier) freezes neither fighter, so
@@ -5965,8 +5974,9 @@ describe("the freeze ends in order: ASDI, the clamp, a ground re-check, then the
     const { frames, hit, fired } = jabbedWhile(atTheLip(), meteor, mashing(Btn.Right));
     expect(frames[hit].state.fighters[1].x).toBe(fx(78));
     const v = frames[fired].state.fighters[1];
-    // Three pulses of 2 (freeze 12, 8, 4): past the edge at 80.
-    expect(v.x).toBe(fx(84));
+    // The freeze of 12 holds the victim 11 frames past the hit's (Plan 5, Task 7b):
+    // two pulses of 2 (11 frames left, then pulses on 8 and 4), past the edge at 80.
+    expect(v.x).toBe(fx(82));
     expect(v.grounded).toBe(false);
     expect(v.kinetic.damageY).toBeLessThan(0);
     // The whole launch, not the bounce's 0.9 of it.
@@ -6274,6 +6284,8 @@ describe("a hitlag multiplier below 1x counts as 1x on a shield (final wave, par
   // transition considerably slower if it hits a shield". The Task 10 review's carry.
   const quick = jabbing(hitbox({ hitlagMultiplier: fx(0.3) }));
   const JAB_DAMAGE = mul(fx(10), STALE_FRESH_BONUS);
+  // Each freeze counts the frame it lands on (Plan 5, Task 7b), so what is stored
+  // after the hit's own frame is n − 1.
   const freezes = (inputs: (i: number) => readonly InputFrame[]): [number, number] => {
     const frames = play(standing(quick), 10, inputs, quick);
     const at = frames.find((f) => f.events.hits.length + f.events.shieldHits.length > 0)!;
@@ -6282,13 +6294,15 @@ describe("a hitlag multiplier below 1x counts as 1x on a shield (final wave, par
 
   it("freezes both fighters a shield hit's whole hitlag", () => {
     const lag = computeHitlag(JAB_DAMAGE, { shielding: true });
-    expect(freezes(JAB_INTO_SHIELD)).toEqual([lag, lag]);
+    expect(lag).toBe(8);
+    expect(freezes(JAB_INTO_SHIELD)).toEqual([lag - 1, lag - 1]);
   });
 
   it("keeps the 0.3x on a hit to the body", () => {
     const lag = computeHitlag(JAB_DAMAGE, { moveMultiplier: fx(0.3) });
+    expect(lag).toBe(3);
     expect(lag).toBeLessThan(computeHitlag(JAB_DAMAGE, { shielding: true }));
-    expect(freezes(JAB)).toEqual([lag, lag]);
+    expect(freezes(JAB)).toEqual([lag - 1, lag - 1]);
   });
 });
 
@@ -6568,5 +6582,246 @@ describe("a hit says where the box touched the body (Plan 4, ruling R9)", () => 
   it("is a sphere's centre", () => {
     const hit = hitWith(ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 6, x: 0, y: 6, z: 14 }));
     expect([hit.contactX, hit.contactY]).toEqual([hit.x, hit.y]);
+  });
+});
+
+/* ------------------------------ Plan 5, Task 7b: one hitlag convention -- */
+
+/**
+ * A freeze of n frames counts the frame it starts on, so it holds a fighter n − 1
+ * frames past it (`framesAfterHit`), wherever a freeze is stored (Plan 5, Task 7b,
+ * the controller's ruling). SmashWiki "Marth (SSBU)/Forward throw"
+ * (https://www.ssbwiki.com/Marth_(SSBU)/Forward_throw): "During frame 14, the move
+ * inflicts 4 frames of hitlag", and its timing "without the hitlag" (release 15,
+ * interruptible 32) is UltimateFrameData's 18/34 (https://ultimateframedata.com/marth)
+ * less 3. SmashWiki "Pummel" (https://www.ssbwiki.com/Pummel): Mario's 19 is his 6
+ * coded frames and 14 of hitlag, less the frame they share. The freeze's damage
+ * leaves the 1v1 multiplier out: SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag),
+ * "The 1v1 multiplier and shield damage are not factored".
+ *
+ * The fixture's fresh 10% jab freezes ⌊10.5 × 0.65 + 6⌋ = 12 frames; in 1v1 its
+ * 12.6% would freeze 14 if the multiplier counted.
+ */
+describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)", () => {
+  const JAB_DMG = mul(fx(10), STALE_FRESH_BONUS);
+  const LAG = computeHitlag(JAB_DMG);
+  /** `s` played one-on-one. */
+  const oneOnOne = (s: GameState): GameState => {
+    s.rules = { ...s.rules, oneOnOne: true };
+    return s;
+  };
+  /** The fixture with its jab's box changed by `over`. */
+  const jabWith = (over: Partial<Hitbox>): FighterDef => ({
+    ...BASE_DEF,
+    moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox(over)] }) },
+  });
+  const firstHit = (frames: readonly Frame[]): number => frames.findIndex((f) => f.events.hits.length > 0 || f.events.shieldHits.length > 0);
+
+  // The controller's rule: one helper at every freeze, and no site works out its
+  // own. Every write to `hitlag` in the engine's code, pinned: the countdown, the
+  // KO's reset, the thrower's own freeze kept across its release, and the two that
+  // store a freeze, both through `framesAfterHit`. A new site fails here.
+  it("is stored only through framesAfterHit: every write to hitlag in the engine, listed", () => {
+    const root = join(process.cwd(), "src", "engine");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((e) => (statSync(join(dir, e)).isDirectory() ? walk(join(dir, e)) : e.endsWith(".ts") && !e.endsWith(".test.ts") ? [join(dir, e)] : []));
+    const writes = walk(root).flatMap((file) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => !line.startsWith("//") && !line.startsWith("*") && /\.hitlag\s*(?:[-+]?=)(?!=)/.test(line))
+        .map((line) => `${relative(root, file)}: ${line}`),
+    );
+    expect(writes.sort()).toEqual([
+      "counter.ts: f.hitlag = framesAfterHit(c.freeze);",
+      "simulate.ts: f.hitlag -= 1;",
+      "simulate.ts: f.hitlag = 0;",
+      "simulate.ts: f.hitlag = Math.max(atLeast, framesAfterHit(n));",
+      "simulate.ts: f.hitlag = own;",
+    ]);
+  });
+
+  it("is 12 frames for the fixture's jab, and 14 is what its 1v1 damage would freeze", () => {
+    expect(LAG).toBe(12);
+    expect(computeHitlag(mul(JAB_DMG, fx(1.2)))).toBe(14);
+  });
+
+  it("holds both on the hit's frame for n frames: n − 1 after it, the launch on the last, the move n − 1 longer", () => {
+    const frames = play(standing(), 60, JAB);
+    const h = firstHit(frames);
+    expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, LAG - 1]);
+    // Frozen on frames h … h + n − 1; the parked launch fires on the last of them.
+    const fired = frames.findIndex((f, i) => i >= h && f.state.fighters[1].pendingFacing === 0);
+    expect(fired).toBe(h + LAG - 1);
+    expect(frames[h + LAG - 2].state.fighters[1].x).toBe(frames[h].state.fighters[1].x);
+    // The fixture's 24-frame jab stands n − 1 frames longer.
+    expect(frames.findIndex((f) => f.state.fighters[0].action !== "attack")).toBe(24 + LAG - 1);
+  });
+
+  it("reads the damage without the 1v1 multiplier: 12 frames one-on-one too, not 14", () => {
+    const frames = play(oneOnOne(standing()), 20, JAB);
+    const h = firstHit(frames);
+    expect(frames[h].events.hits[0].damage).toBe(mul(JAB_DMG, fx(1.2)));
+    expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, LAG - 1]);
+  });
+
+  it("treats a freeze of 1 as none: every frame hashes as a freeze of 0's does, an electric hit's too", () => {
+    for (const effect of [undefined, "electric"] as const) {
+      const one = jabWith({ hitlagMultiplier: fx(0.1), ...(effect ? { effect } : {}) });
+      const none = jabWith({ hitlagMultiplier: 0, ...(effect ? { effect } : {}) });
+      expect(computeHitlag(JAB_DMG, { moveMultiplier: fx(0.1), electric: effect === "electric" }), `${effect}`).toBe(1);
+      const a = play(standing(ctxFor(one)), 40, JAB, ctxFor(one));
+      const b = play(standing(ctxFor(none)), 40, JAB, ctxFor(none));
+      expect(firstHit(a), `${effect}`).toBeGreaterThan(0);
+      a.forEach((f, i) => expect(hashState(f.state), `${effect}, frame ${i}`).toBe(hashState(b[i].state)));
+      // The launch fired on contact, with nothing frozen.
+      const h = firstHit(a);
+      expect(a[h].state.fighters[1]).toMatchObject({ hitlag: 0, pendingFacing: 0 });
+      expect(a[h].state.fighters[1].combat).toMatchObject({ victimFreeze: false, asdi: false });
+    }
+  });
+
+  it("holds both one frame past the hit for a freeze of 2", () => {
+    const two = jabWith({ hitlagMultiplier: fx(0.2) });
+    expect(computeHitlag(JAB_DMG, { moveMultiplier: fx(0.2) })).toBe(2);
+    const frames = play(standing(ctxFor(two)), 40, JAB, ctxFor(two));
+    const h = firstHit(frames);
+    expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([1, 1]);
+    expect(frames[h].state.fighters[1].pendingFacing).not.toBe(0);
+    expect(frames[h + 1].state.fighters[1].pendingFacing).toBe(0);
+  });
+
+  it("re-simulates hash-equal from any frame across freezes of 0, 1, 2 and n", () => {
+    for (const mult of [0, fx(0.1), fx(0.2), ONE]) {
+      const ctx = ctxFor(jabWith({ hitlagMultiplier: mult }));
+      const n = 40;
+      const frames = play(standing(ctx), n, JAB, ctx);
+      expect(firstHit(frames)).toBeGreaterThan(0);
+      for (let k = 0; k < n - 1; k++) {
+        const again = play(cloneState(frames[k].state), n - 1 - k, (i) => JAB(i + k + 1), ctx);
+        again.forEach((f, j) => expect(hashState(f.state), `×${toFloat(mult)}, snapshot ${k}, frame ${k + 1 + j}`).toBe(hashState(frames[k + 1 + j].state)));
+      }
+    }
+  });
+
+  describe("at every place a freeze is stored", () => {
+    it("a shield: both n − 1 of the shield hitlag, the 1v1 multiplier left out", () => {
+      // 8 frames on a shield (×0.67); one-on-one, 12.6% would make it 9.
+      const onShield = computeHitlag(JAB_DMG, { shielding: true });
+      expect([onShield, computeHitlag(mul(JAB_DMG, fx(1.2)), { shielding: true })]).toEqual([8, 9]);
+      for (const s of [standing(), oneOnOne(standing())]) {
+        const frames = play(s, 20, JAB_INTO_SHIELD);
+        const h = firstHit(frames);
+        expect(frames[h].events.shieldHits).toHaveLength(1);
+        expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([onShield - 1, onShield - 1]);
+      }
+    });
+
+    // Both freeze alike, so the freeze moves neither's first free frame against the
+    // other's: the advantage is the freeze-free hit's. (UltimateFrameData's
+    // advantages, https://ultimateframedata.com, leave hitlag out for this reason.)
+    it("a shield: the frame advantage is the same as with no freeze at all", () => {
+      const advantage = (def: FighterDef): number => {
+        const frames = play(standing(ctxFor(def)), 60, JAB_INTO_SHIELD, ctxFor(def));
+        const h = firstHit(frames);
+        const attackerFree = frames.findIndex((f, i) => i > h && f.state.fighters[0].action !== "attack");
+        const defenderFree = frames.findIndex((f, i) => i > h && f.state.fighters[1].action !== "shieldStun");
+        return defenderFree - attackerFree;
+      };
+      expect(advantage(BASE_DEF)).toBe(advantage(jabWith({ hitlagMultiplier: 0 })));
+    });
+
+    it("super armour: the attacker n − 1, the 1v1 multiplier left out", () => {
+      const s = oneOnOne(standing());
+      Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
+      const frames = play(s, 12, JAB);
+      const h = firstHit(frames);
+      expect(frames[h].events.hits[0].knockback).toBe(0);
+      expect(frames[h].state.fighters[1].action).toBe("special");
+      expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, 0]);
+    });
+
+    it("an invincible fighter: the attacker n − 1, the 1v1 multiplier left out", () => {
+      const s = oneOnOne(standing());
+      s.fighters[1].invincible = 60;
+      const frames = play(s, 12, JAB);
+      const h = firstHit(frames);
+      expect(frames[h].events.hits[0].damage).toBe(0);
+      expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([LAG - 1, 0]);
+    });
+
+    it("a catch-only hit, a pummel: both n − 1, the 1v1 multiplier left out", () => {
+      // An 8% catch-only box: ⌊8.4 × 0.65 + 6⌋ = 11; one-on-one, 10.08% would freeze 12.
+      const pummeller: FighterDef = {
+        ...BASE_DEF,
+        moves: {
+          ...BASE_DEF.moves,
+          pummel: move("pummel", {
+            totalFrames: 10,
+            hitboxes: [hitbox({ startFrame: 1, endFrame: 1, x: fx(40), damage: fx(8), angle: fx(361), baseKnockback: 0, fixedKnockback: fx(40) })],
+          }),
+        },
+      };
+      const n = computeHitlag(mul(fx(8), STALE_FRESH_BONUS));
+      expect([n, computeHitlag(mul(mul(fx(8), STALE_FRESH_BONUS), fx(1.2)))]).toEqual([11, 12]);
+      const ctx = ctxFor(pummeller);
+      const s = oneOnOne(standing(ctx));
+      Object.assign(s.fighters[0], { action: "grabHold", grabbing: 1 });
+      Object.assign(s.fighters[1], { action: "grabbed", actionFrame: 30, grabbedBy: 0, grabTimer: 100 });
+      const frames = play(s, 30, (i) => [i === 2 ? Btn.Attack : 0, 0], ctx);
+      const h = firstHit(frames);
+      expect(frames[h].state.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
+      expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([n - 1, n - 1]);
+      // The pummel's 10 frames and n − 1 more.
+      const started = frames.findIndex((f) => f.state.fighters[0].action === "pummel");
+      expect(frames.findIndex((f, i) => i > started && f.state.fighters[0].action !== "pummel") - started).toBe(10 + n - 1);
+    });
+
+    describe("knockback stacking", () => {
+      // Fighter 2 jabs fighter 1 (a box live from frame 1), who already flies from
+      // fighter 0's launch at `ratio` of the jab's speed: kept (0.7) or armoured
+      // through (0.4), and either way both freeze (SmashWiki "Knockback").
+      const quick: FighterDef = jabWith({ startFrame: 1, radius: fx(10) });
+      const ctx = ctxFor(quick);
+      function flying(ratio: number, hitlag = 0): { at: Frame; h: number } {
+        const fresh = (): GameState => {
+          const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+          const place = [
+            { x: fx(-60), facing: 1 },
+            { x: fx(8), facing: -1 },
+            { x: 0, facing: 1 },
+          ];
+          s.fighters.forEach((f, i) => Object.assign(f, place[i], { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 }));
+          return s;
+        };
+        const jab = (i: number): readonly InputFrame[] => [0, 0, i === 0 ? Btn.Attack : 0];
+        const dry = play(fresh(), 8, jab, ctx).find((f) => f.events.hits.length > 0)!;
+        const jabSpeed = Math.trunc((dry.events.hits[0].knockback * 3) / 100);
+        const s = fresh();
+        const v = s.fighters[1];
+        Object.assign(v, { grounded: false, platform: -1, y: fx(1), action: "tumble", hitstun: 50, hitlag });
+        const current = Math.trunc(jabSpeed / ratio);
+        v.kinetic.damageY = current;
+        v.launchSpeed = current;
+        v.vy = current;
+        v.combat.launchSource = 0;
+        const frames = play(s, 8, jab, ctx);
+        const h = firstHit(frames);
+        return { at: frames[h], h };
+      }
+
+      it.each([0.7, 0.4])("at %s of the live launch: both n − 1, the launch left as it was", (ratio) => {
+        const { at } = flying(ratio);
+        expect(at.state.fighters[1].pendingFacing).toBe(0);
+        expect([at.state.fighters[1].hitlag, at.state.fighters[2].hitlag]).toEqual([LAG - 1, LAG - 1]);
+      });
+
+      it("never cuts a longer freeze of the victim's short", () => {
+        // Frozen 20 frames from the start, counted down one a frame up to the hit's.
+        const { at, h } = flying(0.7, 20);
+        expect(20 - (h + 1)).toBeGreaterThan(LAG - 1);
+        expect([at.state.fighters[1].hitlag, at.state.fighters[2].hitlag]).toEqual([20 - (h + 1), LAG - 1]);
+      });
+    });
   });
 });

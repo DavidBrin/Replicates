@@ -190,6 +190,11 @@ const MATCHES: readonly Match[] = [
  * seventh match, the states lab (ruling P5-R14: visited, not exempted), carries
  * Mario twice: he mashes out of the first carry, and the second ends in a cargo
  * up throw that lands. Tasks 9, 11 and 12 extend it for their own states.
+ * Plan 5 Task 7b (a freeze of n frames counts its own frame; its damage leaves
+ * the 1v1 multiplier out) moved all four CPU matches: they reach 44 between them
+ * now — kirby-marth grabs, throws, is grabbed and thrown and spot-dodges,
+ * link-samus is shield-stunned, mario-fox trumps a ledge, and two tech-roll —
+ * and lose none of the 35.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -525,6 +530,18 @@ describe("engine golden trace", () => {
   // grab nobody; the script has no Donkey Kong) and added the states lab: one hit
   // (the cargo up throw), no shield hits, no KO. So now: hits 17/33/21/23, 6, 0
   // and 1; shield hits 0/0/1/0, 3, 0 and 0; KOs 1/2/2/2, 1, 2 and 0.
+  // Plan 5 Task 7b (one hitlag convention: a freeze of n frames counts the frame
+  // it starts on, so every hit's freeze is a frame shorter, and its damage leaves
+  // the 1v1 multiplier out, so a 1v1 hit's is shorter again where the bonus
+  // crossed a frame) moved five: mario-fox from the 801-900 sample, the other
+  // three CPU matches from the first, and the script from 201-300 (its pummel's
+  // freeze, 14 frames, now holds 13 past the hit's). The two labs hold: the tech
+  // lab lands no hit, and the states lab's one, the cargo up throw, freezes
+  // nobody. Hits 19, 16, 21 and 21; shield hits 0, 0, 1 and 0; KOs 3, 2, 0 and 0.
+  // So now: hits 19/16/21/21, 6, 0 and 1; shield hits 0/0/1/0, 3, 0 and 0; KOs
+  // 3/2/0/0, 1, 2 and 0, every one a self-destruct: Mario twice during a Cape and
+  // Fox during Fire Fox in mario-fox, Donkey Kong during a Headbutt and Pikachu in
+  // special fall in donkeyKong-pikachu.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

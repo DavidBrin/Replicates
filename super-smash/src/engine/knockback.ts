@@ -376,6 +376,34 @@ export function computeHitlag(damage: number, opts: HitlagOptions = {}): number 
   return clamp(frames, 0, HITLAG_CAP);
 }
 
+/**
+ * The frames a freeze of `n` holds a fighter *after* the frame it starts on:
+ * `max(n − 1, 0)`. The one conversion every stored freeze goes through
+ * (`FighterState.hitlag` counts the frames still to come): a hit's, a shield's,
+ * a parry's, armour's, a pummel's, a throw's catch stop and partial hit, a
+ * counter's (Plan 5, Task 7b, the controller's ruling: one published convention,
+ * engine-wide).
+ *
+ * A freeze of n frames counts the frame it starts on, so it lengthens a move by
+ * n − 1:
+ * - SmashWiki "Marth (SSBU)/Forward throw"
+ *   (https://www.ssbwiki.com/Marth_(SSBU)/Forward_throw): "During frame 14, the
+ *   move inflicts 4 frames of hitlag", and its timing "without the hitlag",
+ *   release 15 and interruptible 32, is UltimateFrameData's 18/34
+ *   (https://ultimateframedata.com/marth) less 3.
+ * - SmashWiki "Pikachu (SSBU)/Down throw"
+ *   (https://www.ssbwiki.com/Pikachu_(SSBU)/Down_throw): the release on 21
+ *   inflicts ⌊5 × 0.65 + 6⌋ = 9, "causing their knockback to start on frame 30".
+ * - SmashWiki "Pummel" (https://www.ssbwiki.com/Pummel) and UltimateFrameData:
+ *   Mario's 19 is his 6 coded frames and 14 of hitlag, less the one they share.
+ *
+ * So a freeze of 1 holds nothing past its own frame, as a freeze of 0 does: the
+ * launch it parks fires on contact.
+ */
+export function framesAfterHit(n: number): number {
+  return n > 1 ? n - 1 : 0;
+}
+
 export interface ShieldstunOptions {
   readonly smash?: boolean;
   readonly aerial?: boolean;

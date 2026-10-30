@@ -580,6 +580,55 @@ describe("the push and a grab (UNVERIFIED: no source covers either; Plan 5, Task
   });
 });
 
+// SmashWiki "Throw" (https://www.ssbwiki.com/Throw): in Ultimate "the thrower is now
+// invincible until the opponent has been thrown", "from frame 1 all the way until the
+// frame the opponent is thrown", and a push on an invincible fighter does nothing
+// (`applyWindbox`). Read off the throw's script (`isInvincible`), not the fighter's
+// `invincible` counter, which stays 0 (Task 7 re-review's Minor; Plan 5, Task 7b).
+describe("the push and a throw (SmashWiki \"Throw\": the thrower is invincible until the release)", () => {
+  const RULES3: MatchRules = { ...RULES, oneOnOne: false };
+  /** Mario at −12 facing right; Marth (port 2) at 12, his back to Mario, holding Fox at 18. */
+  function marthHolding(): GameState {
+    const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }, { defId: "marth" }], RULES3, 5);
+    const at = { actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0, invincible: 0 };
+    Object.assign(s.fighters[0], at, { action: "stand", x: fx(-12), facing: 1 });
+    Object.assign(s.fighters[2], at, { action: "grabHold", x: fx(12), facing: 1, grabbing: 1 });
+    Object.assign(s.fighters[1], at, { action: "grabbed", x: fx(18), facing: -1, grabbedBy: 2, grabTimer: 500 });
+    return s;
+  }
+  /** Mario's bare F.L.U.D.D., and Marth's inputs from `marth`. */
+  const play3 = (s: GameState, n: number, marth: (i: number) => InputFrame) => {
+    let st = s;
+    let prev: InputFrame[] = [0, 0, 0];
+    const out: { state: GameState; events: StepEvents }[] = [];
+    for (let i = 0; i < n; i++) {
+      const now = [bare(i), 0, marth(i)];
+      const r = step(st, now, { prevInputs: prev });
+      st = r.state;
+      prev = now;
+      out.push(r);
+    }
+    return out;
+  };
+  const pushedOn = (steps: readonly { events: StepEvents }[]): number[] =>
+    steps.flatMap((r, i) => (r.events.pushes.some((p) => p.victim === 2) ? [i] : []));
+
+  it("leaves Marth alone through his forward throw up to its release, and pushes him after it", () => {
+    // Holding, the first pump to reach him pushes him (the control).
+    const held = pushedOn(play3(marthHolding(), 50, () => 0));
+    expect(held.length).toBeGreaterThan(0);
+    // Thrown on step 14: the release is UFD's frame 18 (https://ultimateframedata.com/marth), after that first pump.
+    const steps = play3(marthHolding(), 50, (i) => (i === 14 ? Btn.Right : 0));
+    const release = steps.findIndex((r) => r.events.hits.some((h) => h.attacker === 2 && h.victim === 1));
+    expect(release).toBe(14 + 17);
+    expect(held[0]).toBeLessThan(release);
+    expect(steps.slice(14, release + 1).every((r) => r.state.fighters[2].action === "throw" && r.state.fighters[2].invincible === 0)).toBe(true);
+    const pushes = pushedOn(steps);
+    expect(pushes.filter((i) => i <= release)).toEqual([]);
+    expect(pushes.length).toBeGreaterThan(0);
+  });
+});
+
 describe("the push against a launch still live (UNVERIFIED: SmashWiki \"Knockback\"'s stacking, read for a push)", () => {
   /**
    * The bare-press run one step before the first pump reaches Fox, with Fox

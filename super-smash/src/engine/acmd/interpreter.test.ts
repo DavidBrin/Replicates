@@ -606,4 +606,27 @@ describe("throws and catch-only boxes (Plan 5)", () => {
     const s = script("t", "catch_attack", [frame(1), hit(0), catchOnly(true), frame(3), catchOnly(false)]);
     expect([1, 2, 3].map((g) => runScript(s, g).catchOnly)).toEqual([true, true, false]);
   });
+
+  // A box issued and cleared on one frame is "flashed": SmashWiki "Pikachu
+  // (SSBU)/Down throw" (https://www.ssbwiki.com/Pikachu_(SSBU)/Down_throw), a hitbox
+  // "set to both appear and be deleted on frame 14", "only partially registered on
+  // the thrown opponent". Pikachu's own script clears it with `clear_all`; a
+  // `clear(id)` on the same frame flashes the one box it names (Task 7 re-review's
+  // Minor; Plan 5, Task 7b).
+  it("reports a box cleared by clear(id) on the frame it was issued as flashed, and only that one", () => {
+    const s = script("game_throwlw", "throw_lw", [frame(14), hit(0, 2), hit(1, 3), catchOnly(true), clear(0), frame(16), clear(1)]);
+    const flashedOn = (g: number) => runScript(s, g).flashed.map((f) => [f.params.id, f.catchOnly]);
+    expect(flashedOn(14)).toEqual([[0, true]]);
+    expect(runScript(s, 14).attacks.map((a) => a.id)).toEqual([1]);
+    // Box 1 lived two frames before its clear: not a flash.
+    expect([13, 15, 16].map(flashedOn)).toEqual([[], [], []]);
+  });
+
+  it("reports every box clear_all ends on the frame they were issued as flashed", () => {
+    const s = script("game_throwlw", "throw_lw", [frame(14), hit(0, 2), hit(1, 3), clearAll()]);
+    expect(runScript(s, 14).flashed.map((f) => [f.params.id, f.catchOnly])).toEqual([
+      [0, false],
+      [1, false],
+    ]);
+  });
 });

@@ -25,6 +25,7 @@ import {
   damageSpeedUpMag,
   damageSpeedUpMaxMag,
   effectiveHitstun,
+  framesAfterHit,
   knockbackStack,
   knockbackToVelocity,
   launchDiAble,
@@ -427,6 +428,24 @@ describe("computeHitlag", () => {
     expect(computeHitlag(fx(10), { moveMultiplier: fx(0.3), shielding: true })).toBe(8);
     expect(computeHitlag(fx(10), { moveMultiplier: fx(2), shielding: true })).toBe(16);
     expect(computeHitlag(fx(10), { moveMultiplier: 0, shielding: true })).toBe(0);
+  });
+});
+
+// Plan 5, Task 7b: a freeze of n frames counts the frame it starts on, so it holds
+// a fighter n − 1 frames past it. SmashWiki "Marth (SSBU)/Forward throw"
+// (https://www.ssbwiki.com/Marth_(SSBU)/Forward_throw): "During frame 14, the move
+// inflicts 4 frames of hitlag", and its timing "without the hitlag" (release 15,
+// interruptible 32) is UltimateFrameData's 18/34 (https://ultimateframedata.com/marth)
+// less 3. SmashWiki "Pummel" (https://www.ssbwiki.com/Pummel): totals are "the
+// combined total frames of both the pummels' coded duration and the amount of
+// hitlag", Mario's 19 = 6 + 14 − 1 (UFD: "Total frames includes 14 frames of hitlag").
+describe("framesAfterHit", () => {
+  it("is max(n − 1, 0): a freeze of 1 holds nothing past its own frame, as 0 does", () => {
+    expect([0, 1, 2, 3, 13, 30].map(framesAfterHit)).toEqual([0, 0, 1, 2, 12, 29]);
+  });
+
+  it("never goes negative", () => {
+    fc.assert(fc.property(fc.integer({ min: -5, max: 40 }), (n) => framesAfterHit(n) === Math.max(n - 1, 0)));
   });
 });
 

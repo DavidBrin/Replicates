@@ -1,7 +1,8 @@
 /**
  * Marth's Counter, through the real `step()` (Plan 5, Task 5). SmashWiki
  * "Marth (SSBU)/Down special": catches hits on frames 6–27; returns ×1.2,
- * at least 8%, at most 50%; both freeze 21 frames; a grab goes through.
+ * at least 8%, at most 50%; both freeze 21 frames, the catch's own frame the
+ * first of them (Plan 5, Task 7b: `framesAfterHit`); a grab goes through.
  *
  * Sources, every number below:
  * - SmashWiki "Marth (SSBU)/Down special"
@@ -18,7 +19,9 @@
  *   (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Marth/data.json):
  *   the same boxes; the motion's CancelFrame 42.
  * - UltimateFrameData (https://ultimateframedata.com/marth): "Down B (Counter)"
- *   total 64, "Counter window 6-27".
+ *   total 64, "Counter window 6-27"; "Counter, Attack" startup 4, active 4—6,
+ *   "Intangible on frame 1-7 in addition to counter freeze frames": counted
+ *   from the end of the freeze, the counterattack's frame 1 spent inside it.
  * - SmashWiki "Counterattack" (https://www.ssbwiki.com/Counterattack): a grab
  *   "is immune to counterattacks"; "Counterattacks also do not trigger if the
  *   fighter is invincible".
@@ -147,12 +150,15 @@ describe("Marth's Counter", () => {
     expect(toFloat(end.fighters[0].damage)).toBeCloseTo(8 * 1.05 * 1.2, 1);
   });
 
-  it("freezes both fighters for 21 frames when it catches", () => {
+  // The 21 frames count the one the counter catches on (Plan 5, Task 7b), so 20
+  // follow it, and Marth shows the counterattack's frame 1 for all 21.
+  it("freezes both fighters for 21 frames when it catches, the catch's own frame the first", () => {
     const { states, events } = run(duel("mario", 12), 40, (i) => [i === 7 ? Btn.Attack : 0, i === 0 ? COUNTER : 0]);
     const at = events.findIndex((e) => e.counters.length > 0);
-    expect(states[at].fighters[1].hitlag).toBe(21);
-    expect(states[at].fighters[0].hitlag).toBe(21);
+    expect(states[at].fighters[1].hitlag).toBe(21 - 1);
+    expect(states[at].fighters[0].hitlag).toBe(21 - 1);
     expect(states[at].fighters[1].move).toBe("counterAttack");
+    expect(states.filter((s) => s.fighters[1].move === "counterAttack" && s.fighters[1].actionFrame === 0)).toHaveLength(21);
   });
 
   it("whiffs harmlessly and ends on frame 64", () => {
@@ -194,7 +200,8 @@ describe("Review Focus: counter against a projectile", () => {
     const { states, events } = run(duel("mario", 50), 120, (i) => [i === 0 ? Btn.Special : 0, i === 14 ? COUNTER : 0]);
     const at = caughtAt(events);
     expect(states[at].fighters[1].combat.counterDamage).toBe(fx(8));
-    expect(states[at].fighters[1].hitlag).toBe(21);
+    // 21 frames counting the catch's (Plan 5, Task 7b).
+    expect(states[at].fighters[1].hitlag).toBe(21 - 1);
     // The thrower acts on through Marth's freeze: its frame moves on.
     expect(states[at + 5].fighters[0].actionFrame).toBeGreaterThan(states[at].fighters[0].actionFrame);
   });
@@ -202,7 +209,8 @@ describe("Review Focus: counter against a projectile", () => {
   it("catches what a melee attacker throws and freezes the thrower; a projectile's thrower, never", () => {
     const melee = run(duel("mario", 12), 40, (i) => [i === 7 ? Btn.Attack : 0, i === 0 ? COUNTER : 0]);
     const shot = run(duel("mario", 50), 120, (i) => [i === 0 ? Btn.Special : 0, i === 14 ? COUNTER : 0]);
-    expect(melee.states[caughtAt(melee.events)].fighters[0].hitlag).toBe(21);
+    // 21 frames counting the catch's (Plan 5, Task 7b).
+    expect(melee.states[caughtAt(melee.events)].fighters[0].hitlag).toBe(21 - 1);
     expect(shot.states[caughtAt(shot.events)].fighters[0].hitlag).toBe(0);
   });
 });
@@ -316,18 +324,21 @@ describe("the riposte", () => {
     return { ...r, at, hitAt, hit: r.events[hitAt].hits.find((h) => h.attacker === 1)! };
   };
 
-  it("strikes on its frame 5, after the 21-frame freeze spent on its frame 1", () => {
+  // The 21 frames count the catch's own (Plan 5, Task 7b): UFD's "Counter, Attack"
+  // startup 4 (https://ultimateframedata.com/marth) is SmashWiki's frame 5, 4 frames
+  // after the freeze's last.
+  it("strikes on its frame 5, 4 frames after the 21-frame freeze spent on its frame 1", () => {
     const { states, at, hitAt } = scene();
     // Caught on the forward smash's first live frame, frame 15.
     expect(states[at].fighters[0]).toMatchObject({ move: "fsmash", actionFrame: 14 });
     expect(states[at].fighters[1]).toMatchObject({ action: "special", move: "counterAttack", actionFrame: 0 });
-    // Neither moves through the freeze…
-    expect(states[at + 21].fighters[1].actionFrame).toBe(0);
-    expect(states[at + 21].fighters[0].actionFrame).toBe(14);
+    // Neither moves through the freeze, the catch's frame and 20 more…
+    expect(states[at + 20].fighters[1].actionFrame).toBe(0);
+    expect(states[at + 20].fighters[0].actionFrame).toBe(14);
     // …then both go on together, and the boxes go live on frame 5.
-    expect(states[at + 22].fighters[1].actionFrame).toBe(1);
-    expect(states[at + 22].fighters[0].actionFrame).toBe(15);
-    expect(hitAt).toBe(at + 21 + 4);
+    expect(states[at + 21].fighters[1].actionFrame).toBe(1);
+    expect(states[at + 21].fighters[0].actionFrame).toBe(15);
+    expect(hitAt).toBe(at + 20 + 4);
     expect(states[hitAt].fighters[1].actionFrame).toBe(4);
   });
 
@@ -350,7 +361,14 @@ describe("the riposte", () => {
     expect(hit.knockback).toBe(kb);
     // 361 on a grounded victim: the angle rises with the knockback (Sakurai angle).
     expect(victim.pendingAngle).toBe(resolveAngle({ angle: fx(361) }, true, kb));
-    expect(victim.hitlag).toBe(computeHitlag(hit.damage, { moveMultiplier: fx(1.4) }));
+    // The freeze reads the damage without the one-on-one ×1.2 (SmashWiki "Hitlag",
+    // https://www.ssbwiki.com/Hitlag: "The 1v1 multiplier and shield damage are not
+    // factored"): ⌊(22.428 × 0.65 + 6) × 1.4⌋ = 28 frames, counting the hit's, so 27
+    // after it (Plan 5, Task 7b). One-on-one, 26.9% would freeze the cap, 30.
+    const lagDamage = mul(caught, computeStaleness([], "counterAttack").damage);
+    expect(computeHitlag(lagDamage, { moveMultiplier: fx(1.4) })).toBe(28);
+    expect(computeHitlag(hit.damage, { moveMultiplier: fx(1.4) })).toBe(30);
+    expect(victim.hitlag).toBe(28 - 1);
   });
 
   it("deals its own 8% only when the counter caught nothing: the damage it deals is the counter's", () => {
@@ -442,8 +460,9 @@ describe("intangible through the freeze and the counterattack's frames 1-8", () 
       const frame = s.fighters[1].actionFrame + 1;
       expect(s.fighters[1].intangible > 0, `frame ${frame}, hitlag ${s.fighters[1].hitlag}`).toBe(frame <= 8);
     }
-    // The freeze is all on frame 1, intangible throughout.
-    expect(riposte.filter((s) => s.fighters[1].actionFrame === 0)).toHaveLength(22);
+    // The freeze is all on frame 1, intangible throughout: its 21 frames, the
+    // catch's the first (Plan 5, Task 7b).
+    expect(riposte.filter((s) => s.fighters[1].actionFrame === 0)).toHaveLength(21);
   });
 });
 
@@ -621,7 +640,7 @@ describe("rollback", () => {
   it("re-simulates identically from mid-window, mid-freeze and mid-riposte", () => {
     const live = run(duel("mario", 16), 90, FSMASH).states;
     const at = caughtAt(run(duel("mario", 16), 90, FSMASH).events);
-    for (const from of [at - 3, at + 10, at + 24]) {
+    for (const from of [at - 3, at + 10, at + 23]) {
       const snapshot = cloneState(live[from]);
       let s = snapshot;
       let prev = FSMASH(from);
@@ -635,8 +654,8 @@ describe("rollback", () => {
     // The snapshots are where they claim to be.
     expect(live[at - 3].fighters[1].move).toBe("downB");
     expect(live[at + 10].fighters[1]).toMatchObject({ move: "counterAttack", actionFrame: 0 });
-    expect(live[at + 24].fighters[1]).toMatchObject({ move: "counterAttack", actionFrame: 3 });
-    expect(live[at + 24].fighters[1].combat.counterDamage).toBe(mul(fx(17.8), fx(1.2)));
+    expect(live[at + 23].fighters[1]).toMatchObject({ move: "counterAttack", actionFrame: 3 });
+    expect(live[at + 23].fighters[1].combat.counterDamage).toBe(mul(fx(17.8), fx(1.2)));
   });
 
   it("hashes the caught damage, so a rollback that lost it would be seen", () => {

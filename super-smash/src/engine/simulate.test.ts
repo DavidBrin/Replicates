@@ -641,14 +641,18 @@ describe("a connecting pummel", () => {
       { attacker: 0, victim: 1, damage: 5591, x: 24576, y: 24576, contactX: 24576, contactY: 24576, knockback: 0, angle: 0, hitboxId: 0 },
     ]);
     const [a, b] = hit.state.fighters;
-    expect(a).toMatchObject({ action: "pummel", move: "pummel", grabbing: 1, hitlag: 6, hitThisMove: [1] });
-    expect(b).toMatchObject({ action: "grabbed", grabbedBy: 0, damage: 5591, hitlag: 6, hitstun: 0 });
+    // A freeze of ⌊1.365 × 0.65 + 6⌋ = 6, counted from the hit's frame: 5 after it
+    // (SmashWiki "Pummel": a pummel's total is its own frames and its hitlag less the
+    // frame they share, Mario's 19 = 6 + 14 − 1; Plan 5, Task 7b).
+    expect(a).toMatchObject({ action: "pummel", move: "pummel", grabbing: 1, hitlag: 5, hitThisMove: [1] });
+    expect(b).toMatchObject({ action: "grabbed", grabbedBy: 0, damage: 5591, hitlag: 5, hitstun: 0 });
   });
 
   it("launches nobody when the freeze ends, and the holder finishes the pummel and holds on", () => {
     const ticks = holdThen(Btn.Attack, 40);
     const release = ticks.findIndex((t, i) => i > HOLD_INPUT_TICK && t.state.fighters[1].hitlag === 0);
-    expect(release).toBe(HOLD_INPUT_TICK + 6);
+    // The freeze's 6 frames end on the hit's frame + 5 (Plan 5, Task 7b).
+    expect(release).toBe(HOLD_INPUT_TICK + 5);
     expect(ticks[release].state.fighters[1]).toMatchObject({
       action: "grabbed",
       grabbedBy: 0,

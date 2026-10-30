@@ -32,6 +32,7 @@
 import { clamp, mul } from "./fixed";
 import { circle, moveFrameOf } from "./hitbox";
 import type { Capsule } from "./hitbox";
+import { framesAfterHit } from "./knockback";
 import { startMove, updateDodgeIntangibility } from "./states";
 import type { CounterDef, FighterDef, FighterState } from "./types";
 
@@ -66,6 +67,14 @@ export function counterDamage(c: CounterDef, damage: number): number {
  * counterattack (`c.then`) on its first frame, frozen there for the counter's
  * hitlag. Returns the freeze, which `step()` gives a melee attacker too.
  *
+ * The 21 frames count the one the counter catches on, as every freeze does
+ * (`framesAfterHit`; Plan 5, Task 7b): the counterattack's frame 1 is shown for
+ * 21 frames, and its frame 5 strikes 4 after them. UltimateFrameData
+ * (https://ultimateframedata.com/marth), "Counter, Attack": startup 4, active
+ * 4—6, "Intangible on frame 1-7 in addition to counter freeze frames", against
+ * SmashWiki's counterattack frames "Hitbox 5-7", "Intangibility 1-8": UFD's count
+ * starts after the freeze, the counterattack's frame 1 spent inside it.
+ *
  * The counterattack's own intangibility, when it starts on frame 1 (Marth's
  * "Intangibility 1-8"), holds through the freeze: the freeze is spent on that
  * frame. The fighter keeps facing the way it faced. UNVERIFIED: no source says
@@ -75,7 +84,7 @@ export function counterDamage(c: CounterDef, damage: number): number {
 export function triggerCounter(f: FighterState, def: FighterDef, c: CounterDef, caught: number): number {
   startMove(f, "special", c.then);
   f.combat.counterDamage = counterDamage(c, caught);
-  f.hitlag = c.freeze;
+  f.hitlag = framesAfterHit(c.freeze);
   // Its frame 1, intangible when the counterattack's window starts there; the
   // freeze holds the frame, and with it the window (`step()`'s hitlag branch).
   updateDodgeIntangibility(f, def);

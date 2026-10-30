@@ -57,6 +57,7 @@ import {
   computeShieldstun,
   computeStaleness,
   effectiveHitstun,
+  framesAfterHit,
   shieldstunExact,
   applyDI,
   applyLSI,
@@ -1340,7 +1341,7 @@ function resolveHits(
         if (counterNow !== null) {
           recordHit(c, attacker, victim.port);
           const freeze = triggerCounter(victim, defs[v], counterNow, mul(c.hitbox.damage, c.chargeScale));
-          if (c.projectile === null) attacker.hitlag = freeze;
+          if (c.projectile === null) freezeFighter(attacker, freeze);
           else destroyed.add(c.projectile.instanceId);
           const at = contactPoint(capsuleOf(c), bubble);
           events.counters.push({ port: victim.port, x: at.x, y: at.y });
@@ -1369,7 +1370,7 @@ function resolveHits(
       if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c, events);
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
-      else if (isInvincible(victim, defs[v])) applyInvincibleHit(s, attacker, victim, c, contact, events);
+      else if (isInvincible(victim, defs[v])) applyInvincibleHit(attacker, victim, c, contact, events);
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
@@ -1404,10 +1405,11 @@ function resolveHits(
  *   move inflicts 4 frames of hitlag to both Marth and the opponent, during which
  *   the opponent is invincible"; SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag)
  *   says the same of his back and down throws. The n frames count the frame it
- *   fires on, so the move stands n − 1 frames more: UFD's 18, 19 and 20 for
- *   Marth's forward, back and down throws are the scripts' releases 15, 16 and
- *   16 plus 3, 3 and 4 (https://ultimateframedata.com/marth). No damage and no
- *   hit, so nothing is reported.
+ *   fires on, as every freeze does (`framesAfterHit`), so the move stands n − 1
+ *   frames more: UFD's 18, 19 and 20 for Marth's forward, back and down throws
+ *   are the scripts' releases 15, 16 and 16 plus 3, 3 and 4
+ *   (https://ultimateframedata.com/marth). No damage and no hit, so nothing is
+ *   reported.
  * - A catch-only box issued and cleared on one frame (`flashed`) is registered
  *   in part on the fighter held: the freeze of its hit on both fighters, and
  *   nothing else (fix round 1). SmashWiki "Pikachu (SSBU)/Down throw"
@@ -1415,7 +1417,10 @@ function resolveHits(
  *   both appear and be deleted on frame 14", and "the hit is only partially
  *   registered on the thrown opponent, causing hitlag but not any damage or
  *   graphical effects". UNVERIFIED: that it freezes Pikachu too; UFD's 29/51
- *   (https://ultimateframedata.com/pikachu) count it in his own timeline.
+ *   (https://ultimateframedata.com/pikachu) count it in his own timeline: the
+ *   script's 21/43 and the box's ⌊(3.15 × 0.65 + 6) × 1.2⌋ = 9 frames less the one
+ *   they share (Plan 5, Task 7b). Its damage is the swing's, without the 1v1
+ *   multiplier (`swingDamage`), as every freeze's is.
  * - `ATK_HIT_ABS` lays the live `ATTACK_ABS` launch on the fighter held — no
  *   hurtbox, no geometry, nothing to clank with — through the ordinary hit
  *   pipeline (`applyHit`): damage, staleness, knockback, the release. Its
@@ -1459,9 +1464,8 @@ function resolveThrows(
       if (cmd.op === "catchStop") {
         const victim = held();
         if (victim === null) continue;
-        const more = cmd.frames - 1;
-        f.hitlag = Math.max(f.hitlag, more);
-        victim.hitlag = Math.max(victim.hitlag, more);
+        freezeFighter(f, cmd.frames, f.hitlag);
+        freezeFighter(victim, cmd.frames, victim.hitlag);
         // `invincible` counts down before each frame's hits, so `frames` covers the stop.
         victim.invincible = Math.max(victim.invincible, cmd.frames);
       }
@@ -1479,10 +1483,10 @@ function resolveThrows(
       const victim = held();
       if (victim === null) continue;
       const hb = unplacedHitbox(flash.params);
-      const damage = effectiveDamage(s, f, throwCandidate(i, hb, f.move, { x: victim.x, y: victim.y }));
+      const damage = swingDamage(f, throwCandidate(i, hb, f.move, { x: victim.x, y: victim.y }));
       const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
-      freezeVictim(victim, Math.max(victim.hitlag, lag));
-      f.hitlag = Math.max(f.hitlag, lag);
+      freezeVictim(victim, lag, victim.hitlag);
+      freezeFighter(f, lag, f.hitlag);
     }
   }
 }
@@ -1562,15 +1566,6 @@ function recordHit(c: Candidate, attacker: FighterState, port: number): void {
  * transfers nothing" version of being caught.
  */
 /**
- * What a hit is worth once every modifier that scales damage has applied.
- *
- * Shared between an ordinary hit and one that lands on an invincible fighter,
- * because the two must agree: the attacker's freeze cannot depend on the state
- * of the person they hit. A projectile is exempt from staleness and short hop —
- * its charge was baked in at launch and the staleness queue is keyed by move
- * slot, which an arrow in flight no longer has.
- */
-/**
  * Crouching, for the purpose of crouch cancel.
  *
  * Shared between the ordinary and invincible hit paths because they must agree:
@@ -1598,17 +1593,34 @@ function swingStaleness(attacker: FighterState, slot: MoveSlot) {
   );
 }
 
-function effectiveDamage(s: GameState, attacker: FighterState, c: Candidate): number {
+/**
+ * What a swing is worth once its charge, a short hop and staleness have
+ * applied, before the one-on-one bonus: the damage a freeze reads (Plan 5, Task
+ * 7b). SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag), of the formula's
+ * damage: "The 1v1 multiplier and shield damage are not factored".
+ *
+ * Shared between an ordinary hit and one that lands on an invincible fighter,
+ * because the two must agree: the attacker's freeze cannot depend on the state
+ * of the person they hit. A projectile is exempt from staleness and short hop —
+ * its charge was baked in at launch and the staleness queue is keyed by move
+ * slot, which an arrow in flight no longer has. `applyHit` works the same
+ * numbers out inline, with the knockback's staleness beside them.
+ */
+function swingDamage(attacker: FighterState, c: Candidate): number {
   const staleness = c.slot === null ? ONE : swingStaleness(attacker, c.slot).damage;
   const shortHopped = c.slot !== null && isAerialSlot(c.slot) && attacker.shortHop;
   const charged = mul(c.hitbox.damage, c.chargeScale);
   const base = shortHopped ? mul(charged, SHORT_HOP_DAMAGE) : charged;
-  const staled = mul(base, staleness);
+  return mul(base, staleness);
+}
+
+/** What a hit deals: the swing's damage (`swingDamage`), and the one-on-one bonus in 1v1. */
+function effectiveDamage(s: GameState, attacker: FighterState, c: Candidate): number {
+  const staled = swingDamage(attacker, c);
   return s.rules.oneOnOne ? mul(staled, ONE_ON_ONE_MULTIPLIER) : staled;
 }
 
 function applyInvincibleHit(
-  s: GameState,
   attacker: FighterState,
   victim: FighterState,
   c: Candidate,
@@ -1617,13 +1629,14 @@ function applyInvincibleHit(
 ): void {
   recordHit(c, attacker, victim.port);
   if (c.hitbox.grabbing) return;
-  // The freeze is computed from the *same* adjusted damage an ordinary hit would
-  // use — staleness, short hop and the 1v1 bonus included. Hitlag is a property
-  // of the swing, not of whether its consequences landed, so a stale aerial that
-  // meets an invincible respawn should freeze for exactly as long as one that
-  // meets a vulnerable fighter. Reading raw damage here made the freeze wrong in
-  // precisely the situations where the attacker most needs it to be predictable.
-  const lag = computeHitlag(effectiveDamage(s, attacker, c), {
+  // The freeze is computed from the *same* adjusted damage an ordinary hit's
+  // freeze uses — staleness and short hop included, the 1v1 bonus not (Plan 5,
+  // Task 7b: `swingDamage`). Hitlag is a property of the swing, not of whether
+  // its consequences landed, so a stale aerial that meets an invincible respawn
+  // should freeze for exactly as long as one that meets a vulnerable fighter.
+  // Reading raw damage here made the freeze wrong in precisely the situations
+  // where the attacker most needs it to be predictable.
+  const lag = computeHitlag(swingDamage(attacker, c), {
     electric: c.hitbox.effect === "electric",
     moveMultiplier: c.hitbox.hitlagMultiplier,
     // Crouch cancel too. A fighter who has just left the respawn platform is
@@ -1634,7 +1647,7 @@ function applyInvincibleHit(
   });
   // Same asymmetry as an ordinary hit: a projectile's owner is not a party to
   // the exchange, so an arrow bouncing off does not freeze the archer.
-  if (c.projectile === null) attacker.hitlag = lag;
+  if (c.projectile === null) freezeFighter(attacker, lag);
   events.hits.push({
     attacker: attacker.port,
     victim: victim.port,
@@ -2055,13 +2068,27 @@ function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield
 }
 
 /**
- * Freeze `victim` for `lag` frames as the fighter a hit landed on: the one freeze
- * SDI and ASDI act in (`CombatState.victimFreeze`; Plan 3 final wave). A hit with
- * no freeze leaves nothing to SDI in.
+ * Freeze `f` for a freeze of `n` frames, counted from this one: the `n − 1`
+ * frames after it (`framesAfterHit`; Plan 5, Task 7b), and never fewer than the
+ * `atLeast` frames a freeze already running still holds (a second freeze lands
+ * on a fighter in the first: knockback stacking, a throw's stop or partial hit).
+ * Every freeze `step()` stores goes through here, `freezeVictim`'s included;
+ * `triggerCounter` applies `framesAfterHit` itself (`combat.test.ts` lists every
+ * write to `hitlag`).
  */
-function freezeVictim(victim: FighterState, lag: number): void {
-  victim.hitlag = lag;
-  victim.combat.victimFreeze = lag > 0;
+function freezeFighter(f: FighterState, n: number, atLeast = 0): void {
+  f.hitlag = Math.max(atLeast, framesAfterHit(n));
+}
+
+/**
+ * Freeze `victim` for a freeze of `n` frames as the fighter a hit landed on
+ * (`freezeFighter`): the one freeze SDI and ASDI act in (`CombatState.victimFreeze`;
+ * Plan 3 final wave). A hit with no frame of freeze after its own leaves nothing
+ * to SDI in.
+ */
+function freezeVictim(victim: FighterState, n: number, atLeast = 0): void {
+  freezeFighter(victim, n, atLeast);
+  victim.combat.victimFreeze = victim.hitlag > 0;
 }
 
 /**
@@ -2088,13 +2115,14 @@ function applyHeldHit(
   const hb = c.hitbox;
   recordHit(c, attacker, victim.port);
   const damage = effectiveDamage(s, attacker, c);
+  // The freeze reads the swing's damage, without the 1v1 bonus (`swingDamage`).
+  const lag = computeHitlag(swingDamage(attacker, c), { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
   enterStaleQueue(attacker, c.slot, false);
   victim.damage += damage;
   victim.airDodged = false;
   victim.combat.specialStall = false;
-  const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
   freezeVictim(victim, lag);
-  attacker.hitlag = lag;
+  freezeFighter(attacker, lag);
   events.hits.push({
     attacker: attacker.port,
     victim: victim.port,
@@ -2233,6 +2261,10 @@ function applyHit(
     : mul(hb.damage, c.chargeScale);
   let damage = mul(baseDamage, staleness.damage);
   let kbDamage = mul(baseDamage, staleness.knockback);
+  // What every freeze below reads: the damage before the one-on-one bonus
+  // (`swingDamage`; SmashWiki "Hitlag", https://www.ssbwiki.com/Hitlag: "The 1v1
+  // multiplier and shield damage are not factored"; Plan 5, Task 7b).
+  const lagDamage = damage;
   if (s.rules.oneOnOne) {
     damage = mul(damage, ONE_ON_ONE_MULTIPLIER);
     kbDamage = mul(kbDamage, ONE_ON_ONE_MULTIPLIER);
@@ -2248,7 +2280,7 @@ function applyHit(
 
   /* ---- the shield path ---- */
   if (onShield) {
-    const lag = computeHitlag(damage, {
+    const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
       shielding: true,
       moveMultiplier: hb.hitlagMultiplier,
@@ -2272,9 +2304,10 @@ function applyHit(
       // normally"; rubendal's `ParryHitlag` disagrees on the melee rows, see
       // `PARRY_MELEE_*`). Pushback carries the 0.15 inside its formula, before the
       // 1.3 cap. A parried projectile freezes nobody a stage away.
+      // Each a freeze of its own, counted from the hit's frame (`framesAfterHit`).
       const parry = perfectShieldHitlag(lag, fromProjectile, hb.direct ?? !fromProjectile);
       freezeVictim(victim, parry.defender);
-      if (!fromProjectile) attacker.hitlag = parry.attacker;
+      if (!fromProjectile) freezeFighter(attacker, parry.attacker);
       kineticSetX(victim, away * shieldPushback(stunExact, true), "stop");
       if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
       events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
@@ -2283,7 +2316,7 @@ function applyHit(
     victim.shieldHealth -= shieldDamage(damage);
     victim.hitstun = computeShieldstun(damage, stunOpts);
     freezeVictim(victim, lag);
-    if (!fromProjectile) attacker.hitlag = lag;
+    if (!fromProjectile) freezeFighter(attacker, lag);
     kineticSetX(victim, away * shieldPushback(stunExact), "stop");
     // A melee attacker on the ground slides back off the shield too; a
     // projectile's owner is not there to be pushed (rubendal `AttackerShieldPushback`).
@@ -2317,11 +2350,11 @@ function applyHit(
   if (hasSuperArmour(victim, victimDef) && hb.forceReaction !== true) {
     // The attacker still freezes. Hitting armour should feel like hitting
     // something solid, and a hit that reports nothing back reads as a whiff.
-    const lag = computeHitlag(damage, {
+    const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
       moveMultiplier: hb.hitlagMultiplier,
     });
-    if (!fromProjectile) attacker.hitlag = lag;
+    if (!fromProjectile) freezeFighter(attacker, lag);
     events.hits.push({
       attacker: attacker.port,
       victim: victim.port,
@@ -2377,7 +2410,7 @@ function applyHit(
   // is why one `lag` is computed and handed to each of them below rather than
   // one each: crouching does not buy the defender a frame advantage, it makes
   // the whole exchange snappier.
-  const lag = computeHitlag(damage, {
+  const lag = computeHitlag(lagDamage, {
     electric: hb.effect === "electric",
     crouchCancel,
     moveMultiplier: hb.hitlagMultiplier,
@@ -2435,8 +2468,8 @@ function applyHit(
       kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
     }
     victim.combat.comboHits += 1;
-    freezeVictim(victim, Math.max(victim.hitlag, lag));
-    if (!fromProjectile) attacker.hitlag = lag;
+    freezeVictim(victim, lag, victim.hitlag);
+    if (!fromProjectile) freezeFighter(attacker, lag);
     events.hits.push({
       attacker: attacker.port,
       victim: victim.port,
@@ -2476,7 +2509,9 @@ function applyHit(
   // takes a freeze: the shift is clamped to the stage where the freeze ends
   // (`clampShiftToStage`), and a zero-lag release happens in this function,
   // which has no stage to clamp against.
-  victim.combat.asdi = lag > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
+  // Only a freeze with a frame after the hit's has a last frame to shift on (one
+  // of 0 or 1 releases on contact below, which clears the flag again).
+  victim.combat.asdi = framesAfterHit(lag) > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
   parkAutolink(victim, hb, c, attacker);
   // Which way the launch goes, for the spark: the un-DI'd direction (DI is
@@ -2513,10 +2548,11 @@ function applyHit(
   // Hitlag freezes both parties to a melee exchange. A projectile's owner is not
   // a party to it — freezing Link when his arrow connects across the stage would
   // give the opponent a free frame every time they walked into one.
-  if (!fromProjectile) attacker.hitlag = lag;
-  // A hit with no freeze at all has no window to react in, so its DI is decided
-  // on the contact frame after all — which is the same rule, at length zero.
-  if (lag <= 0) releasePendingLaunch(victim, victimIntent);
+  if (!fromProjectile) freezeFighter(attacker, lag);
+  // A hit with no frame of freeze after its own (a freeze of 0 or 1) has no
+  // window to react in, so its DI is decided on the contact frame after all —
+  // which is the same rule, at length zero.
+  if (victim.hitlag === 0) releasePendingLaunch(victim, victimIntent);
 
   // Taking a hit ends any grab this fighter is part of, at *either* end. Being
   // launched out of a captor's hands is the obvious half; the half that is easy
