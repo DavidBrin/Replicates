@@ -22,12 +22,13 @@ import { stateInvariantBreaks } from "./stateInvariants";
 import { TECH_LAB } from "./goldenLab";
 import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
 import { INHALE_LAB } from "./goldenInhaleLab";
+import { CRAWL_LAB } from "./goldenCrawlLab";
 import { STATES_LAB } from "./goldenStatesLab";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Eight matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Nine matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
@@ -35,8 +36,10 @@ import { STATES_LAB } from "./goldenStatesLab";
  * three fighters launched by hand into the floor, the wall and the underside,
  * and a 600-frame states lab (`goldenStatesLab.ts`, Plan 5 Task 8, ruling
  * P5-R14): scripted keys for the Plan 5 states nothing else reaches, Donkey
- * Kong's cargo first and the footstools after (Task 11), and a 400-frame Inhale lab (`goldenInhaleLab.ts`, Task 9,
- * ruling R-T8e): Kirby against Mario, the spit and the swallow.
+ * Kong's cargo first and the footstools after (Task 11), a 400-frame Inhale lab (`goldenInhaleLab.ts`, Task 9,
+ * ruling R-T8e): Kirby against Mario, the spit and the swallow, and a 200-frame
+ * crawl lab (`goldenCrawlLab.ts`, Task 12, ruling R-T8e): Pikachu crawls, down
+ * tilts out of the crawl, and crawls off the stage's edge onto the ledge.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -154,10 +157,17 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => INHALE_LAB.inputs(frame);
     },
   },
+  {
+    ...CRAWL_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => CRAWL_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the eight matches must visit between them: all 56. A
+ * Every `ActionState` the nine matches must visit between them: all 57. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
@@ -221,6 +231,12 @@ const MATCHES: readonly Match[] = [
  * earlier steps and samples untouched): Mario jumps off Donkey Kong's head
  * standing (`footstooled`) and then in the air (his tumble down and lie-down).
  * All 56 are visited.
+ * Plan 5 Task 12 added `crawl`, Pikachu's. No golden CPU crawls (the eight traces
+ * were byte-identical with crawling in), and neither lab has a crawler; a lab's
+ * fighters are fixed for the match, so appending to one (ruling R-T11a) cannot
+ * reach it. So a ninth match, the crawl lab (ruling R-T8e), has Pikachu crawl
+ * both ways, down tilt out of the crawl, and crawl off the edge onto the ledge.
+ * All 57 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -232,6 +248,7 @@ const MUST_VISIT: Record<ActionState, true> = {
   crouchStart: true,
   crouch: true,
   crouchEnd: true,
+  crawl: true,
   jumpSquat: true,
   jump: true,
   fall: true,
@@ -412,7 +429,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all eight matches.
+ * on every frame of all nine matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -613,7 +630,11 @@ describe("engine golden trace", () => {
   // the states lab, from its 401-500 sample: Mario is intangible on 452-455 and
   // 492-495, every other named frame as before. The other seven are byte-identical
   // (no golden CPU footstools), so the counts are as above.
-  // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
+  // Plan 5 Task 12 (Pikachu crawls) left all eight traces byte-identical (no golden
+  // CPU crawls) and added the crawl lab: one hit (the down tilt out of the crawl,
+  // 7.56%), no shield hits, no KO. So now: hits 32/20/18/21, 6, 0, 1, 4 and 1;
+  // shield hits 0/0/0/0, 3, 0, 0, 0 and 0; KOs 1/2/1/0, 1, 2, 0, 0 and 0.
+  // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
   // The floors below are what a refactor must not drop, not these counts.

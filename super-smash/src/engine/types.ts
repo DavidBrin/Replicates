@@ -96,6 +96,8 @@ export type ActionState =
   | "crouchStart"
   | "crouch"
   | "crouchEnd"
+  // crawling out of a crouch, for the fighters who can (Plan 5, Task 12)
+  | "crawl"
   // airborne
   | "jumpSquat"
   | "jump"
@@ -781,6 +783,11 @@ export interface FighterAttributes {
    * the fighters with no published height (`wallJump.ts`).
    */
   readonly wallJumpHeight?: number;
+  /**
+   * Can crawl out of a crouch (Plan 5, Task 12; SmashWiki "Crawling",
+   * https://www.ssbwiki.com/Crawling: of the eight, Pikachu). Absent: cannot.
+   */
+  readonly canCrawl?: boolean;
   /** Half-width and height of the fighter's hurtbox, fixed. */
   readonly width: number;
   readonly height: number;

@@ -16,7 +16,8 @@
  * `special` (SSBU: SPECIAL_N/S/HI/LW, no aggregate kind exists — the name
  * here is SSBU-*like*), `roll` (ESCAPE_F and ESCAPE_B), and `landingLag`
  * (named LANDING_ATTACK_AIR for an aerial's landing lag, but also the replica's
- * landing from an air dodge, which is not an aerial's).
+ * landing from an air dodge, which is not an aerial's). Plan 5 adds more, each
+ * marked at its entry (`crawl`: SQUAT_F and SQUAT_B).
  */
 
 import type { Intent, StateContext } from "../states";
@@ -33,6 +34,7 @@ export type StatusKind =
   | "FIGHTER_STATUS_KIND_SQUAT"
   | "FIGHTER_STATUS_KIND_SQUAT_WAIT"
   | "FIGHTER_STATUS_KIND_SQUAT_RV"
+  | "FIGHTER_STATUS_KIND_SQUAT_F"
   | "FIGHTER_STATUS_KIND_JUMP_SQUAT"
   | "FIGHTER_STATUS_KIND_JUMP"
   | "FIGHTER_STATUS_KIND_FALL"
@@ -102,6 +104,8 @@ export const STATUS_KIND_OF_ACTION: Readonly<Record<ActionState, StatusKind>> = 
   crouchStart: "FIGHTER_STATUS_KIND_SQUAT",
   crouch: "FIGHTER_STATUS_KIND_SQUAT_WAIT",
   crouchEnd: "FIGHTER_STATUS_KIND_SQUAT_RV",
+  // Plan 5, Task 12. SSBU splits crawling forward (SQUAT_F) and back (SQUAT_B); one status here.
+  crawl: "FIGHTER_STATUS_KIND_SQUAT_F",
   jumpSquat: "FIGHTER_STATUS_KIND_JUMP_SQUAT",
   jump: "FIGHTER_STATUS_KIND_JUMP",
   fall: "FIGHTER_STATUS_KIND_FALL",

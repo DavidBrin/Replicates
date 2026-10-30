@@ -120,6 +120,8 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   // Plan 5, Task 8: Donkey Kong's carry walks; the fighter carried does not move.
   cargoCarry: "WALK",
   cargoHeld: "NONE",
+  // Plan 5, Task 12: crawling.
+  crawl: "WALK",
   // Plan 5, Task 11: stood on, on the ground: it stops like a landing.
   footstooled: "GROUND_STOP",
   // Plan 5, Task 9: Kirby's mouthful walks; the swallowed and the spat are carried.
@@ -193,6 +195,8 @@ const MIGRATED = [
   // Plan 5, Task 8
   "cargoCarry",
   "cargoHeld",
+  // Plan 5, Task 12
+  "crawl",
   // Plan 5, Task 11
   "footstooled",
   // Plan 5, Task 9

@@ -248,6 +248,8 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "crouchStart":
       return "crouchStart";
     case "crouch":
+    // Plan 5, Task 12: a crawl is a crouch on the move.
+    case "crawl":
       return "crouch";
     case "crouchEnd":
       return "crouchEnd";

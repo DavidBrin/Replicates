@@ -115,9 +115,12 @@ function airDodgeSuffix(charge: number): string {
  * Kirby's mouthful plays the walk's, and the fighter swallowed and the one spat
  * the tumble's (`poseNameFor` gives them those clips). Task 11: the fighter
  * footstooled plays the grab's (`poseNameFor`'s clip; its own motion would bake
- * the grab's frames byte for byte).
+ * the grab's frames byte for byte). Task 12: Pikachu's crawl plays the crouch's
+ * (`poseNameFor`'s clip, a loop on the same clock; its own motion would bake the
+ * crouch's frames byte for byte).
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
+  crawl: "crouch",
   specialFall: "fall",
   specialLanding: "landingLag",
   cargoCarry: "walk",

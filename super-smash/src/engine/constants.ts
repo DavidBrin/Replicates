@@ -657,6 +657,16 @@ export const RESPAWN_PLATFORM_FRAMES = 300;
 export const RESPAWN_INVINCIBILITY_MIN = 60;
 export const RESPAWN_INVINCIBILITY_MAX = 180;
 
+/**
+ * Crawling speeds, units a frame (Plan 5, Task 12). SmashWiki "Crawling"
+ * (https://www.ssbwiki.com/Crawling, revision 2030850): "The majority of
+ * characters [...] have a forward crawl speed of 0.7 and a backward crawl
+ * speed of 0.5 with a few exceptions"; Pikachu, the one crawler of the eight,
+ * is not among the page's Ultimate exceptions.
+ */
+export const CRAWL_FORWARD_SPEED = fx(0.7);
+export const CRAWL_BACK_SPEED = fx(0.5);
+
 /** Smash Ball: 40 HP, decaying 2 every 60 frames on its own. */
 export const SMASH_BALL_HEALTH = fx(40);
 export const SMASH_BALL_DECAY = fx(2);

@@ -146,6 +146,10 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   crouchStart: "ENABLE",
   crouch: "ENABLE",
   crouchEnd: "ENABLE",
+  // UNVERIFIED: a crawl (Plan 5, Task 12) is a crouch on the move, read as the
+  // crouch's; no SmashWiki page says, and WuBor `movement/squat.rs` does not
+  // reimplement its `status_pre`.
+  crawl: "ENABLE",
   // UNVERIFIED: WuBor `movement/jump_squat.rs`, a reimplementation.
   jumpSquat: "ENABLE",
   // SmashWiki: "When used on an opponent in midair".

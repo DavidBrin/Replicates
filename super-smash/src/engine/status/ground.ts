@@ -1,13 +1,15 @@
 /**
  * Grounded neutral statuses: WAIT, WALK, DASH, RUN, RUN_BRAKE, TURN_RUN,
- * SQUAT, SQUAT_WAIT, SQUAT_RV (Plan 2, Task 10).
+ * SQUAT, SQUAT_WAIT, SQUAT_RV (Plan 2, Task 10), and SQUAT_F, the crawl
+ * (Plan 5, Task 12).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim. WAIT,
  * WALK, DASH and RUN share one `main`, as they shared one case: the
  * walk/dash/run ladder is a single decision read from the same input.
  */
 
-import { DASH_INTERRUPT_FRAME } from "../constants";
+import { CRAWL_BACK_SPEED, CRAWL_FORWARD_SPEED, DASH_INTERRUPT_FRAME } from "../constants";
+import { kineticSum } from "../kinetic";
 import {
   CROUCH_END_FRAMES,
   CROUCH_START_FRAMES,
@@ -152,6 +154,29 @@ export const STATUS_SQUAT_WAIT: FighterStatus = {
   main(f, intent, ctx) {
     if (handleActionable(f, intent, ctx)) return;
     if (intent.y >= 0) startAction(f, "crouchEnd");
+    // Down and to the side crawls, for the fighters who can (Plan 5, Task 12).
+    else if (intent.x !== 0 && ctx.def.attributes.canCrawl === true) startAction(f, "crawl");
+  },
+};
+
+/**
+ * Crawling (Plan 5, Task 12): forward 0.7, back 0.5, still facing the same way
+ * (SmashWiki "Crawling": "all crawling characters can crawl backwards"); any
+ * grounded option out of it, an attack being the down tilt (`groundAttackSlot`).
+ * UNVERIFIED: at full speed from its first frame (no acceleration is published).
+ */
+export const STATUS_SQUAT_F: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_SQUAT_F",
+  action: "crawl",
+  kineticType: "WALK",
+  main(f, intent, ctx) {
+    if (handleActionable(f, intent, ctx)) return;
+    if (intent.y >= 0) startAction(f, "crouchEnd");
+    else if (intent.x === 0) startAction(f, "crouch");
+  },
+  exec(f, intent) {
+    f.kinetic.controlX = intent.x === 0 ? 0 : intent.x * (intent.x === f.facing ? CRAWL_FORWARD_SPEED : CRAWL_BACK_SPEED);
+    kineticSum(f);
   },
 };
 
@@ -175,4 +200,5 @@ export const GROUND_STATUSES: readonly FighterStatus[] = [
   STATUS_SQUAT,
   STATUS_SQUAT_WAIT,
   STATUS_SQUAT_RV,
+  STATUS_SQUAT_F,
 ];

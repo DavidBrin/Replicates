@@ -343,6 +343,12 @@ describe("state to pose", () => {
     expect(poseNameFor({ action: "specialLanding", move: null, jumpsUsed: 1, fastFalling: false })).toBe("landingLag");
   });
 
+  // Plan 5, Task 12: no crawl clip is authored, so a crawl is drawn as the crouch
+  // it moves in (the bake plays the crouch's motion, `MOTION_OF_ACTION`).
+  it("draws a crawling fighter crouched", () => {
+    expect(poseNameFor({ action: "crawl", move: null, jumpsUsed: 0, fastFalling: false })).toBe("crouch");
+  });
+
   const SLOTS: MoveSlot[] = [
     "jab1", "jab2", "jab3", "rapidJab", "ftilt", "utilt", "dtilt", "dashAttack",
     "fsmash", "usmash", "dsmash", "nair", "fair", "bair", "uair", "dair",

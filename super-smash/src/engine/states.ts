@@ -519,7 +519,7 @@ export function moveIntangibility(f: FighterState, def: FighterDef): readonly [n
 /** Which ground attack a direction means. Smash direction wins over held direction. */
 export function groundAttackSlot(f: FighterState, intent: Intent): MoveSlot {
   if (f.action === "run" || f.action === "dashStart") return "dashAttack";
-  if (f.action === "crouch" || f.action === "crouchStart") return "dtilt";
+  if (f.action === "crouch" || f.action === "crouchStart" || f.action === "crawl") return "dtilt";
   if (intent.smash) {
     if (intent.smashX !== 0) return "fsmash";
     if (intent.smashY > 0) return "usmash";
@@ -675,6 +675,8 @@ export function isActionable(f: FighterState): boolean {
     case "run":
     case "runBrake":
     case "crouch":
+    // A crawl off an edge or a soft platform falls, as a walk does (Plan 5, Task 12).
+    case "crawl":
     case "fall":
     case "tumbleFall":
     case "jump":
