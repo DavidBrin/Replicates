@@ -13,6 +13,13 @@
  *   stick input, and 14.4 frames per button input";
  * - "while carrying an opponent or heavy item, Donkey Kong's walk speed and
  *   acceleration are increased by 1.1×".
+ * SmashWiki "Donkey Kong (SSBU)" (https://www.ssbwiki.com/Donkey_Kong_(SSBU)),
+ * Kong Karry: g is the grab time passed "(including button mashing)", and grab
+ * time is fixed at the grab, "not affected by pummeling or external damage"
+ * (SmashWiki "Grab", https://www.ssbwiki.com/Grab), so g is the grab's own length
+ * less what is left of it (`CombatState.grabLength`; Task 8 fix round 1). In the
+ * carry he acts as usual "aside from being unable to use his other moves and
+ * having only one jump" (the page's overview): his ground jump, and no air jump.
  * SmashWiki "Forward throw" (https://www.ssbwiki.com/Forward_throw, "Notable
  * forward throws"): the cargo "allows Donkey Kong to move and jump while holding
  * the opponent, as well as perform four cargo throws ... by pressing the attack
@@ -27,22 +34,18 @@
  * Where it rides is `held.ts`.
  *
  * UNVERIFIED, the replica's readings where nothing is published:
- * - g is what is gone of the hold, `grabHoldFrames(p) − grabTimer` at the lift
- *   (mashing during the hold included), so the carry is the grab time left plus
- *   five sixths of the hold at today's percent. The hold's own first length is
- *   not kept: damage dealt during the hold (a pummel's) counts toward g too.
- *   The formula's rounding is not published: here the hold's whole frames
+ * - The formula's rounding: here the hold's whole frames at today's percent
  *   (`grabHoldFrames`, floor(90 + 1.7p)) × 11 / 6, rounded down.
  * - The carry keeps the grab's floor (`GRAB_MIN_FRAMES`, 19 frames: SmashWiki
  *   "Grab" says it of grab time); nothing is struggled during the lift itself.
- * - The jump is his own full hop at once: the motions `shoulder_jump_squat` and
- *   `shoulder_landing` exist (rubendal Motions, below), but no frames or heights
- *   for them are published, so there is no squat, no short hop, no air jump and
- *   no landing lag.
+ * - The jump is his full hop at once: the motions `shoulder_jump_squat` and
+ *   `shoulder_landing` exist (rubendal Motions, below), but no frames are
+ *   published for them, so there is no squat, no short hop and no landing lag.
  * - He turns at once, and only on the ground (the `shoulder_turn` motion's
  *   length is unpublished).
- * - A press with no direction throws forward, and the grab button throws as the
- *   attack button does (SmashWiki names the attack button with a direction).
+ * - A press with no direction throws forward, a diagonal throws up or down (as a
+ *   hold reads its throws), and the grab button throws as the attack button does
+ *   (SmashWiki names the attack button with a direction).
  * - In the air he drifts by his own air control (`kineticExec`'s WALK).
  * rubendal SSBU Data Viewer, patch 13.0.1
  * (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Donkey%20Kong/data.json),
@@ -56,7 +59,7 @@ import { fighterParams } from "../params";
 import { grabHoldFrames, handOff, hasMove, presses, startAction, startMove } from "../states";
 import type { Intent, StateContext } from "../states";
 import type { FighterState, MoveSlot } from "../types";
-import { releaseHeld, struggleInGrab } from "./attack";
+import { releaseHeld, struggleInGrab } from "./grab";
 import type { FighterStatus } from "./kind";
 
 /** ×1.1 walk speed and acceleration while carrying (SmashWiki, above). */
@@ -85,9 +88,10 @@ export function cargoThrowSlot(x: number, y: number, facing: number): MoveSlot {
 export function liftCargo(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   const held = f.grabbing >= 0 ? ctx.fighters[f.grabbing] : undefined;
   if (held === undefined || held.grabbedBy !== f.port || held.action === "dead") return false;
-  const whole = grabHoldFrames(held.damage);
-  const spent = Math.max(0, whole - held.grabTimer);
-  held.grabTimer = Math.floor((whole * 11) / 6) - spent;
+  // p is the percent now, at the carry's start; g is the grab time passed, from
+  // the grab's own length, which no damage since the catch changes.
+  const spent = Math.max(0, held.combat.grabLength - held.grabTimer);
+  held.grabTimer = Math.floor((grabHoldFrames(held.damage) * 11) / 6) - spent;
   startAction(held, "cargoHeld");
   handOff(f, "cargoCarry", intent, ctx);
   return true;
@@ -120,6 +124,7 @@ export const STATUS_CARGO_CARRY: FighterStatus = {
       }
     }
     if (f.grounded && intent.x !== 0) f.facing = intent.x;
+    // "Having only one jump" (SmashWiki "Donkey Kong (SSBU)"): from the ground.
     if (p.jump && f.grounded) {
       kineticGroundJump(f, fighterParams(ctx.def), true);
       f.shortHop = false;

@@ -86,6 +86,8 @@ function isImposed(action: FighterState["action"]): boolean {
     case "tumble":
     case "grabbed":
     case "thrown":
+    // Lifted onto Donkey Kong's shoulders (Plan 5, Task 8): done to the fighter.
+    case "cargoHeld":
     case "downed":
     case "shieldBroken":
     // The ledge taken from under it (Plan 3, Task 15): done to the fighter.

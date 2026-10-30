@@ -44,6 +44,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { restEcb } from "@/engine/acmd/hurtboxes";
 import { fx, mul, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
+import { kineticSet } from "@/engine/kinetic";
 import { moveFrameOf } from "@/engine/hitbox";
 import { fighterParams } from "@/engine/params";
 import { KO_FREEZE_FRAMES, cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
@@ -80,8 +81,10 @@ function holding(percent = 0, others: readonly string[] = [], ctx?: SimContext):
   const [dk, m] = s.fighters;
   Object.assign(dk, { action: "grabHold", grounded: true, platform: 0, x: fx(-5), y: 0, facing: 1, intangible: 0, grabbing: 1 });
   Object.assign(m, { action: "grabbed", grounded: true, platform: 0, x: fx(5), y: 0, facing: -1, intangible: 0, grabbedBy: 0, damage: fx(percent) });
-  // floor(90 + 1.7p) (`grabHoldFrames`), none of it spent yet.
+  // floor(90 + 1.7p) (`grabHoldFrames`), none of it spent yet, and the grab's
+  // length, as a catch sets both.
   m.grabTimer = Math.floor((900 * 4096 + 17 * m.damage) / (10 * 4096));
+  m.combat.grabLength = m.grabTimer;
   for (const f of s.fighters.slice(2)) Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(60), y: 0, facing: -1, intangible: 0 });
   return s;
 }
@@ -168,6 +171,8 @@ describe("Donkey Kong's cargo: the lift and the carry", () => {
     // The hit on the carrier ends the carry at both ends; Mario falls from where he rode.
     const [dk, m] = states[hit].fighters;
     expect([dk.grabbing, m.grabbedBy]).toEqual([-1, -1]);
+    // The grab's length goes with the link, from the carrier's end (`releaseGrab`).
+    expect([m.grabTimer, m.combat.grabLength]).toEqual([0, 0]);
     expect(states[hit + 1].fighters[1].action).toBe("fall");
     // ...with no grab immunity: his captor was hit, he did not break out (`releaseHeld`).
     expect(states[hit + 1].fighters[1].combat.grabImmune).toBe(0);
@@ -208,9 +213,12 @@ describe("Donkey Kong's cargo: the lift and the carry", () => {
     expect(m.x).toBe(dk.x);
   });
 
-  it("jumps with him, and lands still carrying", () => {
+  it("jumps with him, his full hop's height, and lands still carrying", () => {
     const { states } = run(holding(), [...LIFT, Btn.Jump, ...idle(80)]);
-    expect(Math.max(...states.map((s) => s.fighters[0].y))).toBeGreaterThan(fx(10));
+    // His full hop, `jump_y` 34 (rubendal SSBU-Calculator `FullHopHeight`), ±1:
+    // not the short hop's 17.3.
+    const apex = Math.max(...states.map((s) => s.fighters[0].y));
+    expect(Math.abs(apex - fighterParams(DK).jump_y)).toBeLessThanOrEqual(fx(1));
     for (const s of states.slice(CARRYING_FROM)) {
       expect(s.fighters[0].action).toBe("cargoCarry");
       expect(s.fighters[1].action).toBe("cargoHeld");
@@ -218,6 +226,16 @@ describe("Donkey Kong's cargo: the lift and the carry", () => {
     const end = states.at(-1)!.fighters[0];
     expect(end.grounded).toBe(true);
     expect(end.jumpsUsed).toBe(0);
+  });
+
+  // SmashWiki "Donkey Kong (SSBU)" (https://www.ssbwiki.com/Donkey_Kong_(SSBU)):
+  // during the carry he acts as usual "aside from being unable to use his other
+  // moves and having only one jump".
+  it("has only one jump: a second press in the air does nothing", () => {
+    const once = run(holding(), [...LIFT, Btn.Jump, ...idle(80)]).states;
+    const twice = run(holding(), [...LIFT, Btn.Jump, ...idle(15), Btn.Jump, ...idle(64)]).states;
+    twice.forEach((s, i) => expect([s.fighters[0].y, s.fighters[0].vy], `step ${i}`).toEqual([once[i].fighters[0].y, once[i].fighters[0].vy]));
+    expect(twice.every((s) => s.fighters[0].jumpsUsed <= 1)).toBe(true);
   });
 
   it("turns only on the ground: a stick held back in the air drifts him, and he faces on (UNVERIFIED)", () => {
@@ -287,12 +305,82 @@ describe("Donkey Kong's cargo throws", () => {
     expect(states.at(-1)!.fighters[1].x).toBeLessThan(states.at(-1)!.fighters[0].x);
   });
 
-  it("hops him up at 1.5 on the down throw's frame 17", () => {
-    const { states } = run(holding(), [...LIFT, 0, Btn.Down | Btn.Attack, ...idle(60)]);
+  // SmashWiki "Donkey Kong (SSBU)": the cargo down throw gives "a small boost
+  // upwards when using this move in the air"; the forward-throw page: "On frame
+  // 17, the move stops Donkey Kong's horizontal momentum, and sets his vertical
+  // momentum to 1.5" (`SET_SPEED_EX(0, 1.5, …)`).
+  it("boosts him up at 1.5 on the down throw's frame 17, in the air", () => {
+    const { states } = run(holding(), [...LIFT, Btn.Jump, ...idle(2), Btn.Down | Btn.Attack, ...idle(60)]);
     const at = states.findIndex((s) => s.fighters[0].action === "throw" && moveFrameOf(s.fighters[0].actionFrame) === 17);
-    expect(states[at - 1].fighters[0].grounded).toBe(true);
-    expect(states[at].fighters[0].vy).toBe(fx(1.5));
-    expect(states[at].fighters[0].grounded).toBe(false);
+    expect(states[at - 1].fighters[0].grounded).toBe(false);
+    // Set to 1.5, then this frame's gravity, as after every scripted speed
+    // (`applyMoveMomentum`: drift and gravity take over on the hold's last frame).
+    expect(states[at].fighters[0].vy).toBe(fx(1.5) - fighterParams(DK).air_accel_y);
+    expect(states[at].fighters[0].vy).toBeGreaterThan(states[at - 1].fighters[0].vy);
+    expect(states[at].fighters[0].vx).toBe(0);
+  });
+
+  it("stops him on the down throw's frame 17 on the ground, and does not lift him", () => {
+    const { states } = run(holding(), [...LIFT, ...Array<InputFrame>(10).fill(Btn.Right), Btn.Down | Btn.Attack, ...idle(60)]);
+    const start = states.findIndex((s) => s.fighters[0].action === "throw" && s.fighters[0].move === "cargoDthrow");
+    const at = states.findIndex((s) => s.fighters[0].action === "throw" && moveFrameOf(s.fighters[0].actionFrame) === 17);
+    expect(states[start].fighters[0].vx).toBeGreaterThan(0);
+    const floor = states[start].fighters[0].y;
+    expect(states.slice(start).every((s) => s.fighters[0].grounded && s.fighters[0].y === floor)).toBe(true);
+    expect(states[at].fighters[0].vx).toBe(0);
+  });
+
+  // UNVERIFIED reading: a stick held on a diagonal throws up or down, as a hold
+  // reads its throws (`STATUS_CATCH_WAIT`).
+  it("reads up and down before back and forward on a diagonal", () => {
+    for (const [keys, slot] of [
+      [Btn.Up | Btn.Left | Btn.Attack, "cargoUthrow"],
+      [Btn.Down | Btn.Left | Btn.Attack, "cargoDthrow"],
+      [Btn.Up | Btn.Right | Btn.Attack, "cargoUthrow"],
+      [Btn.Down | Btn.Right | Btn.Attack, "cargoDthrow"],
+    ] as const) {
+      const { states } = run(holding(), [...LIFT, 0, keys, ...idle(2)]);
+      expect(states[CARRYING_FROM + 2].fighters[0].move, slot).toBe(slot);
+    }
+  });
+
+  // SmashWiki "Donkey Kong (SSBU)": "He also gains Knockback-based Armor when he
+  // starts a throw instead of gaining Throw Invulnerability, of which allows him to
+  // resist up to 16 Units of Knockback"; SmashWiki "Armor"
+  // (https://www.ssbwiki.com/Armor): armour is "sustaining hitlag and damage, but
+  // not sustaining any ... knockback". Pikachu's jab is 15.6 units on Donkey Kong
+  // at 0%; Mario's forward smash about 43.
+  function hitMidThrow(attacker: string, keys: InputFrame, x: number) {
+    const s = holding(0, [attacker]);
+    const { states } = run(s, [...LIFT, 0, Btn.Attack, ...idle(2)]);
+    const at = cloneState(states.at(-1)!);
+    expect(at.fighters[0]).toMatchObject({ action: "throw", move: "cargoFthrow" });
+    Object.assign(at.fighters[2], { x: at.fighters[0].x + fx(x), facing: 1 });
+    return play(at, 40, (i) => [0, 0, i === 0 ? keys : 0]);
+  }
+
+  it("armours a cargo throw against a hit of 16 knockback units or less: the damage lands, and he throws on", () => {
+    const { states, events } = hitMidThrow("pikachu", Btn.Attack, -9);
+    const on = events.flatMap((e, i) => e.hits.filter((h) => h.victim === 0 && h.attacker === 2).map((h) => ({ i, ...h })));
+    expect(on.length).toBeGreaterThan(0);
+    const hit = on[0];
+    expect(hit.damage).toBeGreaterThan(0);
+    expect(states[hit.i].fighters[0].damage).toBe(hit.damage);
+    expect(states[hit.i].fighters[0]).toMatchObject({ action: "throw", move: "cargoFthrow", grabbing: 1, hitstun: 0 });
+    // ...and the throw still launches Mario.
+    const launch = events.findIndex((e) => e.hits.some((h) => h.attacker === 0 && h.victim === 1));
+    expect(launch).toBeGreaterThan(hit.i);
+  });
+
+  it("launches a cargo-throwing Donkey Kong with a harder hit, which frees the fighter he holds", () => {
+    const { states, events } = hitMidThrow("mario", Btn.Right | Btn.Attack, -14);
+    const at = events.findIndex((e) => e.hits.some((h) => h.victim === 0 && h.attacker === 2));
+    expect(at).toBeGreaterThanOrEqual(0);
+    const hit = events[at].hits.find((h) => h.victim === 0)!;
+    expect(hit.knockback).toBeGreaterThan(fx(16));
+    expect(["hitstun", "tumble"]).toContain(states[at].fighters[0].action);
+    expect(states[at].fighters[0].grabbing).toBe(-1);
+    expect(states[at].fighters[1].grabbedBy).toBe(-1);
   });
 
   it("keeps the fighter thrown on his shoulders until the release", () => {
@@ -378,6 +466,34 @@ describe("struggling out of the carry", () => {
     expect(carried(holding(), [...idle(60), ...LIFT])).toBe(105);
   });
 
+  /**
+   * Donkey Kong pummels `n` times, one every 25 frames from the first (each one
+   * over by then: a pummel is 22), and lifts on the 25th after the last: Mario's
+   * grab time passed, g, is 25 a pummel, as the review measured it.
+   */
+  function pummelledCarry(n: number): number {
+    const keys = Array.from({ length: 25 * n + 1 }, (_, i): InputFrame => (i === 25 * n ? Btn.Right : i % 25 === 0 ? Btn.Attack : 0));
+    return carried(holding(), [...keys, ...idle(15)]);
+  }
+
+  // SmashWiki "Grab" (https://www.ssbwiki.com/Grab): grab time is fixed "at the
+  // time of the grab (so it is not affected by pummeling or external damage)";
+  // SmashWiki "Donkey Kong (SSBU)": "p is the opponent's percent at the time of
+  // the carry's initiation, and g is the grab time passed prior to it". After one
+  // pummel, 2.02% and g 25: floor(floor(93.4) × 11/6) − 25 = 170 − 25; after three,
+  // 5.35% and g 75: 181 − 75.
+  it("times the carry from the grab: a pummel's damage adds to p, and none of it to g", () => {
+    expect(pummelledCarry(1)).toBe(145);
+    expect(pummelledCarry(3)).toBe(106);
+  });
+
+  // SmashWiki "Donkey Kong (SSBU)": g is the grab time passed "(including button
+  // mashing)". Ten frames and three presses (3 × 14.4 = 43 whole frames) in the
+  // hold: g = 53, so 165 − 53.
+  it("counts the hold's mashing in g", () => {
+    expect(carried(holding(), [...idle(10), ...LIFT], (i) => (i < 10 && i % 2 === 0 && i <= 4 ? Btn.Attack : 0))).toBe(112);
+  });
+
   it("lasts floor(175 × 11/6) = 320 frames at 50% straight out of the grab", () => {
     expect(carried(holding(50), LIFT)).toBe(320);
   });
@@ -397,6 +513,8 @@ describe("struggling out of the carry", () => {
     expect(freed - CARRYING_FROM + 1).toBeLessThan(165);
     const m = states[freed].fighters[1];
     expect([m.action, m.grabbedBy]).toEqual(["fall", -1]);
+    // The grab's length goes with the link, from the carried fighter's own end.
+    expect([m.grabTimer, m.combat.grabLength]).toEqual([0, 0]);
     expect(m.combat.grabImmune).toBe(GRAB_RELEASE_IMMUNITY);
     // Donkey Kong's own status sees the link gone on his next frame, and stands.
     expect(states[freed + 1].fighters[0]).toMatchObject({ action: "stand", grabbing: -1 });
@@ -459,6 +577,29 @@ describe("every way the carry ends clears both ends", () => {
     expect(after.states[caught].fighters[0].action).toBe("grabbed");
     expect(after.states[caught].fighters[1].grabbedBy).toBe(-1);
     expect(after.states[caught + 1].fighters[1].action).toBe("fall");
+  });
+});
+
+describe("a blast zone ends the carry", () => {
+  // Forged: Donkey Kong, carrying, flung past Final Destination's right blast zone
+  // (x 240). Mario rides at his x, so both go, on the same frame.
+  it("KOs both, clears both ends of the link, and re-simulates hash-equal around it", () => {
+    const { states } = run(holding(), [...LIFT, ...idle(2)]);
+    const s = cloneState(states.at(-1)!);
+    Object.assign(s.fighters[0], { grounded: false, platform: -1, x: fx(236), y: fx(20) });
+    kineticSet(s.fighters[0], fx(2), 0);
+    const keys = (): InputFrame[] => [0, 0];
+    const after = play(s, 30, keys).states;
+    const ko = after.findIndex((st) => st.fighters[0].action === "dead");
+    expect(ko).toBeGreaterThanOrEqual(0);
+    expect(after[ko].fighters[1].action).toBe("dead");
+    expect([after[ko].fighters[0].grabbing, after[ko].fighters[0].grabbedBy]).toEqual([-1, -1]);
+    expect([after[ko].fighters[1].grabbing, after[ko].fighters[1].grabbedBy, after[ko].fighters[1].grabTimer]).toEqual([-1, -1, 0]);
+    expect(after[ko].fighters[1].combat.grabLength).toBe(0);
+    for (const at of [0, ko - 1, ko]) {
+      const again = play(cloneState(after[at]), after.length - at - 1, keys).states;
+      again.forEach((st, k) => expect(hashState(st), `snapshot ${at}, step ${at + 1 + k}`).toBe(hashState(after[at + 1 + k])));
+    }
   });
 });
 

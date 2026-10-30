@@ -3192,6 +3192,9 @@ describe("grab hold, mash and release (Plan 3, Task 14)", () => {
     const frames = play(s, 8, (i) => [i === 0 ? Btn.Grab : 0, 0]);
     const i = frames.findIndex((f) => f.state.fighters[1].grabbedBy === 0);
     expect(frames[i].state.fighters[1].grabTimer).toBe(175);
+    // ...and keeps the length it started from, for the grab time passed (Plan 5,
+    // Task 8 fix round 1: Donkey Kong's carry reads it).
+    expect(frames[i].state.fighters[1].combat.grabLength).toBe(175);
     expect(grabHoldFrames(fx(50))).toBe(175);
     expect(grabHoldFrames(fx(33.3))).toBe(146);
   });

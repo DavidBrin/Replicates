@@ -1013,9 +1013,11 @@ export function releaseGrab(f: FighterState, fighters: readonly FighterState[]):
     if (victim !== undefined && victim.grabbedBy === f.port) {
       victim.grabbedBy = -1;
       // The escape timer and the mash credit are the victim's (Plan 3, Task 14;
-      // the final wave): they go with the link, however it ends.
+      // the final wave): they go with the link, however it ends. So does the
+      // grab's length (Plan 5, Task 8 fix round 1).
       victim.grabTimer = 0;
       victim.combat.mash = 0;
+      victim.combat.grabLength = 0;
     }
   }
   if (f.grabbedBy >= 0) {
@@ -1026,6 +1028,7 @@ export function releaseGrab(f: FighterState, fighters: readonly FighterState[]):
   f.grabbing = -1;
   f.grabbedBy = -1;
   f.grabTimer = 0;
+  f.combat.grabLength = 0;
 }
 
 /**
@@ -1068,6 +1071,19 @@ export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
 }
 
 /**
+ * The knockback a fighter's move armours it against (`MoveDef.heavyArmour`), or
+ * null (Plan 5, Task 8 fix round 1). Read off the move the fighter is in, as
+ * super armour is, so it rolls back with the move and needs no field of its own.
+ * UNVERIFIED: the window. SmashWiki "Donkey Kong (SSBU)" says he "gains" the armour
+ * "when he starts a throw", and gives no end: here, the whole move.
+ */
+export function heavyArmourOf(f: Pick<FighterState, "action" | "move">, def: FighterDef): number | null {
+  if (f.move === null) return null;
+  if (f.action !== "attack" && f.action !== "special" && f.action !== "throw") return null;
+  return def.moves[f.move]?.heavyArmour ?? null;
+}
+
+/**
  * A move's own scripted movement, if it has one on this frame.
  *
  * This is what makes a Fox Illusion cross the stage, a Dolphin Slash rise, and
@@ -1102,7 +1118,8 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   // The floor still wins. A downward impulse on a grounded fighter drove
   // them straight through the stage — a grounded Stone fell out of the world.
   // A Stone used on the ground simply sits there, as it does in the real game.
-  kineticMotion(f, m.x * (f.facing >= 0 ? 1 : -1), f.grounded && m.y < 0 ? 0 : m.y);
+  // So does a rise that only the air allows (`airOnly`; Plan 5, Task 8 fix round 1).
+  kineticMotion(f, m.x * (f.facing >= 0 ? 1 : -1), f.grounded && (m.y < 0 || m.airOnly === true) ? 0 : m.y);
   const holding = run.gameFrame < m.until;
   // On the last frame of the hold, drift and gravity take over this very frame.
   if (!holding) kineticEndMotion(f);

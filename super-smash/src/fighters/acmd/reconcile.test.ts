@@ -39,9 +39,9 @@ import { withLimbScripts } from "./limb";
  * Throws are reconciled since Plan 5 Task 7: the scripts the game runs carry
  * their `ATTACK_ABS` lifted (`lift.ts`), and the reference scripts are lifted
  * here the same way. The throw and pummel entries went 60 → 10, the legacy
- * throws whose frames or numbers really differ (Donkey Kong's cargo throws,
- * Kirby's up throw); comparing every first actionable frame added 5 moves with
- * no hit on either side (105 → 60 in all).
+ * throws whose frames or numbers really differ (then Donkey Kong's, which held
+ * his cargo throws, and Kirby's up throw); comparing every first actionable
+ * frame added 5 moves with no hit on either side (105 → 60 in all).
  *
  * A script's `CancelFrame` is a motion frame, compared here in game frames
  * through its `FT_MOTION_RATE` (`gameFrameOfMotion`, Task 7 fix round 1): that
@@ -53,6 +53,12 @@ import { withLimbScripts } from "./limb";
  * the shot, 44 total, is the legacy move and has no imported script), and her
  * side B to `game_specials`, the Super Missile (UFD 57), against the legacy
  * Homing Missile (UFD 54).
+ *
+ * Plan 5 Task 8 gave Donkey Kong his own throws back: his forward throw is the
+ * lift (`game_throwf`, no box, first actionable 16) and his back throw is
+ * `game_throwb`'s, so his six entries agree now (52 → 46). His four cargo throws
+ * are not reconciled: the importer maps no slot to `game_throwff` … `game_throwflw`,
+ * and `fighters/cargo.test.ts` pins their numbers.
  */
 
 const ALLOW_FILE = join(process.cwd(), "src", "fighters", "acmd", "reconcile.allow.json");

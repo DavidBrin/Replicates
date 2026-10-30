@@ -178,7 +178,7 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
     at(to + 1).close.push({ op: "superArmour", on: false });
   }
   (move.momentum ?? []).forEach((m, order) => {
-    at(m.frame).open.push({ op: "momentum", x: m.x, y: m.y, hold: m.hold ?? 0, order });
+    at(m.frame).open.push({ op: "momentum", x: m.x, y: m.y, hold: m.hold ?? 0, order, ...(m.airOnly === true ? { airOnly: true } : {}) });
   });
   for (const p of move.projectiles ?? []) at(p.spawnFrame).open.push({ op: "spawnProjectile", id: p.id });
 

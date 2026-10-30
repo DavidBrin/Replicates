@@ -171,6 +171,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.launchBounce);
   x = mixInt(x, c.launchSource);
   x = mixInt(x, c.mash);
+  x = mixInt(x, c.grabLength);
   x = mixInt(x, c.comboHits);
   x = mixBool(x, c.asdi);
   x = mixInt(x, c.techWindow);

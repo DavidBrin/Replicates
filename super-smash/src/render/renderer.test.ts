@@ -248,6 +248,12 @@ describe("draw depth", () => {
     expect(drawDepth(makeFighter({ action: "fall" }))).toBe(1);
     expect(drawDepth(makeFighter({ action: "attack" }))).toBe(2);
   });
+
+  // Plan 5, Task 8: the fighter carried is held; the carrier holds them.
+  it("draws a carried fighter behind and its carrier in front", () => {
+    expect(drawDepth(makeFighter({ action: "cargoHeld" }))).toBe(0);
+    expect(drawDepth(makeFighter({ action: "cargoCarry" }))).toBe(2);
+  });
 });
 
 describe("projectiles", () => {

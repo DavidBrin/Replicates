@@ -629,6 +629,17 @@ export interface MoveDef {
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
   /**
+   * Knockback-based armour for the whole move (Q12 knockback units; Plan 5, Task
+   * 8 fix round 1): a hit whose knockback is at or under this lands its damage
+   * and its hitlag and launches nothing (SmashWiki "Armor",
+   * https://www.ssbwiki.com/Armor, "Knockback-based armor": the non-subtractive
+   * kind, "not sustaining knockback until the threshold is surpassed"); a harder
+   * hit launches as usual. A throw with it has no throw invincibility: Donkey
+   * Kong's cargo throws, "Knockback-based Armor ... instead of gaining Throw
+   * Invulnerability" (SmashWiki "Donkey Kong (SSBU)").
+   */
+  readonly heavyArmour?: number;
+  /**
    * A throw that lifts the fighter it holds to carry instead of launching them
    * (Plan 5, Task 8: Donkey Kong's forward throw): when it ends with its
    * fighter still held, the thrower carries them (`liftCargo`, `status/cargo.ts`).
@@ -659,7 +670,18 @@ export interface MoveDef {
    * impulse is clawed back to the fighter's ordinary fall speed on the next
    * frame — which is the difference between a stone and a puffball.
    */
-  readonly momentum?: readonly { frame: number; x: number; y: number; hold?: number }[];
+  readonly momentum?: readonly {
+    frame: number;
+    x: number;
+    y: number;
+    hold?: number;
+    /**
+     * Its vertical speed is set only in the air: on the ground the floor holds
+     * the fighter, and only the horizontal speed is set (Plan 5, Task 8 fix round
+     * 1: Donkey Kong's cargo down throw boosts him up "in the air").
+     */
+    airOnly?: boolean;
+  }[];
   /** What this move launches, if anything. See `ProjectileDef`. */
   readonly projectiles?: readonly ProjectileDef[];
 }

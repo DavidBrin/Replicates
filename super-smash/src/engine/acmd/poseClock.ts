@@ -109,10 +109,15 @@ function airDodgeSuffix(charge: number): string {
  * is the fall's (the plan's rule: "helpless uses the fall clip unless a
  * published or plan clip exists"; none does), fast fall included, and its
  * special landing is the landing lag's, scaled across the move's own lag.
+ * Task 8 fix round 1 (ruling R-T8c): Donkey Kong's carry is his walk's, and the
+ * fighter carried plays the grab's; their own motions baked byte for byte the
+ * same frames. An authored carry clip will be a motion of its own.
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   specialFall: "fall",
   specialLanding: "landingLag",
+  cargoCarry: "walk",
+  cargoHeld: "grabbed",
 };
 
 /**

@@ -57,7 +57,7 @@ const MOVES: [string, MoveSlot, MoveDef][] = FIGHTERS.flatMap((f) =>
 function legacyMomentum(move: MoveDef, frame: number) {
   for (const m of move.momentum ?? []) {
     const until = m.frame + (m.hold ?? 0);
-    if (frame >= m.frame && frame <= until) return { x: m.x, y: m.y, until };
+    if (frame >= m.frame && frame <= until) return { x: m.x, y: m.y, until, ...(m.airOnly === true ? { airOnly: true } : {}) };
   }
   return null;
 }

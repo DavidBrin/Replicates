@@ -39,6 +39,8 @@ export interface ActiveMomentum {
   readonly y: number;
   /** The last game frame of the hold. */
   readonly until: number;
+  /** Its `y` is set only in the air (`MoveDef.momentum`, Plan 5 Task 8 fix round 1). */
+  readonly airOnly?: boolean;
 }
 
 export interface ScriptFrameState {
@@ -280,7 +282,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
   const catches = new Map<number, CatchParams>();
   const shieldSetoff = new Map<number, number>();
   const flags = new Set<string>();
-  const windows: { x: number; y: number; start: number; until: number; order: number }[] = [];
+  const windows: { x: number; y: number; start: number; until: number; order: number; airOnly: boolean }[] = [];
   const fired: AcmdCommand[] = [];
   let superArmour = false;
   let wholeHit: HitStatus = "HIT_STATUS_NORMAL";
@@ -347,7 +349,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
         wholeHit = c.status;
         break;
       case "momentum":
-        windows.push({ x: c.x, y: c.y, start: e, until: e + c.hold, order: c.order });
+        windows.push({ x: c.x, y: c.y, start: e, until: e + c.hold, order: c.order, airOnly: c.airOnly === true });
         break;
       case "attackAbs":
         // The CATCH kind is what a fighter let go mid-throw takes; nothing reads it yet.
@@ -372,7 +374,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
   for (const w of windows) {
     if (gameFrame < w.start || gameFrame > w.until || w.order >= best) continue;
     best = w.order;
-    momentum = { x: w.x, y: w.y, until: w.until };
+    momentum = { x: w.x, y: w.y, until: w.until, ...(w.airOnly ? { airOnly: true } : {}) };
   }
 
   return {

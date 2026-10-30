@@ -66,7 +66,7 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 59 over the 52 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 57 over the 52 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
@@ -76,12 +76,15 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
       }
     }
     const specs = statusMotionSpecs();
-    // Plan 5, Task 8: the carry and the carried bake a motion each.
+    // Plan 5, Task 8: two actions more, the carry and the carried, and no motion
+    // more: they play the walk's and the grab's (`MOTION_OF_ACTION`; fix round 1,
+    // ruling R-T8c: their own motions were byte-identical copies).
     expect(ACTIONS).toHaveLength(52);
-    expect(named.size).toBe(59);
+    expect(named.size).toBe(57);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
     // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their
-    // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`).
+    // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`), as
+    // the carry and the carried play the walk's and the grab's (Task 8).
     expect(new Set(specs.map((s) => s.action))).toEqual(new Set(ACTIONS.filter((a) => MOTION_OF_ACTION[a] === undefined)));
     expect(specs.map((s) => s.motion)).toContain("status_tumbleFall");
     for (const s of specs) expect(statusMotion(s)).toBe(s.motion);

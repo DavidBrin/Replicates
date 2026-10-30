@@ -86,6 +86,14 @@ describe("cross-fading between clips", () => {
     expect(distance(first, at("fall"))).toBeCloseTo(0, 6);
   });
 
+  // Plan 5, Task 8: lifted onto Donkey Kong's shoulders is done to the fighter.
+  it("snaps a fighter lifted onto a carrier's shoulders into its clip", () => {
+    const b = createPoseBlends();
+    play(b, "thrown", [0, 1, 2], who({ action: "thrown" }));
+    const [first] = play(b, "grabbed", [3], who({ action: "cargoHeld" }));
+    expect(distance(first, at("grabbed"))).toBeCloseTo(0, 6);
+  });
+
   it("does not advance when the same simulation frame is drawn twice", () => {
     const b = createPoseBlends();
     play(b, "idle", [0]);

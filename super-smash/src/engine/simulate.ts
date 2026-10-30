@@ -119,6 +119,7 @@ import {
   grabHoldFrames,
   grabLedge,
   hasSuperArmour,
+  heavyArmourOf,
   interpretInput,
   isCatchStatus,
   isHolding,
@@ -162,7 +163,7 @@ import { absHitbox, scriptHitboxes, unplacedHitbox } from "./acmd/hitboxes";
 import { moveScriptFrame, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
 import { gameScriptFor } from "./acmd/legacy";
 import "./status";
-import { releaseHeld, struggleInGrab } from "./status/attack";
+import { releaseHeld, struggleInGrab } from "./status/grab";
 import { emptyEvents } from "./types";
 import type {
   ActionState,
@@ -1504,6 +1505,11 @@ function resolveThrows(
 function isInvincible(f: FighterState, def: FighterDef): boolean {
   if (f.invincible > 0) return true;
   if (f.action !== "throw" || f.move === null) return false;
+  // A throw with knockback armour has it "instead of gaining Throw
+  // Invulnerability" (SmashWiki "Donkey Kong (SSBU)",
+  // https://www.ssbwiki.com/Donkey_Kong_(SSBU): Donkey Kong's cargo throws; Plan
+  // 5, Task 8 fix round 1, `heavyArmourOf`).
+  if (def.moves[f.move]?.heavyArmour !== undefined) return false;
   // A throw that releases nobody, Donkey Kong's lift (`MoveDef.cargo`), is
   // invincible throughout: SmashWiki "Donkey Kong (SSBU)/Forward throw"
   // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Forward_throw), the carry's
@@ -2202,8 +2208,10 @@ function applyHit(
     releaseGrab(victim, s.fighters);
     attacker.grabbing = victim.port;
     victim.grabbedBy = attacker.port;
-    // The escape timer, fixed now, on the victim (Plan 3, Task 14).
+    // The escape timer, fixed now, on the victim (Plan 3, Task 14), and the
+    // length it starts from, which Donkey Kong's carry reads (Plan 5, Task 8).
     victim.grabTimer = grabHoldFrames(victim.damage);
+    victim.combat.grabLength = victim.grabTimer;
     victim.combat.mash = 0;
     kineticSet(victim, 0, 0);
     // Being caught cancels a launch that had not fired yet: the victim is held,
@@ -2347,9 +2355,9 @@ function applyHit(
   // than at the top with the intangibility checks. The damage was added once,
   // above; adding it again here doubled every armoured hit (Plan 3, Task 1).
   // A box that forces its reaction goes through armour (`Hitbox.forceReaction`).
-  if (hasSuperArmour(victim, victimDef) && hb.forceReaction !== true) {
-    // The attacker still freezes. Hitting armour should feel like hitting
-    // something solid, and a hit that reports nothing back reads as a whiff.
+  // The attacker still freezes. Hitting armour should feel like hitting
+  // something solid, and a hit that reports nothing back reads as a whiff.
+  const armoured = (): void => {
     const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
       moveMultiplier: hb.hitlagMultiplier,
@@ -2367,21 +2375,11 @@ function applyHit(
       angle: 0,
       hitboxId: hb.id,
     });
+  };
+  if (hasSuperArmour(victim, victimDef) && hb.forceReaction !== true) {
+    armoured();
     return;
   }
-
-  // "Characters can only air dodge once until they land, get hit, or grab a
-  // ledge" (SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge). Plan 3, Task 7.
-  // Below the armour: a hit armour takes is not one that gets the fighter hit
-  // out of anything (Plan 3 final wave; the Task 7 review's minor). UNVERIFIED:
-  // that reading of "get hit".
-  victim.airDodged = false;
-  // So is the airtime's special stall (Plan 5): Fox's Reflector stalls "once
-  // until he lands or gets hit" (SmashWiki "Fox (SSBU)",
-  // https://www.ssbwiki.com/Fox_(SSBU)). The same reading of "get hit".
-  // UNVERIFIED for Mario's Cape: borrowed from Fox's; Super Mario Wiki "Cape"
-  // names only landing ("between leaving the ground and returning to it").
-  victim.combat.specialStall = false;
 
   const crouchCancel = isCrouching(victim);
 
@@ -2398,6 +2396,34 @@ function applyHit(
     fixedKnockback: hb.fixedKnockback,
     setWeight: hb.setWeight,
   });
+
+  // Knockback-based armour (`MoveDef.heavyArmour`; Plan 5, Task 8 fix round 1):
+  // a hit of no more knockback than the threshold is taken as super armour takes
+  // one; a harder one launches as usual. Measured on this hit's own knockback,
+  // the one it launches with: SmashWiki's "Units of Knockback" are the knockback
+  // formula's (SmashWiki "Knockback", https://www.ssbwiki.com/Knockback), which
+  // `computeKnockback` is. UNVERIFIED: SmashWiki "Armor" says knockback-based
+  // armour is "unaffected by" the 1v1 multiplier, and this hit's knockback is
+  // reckoned from damage with it in (Plan 3), so in a one-on-one a hit breaks
+  // the armour a little sooner than in the game.
+  const heavy = heavyArmourOf(victim, victimDef);
+  if (heavy !== null && kb <= heavy && hb.forceReaction !== true) {
+    armoured();
+    return;
+  }
+
+  // "Characters can only air dodge once until they land, get hit, or grab a
+  // ledge" (SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge). Plan 3, Task 7.
+  // Below the armour: a hit armour takes is not one that gets the fighter hit
+  // out of anything (Plan 3 final wave; the Task 7 review's minor). UNVERIFIED:
+  // that reading of "get hit".
+  victim.airDodged = false;
+  // So is the airtime's special stall (Plan 5): Fox's Reflector stalls "once
+  // until he lands or gets hit" (SmashWiki "Fox (SSBU)",
+  // https://www.ssbwiki.com/Fox_(SSBU)). The same reading of "get hit".
+  // UNVERIFIED for Mario's Cape: borrowed from Fox's; Super Mario Wiki "Cape"
+  // names only landing ("between leaving the ground and returning to it").
+  victim.combat.specialStall = false;
 
   // The base decides tumble; a tumbling launch without set knockback is then
   // played back sped up, which shortens the hitstun in real frames (SmashWiki

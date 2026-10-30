@@ -182,9 +182,17 @@ export type AcmdCommand =
    * REPLICA: a scripted velocity (Q12, `x` facing-relative) set for this frame
    * and held `hold` more frames — the legacy `MoveDef.momentum`, which the game
    * expresses as animation translation (the MOTION energy). `order` is the
-   * entry's position in the legacy list; the lowest live one wins.
+   * entry's position in the legacy list; the lowest live one wins. `airOnly`: its
+   * `y` only in the air (`MoveDef.momentum`, Plan 5 Task 8 fix round 1).
    */
-  | { readonly op: "momentum"; readonly x: number; readonly y: number; readonly hold: number; readonly order: number }
+  | {
+      readonly op: "momentum";
+      readonly x: number;
+      readonly y: number;
+      readonly hold: number;
+      readonly order: number;
+      readonly airOnly?: boolean;
+    }
   /** `ArticleModule::generate_article` — here, a `ProjectileDef` id. */
   | { readonly op: "spawnProjectile"; readonly id: string }
   /** `REVERSE_LR()`: in a throw, the thrower turns round (Plan 5, Task 7). */

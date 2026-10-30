@@ -824,9 +824,15 @@ const legacy: FighterDef = {
     // The cargo throws, from the carry: `game_throwff`, `game_throwfb`,
     // `game_throwfhi`, `game_throwflw`, motions `throw_f_f` … `throw_f_lw`
     // (CancelFrame 46, 43, 30, 45). SmashWiki gives the same numbers: Throw 15,
-    // 16, 15, 17; Interruptible 46, 43, 30, 45.
+    // 16, 15, 17; Interruptible 46, 43, 30, 45. Each has 16 units of knockback
+    // armour and no throw invincibility (`heavyArmour`; Task 8 fix round 1):
+    // SmashWiki "Donkey Kong (SSBU)" (https://www.ssbwiki.com/Donkey_Kong_(SSBU)),
+    // "He also gains Knockback-based Armor when he starts a throw instead of
+    // gaining Throw Invulnerability, of which allows him to resist up to 16 Units
+    // of Knockback".
     cargoFthrow: {
       slot: "cargoFthrow",
+      heavyArmour: fx(16),
       name: "Cargo Forward Throw",
       totalFrames: 45,
       hitboxes: [
@@ -848,6 +854,7 @@ const legacy: FighterDef = {
 
     cargoBthrow: {
       slot: "cargoBthrow",
+      heavyArmour: fx(16),
       name: "Cargo Back Throw",
       totalFrames: 42,
       // His hardest-hitting throw and his best kill throw. "Donkey Kong changes
@@ -872,6 +879,7 @@ const legacy: FighterDef = {
 
     cargoUthrow: {
       slot: "cargoUthrow",
+      heavyArmour: fx(16),
       name: "Cargo Up Throw",
       totalFrames: 29,
       hitboxes: [
@@ -895,11 +903,15 @@ const legacy: FighterDef = {
 
     cargoDthrow: {
       slot: "cargoDthrow",
+      heavyArmour: fx(16),
       name: "Cargo Down Throw",
       totalFrames: 44,
       // "On frame 17, the move stops Donkey Kong's horizontal momentum, and sets
-      // his vertical momentum to 1.5" (`SET_SPEED_EX(0, 1.5, …)` on 17).
-      momentum: [{ frame: 17, x: fx(0), y: fx(1.5) }],
+      // his vertical momentum to 1.5" (`SET_SPEED_EX(0, 1.5, …)` on 17); SmashWiki
+      // "Donkey Kong (SSBU)": "a small boost upwards when using this move in the
+      // air". So the 1.5 only in the air (`airOnly`; Task 8 fix round 1): the
+      // script has the one command for both, and a throw on the ground stays on it.
+      momentum: [{ frame: 17, x: fx(0), y: fx(1.5), airOnly: true }],
       hitboxes: [
         {
           // A semi-spike at 46°: the stage-spike throw. ATTACK_ABS 11%, angle 46,

@@ -84,7 +84,11 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
   // Plan 5, Task 4b: the helpless fall plays the fall's motion, fast fall
   // included, and its special landing the landing lag's, on its own lag.
   it("plays the helpless fall as a fall and its landing as landing lag, sharing their motions", () => {
-    expect(MOTION_OF_ACTION).toEqual({ specialFall: "fall", specialLanding: "landingLag" });
+    // Plan 5, Task 8 fix round 1 (ruling R-T8c): the carry plays the walk's motion
+    // and the carried the grab's, each its own frames byte for byte before.
+    expect(MOTION_OF_ACTION).toEqual({ specialFall: "fall", specialLanding: "landingLag", cargoCarry: "walk", cargoHeld: "grabbed" });
+    expect(statusMotion({ action: "cargoCarry", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_walk");
+    expect(statusMotion({ action: "cargoHeld", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_grabbed");
     for (const fastFalling of [false, true]) {
       expect(statusMotion({ action: "specialFall", jumpsUsed: 1, fastFalling, charge: 0 })).toBe(
         statusMotion({ action: "fall", jumpsUsed: 1, fastFalling, charge: 0 }),
@@ -217,9 +221,10 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
       for (const charge of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         for (const jumpsUsed of [1, 2])
           for (const fastFalling of [false, true]) names.add(statusMotion({ action, jumpsUsed, fastFalling, charge }));
-    // 50 actions of their own (the two helpless ones share the fall's and the
-    // landing lag's; Plan 5 Task 8's carry and carried have their own), the
-    // second jump, two fast falls, five directional air dodges and the back roll.
+    // 48 actions of their own (the two helpless ones share the fall's and the
+    // landing lag's; Plan 5 Task 8's carry and carried, the walk's and the
+    // grab's), the second jump, two fast falls, five directional air dodges and
+    // the back roll.
     expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
     expect(ACTIONS.length).toBe(52);
   });

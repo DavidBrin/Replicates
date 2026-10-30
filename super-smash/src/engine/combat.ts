@@ -51,6 +51,16 @@ export interface CombatState {
   launchSource: number;
   /** Tenths of a frame mashing has earned but not yet spent (`mashFrames`). */
   mash: number;
+  /**
+   * On a held fighter: the grab time the grab was made with, `grabHoldFrames` at
+   * the catch, kept for the hold and the carry (Plan 5, Task 8 fix round 1).
+   * Grab time is fixed "at the time of the grab (so it is not affected by
+   * pummeling or external damage)" (SmashWiki "Grab",
+   * https://www.ssbwiki.com/Grab), so the grab time passed is this less
+   * `grabTimer`, mashing included: Donkey Kong's carry reads it (`liftCargo`).
+   * 0 when nobody holds the fighter; `releaseGrab` clears it with the link.
+   */
+  grabLength: number;
   /** Hits taken since this fighter was last out of hitstun: SDI grows ×1.15 past five (Task 11). */
   comboHits: number;
   /** The freeze now running is from a hit that grants automatic SDI when it ends (Task 11). */
@@ -151,6 +161,7 @@ export function emptyCombat(): CombatState {
     launchBounce: false,
     launchSource: -1,
     mash: 0,
+    grabLength: 0,
     comboHits: 0,
     asdi: false,
     techWindow: 0,
@@ -182,6 +193,7 @@ export function cloneCombat(c: CombatState): CombatState {
     launchBounce: c.launchBounce,
     launchSource: c.launchSource,
     mash: c.mash,
+    grabLength: c.grabLength,
     comboHits: c.comboHits,
     asdi: c.asdi,
     techWindow: c.techWindow,
