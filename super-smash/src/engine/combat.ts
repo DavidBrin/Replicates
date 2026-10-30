@@ -151,6 +151,26 @@ export interface CombatState {
    * end, a hit, a grab, a ledge, a landing, a clank or a KO).
    */
   counterDamage: number;
+  /**
+   * Plan 5, Task 9: Kirby's Copy Ability, the id of the fighter whose neutral
+   * special he has (`withCopyAbility`), or "" for none. Set by a swallow, and
+   * cleared by a KO (SmashWiki "Copy Ability": "he will also lose it upon being
+   * KO'd") or, past its grace, by a hit's chance (`maybeLoseCopy`); a Kirby who
+   * is swallowed by another loses it to him.
+   */
+  copy: string;
+  /**
+   * Plan 5, Task 9: frames the Copy Ability has been held, counting up to its
+   * 1200-frame grace and stopping there (`COPY_GRACE_FRAMES`). 0 with no copy;
+   * cleared with it.
+   */
+  copyFrames: number;
+  /**
+   * Plan 5, Task 9: on a fighter Kirby spat (`spatStar`), the instance id of the
+   * star it rides; 0 otherwise. Cleared when the ride ends, however it ends
+   * (`STATUS_SPAT_STAR`'s `end`: the flight's end, the star's, a KO).
+   */
+  ride: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -182,6 +202,9 @@ export function emptyCombat(): CombatState {
     stalling: false,
     helplessMove: null,
     counterDamage: 0,
+    copy: "",
+    copyFrames: 0,
+    ride: 0,
   };
 }
 
@@ -214,5 +237,8 @@ export function cloneCombat(c: CombatState): CombatState {
     stalling: c.stalling,
     helplessMove: c.helplessMove,
     counterDamage: c.counterDamage,
+    copy: c.copy,
+    copyFrames: c.copyFrames,
+    ride: c.ride,
   };
 }

@@ -665,6 +665,15 @@ const legacy: FighterDef = {
       slot: "neutralB",
       name: "Inhale",
       totalFrames: 67,
+      // Plan 5, Task 9: the catch puts the fighter caught in his mouth
+      // (`swallowed`, Kirby `inhaleHold`), from which B or down swallows
+      // (`inhaleSwallow`) and attack spits (`inhaleSpit`): SmashWiki "Inhale
+      // (Kirby)" (https://www.ssbwiki.com/Inhale_(Kirby)), "Kirby can swallow the
+      // victim by pressing down or the special move button", and "spit them out
+      // as a star ... by pressing the attack button". UNVERIFIED-simplified: the
+      // loop's pull (`game_specialnloop`'s windboxes; SmashWiki "Vacuum speed 0.9,
+      // 1.2") and holding the inhale past frame 44 with B held are not modelled.
+      inhale: { swallow: "inhaleSwallow", spit: "inhaleSpit" },
       // Not a damaging move — a grab. Suction is active frames 10-44 (longer
       // if held) and pulls anyone caught into Kirby's mouth, from which he can
       // either **swallow** (10%, and he takes the victim's neutral special as
@@ -684,6 +693,70 @@ const legacy: FighterDef = {
           baseKnockback: fx(0),
           knockbackGrowth: fx(0),
           grabbing: true,
+        },
+      ],
+    },
+
+    inhaleSwallow: {
+      slot: "inhaleSwallow",
+      name: "Inhale (swallow)",
+      // SmashWiki "Kirby (SSBU)/Neutral special"
+      // (https://www.ssbwiki.com/Kirby_(SSBU)/Neutral_special), Swallow: "Throw
+      // release frame 8", "Interruptible 21"; its throw 10.0% at 361, BK 0, KS 0,
+      // H× 0.0×: the damage lands and nothing launches or freezes. The fighter
+      // swallowed's neutral special becomes his Copy Ability (`engine/inhale.ts`).
+      totalFrames: 20,
+      release: { frame: 8, kind: "swallow", damage: fx(10.0) },
+      hitboxes: [],
+    },
+
+    inhaleSpit: {
+      slot: "inhaleSpit",
+      name: "Inhale (spit)",
+      // SmashWiki, Spit: "Throw release frame 8", grounded "Interruptible 31";
+      // its throw 6.0%, BK 0, KS 0, H× 0.0×. UNVERIFIED-simplified: the aerial
+      // spit's own "Interruptible 39" is not modelled (it ends as the grounded one).
+      totalFrames: 30,
+      release: { frame: 8, kind: "spit", damage: fx(6.0) },
+      hitboxes: [],
+      projectiles: [
+        {
+          // The spat fighter as a star (SmashWiki, the star's parameters and hitbox
+          // table): "Offsets 7, 7"; "Can pierce opponents? Yes"; radius 2.5, angle 45
+          // ("Speed-based": the way it flies), BK 70, KS 78, "H× 2.0×"; its damage is
+          // the rider's weight's row (`starDamage`: the box carries 1%, its
+          // `chargeScale` the rest); "its speed ... 2.8 + 0.008(t - k)" (2.8 here,
+          // and the release sets the rest), slowing "by 0.05 per frame", letting go
+          // "below 0.4", for "a maximum of 60" frames. Reflectable (the table).
+          // UNVERIFIED-simplified: the table's clang (projectiles here are
+          // transcendent, `schema.test.ts`).
+          id: "star",
+          spawnFrame: 8,
+          offsetX: fx(7.0),
+          offsetY: fx(7.0),
+          vx: fx(2.8),
+          vy: fx(0),
+          gravity: fx(0),
+          lifetime: 60,
+          destroyOnHit: false,
+          drag: { perFrame: fx(0.05), minSpeed: fx(0.4) },
+          ridden: true,
+          visual: "spark",
+          reflectable: true,
+          hitbox: {
+            id: 0,
+            startFrame: 0,
+            endFrame: 59,
+            x: fx(0),
+            y: fx(0),
+            radius: fx(2.5),
+            damage: fx(1.0),
+            angle: fx(45),
+            baseKnockback: fx(70),
+            knockbackGrowth: fx(78),
+            hitlagMultiplier: fx(2.0),
+            transcendent: true,
+          },
         },
       ],
     },

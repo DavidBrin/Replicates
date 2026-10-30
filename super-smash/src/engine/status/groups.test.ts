@@ -120,6 +120,10 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   // Plan 5, Task 8: Donkey Kong's carry walks; the fighter carried does not move.
   cargoCarry: "WALK",
   cargoHeld: "NONE",
+  // Plan 5, Task 9: Kirby's mouthful walks; the swallowed and the spat are carried.
+  inhaleHold: "WALK",
+  swallowed: "NONE",
+  spatStar: "NONE",
 };
 
 /** Every action migrated so far; each status-group task extends this list first. */
@@ -187,6 +191,10 @@ const MIGRATED = [
   // Plan 5, Task 8
   "cargoCarry",
   "cargoHeld",
+  // Plan 5, Task 9
+  "inhaleHold",
+  "swallowed",
+  "spatStar",
 ];
 
 describe("migrated statuses", () => {

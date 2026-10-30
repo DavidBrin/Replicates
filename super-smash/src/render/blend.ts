@@ -88,6 +88,9 @@ function isImposed(action: FighterState["action"]): boolean {
     case "thrown":
     // Lifted onto Donkey Kong's shoulders (Plan 5, Task 8): done to the fighter.
     case "cargoHeld":
+    // Swallowed by Kirby, or spat as his star (Plan 5, Task 9): done to them too.
+    case "swallowed":
+    case "spatStar":
     case "downed":
     case "shieldBroken":
     // The ledge taken from under it (Plan 3, Task 15): done to the fighter.

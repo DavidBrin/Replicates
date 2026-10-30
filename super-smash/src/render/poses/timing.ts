@@ -191,6 +191,9 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   cargoBthrow: "bthrow",
   cargoUthrow: "uthrow",
   cargoDthrow: "dthrow",
+  // Plan 5, Task 9: Kirby's swallow and spit borrow his Inhale's clip.
+  inhaleSwallow: "neutralB",
+  inhaleSpit: "neutralB",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */
@@ -306,9 +309,16 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "cargoHeld":
       return "grabbed";
     // ...and Donkey Kong carrying: no clip has the carry's raised arms, and his
-    // walk reads as the carry (it walks).
+    // walk reads as the carry (it walks). Plan 5, Task 9: Kirby walking with a
+    // mouthful, likewise.
     case "cargoCarry":
+    case "inhaleHold":
       return "walk";
+    // Plan 5, Task 9: inside Kirby, or flying as his star (until Task 17 hides the
+    // swallowed), the fighter tumbles.
+    case "swallowed":
+    case "spatStar":
+      return "tumble";
     case "thrown":
       return "thrown";
     case "downed":

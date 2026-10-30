@@ -94,6 +94,16 @@ describe("cross-fading between clips", () => {
     expect(distance(first, at("grabbed"))).toBeCloseTo(0, 6);
   });
 
+  // Plan 5, Task 9: swallowed by Kirby, or spat as his star, is done to the fighter.
+  it("snaps a swallowed or spat fighter into its clip", () => {
+    for (const action of ["swallowed", "spatStar"] as const) {
+      const b = createPoseBlends();
+      play(b, "idle", [0, 1, 2], who());
+      const [first] = play(b, "tumble", [3], who({ action }));
+      expect(distance(first, at("tumble")), action).toBeCloseTo(0, 6);
+    }
+  });
+
   it("does not advance when the same simulation frame is drawn twice", () => {
     const b = createPoseBlends();
     play(b, "idle", [0]);

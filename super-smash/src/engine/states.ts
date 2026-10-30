@@ -973,20 +973,18 @@ export function isCatchStatus(action: ActionState): boolean {
  * has stopped holding (a clank cancelled the pummel, say), and the link ends
  * there.
  *
- * And `special`, while its move owns a catch box: Kirby's Inhale catches with
- * one, and holds its victim for the move, which lets it go when it ends (Plan 3
- * final wave; the Task 14 re-review's minor, where the guard let go one frame
- * after the catch). UNVERIFIED: a stand-in for Inhale's own statuses, which Plan
- * 5 Task 9 builds and which replace it. It does not stop at a cliff: that is the
- * catch statuses' alone.
- *
  * And Donkey Kong's carry (Plan 5, Task 8: `cargoCarry`), which holds its
  * fighter on his shoulders and walks off a cliff with them.
+ *
+ * And Kirby's mouthful (Plan 5, Task 9: `inhaleHold`), and his swallow and spit
+ * (`special` in a move with a `release`), which hold the fighter in his mouth
+ * until their release lets it out (`resolveInhaleReleases`). These replace Plan
+ * 3's stand-in, under which `special` held while its move owned a catch box.
+ * None stops at a cliff: that is the catch statuses' alone.
  */
 export function isHolding(f: Pick<FighterState, "action" | "move">, def: FighterDef): boolean {
-  if (isCatchStatus(f.action) || f.action === "cargoCarry") return true;
-  if (f.action !== "special" || f.move === null) return false;
-  return def.moves[f.move]?.hitboxes.some((h) => h.grabbing === true) ?? false;
+  if (isCatchStatus(f.action) || f.action === "cargoCarry" || f.action === "inhaleHold") return true;
+  return f.action === "special" && f.move !== null && def.moves[f.move]?.release !== undefined;
 }
 
 /**
@@ -1220,7 +1218,12 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // "Donkey Kong (SSBU)/Forward throw" gives neither a landing lag for the carry
   // (the `shoulder_landing` motion's length is unpublished) nor what a landing
   // does to a cargo throw. Only a cargo throw is ever airborne.
-  if (f.action === "cargoCarry" || f.action === "throw") return;
+  // So does Kirby's mouthful, and a swallow or a spit begun in the air that still
+  // holds its fighter (Plan 5, Task 9). UNVERIFIED for the same reason: the
+  // SPECIAL_N_EAT_LANDING motion's length is unpublished, and no source says what a
+  // landing does to an aerial swallow or spit.
+  if (f.action === "cargoCarry" || f.action === "throw" || f.action === "inhaleHold") return;
+  if (f.action === "special" && f.grabbing >= 0) return;
   // A tumble that reaches the floor lies down: in hitstun, one too slow to
   // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
   // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").

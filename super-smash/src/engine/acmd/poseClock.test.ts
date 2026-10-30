@@ -86,9 +86,22 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
   it("plays the helpless fall as a fall and its landing as landing lag, sharing their motions", () => {
     // Plan 5, Task 8 fix round 1 (ruling R-T8c): the carry plays the walk's motion
     // and the carried the grab's, each its own frames byte for byte before.
-    expect(MOTION_OF_ACTION).toEqual({ specialFall: "fall", specialLanding: "landingLag", cargoCarry: "walk", cargoHeld: "grabbed" });
+    // Plan 5, Task 9: Kirby's mouthful plays the walk's, and the swallowed and the
+    // spat the tumble's (`poseNameFor`'s own clips, which baked them byte for byte).
+    expect(MOTION_OF_ACTION).toEqual({
+      specialFall: "fall",
+      specialLanding: "landingLag",
+      cargoCarry: "walk",
+      cargoHeld: "grabbed",
+      inhaleHold: "walk",
+      swallowed: "tumble",
+      spatStar: "tumble",
+    });
     expect(statusMotion({ action: "cargoCarry", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_walk");
     expect(statusMotion({ action: "cargoHeld", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_grabbed");
+    expect(statusMotion({ action: "inhaleHold", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_walk");
+    expect(statusMotion({ action: "swallowed", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_tumble");
+    expect(statusMotion({ action: "spatStar", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_tumble");
     for (const fastFalling of [false, true]) {
       expect(statusMotion({ action: "specialFall", jumpsUsed: 1, fastFalling, charge: 0 })).toBe(
         statusMotion({ action: "fall", jumpsUsed: 1, fastFalling, charge: 0 }),
@@ -223,10 +236,11 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
           for (const fastFalling of [false, true]) names.add(statusMotion({ action, jumpsUsed, fastFalling, charge }));
     // 48 actions of their own (the two helpless ones share the fall's and the
     // landing lag's; Plan 5 Task 8's carry and carried, the walk's and the
-    // grab's), the second jump, two fast falls, five directional air dodges and
-    // the back roll.
+    // grab's; Task 9's mouthful, swallowed and spat, the walk's and the
+    // tumble's), the second jump, two fast falls, five directional air dodges
+    // and the back roll.
     expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
-    expect(ACTIONS.length).toBe(52);
+    expect(ACTIONS.length).toBe(55);
   });
 
   it.each(FIGHTERS.map((d) => [d.id, d] as const))("%s: spot dodge, rolls, air dodges and techs last the engine's own lengths", (_id, def) => {

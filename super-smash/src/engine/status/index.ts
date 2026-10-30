@@ -13,6 +13,7 @@ import { CLIFF_STATUSES } from "./cliff";
 import { DAMAGE_STATUSES } from "./damage";
 import { GROUND_STATUSES } from "./ground";
 import { GUARD_STATUSES } from "./guard";
+import { INHALE_STATUSES } from "./inhale";
 import { registerStatus } from "./kind";
 import type { FighterStatus } from "./kind";
 import { META_STATUSES } from "./meta";
@@ -28,6 +29,7 @@ export const ALL_STATUSES: readonly FighterStatus[] = [
   ...AIR_STATUSES,
   ...PASSIVE_STATUSES,
   ...CARGO_STATUSES,
+  ...INHALE_STATUSES,
 ];
 
 for (const s of ALL_STATUSES) registerStatus(s);

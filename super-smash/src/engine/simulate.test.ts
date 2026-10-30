@@ -284,7 +284,7 @@ describe("cloneState", () => {
       {
         instanceId: 1, defId: "pellet", owner: 0, x: 0, y: 0, vx: 0, vy: 0, facing: 1,
         age: 0, bouncesLeft: 0, chargeScale: ONE, hitPorts: [1], returning: false,
-        source: "<any>", charge: 0, reflected: 0,
+        source: "<any>", charge: 0, reflected: 0, damageMul: ONE,
       },
     ];
     s.outcome = { kind: "stockOut", placings: [1, 0] };

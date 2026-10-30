@@ -111,13 +111,18 @@ function airDodgeSuffix(charge: number): string {
  * special landing is the landing lag's, scaled across the move's own lag.
  * Task 8 fix round 1 (ruling R-T8c): Donkey Kong's carry is his walk's, and the
  * fighter carried plays the grab's; their own motions baked byte for byte the
- * same frames. An authored carry clip will be a motion of its own.
+ * same frames. An authored carry clip will be a motion of its own. Task 9:
+ * Kirby's mouthful plays the walk's, and the fighter swallowed and the one spat
+ * the tumble's (`poseNameFor` gives them those clips).
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   specialFall: "fall",
   specialLanding: "landingLag",
   cargoCarry: "walk",
   cargoHeld: "grabbed",
+  inhaleHold: "walk",
+  swallowed: "tumble",
+  spatStar: "tumble",
 };
 
 /**

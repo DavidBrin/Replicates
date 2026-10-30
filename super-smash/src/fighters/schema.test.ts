@@ -257,6 +257,12 @@ describe("projectiles", () => {
     ["link", "remoteBomb", 1800, [0, 1799], "https://www.ssbwiki.com/Link_(SSBU)/Down_special"],
     // The grounded jolt: "Lifetime 96 frames"; "Clean hit 19-52", "Mid hit 53-85", "Late hit 86-114".
     ["pikachu", "thunderJolt", 96, [0, 95], "https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special"],
+    // Kirby's spit star (Plan 5, Task 9), live as long as it flies: "a maximum of 60"
+    // frames, and "The star's speed decreases by 0.05 per frame, and it releases the
+    // target when its speed drops below 0.4", so at its base speed 2.8 it is gone
+    // after (2.8 − 0.4) / 0.05 = 48. Its rider's own flight (`25 + 0.5t`) ends it
+    // sooner still (`engine/inhale.ts`).
+    ["kirby", "star", 48, [0, 59], "https://www.ssbwiki.com/Kirby_(SSBU)/Neutral_special"],
   ];
 
   it("lists every projectile on the roster in the published lives", () => {
@@ -312,7 +318,8 @@ describe("projectiles", () => {
   it("puts a projectile on exactly the specials the spec says have one", () => {
     // SPEC section 7: Link has three at once, Samus charges one.
     const owners = FIGHTERS.filter((f) => everyProjectile(f).length > 0).map((f) => f.id);
-    expect(new Set(owners)).toEqual(new Set(["mario", "link", "samus", "fox", "pikachu"]));
+    // Plan 5, Task 9: Kirby's spit fires the spat fighter as a star.
+    expect(new Set(owners)).toEqual(new Set(["mario", "link", "samus", "kirby", "fox", "pikachu"]));
 
     const linkProjectiles = everyProjectile(getFighterOrThrow("link"));
     expect(linkProjectiles).toHaveLength(3);

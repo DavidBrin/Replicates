@@ -254,6 +254,13 @@ describe("draw depth", () => {
     expect(drawDepth(makeFighter({ action: "cargoHeld" }))).toBe(0);
     expect(drawDepth(makeFighter({ action: "cargoCarry" }))).toBe(2);
   });
+
+  // Plan 5, Task 9: the swallowed and the spat are held or flown; Kirby holds them.
+  it("draws a swallowed or spat fighter behind and Kirby with a mouthful in front", () => {
+    expect(drawDepth(makeFighter({ action: "swallowed" }))).toBe(0);
+    expect(drawDepth(makeFighter({ action: "spatStar" }))).toBe(0);
+    expect(drawDepth(makeFighter({ action: "inhaleHold" }))).toBe(2);
+  });
 });
 
 describe("projectiles", () => {

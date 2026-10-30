@@ -590,11 +590,14 @@ export type KOKind = "blast" | "star" | "screen";
  * renderer: a slow drift over the top is a star KO with the twinkle, a fast one
  * is a screen KO that cracks the camera.
  */
-export function blastZoneKO(f: FighterState, stage: StageDef): KOKind | null {
+export function blastZoneKO(f: FighterState, stage: StageDef, reach = 0): KOKind | null {
   const b = stage.blastZone;
   if (f.y > b.top) return f.vy >= SCREEN_KO_SPEED ? "screen" : "star";
-  if (f.y < b.bottom) return "blast";
-  if (f.x < b.left || f.x > b.right) return "blast";
+  if (f.y - reach < b.bottom) return "blast";
+  // `reach` takes the fighter's lines nearer ahead of it and below it (Plan 5,
+  // Task 9: Kirby with a mouthful).
+  const ahead = f.x + (f.facing >= 0 ? reach : -reach);
+  if (f.x < b.left || f.x > b.right || ahead < b.left || ahead > b.right) return "blast";
   return null;
 }
 

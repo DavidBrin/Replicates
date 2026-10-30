@@ -144,6 +144,11 @@ export type ActionState =
   // carried (Plan 5, Task 8): Donkey Kong's cargo, and the fighter on his shoulders
   | "cargoCarry"
   | "cargoHeld"
+  // Kirby's Inhale (Plan 5, Task 9): the mouthful, the fighter inside him, and the
+  // fighter he spat flying as his star
+  | "inhaleHold"
+  | "swallowed"
+  | "spatStar"
   // meta
   | "respawnPlatform"
   | "dead"
@@ -187,7 +192,10 @@ export type MoveSlot =
   | "cargoFthrow"
   | "cargoBthrow"
   | "cargoUthrow"
-  | "cargoDthrow";
+  | "cargoDthrow"
+  // Plan 5, Task 9: Kirby's swallow and spit, from the mouthful.
+  | "inhaleSwallow"
+  | "inhaleSpit";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -362,6 +370,16 @@ export interface ProjectileDef {
   readonly visual: "arrow" | "bomb" | "boomerang" | "energy" | "fire" | "spark" | "missile";
   /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */
   readonly reflectable?: boolean;
+  /**
+   * It slows by `perFrame` every frame and is gone once slower than `minSpeed`
+   * (Plan 5, Task 9: Kirby's spit star). Q12, units a frame.
+   */
+  readonly drag?: { readonly perFrame: number; readonly minSpeed: number };
+  /**
+   * It carries the fighter its move spat, and lives only while one rides it
+   * (Plan 5, Task 9: Kirby's spit star; `engine/inhale.ts`).
+   */
+  readonly ridden?: boolean;
 }
 
 /**
@@ -433,6 +451,16 @@ export interface CounterDef {
   readonly freeze: number;
   /** The move slot the counterattack is. Its hitboxes deal the counter's damage (`MoveDef.counterDamage`). */
   readonly then: MoveSlot;
+}
+
+/**
+ * Kirby's Inhale (Plan 5, Task 9): its catch puts the fighter caught in his mouth
+ * (`swallowed`, Kirby `inhaleHold`), and from there these two moves let them out.
+ */
+export interface InhaleDef {
+  /** The move that swallows (B or down), and the one that spits (attack). */
+  readonly swallow: MoveSlot;
+  readonly spit: MoveSlot;
 }
 
 /**
@@ -652,6 +680,18 @@ export interface MoveDef {
    * P5-R7). A throw run from its imported script turns where its script says.
    */
   readonly turnAt?: number;
+  /** Its catch boxes swallow rather than grab (Plan 5, Task 9: Kirby's Inhale). See `InhaleDef`. */
+  readonly inhale?: InhaleDef;
+  /**
+   * A copied move's damage multiplier, on its hitboxes and its projectiles'
+   * (Plan 5, Task 9: Kirby's Copy Ability, ×1.2; `withCopyAbility`). Q12.
+   */
+  readonly copyDamage?: number;
+  /**
+   * The move frame on which the fighter in Kirby's mouth comes out, how, and for
+   * what damage (Plan 5, Task 9: the swallow and the spit; `resolveInhaleReleases`).
+   */
+  readonly release?: { readonly frame: number; readonly kind: "swallow" | "spit"; readonly damage: number };
   /** A jab that loops until the button is released. */
   readonly rapid?: boolean;
   /** Which move follows this one if the button is pressed again in time. */
@@ -1072,6 +1112,12 @@ export interface ProjectileState {
   charge: number;
   /** How many times it has been reflected. SmashWiki "Reflect": seven at most. Plan 5. */
   reflected: number;
+  /**
+   * Its damage multiplier from the move that launched it, Q12: Kirby's Copy
+   * Ability's ×1.2 on a copied special's projectile, `ONE` otherwise (Plan 5,
+   * Task 9; `MoveDef.copyDamage`). Knockback's `d` leaves it out.
+   */
+  damageMul: number;
 }
 
 export interface SmashBallState {

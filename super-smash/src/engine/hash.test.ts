@@ -76,6 +76,7 @@ function projectile(over: Partial<ProjectileState> = {}): ProjectileState {
     source: "link",
     charge: 0,
     reflected: 0,
+    damageMul: fx(1),
     ...over,
   };
 }
@@ -298,6 +299,7 @@ describe("hashState", () => {
     expect(withProjectile({ source: "samus" })).not.toBe(base);
     expect(withProjectile({ charge: fx(0.5) })).not.toBe(base);
     expect(withProjectile({ reflected: 1 })).not.toBe(base);
+    expect(withProjectile({ damageMul: fx(1.2) })).not.toBe(base);
   });
 
   it("distinguishes two fighters swapped between ports", () => {

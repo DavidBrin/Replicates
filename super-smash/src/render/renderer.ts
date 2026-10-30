@@ -449,8 +449,11 @@ export function drawDepth(f: FighterState): number {
     case "tumbleFall":
     case "grabbed":
     case "thrown":
-    // Carried on Donkey Kong's shoulders (Plan 5, Task 8).
+    // Carried on Donkey Kong's shoulders (Plan 5, Task 8), or swallowed or spat by
+    // Kirby (Task 9).
     case "cargoHeld":
+    case "swallowed":
+    case "spatStar":
     case "downed":
     case "shieldBroken":
       return 0;
@@ -461,8 +464,9 @@ export function drawDepth(f: FighterState): number {
     case "grabHold":
     case "pummel":
     case "throw":
-    // Carrying somebody (Plan 5, Task 8).
+    // Carrying somebody (Plan 5, Task 8), or holding them in a mouth (Task 9).
     case "cargoCarry":
+    case "inhaleHold":
       return 2;
     default:
       return 1;

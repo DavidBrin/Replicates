@@ -192,6 +192,9 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.stalling);
   x = c.helplessMove === null ? mixInt(x, 0) : mixString(x, c.helplessMove);
   x = mixInt(x, c.counterDamage);
+  x = mixString(x, c.copy);
+  x = mixInt(x, c.copyFrames);
+  x = mixInt(x, c.ride);
   return x;
 }
 
@@ -240,6 +243,7 @@ export function mixProjectile(h: number, p: ProjectileState): number {
   x = mixString(x, p.source);
   x = mixInt(x, p.charge);
   x = mixInt(x, p.reflected);
+  x = mixInt(x, p.damageMul);
   return x;
 }
 

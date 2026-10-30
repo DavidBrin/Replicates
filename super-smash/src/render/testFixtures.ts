@@ -121,6 +121,7 @@ export function makeProjectile(over: Partial<ProjectileState> = {}): ProjectileS
     source: "link",
     charge: 0,
     reflected: 0,
+    damageMul: ONE,
     ...over,
   };
 }

@@ -67,6 +67,11 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   cargoBthrow: "throw_f_b",
   cargoUthrow: "throw_f_hi",
   cargoDthrow: "throw_f_lw",
+  // Plan 5, Task 9: Kirby's swallow and spit (skyline-smash `lua_const.rs`:
+  // FIGHTER_KIRBY_STATUS_KIND_SPECIAL_N_SWALLOW, _SPIT; the motions' names are
+  // the replica's).
+  inhaleSwallow: "special_n_swallow",
+  inhaleSpit: "special_n_spit",
 };
 
 /**

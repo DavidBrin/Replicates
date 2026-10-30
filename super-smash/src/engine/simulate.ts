@@ -101,6 +101,21 @@ import { reflectProjectiles } from "./reflect";
 import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import { pinHeldFighters, ridesCaptor } from "./held";
 import {
+  COPY_GRACE_FRAMES,
+  HOLD_BLAST_REACH,
+  carryStarRider,
+  dropLostCopies,
+  dropRiderlessStars,
+  holdsMouthful,
+  inhaleMayCatch,
+  loseCopy,
+  maybeLoseCopy,
+  resolveInhaleReleases,
+  spawnDamageMul,
+  swallowVictim,
+  withCopyAbility,
+} from "./inhale";
+import {
   blastZoneKO,
   clampShiftToStage,
   ecbOf,
@@ -522,6 +537,12 @@ interface Candidate {
    * when nobody is, which no port equals.
    */
   readonly onlyPort: number | null;
+  /**
+   * Kirby's Copy Ability, ×1.2 on the damage dealt and not on knockback's `d`
+   * (Plan 5, Task 9: `MoveDef.copyDamage`, a copied projectile's `damageMul`); `ONE`
+   * otherwise.
+   */
+  readonly damageMul: number;
   suppressed: boolean;
 }
 
@@ -562,7 +583,11 @@ export function step(
   const s = cloneState(state);
   const events = emptyEvents();
   const stage = ctx.stage(s.stageId);
-  const defs = s.fighters.map((f) => ctx.fighter(f.defId));
+  // A Kirby with a Copy Ability runs the copied neutral special (Plan 5, Task 9).
+  const defs = s.fighters.map((f) => {
+    const def = ctx.fighter(f.defId);
+    return f.combat.copy === "" ? def : withCopyAbility(def, ctx.fighter(f.combat.copy));
+  });
   const bones = ctx.bones ?? LEGACY_BONE_TABLE;
   const bake = ctx.bake ?? LEGACY_BAKE;
   // A fighter's ECB this frame: from its bones (Plan 4), or Plan 2's box without a bake.
@@ -625,6 +650,8 @@ export function step(
     // so a fighter hit off a ledge serves its lockout during the hitlag too.
     if (f.intangible > 0) f.intangible -= 1;
     if (f.combat.grabImmune > 0) f.combat.grabImmune -= 1;
+    // The Copy Ability's grace counts up to its end and stops (Plan 5, Task 9).
+    if (f.combat.copy !== "" && f.combat.copyFrames < COPY_GRACE_FRAMES) f.combat.copyFrames += 1;
     if (f.invincible > 0) f.invincible -= 1;
     if (f.ledgeLockout > 0) f.ledgeLockout -= 1;
 
@@ -709,8 +736,9 @@ export function step(
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     if (frozen[i] || f.action === "dead") continue;
-    // A held fighter has no movement of its own: it is carried (5b below).
-    if (captorOf(s, f) !== null) continue;
+    // A held fighter has no movement of its own: it is carried (5b below), and a
+    // spat one rides its star (phase 6; Plan 5, Task 9).
+    if (captorOf(s, f) !== null || f.action === "spatStar") continue;
     applyMovement(f, intents[i], stateCtx(i));
     preIntegrate[i] = { x: f.x, y: f.y };
     integrate(f);
@@ -723,6 +751,7 @@ export function step(
     if (frozen[i] || f.action === "dead" || f.action === "respawnPlatform") continue;
     if (f.ledge !== null) continue; // hanging: the ledge holds you, not the floor
     if (captorOf(s, f) !== null) continue; // held: the captor's floor is all it touches
+    if (f.action === "spatStar") continue; // riding a star: where it flies, it goes
 
     const before = launchBefore(f);
     // The ECB from this frame's bones (Plan 4), or Plan 2's box without a bake.
@@ -750,9 +779,10 @@ export function step(
     }
 
     // Hands full: a carrier, or a thrower in a cargo throw it began in the air, takes
-    // no ledge (Plan 5, Task 8; a throw on the ground never reaches here).
-    // UNVERIFIED: no source says whether either can take one.
-    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw") {
+    // no ledge (Plan 5, Task 8; a throw on the ground never reaches here); nor does
+    // a full mouth, or the one held would be left in it on the ledge (Task 9).
+    // UNVERIFIED: no source says whether any of them can take one.
+    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw" && !holdsMouthful(f)) {
       const grab = findLedgeGrab(f, stage, s.frame, ecb.half, s.fighters);
       if (grab !== null) {
         const pos = ledgePosition(stage, grab, s.frame);
@@ -795,12 +825,15 @@ export function step(
   // After phase 5, so the captor's position for the frame is final whatever the
   // port order, and before the hit phase, so the box a pummel or a throw is
   // measured from is where the victim is.
-  // A fighter carried rides on top of its carrier instead (Plan 5, Task 8: `held.ts`).
+  // A fighter carried rides on top of its carrier instead (Plan 5, Task 8: `held.ts`),
+  // and one swallowed is inside Kirby: where he is, with no gap (Task 9).
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     const captor = f.action === "dead" ? null : captorOf(s, f);
     if (captor === null || ridesCaptor(f, captor)) continue;
-    holdAtCaptor(f, captor, bodyHalf(defs[captor.port], bake, bones), bodyHalf(defs[i], bake, bones), stage, s.frame);
+    const inside = f.action === "swallowed";
+    const captorHalf = inside ? 0 : bodyHalf(defs[captor.port], bake, bones);
+    holdAtCaptor(f, captor, captorHalf, inside ? 0 : bodyHalf(defs[i], bake, bones), stage, s.frame);
   }
   pinHeldFighters(s, (captor) => bodyTop(defs[captor.port], bake, bones));
 
@@ -810,6 +843,10 @@ export function step(
   // fists and arrows alike — goes through one clank pass and one hit pass.
   const projectilePrev = advanceProjectiles(s, ctx, stage);
   spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev);
+  // A swallow or a spit lets its mouthful out, onto this frame's star for a spit,
+  // and a star nobody rides is gone (Plan 5, Task 9).
+  resolveInhaleReleases(s, defs, (id) => ctx.fighter(id), frozen, beforeActionFrame, events);
+  dropRiderlessStars(s, (p) => projectileDefOf(ctx, p)?.ridden === true);
 
   const destroyed = new Set<number>();
   const candidates = gatherHitboxes(s, defs, prevPos, frozen, bones);
@@ -851,7 +888,9 @@ export function step(
 
   for (const f of s.fighters) {
     if (f.action === "dead" || f.hitlag > 0) continue;
-    const ko = blastZoneKO(f, stage);
+    // A Kirby with a mouthful meets his blast lines 4 units sooner, ahead and below
+    // (Plan 5, Task 9: SmashWiki "Kirby (SSBU)/Neutral special"), so in a Kirbycide he goes first.
+    const ko = blastZoneKO(f, stage, holdsMouthful(f) ? HOLD_BLAST_REACH : 0);
     if (ko === null) continue;
     events.kos.push({ port: f.port, x: f.x, y: f.y, kind: ko });
     f.stocks -= 1;
@@ -886,10 +925,15 @@ export function step(
     f.combat.storedCharge = 0;
     // A new stock is a new airtime: its one special stall is back (Plan 5).
     f.combat.specialStall = false;
+    // A KO costs Kirby his Copy Ability (Plan 5, Task 9: SmashWiki "Copy Ability",
+    // "he will also lose it upon being KO'd").
+    loseCopy(f);
     clearHitRecord(f);
     startAction(f, "dead");
     s.freezeFrames = KO_FREEZE_FRAMES;
   }
+  // What a lost Copy Ability spawned vanishes with it (Plan 5, Task 9).
+  dropLostCopies(s);
 
   /* -- 10. is the match over? ---------------------------------------------- */
 
@@ -1032,6 +1076,7 @@ function gatherHitboxes(
         chargeScale: f.action === "attack" ? chargeMultiplier(f.charge) : ONE,
         destroyOnHit: false,
         onlyPort: run.state.catchOnly ? f.grabbing : null,
+        damageMul: defs[i].moves[f.move]?.copyDamage ?? ONE,
         suppressed: false,
       });
     }
@@ -1065,6 +1110,8 @@ function advanceProjectiles(s: GameState, ctx: SimContext, stage: StageDef): Pre
     const owner = s.fighters[p.owner] ?? null;
     const moved = advanceProjectile(p, def, stage, owner, s.frame);
     prev.set(p.instanceId, { x: moved.prevX, y: moved.prevY });
+    // A spat fighter rides its star, and is let go when it is gone (Plan 5, Task 9).
+    if (def.ridden === true) carryStarRider(s, p, moved.alive, stage);
     if (moved.alive) survivors.push(p);
   }
   s.projectiles = survivors;
@@ -1108,8 +1155,12 @@ function spawnDueProjectiles(
       // The script says which and when; what flies is still the move's `ProjectileDef`.
       const def = findProjectileDef(defs[i], cmd.id);
       if (def === undefined) continue;
-      const sc = defs[i].moves[f.move]?.specialCharge;
-      const p = spawnProjectile(def, f, s.nextProjectileId, defs[i].id, sc?.frames);
+      const move = defs[i].moves[f.move];
+      const sc = move?.specialCharge;
+      // A copied neutral special fires the copied fighter's projectile, at its ×1.2
+      // (Plan 5, Task 9, ruling R-T9a): its definition is looked up by `source`.
+      const source = f.combat.copy !== "" && f.move === "neutralB" ? f.combat.copy : defs[i].id;
+      const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move));
       s.nextProjectileId += 1;
       s.projectiles.push(p);
       prev.set(p.instanceId, { x: p.x, y: p.y });
@@ -1144,6 +1195,7 @@ function appendProjectileCandidates(
       chargeScale: p.chargeScale,
       destroyOnHit: def.destroyOnHit === true,
       onlyPort: null,
+      damageMul: p.damageMul,
       suppressed: false,
     });
   }
@@ -1290,6 +1342,10 @@ function resolveHits(
       // UNVERIFIED: the ledge's getup, roll, attack and jump too, which hold the
       // ledge (`ledge`) until they end, pinned to it as the hang is.
       if (c.hitbox.windbox === true && victim.ledge !== null) continue;
+      // Kirby's Inhale catches nobody on a ledge (ruling P5-R11: the Inhale alone; an
+      // ordinary grab still pulls a hanging fighter off, D56), no Kirby with someone
+      // in his mouth, and nobody once its own mouth is full (Plan 5, Task 9: `inhaleMayCatch`).
+      if (c.hitbox.grabbing === true && isInhale(defs[c.attacker], c) && !inhaleMayCatch(s.fighters[c.attacker], victim)) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
       // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
       // holds alone, and hits anyone else it reaches. SmashWiki "Throw"
@@ -1375,7 +1431,7 @@ function resolveHits(
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
-        applyHit(s, attacker, victim, defs[v], c, contact, intents[v], events);
+        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
         // on contact, whatever else the hit does: a launch, a launch it cannot
         // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
@@ -1476,7 +1532,7 @@ function resolveThrows(
       const v = victim.port;
       const at = { x: victim.x, y: victim.y };
       const own = f.hitlag;
-      applyHit(s, f, victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events);
+      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events);
       f.hitlag = own;
     }
     for (const flash of run.state.flashed) {
@@ -1521,6 +1577,11 @@ function isInvincible(f: FighterState, def: FighterDef): boolean {
   return release !== null && moveFrameOf(f.actionFrame) <= release;
 }
 
+/** Is `c` a box of a move that inhales (`MoveDef.inhale`, Plan 5, Task 9: Kirby's neutral special)? */
+function isInhale(def: FighterDef, c: Candidate): boolean {
+  return c.projectile === null && c.slot !== null && def.moves[c.slot]?.inhale !== undefined;
+}
+
 /** A throw's own hit as a hit candidate: no geometry, no projectile, the fighter held its only target. */
 function throwCandidate(attacker: number, hitbox: Hitbox, slot: MoveSlot, at: Point): Candidate {
   return {
@@ -1537,6 +1598,7 @@ function throwCandidate(attacker: number, hitbox: Hitbox, slot: MoveSlot, at: Po
     chargeScale: ONE,
     destroyOnHit: false,
     onlyPort: null,
+    damageMul: ONE,
     suppressed: false,
   };
 }
@@ -2125,6 +2187,7 @@ function applyHeldHit(
   const lag = computeHitlag(swingDamage(attacker, c), { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
   enterStaleQueue(attacker, c.slot, false);
   victim.damage += damage;
+  maybeLoseCopy(s, victim, damage);
   victim.airDodged = false;
   victim.combat.specialStall = false;
   freezeVictim(victim, lag);
@@ -2188,6 +2251,7 @@ function shieldPushDirection(c: Candidate, attacker: FighterState, victim: Fight
 function applyHit(
   s: GameState,
   attacker: FighterState,
+  attackerDef: FighterDef,
   victim: FighterState,
   victimDef: FighterDef,
   c: Candidate,
@@ -2249,6 +2313,12 @@ function applyHit(
     // (SmashWiki "Ledge"), and being grabbed is neither.
     if (victim.ledge !== null) victim.ledgeLockout = LEDGE_REGRAB_LOCKOUT_FRAMES;
     victim.ledge = null;
+    // Kirby's Inhale swallows rather than grabs (Plan 5, Task 9): the same link,
+    // its own timer and statuses (`swallowVictim`).
+    if (isInhale(attackerDef, c)) {
+      swallowVictim(attacker, victim);
+      return;
+    }
     startAction(victim, "grabbed");
     return;
   }
@@ -2277,6 +2347,12 @@ function applyHit(
     damage = mul(damage, ONE_ON_ONE_MULTIPLIER);
     kbDamage = mul(kbDamage, ONE_ON_ONE_MULTIPLIER);
   }
+  // Kirby's Copy Ability (Plan 5, Task 9): ×1.2 on the damage dealt, a shield's
+  // included, and not on knockback's `d` (SmashWiki "Copy Ability": "knockback is
+  // not affected"; "Inhale (Kirby)": it "raises damage percent, but knockback only
+  // reflects the change in percent"; Rollout "instantly break[s] a shield" with
+  // it). UNVERIFIED: that hitlag leaves it out, as it leaves the 1v1 bonus out.
+  damage = mul(damage, c.damageMul);
 
   // A move joins the staleness queue once per swing, on its first connection —
   // a shield hit included, marked so it stales at 0.85 (SmashWiki "Stale-move
@@ -2345,6 +2421,8 @@ function applyHit(
 
   /* ---- the damage path ---- */
   victim.damage += damage;
+  // A Kirby hit may lose his Copy Ability (Plan 5, Task 9: `maybeLoseCopy`).
+  maybeLoseCopy(s, victim, damage);
 
   /* ---- the super-armour path ---- */
   //

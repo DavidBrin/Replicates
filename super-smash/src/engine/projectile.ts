@@ -86,6 +86,8 @@ export function projectileChargeScale(def: ProjectileDef, charge: number, frames
  * `offsetX` and `vx` are facing-relative, exactly like a hitbox's offset, so the
  * roster authors one Fireball and it comes out of the correct hand in both
  * directions. `vy` is absolute: up is up whichever way you are looking.
+ * `damageMul` is the launching move's own damage multiplier (Plan 5, Task 9:
+ * a copied special's ×1.2, `MoveDef.copyDamage`).
  */
 export function spawnProjectile(
   def: ProjectileDef,
@@ -93,6 +95,7 @@ export function spawnProjectile(
   instanceId: number,
   source: string = owner.defId,
   chargeFrames: number = SMASH_CHARGE_MAX,
+  damageMul: number = ONE,
 ): ProjectileState {
   const facing = owner.facing >= 0 ? 1 : -1;
   const chargeScale = projectileChargeScale(def, owner.charge, chargeFrames);
@@ -119,6 +122,7 @@ export function spawnProjectile(
     source,
     charge,
     reflected: 0,
+    damageMul,
   };
 }
 
@@ -180,6 +184,15 @@ export function advanceProjectile(
     p.returning = true;
   }
 
+  // A star slows, and is gone below its least speed (Plan 5, Task 9: Kirby's spit,
+  // SmashWiki "Kirby (SSBU)/Neutral special", "The star's speed decreases by 0.05
+  // per frame, and it releases the target when its speed drops below 0.4").
+  // UNVERIFIED: that a frame slows it before it moves.
+  if (def.drag !== undefined) {
+    const speed = abs(p.vx) - def.drag.perFrame;
+    if (speed < def.drag.minSpeed) return { alive: false, prevX, prevY };
+    p.vx = p.vx >= 0 ? speed : -speed;
+  }
   p.vy -= def.gravity;
   p.x += p.vx;
   p.y += p.vy;
@@ -272,5 +285,6 @@ export function cloneProjectile(p: ProjectileState): ProjectileState {
     source: p.source,
     charge: p.charge,
     reflected: p.reflected,
+    damageMul: p.damageMul,
   };
 }
