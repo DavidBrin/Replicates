@@ -43,6 +43,15 @@ export const BAKE_TIMEOUT_MS = 30_000;
 /** On the deadline. Trying again may well work, so it says so. */
 const TOO_SLOW = "The fighters' animation data took too long to download. Check your connection and try again.";
 
+/**
+ * The request failed before any answer (offline, DNS, a refused connection),
+ * or its body failed partway. The browser's own words for either ("Failed to
+ * fetch", "network error") name nothing a player can do; they stay on the
+ * error as its `cause`, for the logs.
+ */
+const UNREACHABLE = "Couldn't reach the fighters' animation data. Check your connection and try again.";
+const BROKE_OFF = "The fighters' animation data stopped downloading partway. Check your connection and try again.";
+
 /** gzip's magic number, the first two bytes of every gzip file (RFC 1952 §2.3.1). */
 const isGzip = (bytes: Uint8Array): boolean => bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 
@@ -54,10 +63,11 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 /**
- * `BAKE_URL`'s body, every byte of it, or a rejection: the request's own, or
- * `TOO_SLOW` once `BAKE_TIMEOUT_MS` has passed since asking, whether the
- * request never answered or its body never closed. On the deadline the fetch
- * is aborted, which ends its body's stream too.
+ * `BAKE_URL`'s body, every byte of it, or a rejection in a sentence a player
+ * can read: `UNREACHABLE` or `BROKE_OFF` when the network fails, the HTTP
+ * status when the server refuses, or `TOO_SLOW` once `BAKE_TIMEOUT_MS` has
+ * passed since asking, whether the request never answered or its body never
+ * closed. On the deadline the fetch is aborted, which ends its body's stream too.
  */
 async function download(fetchFn: FetchLike): Promise<Uint8Array> {
   const controller = new AbortController();
@@ -69,9 +79,18 @@ async function download(fetchFn: FetchLike): Promise<Uint8Array> {
     }, BAKE_TIMEOUT_MS);
   });
   const read = (async () => {
-    const res = await fetchFn(BAKE_URL, { signal: controller.signal });
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await fetchFn(BAKE_URL, { signal: controller.signal });
+    } catch (e) {
+      throw new Error(UNREACHABLE, { cause: e });
+    }
     if (!res.ok || res.body === null) throw new Error(`Could not load the fighters' animation data (HTTP ${res.status}).`);
-    return new Uint8Array(await new Response(res.body).arrayBuffer());
+    try {
+      return new Uint8Array(await new Response(res.body).arrayBuffer());
+    } catch (e) {
+      throw new Error(BROKE_OFF, { cause: e });
+    }
   })();
   // What the abort makes of a download the deadline already ended is nobody's to hear.
   read.catch(() => {});
@@ -100,7 +119,8 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 /**
  * Fetch, verify and decode the bake. Rejects with a sentence a player can read:
- * the file missing, too slow to arrive (`BAKE_TIMEOUT_MS`), anything that is
+ * the file missing, unreachable or cut off by the network, too slow to arrive
+ * (`BAKE_TIMEOUT_MS`), anything that is
  * not exactly this build's bake (another build's, cut short, corrupt, or a page
  * that is not a bake at all), or a page that cannot check it. The length and
  * digest are checked before the decoder reads a byte.

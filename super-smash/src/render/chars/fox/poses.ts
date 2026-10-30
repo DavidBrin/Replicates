@@ -742,7 +742,8 @@ const fsmash: PoseClip = {
  * head is at 13.10. Round one worked round it by pitching the torso back and
  * calling it done, and the capture shows exactly what that buys — a fighter
  * sitting down in mid-air with a boot out at ear height, carried entirely by
- * the swing arc the renderer paints over him. Lengthening the leg is not the
+ * the swing arc the 2D renderer painted over him (the swing arcs went with the
+ * 2D figure in Plan 4). Lengthening the leg is not the
  * answer either: it would need +1.9 units, which is a stork, and every unit of
  * it has to be repaid in `root` or he stands through the floor in all fifty
  * shared clips.

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -7,6 +7,7 @@ import { localBuild } from "@/game/onlineConfig";
 import { useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession } from "@/net/online/session";
+import { NO_WEBGL } from "@/render3d/webgl";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
 import type { Role, RoomIntent } from "@/net/signalProtocol";
 import { OnlineLobby, type OpenSession } from "./OnlineLobby";
@@ -63,15 +64,62 @@ async function join(code: string) {
   });
 }
 
+/**
+ * WebGL, stood in for: the lobby asks a scratch canvas for a WebGL 2 context
+ * before it opens a room (jsdom has none). By default there is one; a test can
+ * take it away.
+ */
+let getContext: MockInstance;
+const WEBGL2 = { getExtension: () => ({ loseContext: () => {} }) };
+
 beforeEach(() => {
   leaveOnline();
   routerMock.push.mockClear();
   bake.next = null;
   bake.calls = 0;
+  getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) => (kind === "webgl2" ? WEBGL2 : null)) as never);
 });
 
 afterEach(() => {
   window.history.replaceState({}, "", "/");
+  getContext.mockRestore();
+});
+
+describe("OnlineLobby, WebGL before a room (part 1 re-review)", () => {
+  // A browser that cannot draw the match must not open a room: the other player would wait on a match that never
+  // starts until their link monitor gives up (about 10 s). It is refused here, in the match's own sentence.
+  it("refuses to create a room in a browser that cannot draw the 3D world, before the bake or a room is asked for", async () => {
+    getContext.mockReturnValue(null);
+    const { openSession } = harness();
+    await act(async () => {});
+    const asked = bake.calls;
+    await create();
+    expect(screen.getByRole("alert")).toHaveTextContent(NO_WEBGL);
+    expect(openSession).not.toHaveBeenCalled();
+    expect(bake.calls).toBe(asked);
+    expect(getContext).toHaveBeenCalledWith("webgl2");
+    expect(useOnlineStore.getState().status).toBe("error");
+    expect(screen.getByRole("button", { name: /create room/i })).toBeInTheDocument();
+  });
+
+  it("refuses to join one too", async () => {
+    getContext.mockReturnValue(null);
+    const { openSession } = harness();
+    await join("QRST");
+    expect(screen.getByRole("alert")).toHaveTextContent(NO_WEBGL);
+    expect(openSession).not.toHaveBeenCalled();
+  });
+
+  it("asks again on every try: with WebGL back (acceleration turned on), the next Create opens the room", async () => {
+    getContext.mockReturnValue(null);
+    const { openSession } = harness();
+    await create();
+    expect(openSession).not.toHaveBeenCalled();
+    getContext.mockImplementation(((kind: string) => (kind === "webgl2" ? WEBGL2 : null)) as never);
+    await create();
+    expect(openSession).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("OnlineLobby, the bake first (Plan 4)", () => {

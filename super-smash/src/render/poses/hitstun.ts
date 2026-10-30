@@ -41,9 +41,10 @@
  * in the game. It gets drawn like one.
  *
  * The renderer covers the impact itself and this clip must not restate it:
- * `hitlagShake` vibrates the body every frame of the freeze and `squashFor`
- * stretches it 0.86 × 1.16 for the same window. The pose's own `scaleY` is a
- * small addition on top of that, not the effect. And `blend.ts` classes hitstun
+ * `hitlagShake` vibrates the body every frame of the freeze. The 2D figure also
+ * stretched it 0.86 × 1.16 for the same window with `squashFor`, which the
+ * model draws without since Plan 4 (D57). The pose's own `scaleY` is a small
+ * addition on top of that, not the effect. And `blend.ts` classes hitstun
  * as *imposed* and refuses to cross-fade into it, so the first key lands on the
  * frame of contact with nothing eased away — it is authored as the hit, not as
  * a departure from whatever stance preceded it.

@@ -66,6 +66,31 @@ describe("loading the bake in the browser", () => {
     expect((err as Error).cause).toBeDefined();
   });
 
+  // The browser's own words for a network failure ("Failed to fetch", "network error") name nothing a player can
+  // do. Both ways it fails are said in the deadline's style, and the browser's error stays attached for the logs
+  // (part 1 re-review).
+  it("says the data could not be reached when the request fails at once, keeping the browser's error as the cause", async () => {
+    const offline = new TypeError("Failed to fetch");
+    const err = await fetchBake(async () => {
+      throw offline;
+    }).catch((e: unknown) => e);
+    expect((err as Error).message).toBe("Couldn't reach the fighters' animation data. Check your connection and try again.");
+    expect((err as Error).cause).toBe(offline);
+  });
+
+  it("says the download broke off when the body fails partway, keeping the stream's error as the cause", async () => {
+    const reset = new TypeError("network error");
+    const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
+      start(c) {
+        c.enqueue(new Uint8Array(GZ.subarray(0, 1024)));
+        c.error(reset);
+      },
+    });
+    const err = await fetchBake(async () => ({ ok: true, status: 200, body })).catch((e: unknown) => e);
+    expect((err as Error).message).toBe("The fighters' animation data stopped downloading partway. Check your connection and try again.");
+    expect((err as Error).cause).toBe(reset);
+  });
+
   // The digest keeps unverified bytes away from the decoder: a file of the right
   // length whose header is wrong is refused as not this build's, before the decoder
   // ever reads it (and says "not a David-Smash bake").
@@ -173,6 +198,30 @@ describe("a bake that does not arrive in time", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect((seen.error as Error).message).toBe(TOO_SLOW);
     expect(signal?.aborted).toBe(true);
+  });
+
+  it("hands the deadline's signal to the browser's own fetch when no fetch is given (part 1 re-review)", async () => {
+    // What the game calls: `fetchBake()` with the default, the platform's fetch. Without the signal the deadline
+    // would still reject, but the request would go on downloading in the background after the player was told.
+    const asked: [string, RequestInit | undefined][] = [];
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      asked.push([url, init]);
+      return new Promise(() => {});
+    });
+    try {
+      const seen = watch(fetchBake());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(asked).toHaveLength(1);
+      const [url, init] = asked[0];
+      expect(url).toBe("/bake/roster.bin.gz");
+      expect(init?.cache).toBe("no-cache");
+      expect(init?.signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS);
+      expect((seen.error as Error).message).toBe(TOO_SLOW);
+      expect(init?.signal?.aborted).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("leaves no deadline running once the bake is in, or once the file is refused", async () => {

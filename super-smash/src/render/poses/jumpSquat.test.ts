@@ -2,9 +2,10 @@
  * The jumpsquat is three frames long, so there are only three drawings to be
  * right or wrong about, and every test here is about one of them as it reaches
  * the screen: sampled through `samplePoseForFighter` at the frames the state
- * machine actually produces, resolved onto the rig, and squashed by the same
- * `squashFor` the renderer applies. Angles in the file are not evidence — a key
- * can be perfect and be shown for none of the three frames.
+ * machine actually produces, resolved onto the rig, and squashed by `squashFor`
+ * as the 2D figure drew them (the model draws without that squash since Plan 4,
+ * D57; the clip was authored with it). Angles in the file are not evidence — a
+ * key can be perfect and be shown for none of the three frames.
  */
 
 import { describe, expect, it } from "vitest";

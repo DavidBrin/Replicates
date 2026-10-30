@@ -14,10 +14,11 @@
  * short one is a bounce; the long one is the fighter being *stuck*, and that
  * is the thing the animation has to say.
  *
- * `squashFor()` in `characterArt.ts` already multiplies an impact squash onto
- * both — 1.22× wide, 0.8× tall on the contact frame, linearly gone by frame six
- * — so neither clip restates it, and the scale keys below are all about
- * outrunning its decay or replacing it once it has expired.
+ * `squashFor()` in `characterArt.ts` multiplied an impact squash onto both
+ * when the 2D figure drew them — 1.22× wide, 0.8× tall on the contact frame,
+ * linearly gone by frame six — so neither clip restates it, and the scale keys
+ * below are all about outrunning its decay or replacing it once it has
+ * expired. The model draws without that squash since Plan 4 (D57).
  *
  * Two consequences shape everything else. The squash is front-loaded, so the
  * contact frame is *already* the most compressed drawing and the legs should

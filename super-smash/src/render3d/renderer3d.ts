@@ -57,6 +57,7 @@ import { hitFlashAmount } from "@/render/vfx";
 import { fighterPoser } from "./bake/bake";
 import { applySideCamera, createSideCamera } from "./camera3d";
 import { createFighter3D, type Fighter3D } from "./fighter3d";
+import { NO_WEBGL } from "./webgl";
 import type { ModelCache } from "./models/loader";
 import type { SkeletonFile } from "./skeleton/skeleton";
 import { createStage3D } from "./stage3d";
@@ -116,12 +117,11 @@ export interface Renderer3DOptions {
 }
 
 /**
- * What the player reads when the page cannot draw the 3D world at all: WebGL
- * switched off, blocked, or missing (final review M1). three's own message
- * ("THREE.WebGLRenderer: Error creating WebGL context.") names nothing a
- * player can do about it. The error's `cause` keeps three's.
+ * What `createRenderer3D` throws when the page cannot draw the 3D world at all
+ * (`webgl.ts`, where the online lobby reads it too, without three). The error's
+ * `cause` keeps three's own.
  */
-export const NO_WEBGL = "This browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or try another browser.";
+export { NO_WEBGL };
 
 /**
  * How long a lost WebGL context may stay lost before the page is told

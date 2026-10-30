@@ -22,9 +22,11 @@ import { P, type PoseClip } from "./clip";
  * universal 3 created and then had to sell a short-hop attack macro to soften —
  * so it can be loaded but not committed.
  *
- * Two things constrain the numbers. `squashFor` already multiplies 1.1/0.88
- * onto the whole state, so the break rides that untouched, only the bottom
- * deepens it, and only the unload takes it back past neutral into a stretch.
+ * Two things constrain the numbers. The clip was authored with `squashFor`'s
+ * 1.1/0.88 multiplied onto the whole state, as the 2D figure drew it (the model
+ * draws without it since Plan 4, D57), so the break rides that untouched, only
+ * the bottom deepens it, and only the unload takes it back past neutral into a
+ * stretch.
  * And the feet stay flat rather than up on the toes: eight rigs share this clip
  * with foot bones anywhere from 1.0 to 1.6 units long, and pointing the foot
  * downwards spends that difference on depth — half a unit of Kirby through the

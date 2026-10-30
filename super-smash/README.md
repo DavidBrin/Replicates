@@ -70,7 +70,8 @@ also need Node 24.2 or later, for `import.meta.main`.)
 
 A match needs **WebGL**. Without it no match starts, and the page says so: "This browser can't
 draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or try another
-browser."
+browser." Online, the lobby asks before it creates or joins a room and refuses in the same
+words, so the other player is never left waiting on a match this browser cannot draw.
 
 Online play needs the Worker as well: `pnpm preview` builds the static export and serves it
 with the Worker on <http://localhost:8787>. Open it in two browsers, then Online → Create room in

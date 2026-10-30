@@ -11,6 +11,7 @@ import { bindSession, leaveOnline, roomErrorMessage, useOnlineStore, type Online
 import { OnlineSession, setActiveSession, type OnlineSessionLike, type OpenSessionOptions } from "@/net/online/session";
 import { makeRoomCode, normalizeRoomCode, roomCodeProblem } from "@/net/roomCode";
 import type { Role, RoomIntent } from "@/net/signalProtocol";
+import { NO_WEBGL, canDrawWebGL } from "@/render3d/webgl";
 
 export type OpenSession = (roomCode: string, intent: RoomIntent, options: OpenSessionOptions) => Promise<OnlineSessionLike>;
 
@@ -89,10 +90,19 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
       config: null,
       hostStage: null,
     });
-    // The bake first (ruling R2): installing it changes this build's engine
-    // fingerprint, and the first `hello` the session says must already carry
-    // the bake's, or the other side refuses this one for good. One that cannot
-    // load is this screen's error, in its own sentence; no room is opened.
+    // WebGL before anything (D57: a match is drawn only in 3D). A browser that
+    // cannot draw the match opens no room: the other player would wait on a
+    // match that never starts until their link monitor gave up, about ten
+    // seconds. Asked on every try, so turning acceleration on and trying again works.
+    if (!canDrawWebGL()) {
+      useOnlineStore.getState().patch({ status: "error", error: NO_WEBGL });
+      return;
+    }
+    // Then the bake, before the session (ruling R2): installing it changes this
+    // build's engine fingerprint, and the first `hello` the session says must
+    // already carry the bake's, or the other side refuses this one for good. One
+    // that cannot load is this screen's error, in its own sentence; no room is
+    // opened.
     try {
       await ensureBakeInstalled();
     } catch (e) {

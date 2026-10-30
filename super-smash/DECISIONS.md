@@ -3018,15 +3018,20 @@ against the model manifest.
 - *WebGL is required.* Task 23 removed the 2D figure, so there is no Canvas 2D fallback: a
   browser without WebGL gets no match, and the page says why in our words (`NO_WEBGL`: "This
   browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or
-  try another browser."), not three.js's. A context the browser loses and has not given back
-  after 5 s (`CONTEXT_RESTORE_WAIT_MS`, a judgement, UNVERIFIED) brings up a notice over the match,
-  which keeps running: a reload brings the picture back (online, it also leaves the match).
+  try another browser."), not three.js's. Online, the lobby asks a scratch canvas for WebGL 2
+  before it creates or joins a room (`render3d/webgl.ts`, three-free) and refuses in the same
+  words, so the other player is not left waiting on a match that never starts until their link
+  monitor gives up, about 10 s. A context the browser loses and has not given back after 5 s
+  (`CONTEXT_RESTORE_WAIT_MS`, a judgement, UNVERIFIED) brings up a notice over the match, which
+  keeps running: a reload brings the picture back (online, it also leaves the match).
 - *The bake download has a deadline.* The request and its body share `BAKE_TIMEOUT_MS`, 30 s (the
   1.8 MB file through a 0.5 Mbit/s link); past it the download is aborted with "The fighters'
   animation data took too long to download. Check your connection and try again.", in the lobby
-  (which offers Create and Join again) or over `/play`, and the next try asks afresh. A bake an
-  edge has already decoded (no gzip header) is checked against the same digest as it is (codex,
-  plan-final).
+  (which offers Create and Join again) or over `/play`, and the next try asks afresh. A request
+  that fails outright, or a body that breaks off, is said in the same style ("Couldn't reach the
+  fighters' animation data…", "…stopped downloading partway…"), with the browser's own error kept
+  as the cause. A bake an edge has already decoded (no gzip header) is checked against the same
+  digest as it is (codex, plan-final).
 - *The plan's "layering list stays unchanged"* (its lines 43 and 9464) is stale: Task 2's fix
   round added `render3d` to `layering.test.ts`'s banned layers and Task 15 added `three` to its
   banned packages, and the plan-final wave bans three.js's add-ons (`three-*`) and React Three

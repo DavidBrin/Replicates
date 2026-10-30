@@ -15,7 +15,8 @@
  * ## Why lying still is not still enough
  *
  * `onLanded` sends a tumbling fighter straight to `downed`, never through
- * `land` — and `squashFor` only squashes for `land`/`landingLag`. So nothing
+ * `land` — and `squashFor` squashed only `land`/`landingLag` when the 2D figure
+ * drew it (the model draws no squash at all since Plan 4, D57). So nothing
  * outside this clip gives the arrival any weight: without an impact key the
  * fighter is simply *already* on the floor, in the identical drawing, for forty
  * frames. Two thirds of a second of one drawing is long enough to read as the
