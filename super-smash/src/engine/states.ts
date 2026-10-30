@@ -1214,6 +1214,12 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   f.jumpsUsed = 0;
   f.airDodged = false;
   f.combat.specialStall = false;
+  // Plan 5, Task 10: on the ground the wall jumps start again (SmashWiki "Wall
+  // jump", https://www.ssbwiki.com/Wall_jump: "each one performed without touching
+  // the ground"), and no wall is in reach.
+  f.combat.wallJumps = 0;
+  f.combat.wallSide = 0;
+  f.combat.wallFrames = 0;
   f.airTime = 0;
   // The hop is over, so the next one decides its own height and its own damage.
   f.shortHop = false;
@@ -1377,6 +1383,12 @@ export function grabLedge(
   // ledge; a ledge grab gives back the air dodge (SmashWiki "Air dodge"). For
   // Mario's Cape, Super Mario Wiki "Cape" names landing only.
   f.combat.specialStall = false;
+  // Plan 5, Task 10: and the wall jumps, as the midair jumps are. UNVERIFIED:
+  // SmashWiki "Wall jump" names only the ground; a ledge restores what a landing
+  // does here. The wall it hangs by is no wall to jump from.
+  f.combat.wallJumps = 0;
+  f.combat.wallSide = 0;
+  f.combat.wallFrames = 0;
   f.fastFalling = false;
   f.shortHop = false;
   f.ledgeRegrabs += 1;

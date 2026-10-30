@@ -195,6 +195,9 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixString(x, c.copy);
   x = mixInt(x, c.copyFrames);
   x = mixInt(x, c.ride);
+  x = mixInt(x, c.wallSide);
+  x = mixInt(x, c.wallFrames);
+  x = mixInt(x, c.wallJumps);
   return x;
 }
 

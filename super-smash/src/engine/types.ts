@@ -772,6 +772,13 @@ export interface FighterAttributes {
   readonly airJumpVelocity: number;
   readonly jumps: number;
   readonly canWallJump: boolean;
+  /**
+   * How high a wall jump rises, fixed (Plan 5, Task 10; SmashWiki "Wall jump",
+   * https://www.ssbwiki.com/Wall_jump, "Wall jump height rankings", Ultimate).
+   * Absent: the fighter's air jump height, UNVERIFIED, for the wall tech jumps of
+   * the fighters with no published height (`wallJump.ts`).
+   */
+  readonly wallJumpHeight?: number;
   /** Half-width and height of the fighter's hurtbox, fixed. */
   readonly width: number;
   readonly height: number;

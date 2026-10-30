@@ -60,6 +60,9 @@ const legacy: FighterDef = {
     airJumpVelocity: fx(4.126),
     jumps: 2,
     canWallJump: true,
+    // SmashWiki "Wall jump" (https://www.ssbwiki.com/Wall_jump), "Wall jump height
+    // rankings", Ultimate: 22.05 (revision 2065734, 2026-10-25, the corrected table).
+    wallJumpHeight: fx(22.05),
     width: fx(HALF_WIDTH),
     height: fx(HEIGHT),
     jumpSquatFrames: 3,

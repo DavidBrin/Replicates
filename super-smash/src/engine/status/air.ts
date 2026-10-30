@@ -10,6 +10,7 @@ import { JUMP_SQUAT_FRAMES } from "../constants";
 import { kineticGroundJump, kineticSetY } from "../kinetic";
 import { fighterParams } from "../params";
 import { fastFallVelocity } from "../physics";
+import { tryWallJump } from "../wallJump";
 import {
   LANDING_ANIMATION_FRAMES,
   bufferPress,
@@ -61,6 +62,8 @@ export function airMain(f: FighterState, intent: Intent, ctx: StateContext): voi
     startAction(f, "land");
     return;
   }
+  // A fresh press away from a wall just touched (Plan 5, Task 10: `wallJump.ts`).
+  if (tryWallJump(f, intent, ctx)) return;
   if (handleActionable(f, intent, ctx)) return;
   fastFallOnPress(f, intent, ctx);
   if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");

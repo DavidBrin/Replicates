@@ -18,6 +18,7 @@ import {
 } from "../constants";
 import { kineticSetX, kineticSetY } from "../kinetic";
 import { bufferPress, endStatus, handleActionable, startAction } from "../states";
+import { tryWallTechJump } from "../wallJump";
 import type { FighterStatus } from "./kind";
 
 export const STATUS_PASSIVE: FighterStatus = {
@@ -51,6 +52,9 @@ export const STATUS_PASSIVE_WALL: FighterStatus = {
     if (f.actionFrame <= TECH_WALL_HOLD) kineticSetY(f, 0);
   },
   main(f, intent, ctx) {
+    // A jump input in its first frames is a wall tech jump (Plan 5, Task 10:
+    // `wallJump.ts`), before anything else can read the press.
+    if (tryWallTechJump(f, intent, ctx)) return;
     // Free to act from `TECH_WALL_INTERRUPT` on, its last frame included: a press
     // there acts at once rather than being dropped by the change to `fall`.
     if (f.actionFrame >= TECH_WALL_INTERRUPT && handleActionable(f, intent, ctx)) return;

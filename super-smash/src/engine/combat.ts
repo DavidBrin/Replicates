@@ -173,6 +173,22 @@ export interface CombatState {
    * (`STATUS_SPAT_STAR`'s `end`: the flight's end, the star's, a KO).
    */
   ride: number;
+  /**
+   * Plan 5, Task 10: the wall this fighter last touched in the air (`wallJump.ts`),
+   * 1 to its right, −1 to its left, 0 for none. Set by the collision when a wall
+   * stops the fighter (`CollisionOutcome.wall`), forgotten once neither a wall
+   * jump nor a wall tech jump could use it, and by a landing, a ledge, a hit, a
+   * grab, a KO and the jump off it.
+   */
+  wallSide: number;
+  /** Plan 5, Task 10: frames since that touch; 0 with no wall. */
+  wallFrames: number;
+  /**
+   * Plan 5, Task 10: wall jumps since this fighter last touched the ground, each
+   * 0.96× the one before (SmashWiki "Wall jump"). Reset by the ground (a landing,
+   * a tech, being held over it), a ledge and a KO; not by a hit or a grab.
+   */
+  wallJumps: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -207,6 +223,9 @@ export function emptyCombat(): CombatState {
     copy: "",
     copyFrames: 0,
     ride: 0,
+    wallSide: 0,
+    wallFrames: 0,
+    wallJumps: 0,
   };
 }
 
@@ -242,5 +261,8 @@ export function cloneCombat(c: CombatState): CombatState {
     copy: c.copy,
     copyFrames: c.copyFrames,
     ride: c.ride,
+    wallSide: c.wallSide,
+    wallFrames: c.wallFrames,
+    wallJumps: c.wallJumps,
   };
 }

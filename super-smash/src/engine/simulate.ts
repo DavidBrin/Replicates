@@ -100,6 +100,7 @@ import { chargedHitbox } from "./specialCharge";
 import { reflectProjectiles } from "./reflect";
 import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import { pinHeldFighters, ridesCaptor } from "./held";
+import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -653,6 +654,9 @@ export function step(
     // this phase, so phase 5's collision sees a press made on the frame of
     // landing itself (Plan 3, Task 12).
     updateTechInput(f, intent);
+    // A wall touch counts for a few frames, and not at all on the ground (Plan 5,
+    // Task 10: `wallJump.ts`). Through a freeze too, as the tech input does.
+    ageWallContact(f);
 
     // Before the hitlag branch on purpose: these count down through a freeze,
     // so a fighter hit off a ledge serves its lockout during the hitlag too.
@@ -775,6 +779,9 @@ export function step(
       // The catch statuses stop at the edge instead of walking off it.
       { cliffStop: isCatchStatus(f.action), ecb },
     );
+    // A wall that stopped the body is remembered for a wall jump, or a wall tech
+    // jump (Plan 5, Task 10), before the tech below reads it.
+    noteWallContact(f, outcome.wall);
     // A tumbling body that meets a surface techs or bounces (Plan 3, Task 12);
     // otherwise a landing is a landing — a missed tech lies down in `onLanded`.
     const surface = outcome.landed ? "floor" : outcome.ceiling ? "ceiling" : outcome.wall !== 0 ? "wall" : null;
@@ -933,8 +940,12 @@ export function step(
     // (https://www.ssbwiki.com/Charge) notes surviving a KO only for Oil Panic
     // and Wario Waft ("Charge can be held even after ... is KO'd").
     f.combat.storedCharge = 0;
-    // A new stock is a new airtime: its one special stall is back (Plan 5).
+    // A new stock is a new airtime: its one special stall is back (Plan 5), and
+    // it has touched no wall and made no wall jump (Task 10; UNVERIFIED for the
+    // count, which SmashWiki "Wall jump" says only the ground resets).
     f.combat.specialStall = false;
+    forgetWallContact(f);
+    f.combat.wallJumps = 0;
     // A KO costs Kirby his Copy Ability (Plan 5, Task 9: SmashWiki "Copy Ability",
     // "he will also lose it upon being KO'd").
     loseCopy(f);
@@ -2310,6 +2321,11 @@ function applyHit(
     victim.combat.grabLength = victim.grabTimer;
     victim.combat.mash = 0;
     kineticSet(victim, 0, 0);
+    // A held fighter touches no wall, and the touch before the catch is no use to
+    // it (Plan 5, Task 10). Its wall jumps stay counted: SmashWiki "Wall jump"
+    // resets them only by "touching the ground", which a hold over the floor does
+    // (`holdAtCaptor`, then `ageWallContact`).
+    forgetWallContact(victim);
     // Being caught cancels a launch that had not fired yet: the victim is held,
     // not flying, and a pending launch would go off in their captor's hands.
     clearPendingLaunch(victim);
@@ -2569,6 +2585,11 @@ function applyHit(
   // UNVERIFIED for Mario's Cape: borrowed from Fox's; Super Mario Wiki "Cape"
   // names only landing ("between leaving the ground and returning to it").
   victim.combat.specialStall = false;
+  // A hit ends the fall a wall jump is made from, so the wall it touched is
+  // forgotten (Plan 5, Task 10); its wall jumps stay counted, as its midair jumps
+  // stay spent: SmashWiki "Wall jump" (https://www.ssbwiki.com/Wall_jump) resets
+  // them only by "touching the ground".
+  forgetWallContact(victim);
 
   // The base decides tumble; a tumbling launch without set knockback is then
   // played back sped up, which shortens the hitstun in real frames (SmashWiki
