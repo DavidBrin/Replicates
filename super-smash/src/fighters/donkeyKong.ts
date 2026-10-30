@@ -496,11 +496,23 @@ const legacy: FighterDef = {
       // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Neutral_special): "Total
       // charge time 110 frames (6.0.0 onward)", "Charges between 7-8", damage
       // "base damage + 18 * (charge frames / 110)" (10% → 28%), hitbox "26-27
-      // (19-20)" from release, interruptible 70, super armour 9-20 grounded.
-      // Shield or jump stores the charge; a stored full charge punches straight
-      // from the loop, so its hitbox comes 19 frames later.
-      // UNVERIFIED-simplified: the full punch's shorter FAF (48) and the
-      // 4-frame charge-cancel lag are not modelled.
+      // (19-20)" from release, interruptible 70. A shield, roll, spot dodge,
+      // jump or air dodge stores the charge (`specialChargeMain`).
+      //
+      // Fully charged (the same page, every frame from the press): "Hitbox
+      // 19-20", "Interruptible 48", "Super armor (grounded) 9-20", "(aerial)
+      // 15-20". A stored full punch starts on the loop frame, so its hit comes
+      // 19 frames after B, inside the armour; UltimateFrameData
+      // (https://ultimateframedata.com/donkey_kong): "Ground version has Super
+      // Armor frames 9-20". The page lists no armour for a punch that is not
+      // fully charged, so this move has none of its own (`superArmourFrames`).
+      //
+      // A charge is lost to a flinch while charging, however much was stored
+      // before (SmashWiki "Flinch", https://www.ssbwiki.com/Flinch: "regardless
+      // of whether any charge had been saved previously"), and with the stock.
+      // Published, not modelled: the 4-frame charge-cancel lag ("Charge-canceling
+      // the move incurs 4 frames of lag before the selected action"), and the
+      // punch's lower-arm intangibility (11-27).
       specialCharge: {
         mode: "store",
         frames: 110,
@@ -508,8 +520,8 @@ const legacy: FighterDef = {
         // "base damage + 18 * (charge frames / 110), rounded down".
         partial: { kind: "add", total: fx(18), floor: true },
         full: { 0: { damage: fx(28.0) } },
+        fromStore: { start: "loop", interruptible: 48, superArmour: { grounded: [9, 20], aerial: [15, 20] } },
       },
-      superArmourFrames: [9, 20],
       hitboxes: [
         {
           id: 0,

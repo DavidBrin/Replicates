@@ -24,11 +24,10 @@ import {
   SHIELD_MIN_HOLD,
   SHIELD_RELEASE_FRAMES,
 } from "../constants";
-import { groundDodgeOf, rollCharge, rollOf } from "../groundDodge";
+import { groundDodgeOf, rollOf } from "../groundDodge";
 import { kineticSetX } from "../kinetic";
 import { mashFrames } from "../shield";
 import {
-  ROLL_DISTANCE,
   SHIELD_START_FRAMES,
   bufferPress,
   buttonPresses,
@@ -38,6 +37,7 @@ import {
   presses,
   startAction,
   startMove,
+  startRoll,
 } from "../states";
 import type { FighterStatus } from "./kind";
 
@@ -78,14 +78,7 @@ export const STATUS_GUARD: FighterStatus = {
       startAction(f, "spotDodge");
       return;
     }
-    if (intent.x !== 0) {
-      startAction(f, "roll");
-      // Forward or back, each its own length (`groundDodge.ts`); the distance is
-      // the same either way (`ROLL_DISTANCE`, UNVERIFIED), spread over the roll.
-      f.charge = rollCharge(intent.x, f.facing);
-      const frames = rollOf(groundDodgeOf(ctx.def.attributes), f.charge).frames;
-      kineticSetX(f, intent.x * Math.trunc(ROLL_DISTANCE / frames), "stop");
-    }
+    if (intent.x !== 0) startRoll(f, intent.x, ctx);
   },
 };
 

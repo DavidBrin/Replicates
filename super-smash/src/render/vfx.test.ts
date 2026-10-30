@@ -400,7 +400,7 @@ describe("continuous effects", () => {
     // A special that charges on B holds on `actionFrame` `loopFrame − 1`
     // (`specialChargeMain`) and, released, carries on past it with `charge`
     // still set, as a released smash does (P5-R1: `MoveTiming.chargeHold`).
-    const bow = { mode: "hold", frames: 60, loopFrame: 15 } as const;
+    const bow = { mode: "hold", frames: 60, loopFrame: 15, atFull: "hold" } as const;
     const defs = [makeDef({ moves: { neutralB: { slot: "neutralB", name: "Hero's Bow", totalFrames: 44, hitboxes: [], specialCharge: bow } } })];
     const at = (actionFrame: number, charge: number) =>
       makeState({ fighters: [makeFighter({ action: "special", move: "neutralB", actionFrame, charge })] });
@@ -413,6 +413,21 @@ describe("continuous effects", () => {
       stepVfx(v, null, at(frame, 8), defs);
       expect(motes(), `a new mote on frame ${frame}, after the release`).toBeLessThanOrEqual(before);
     }
+  });
+
+  it("ramps the motes' colour over the move's own full charge, not a smash's 60 frames", () => {
+    // Half of Hammer Flip's 120 frames is the hue half of a smash's 60 is.
+    const hammer = { mode: "hold", frames: 120, loopFrame: 15, atFull: "hold" } as const;
+    const defs = [makeDef({ moves: { sideB: { slot: "sideB", name: "Hammer Flip", totalFrames: 69, hitboxes: [], specialCharge: hammer } } })];
+    const colours = (state: ReturnType<typeof makeState>, d?: Parameters<typeof stepVfx>[3]) => {
+      const v = createVfx();
+      for (let i = 0; i < 8; i++) stepVfx(v, null, state, d);
+      return new Set(v.particles.filter((p) => p.kind === "chargeMote").map((p) => p.colour));
+    };
+    const special = colours(makeState({ fighters: [makeFighter({ action: "special", move: "sideB", actionFrame: 14, charge: 60 })] }), defs);
+    const smash = colours(makeState({ fighters: [makeFighter({ action: "attack", move: "fsmash", actionFrame: 1, charge: 30 })] }), [makeDef()]);
+    expect(special.size).toBe(1);
+    expect([...special]).toEqual([...smash]);
   });
 
   it.each([

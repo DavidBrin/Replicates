@@ -662,14 +662,18 @@ const legacy: FighterDef = {
       // Hold mode (Plan 5), SmashWiki "Pikachu (SSBU)/Side special"
       // (https://www.ssbwiki.com/Pikachu_(SSBU)/Side_special): "Total charge
       // time 80 frames", "Charges between 13-14", damage "6.2 + 15.2 * (charge
-      // frames / 80)" — the damage alone. UNVERIFIED: the release speed 1.6 →
-      // 3.2, which the momentum does not scale.
+      // frames / 80)" — the damage alone. SmashWiki "Charge"
+      // (https://www.ssbwiki.com/Charge): "Automatically activates at full
+      // charge". Published, not modelled: the initial horizontal speed on
+      // release, "1.6 to 3.2" with the charge (the momentum here does not
+      // scale), and the release delay of "12 * charge frames / 80".
       specialCharge: {
         mode: "hold",
         frames: 80,
         loopFrame: 13,
         partial: { kind: "add", total: fx(15.2) },
         full: { 0: { damage: fx(21.4) }, 1: { damage: fx(21.4) } },
+        atFull: "release",
       },
       hitboxes: [
         {

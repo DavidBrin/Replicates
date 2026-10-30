@@ -632,18 +632,27 @@ const legacy: FighterDef = {
       // Store mode (Plan 5): 13 frames to enter the charge state, then 112
       // charge frames to full — SmashWiki "Samus (SSBU)/Neutral special"
       // (https://www.ssbwiki.com/Samus_(SSBU)/Neutral_special): "Total charge
-      // time 112 frames"; UFD's "125 frames to reach full charge" counts the 13
-      // as well. Shield or jump puts the charge away; B fires it, the shot
-      // leaving 3 frames after release (hitbox 16 = 13 + 3); a stored full
-      // charge fires straight from the loop. Being hit while charging loses the
-      // charge built this time. UNVERIFIED-simplified: SSBU's 4-frame
-      // charge-cancel lag and the longer full-charge FAF (61 against 45) are
-      // not modelled.
+      // time 112 frames"; UltimateFrameData's "125 frames to reach full charge"
+      // (https://ultimateframedata.com/samus) counts the 13 as well. A shield,
+      // roll, spot dodge, jump or air dodge puts the charge away; B fires it,
+      // the shot leaving 3 frames after release (hitbox 16 = 13 + 3),
+      // interruptible 45 (32).
       //
-      // UNVERIFIED: whether a stored charge survives a KO. SmashWiki's
-      // chargeable-specials table lists only Oil Panic and Wario Waft as
-      // surviving a stock loss; the replica keeps it.
-      specialCharge: { mode: "store", frames: 112, loopFrame: 13 },
+      // Fully charged, from the press: "Hitbox 16-75", "Interruptible (grounded)
+      // 61" (the same page; UltimateFrameData "Charge Shot, Full Charge":
+      // startup 16). So a stored full charge plays the 13 entry frames and
+      // fires on reaching the loop. Published, not modelled: the full charge's
+      // aerial "Interruptible 46", and the 4 frames of lag a charge cancel takes
+      // ("Charge-canceling the move incurs 4 frames of lag before the selected
+      // action").
+      //
+      // A flinch while charging loses the WHOLE charge, a stored one brought
+      // back out included (SmashWiki "Flinch", https://www.ssbwiki.com/Flinch:
+      // "regardless of whether any charge had been saved previously"; "Charge
+      // Shot": "she will drop all the stored charge"). A stored charge is lost
+      // with the stock too: SmashWiki "Charge" (https://www.ssbwiki.com/Charge)
+      // notes surviving a KO only for Oil Panic and Wario Waft.
+      specialCharge: { mode: "store", frames: 112, loopFrame: 13, fromStore: { start: "entry", interruptible: 61 } },
       hitboxes: [],
       projectiles: [
         {
@@ -652,7 +661,8 @@ const legacy: FighterDef = {
           // `attack(MA_MSC_CMD_ATTACK_SET_LERP, 0, 1)` interpolates between
           // them by charge. SmashWiki: damage 5 + 23·c/112, BK 14 + 32·c/112,
           // KS 42 + 8·c/112, radius 1.9 + 6.1·c/112; speed 1.6 → 3.3;
-          // lifetime 60.
+          // lifetime 60. UNVERIFIED: that the speed is linear between those two
+          // (SmashWiki gives only the ends).
           id: "chargeShot",
           spawnFrame: 16,
           offsetX: fx(8.0),

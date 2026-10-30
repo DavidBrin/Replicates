@@ -103,6 +103,24 @@ describe("Samus's Charge Shot shows its charge", () => {
   });
 });
 
+describe("Donkey Kong's Giant Punch shows its armour", () => {
+  /** The armour ring, 7.5 units round him: how many this frame drew. */
+  function rings(over: Record<string, unknown>): number {
+    const { ctx } = draw("donkeyKong", "neutralB", over.actionFrame as number, over);
+    return ctx.calls.filter((c) => c.method === "arc" && Math.abs((c.args[2] as number) - cam.zoom * 7.5) < 1e-9).length;
+  }
+
+  it("rings him on a stored full punch's armour frames only, never on an uncharged punch", () => {
+    // Plan 5: a stored full punch starts on its loop frame (7), and its armour
+    // is frames 9-20 from the press (SmashWiki "Donkey Kong (SSBU)/Neutral
+    // special"), so `actionFrame` 15-26. An uncharged punch has none.
+    expect(rings({ actionFrame: 20, charge: 110, grounded: true })).toBe(1);
+    expect(rings({ actionFrame: 30, charge: 110, grounded: true })).toBe(0);
+    expect(rings({ actionFrame: 20, charge: 0, grounded: true })).toBe(0);
+    expect(rings({ actionFrame: 12, charge: 0, grounded: true })).toBe(0);
+  });
+});
+
 describe("the rest", () => {
   it("paints something on the frames each effect claims", () => {
     const cases: [string, MoveSlot, number][] = [

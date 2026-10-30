@@ -766,13 +766,16 @@ const legacy: FighterDef = {
       // time 60 frames", "Charges between 11-12"; before full "the damage
       // multiplier is equal to 1 + 1.2 * (charge frames / 60)" (17.44% / 19.62%
       // at most), and "when fully charged, the hitboxes are instead changed
-      // directly": 24% (tip) and 22% (body), the knockback unchanged.
+      // directly": 24% (tip) and 22% (body), the knockback unchanged. SmashWiki
+      // "Charge" (https://www.ssbwiki.com/Charge): "Automatically activates at
+      // full charge".
       specialCharge: {
         mode: "hold",
         frames: 60,
         loopFrame: 11,
         partial: { kind: "multiply", by: fx(1.2) },
         full: { 0: { damage: fx(24.0) }, 1: { damage: fx(22.0) } },
+        atFull: "release",
       },
       // Charge scales **damage and shield damage only** — angle, base knockback
       // and growth are frozen across the whole range (361 / 30 / 90 on the

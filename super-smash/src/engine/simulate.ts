@@ -857,6 +857,10 @@ export function step(
     f.combat.mash = 0;
     f.combat.launchSource = -1;
     f.combat.swingQueued = false;
+    // A stored charge goes with the stock (Plan 5): SmashWiki "Charge"
+    // (https://www.ssbwiki.com/Charge) notes surviving a KO only for Oil Panic
+    // and Wario Waft ("Charge can be held even after ... is KO'd").
+    f.combat.storedCharge = 0;
     // A new stock is a new airtime: its one special stall is back (Plan 5).
     f.combat.specialStall = false;
     clearHitRecord(f);

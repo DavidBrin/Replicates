@@ -393,14 +393,16 @@ export type PartialCharge =
 
 /**
  * A special move that charges (Plan 5). SSBU has two kinds:
- * - `"hold"`: charges while B is held, fires on release (Hero's Bow, Shield
- *   Breaker, Hammer Flip, Skull Bash);
- * - `"store"`: loops after one press; B fires, shield or jump puts the charge
- *   away for later (`CombatState.storedCharge`), and a full charge stores
- *   itself (Charge Shot, Giant Punch, F.L.U.D.D.).
+ * - `"hold"` (`HoldCharge`): charges while B is held, fires on release (Hero's
+ *   Bow, Shield Breaker, Hammer Flip, Skull Bash);
+ * - `"store"` (`StoreCharge`): loops after one press; B fires, a shield, roll,
+ *   spot dodge, jump or air dodge puts the charge away for later
+ *   (`CombatState.storedCharge`), and a full charge stores itself (Charge Shot,
+ *   Giant Punch, F.L.U.D.D.).
  */
-export interface SpecialCharge {
-  readonly mode: "hold" | "store";
+export type SpecialCharge = HoldCharge | StoreCharge;
+
+interface ChargeBase {
   /** Frames from empty to full: SmashWiki's "Total charge time". */
   readonly frames: number;
   /** The move frame the charge loops on: SmashWiki's "Charges between a–b", a. */
@@ -409,6 +411,54 @@ export interface SpecialCharge {
   readonly full?: Readonly<Record<number, ChargedHitbox>>;
   /** How the boxes grow before that (`PartialCharge`); linear in every number when absent. */
   readonly partial?: PartialCharge;
+}
+
+/** A special that charges while B is held. */
+export interface HoldCharge extends ChargeBase {
+  readonly mode: "hold";
+  /**
+   * What a full charge does with B still held (SmashWiki "Charge",
+   * https://www.ssbwiki.com/Charge): `"release"` fires it ("Automatically
+   * activates at full charge": Shield Breaker, Skull Bash); `"hold"` keeps it
+   * until B comes up ("Can be held indefinitely": Hero's Bow, Hammer Flip).
+   */
+  readonly atFull: "release" | "hold";
+  /** The longest a `"hold"` charge can be held, in charge frames, before it fires anyway. */
+  readonly maxHold?: number;
+  /** Damage the fighter takes while holding a full charge (Hammer Flip's burn). */
+  readonly recoil?: ChargeRecoil;
+}
+
+/** Self-damage every `every` frames held at full, while the fighter's damage is below `below`. Q12 damage. */
+export interface ChargeRecoil {
+  readonly every: number;
+  readonly damage: number;
+  readonly below: number;
+}
+
+/** A special whose charge loops after one press and can be stored. */
+export interface StoreCharge extends ChargeBase {
+  readonly mode: "store";
+  /** What a stored full charge does when B brings it back out (`StoredFullCharge`). */
+  readonly fromStore: StoredFullCharge;
+}
+
+/**
+ * A stored full charge's release, as SmashWiki's "Fully charged" rows give it,
+ * every frame counted from the B press that brings it out.
+ */
+export interface StoredFullCharge {
+  /**
+   * `"loop"`: the move starts on its loop frame and releases at once (Giant
+   * Punch: "Hitbox 19-20" against 26-27 uncharged); `"entry"`: it plays its
+   * entry frames and releases on reaching the loop (Charge Shot: "Hitbox 16-75"
+   * either way).
+   */
+  readonly start: "loop" | "entry";
+  /** The fully charged move's "Interruptible" frame. */
+  readonly interruptible: number;
+  /** Its super armour, first and last frame, on the ground and in the air. */
+  readonly superArmour?: { readonly grounded: readonly [number, number]; readonly aerial?: readonly [number, number] };
 }
 
 export interface MoveDef {

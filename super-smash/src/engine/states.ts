@@ -51,7 +51,7 @@ import {
   TECH_CEILING_INTANGIBLE,
   TECH_INTANGIBLE,
 } from "./constants";
-import { dodgeIntangible, groundDodgeOf, rollOf } from "./groundDodge";
+import { dodgeIntangible, groundDodgeOf, rollCharge, rollOf } from "./groundDodge";
 import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
 import { actionFrameOf, clearHitRecord } from "./hitbox";
@@ -82,8 +82,10 @@ import type {
   FighterDef,
   FighterState,
   InputFrame,
+  MoveDef,
   MoveSlot,
   StageDef,
+  StoreCharge,
 } from "./types";
 
 /* ------------------------------------------------------- frame constants -- */
@@ -571,15 +573,59 @@ export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot)
   const move = ctx.def.moves[slot];
   if (move === undefined) return false;
   startMove(f, "special", slot);
-  // A stored charge comes back out (Plan 5): a full one fires at once, from the
-  // loop frame; a partial one keeps charging from where it left off.
+  // A stored charge comes back out (Plan 5): a full one is released as its move
+  // says (`StoredFullCharge.start`: Giant Punch from its loop frame, Charge Shot
+  // after its entry); a partial one keeps charging from where it left off.
   const sc = move.specialCharge;
   if (sc?.mode === "store" && f.combat.storedCharge > 0) {
     f.charge = f.combat.storedCharge;
     f.combat.storedCharge = 0;
-    if (f.charge >= sc.frames) f.actionFrame = sc.loopFrame;
+    if (f.charge >= sc.frames) f.actionFrame = storedFullStart(sc);
   }
   return true;
+}
+
+/**
+ * The `actionFrame` a stored full charge's first frame from the B press falls
+ * on: its loop frame for a move that skips its entry, else the move's first.
+ */
+function storedFullStart(sc: StoreCharge): number {
+  return sc.fromStore.start === "loop" ? sc.loopFrame : 0;
+}
+
+/**
+ * The store-mode charge `f` is releasing at full, or null. A store-mode special
+ * holds a full charge only when one comes back out of storage: it stores itself
+ * on the frame it fills (`specialChargeMain`).
+ */
+function releasingStoredFull(f: FighterState, move: MoveDef | undefined): StoreCharge | null {
+  const sc = move?.specialCharge;
+  return f.action === "special" && sc?.mode === "store" && f.charge >= sc.frames ? sc : null;
+}
+
+/**
+ * The `actionFrame` a move ends on, where the fighter acts (`handOff`): its
+ * `totalFrames`, or for a stored full charge its published "Interruptible",
+ * counted from the press (Plan 5: Charge Shot 61, Giant Punch 48).
+ */
+export function moveEndFrame(f: FighterState, move: MoveDef): number {
+  const sc = releasingStoredFull(f, move);
+  return sc === null ? move.totalFrames : storedFullStart(sc) + sc.fromStore.interruptible - 1;
+}
+
+/**
+ * A stored full charge's super armour as an `actionFrame` window, grounded or
+ * aerial by where the fighter is now, or null (Plan 5: Giant Punch, whose
+ * armour SmashWiki lists for the full charge only, from the press).
+ */
+export function fullChargeArmour(f: FighterState, def: FighterDef): readonly [number, number] | null {
+  const sc = f.move === null ? null : releasingStoredFull(f, def.moves[f.move]);
+  const armour = sc?.fromStore.superArmour;
+  if (sc === null || armour === undefined) return null;
+  const w = f.grounded ? armour.grounded : armour.aerial;
+  if (w === undefined) return null;
+  const start = storedFullStart(sc);
+  return [start + w[0] - 1, start + w[1] - 1];
 }
 
 /* -------------------------------------------------- actionable behaviour -- */
@@ -712,6 +758,19 @@ export function startAirDodge(f: FighterState, intent: Intent): boolean {
     f.charge = 0;
   }
   return true;
+}
+
+/**
+ * Start a roll towards `x` (−1 or 1): forward or back from `f.facing`, each its
+ * own length (`groundDodge.ts`), the same distance either way (`ROLL_DISTANCE`,
+ * UNVERIFIED) spread over the roll. Out of a shield, and out of a stored charge
+ * (`specialChargeMain`).
+ */
+export function startRoll(f: FighterState, x: number, ctx: StateContext): void {
+  startAction(f, "roll");
+  f.charge = rollCharge(x, f.facing);
+  const frames = rollOf(groundDodgeOf(ctx.def.attributes), f.charge).frames;
+  kineticSetX(f, x * Math.trunc(ROLL_DISTANCE / frames), "stop");
 }
 
 /**
@@ -928,7 +987,10 @@ export function respawnInvincibilityFrames(framesWaited: number): number {
 export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
   if (f.move === null) return false;
   if (f.action !== "attack" && f.action !== "special") return false;
-  return moveScriptFrame(def, f)?.state.superArmour === true;
+  if (moveScriptFrame(def, f)?.state.superArmour === true) return true;
+  // A stored full charge's own armour (Plan 5: Giant Punch), timed from the press.
+  const w = fullChargeArmour(f, def);
+  return w !== null && f.actionFrame >= w[0] && f.actionFrame <= w[1];
 }
 
 /**
@@ -1097,6 +1159,11 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
     f.charge = lag;
     return;
   }
+  // UNVERIFIED (Plan 5): a special still charging in the air (Charge Shot, Giant
+  // Punch, Hero's Bow) lands into `land` here, its charge lost and nothing
+  // stored. No published source says what Ultimate does: SmashWiki "Charge
+  // storage cancel" (https://www.ssbwiki.com/Charge_storage_cancel) covers only
+  // landing during the cancel animation.
   startAction(f, "land");
   // `charge` carries the landing's length, as it does for landingLag.
   // UNVERIFIED: that the published lag is the number of frames spent in `land`.

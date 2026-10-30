@@ -8,7 +8,6 @@
 
 import {
   NOTHING,
-  armourWindow,
   crescent,
   glow,
   polygon,
@@ -16,6 +15,7 @@ import {
 } from "../../fxKit";
 import { withAlpha } from "../../rigKit";
 import { SMASH_CHARGE_MAX } from "@/engine/constants";
+import { hasSuperArmour } from "@/engine/states";
 import type { MoveSlot } from "@/engine/types";
 import type { ProjectilePainter } from "../../fxKit";
 
@@ -142,8 +142,10 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       }
     }
 
-    const armour = armourWindow(def, "neutralB");
-    if (armour && frame >= armour[0] && frame <= armour[1]) {
+    // The ring is the armour, which only a stored full punch has, from the
+    // press (Plan 5: `fullChargeArmour`, SmashWiki 9-20), so it is asked of the
+    // engine rather than read off the move.
+    if (hasSuperArmour(f, def)) {
       ctx.strokeStyle = withAlpha("#FFFFFF", 0.75);
       ctx.lineWidth = Math.max(2, u * 0.5);
       ctx.beginPath();

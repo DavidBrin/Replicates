@@ -9,9 +9,9 @@
  */
 
 import { ONE, mul } from "./fixed";
-import { airJump, startAction, startAirDodge } from "./states";
+import { airJump, peekBuffer, startAction, startAirDodge, startRoll } from "./states";
 import type { Intent, StateContext } from "./states";
-import type { ChargedHitbox, FighterState, Hitbox, PartialCharge, SpecialCharge } from "./types";
+import type { ChargedHitbox, FighterState, Hitbox, HoldCharge, PartialCharge, SpecialCharge, StoreCharge } from "./types";
 
 function lerp(a: number, b: number | undefined, t: number): number {
   return b === undefined ? a : a + Math.trunc(((b - a) * t) / ONE);
@@ -74,40 +74,105 @@ function partialDamage(base: number, t: number, partial: Exclude<PartialCharge, 
  */
 export function specialChargeMain(f: FighterState, intent: Intent, ctx: StateContext, sc: SpecialCharge): boolean {
   if (f.actionFrame !== sc.loopFrame) return false;
+  return sc.mode === "hold" ? holdMain(f, intent, sc) : storeMain(f, intent, ctx, sc);
+}
 
-  if (sc.mode === "hold") {
-    if (!intent.specialHeld || f.charge >= sc.frames) return false;
-    f.actionFrame = sc.loopFrame - 1;
-    f.charge += 1;
-    return true;
+/**
+ * Hold mode: the charge grows while B is held and fires when it comes up. At
+ * full, a move that "Automatically activates at full charge" fires (Shield
+ * Breaker, Skull Bash: `atFull` `"release"`); one that "Can be held
+ * indefinitely" stays there until B comes up (Hero's Bow, Hammer Flip:
+ * `"hold"`; SmashWiki "Charge", https://www.ssbwiki.com/Charge), or until its
+ * maximum hold runs out (the bow's 180). `charge` keeps counting past full
+ * while it is held, which is what times the maximum and the recoil; everything
+ * that reads it as a charge clamps it to full (`chargeFraction`).
+ */
+function holdMain(f: FighterState, intent: Intent, sc: HoldCharge): boolean {
+  if (!intent.specialHeld) return false;
+  if (f.charge >= sc.frames && sc.atFull === "release") return false;
+  if (sc.maxHold !== undefined && f.charge >= sc.maxHold) return false;
+  f.actionFrame = sc.loopFrame - 1;
+  f.charge += 1;
+  const r = sc.recoil;
+  if (r !== undefined && f.charge > sc.frames && (f.charge - sc.frames) % r.every === 0 && f.damage < r.below) {
+    f.damage += r.damage;
   }
+  return true;
+}
 
-  // Store mode: B fires; shield or jump puts the charge away; a full charge
-  // puts itself away (UNVERIFIED: that it auto-stores — SmashWiki's tables give
-  // the charge time and the cancels, not what happens at full).
-  if (intent.specialPressed) return false;
-  if (intent.shieldPressed) {
-    storeCharge(f);
-    if (f.grounded) startAction(f, "shieldStart");
-    else if (!startAirDodge(f, intent)) startAction(f, "fall");
-    return true;
-  }
-  if (intent.jumpPressed) {
-    storeCharge(f);
-    if (f.grounded) startAction(f, "jumpSquat");
-    else if (!airJump(f, ctx)) startAction(f, "fall");
-    return true;
-  }
-  if (f.charge >= sc.frames) {
-    storeCharge(f);
-    startAction(f, f.grounded ? "stand" : "fall");
+/**
+ * Store mode, on the loop frame:
+ * - a full charge brought back out of storage fires (Charge Shot plays its
+ *   entry frames first; Giant Punch never comes here: `beginSpecial` starts it
+ *   on the loop frame, `StoredFullCharge.start`);
+ * - B fires: pressed on this frame, or during the entry frames and still in
+ *   the 9-frame buffer (`bufferPress`; UNVERIFIED that Ultimate buffers a
+ *   second press inside this status, but it buffers presses everywhere else);
+ * - a shield, roll, spot dodge, jump or air dodge puts the charge away
+ *   (`storeInto`);
+ * - otherwise the charge grows, and on the frame it fills it puts itself away
+ *   and the fighter stands (or falls): SmashWiki "Charge" calls both moves
+ *   "auto-charge" specials, which "automatically cancel and store the charge
+ *   upon being fully charged"; "Charge Shot" (https://www.ssbwiki.com/Charge_Shot):
+ *   "Samus will stop charging and resume her neutral standing position".
+ *
+ * Published, not modelled: the 4 frames of lag a charge cancel takes before the
+ * chosen action (SmashWiki "Samus (SSBU)/Neutral special" and "Donkey Kong
+ * (SSBU)/Neutral special": "Charge-canceling the move incurs 4 frames of lag
+ * before the selected action"), the same 4 frames after a charge fills
+ * (SmashWiki "Giant Punch", https://www.ssbwiki.com/Giant_Punch: "121 frames,
+ * including the 7 frame pre-charge lag and 4 frame post-charge lag"), and a
+ * grab press: "Charge Shot" lists it among the cancels in its overview of every
+ * game, but no source says what follows it in Ultimate.
+ */
+function storeMain(f: FighterState, intent: Intent, ctx: StateContext, sc: StoreCharge): boolean {
+  if (f.charge >= sc.frames) return false;
+  if (intent.specialPressed || takeBufferedSpecial(f, ctx.frame)) return false;
+  if (intent.shieldPressed || intent.jumpPressed) {
+    storeInto(f, intent, ctx);
     return true;
   }
   f.actionFrame = sc.loopFrame - 1;
   f.charge += 1;
+  if (f.charge >= sc.frames) {
+    f.combat.storedCharge = f.charge;
+    startAction(f, f.grounded ? "stand" : "fall");
+  }
   return true;
 }
 
-function storeCharge(f: FighterState): void {
+/**
+ * Put the charge away, into whatever the shield or jump press asks for.
+ *
+ * On the ground: a shield press is a shield, a spot dodge with down held, a
+ * roll with a side held (SmashWiki "Charge Shot": in Ultimate "she can cancel
+ * the charge with a jump or spotdodge", and the move list's "Can keep the
+ * charge after dodging or shielding"; "Giant Punch": "shielding, rolling or
+ * jumping"). A jump press is a jump. In the air: a shield press is an air dodge
+ * (SmashWiki "Charge storage cancel",
+ * https://www.ssbwiki.com/Charge_storage_cancel: from Brawl on, a shield press
+ * in the air buffers an air dodge), a jump press a midair jump ("Giant Punch":
+ * "It can also be cancelled through jumping in the air"). UNVERIFIED: with
+ * the air dodge or the midair jump already spent, the charge is still put away
+ * and the fighter falls.
+ */
+function storeInto(f: FighterState, intent: Intent, ctx: StateContext): void {
   f.combat.storedCharge = f.charge;
+  if (intent.shieldPressed) {
+    if (!f.grounded) {
+      if (!startAirDodge(f, intent)) startAction(f, "fall");
+    } else if (intent.y < 0) startAction(f, "spotDodge");
+    else if (intent.x !== 0) startRoll(f, intent.x, ctx);
+    else startAction(f, "shieldStart");
+    return;
+  }
+  if (f.grounded) startAction(f, "jumpSquat");
+  else if (!airJump(f, ctx)) startAction(f, "fall");
+}
+
+/** A B press made in the entry frames, still in the buffer: taken, so it fires once. */
+function takeBufferedSpecial(f: FighterState, frame: number): boolean {
+  if (peekBuffer(f, frame) !== "special") return false;
+  f.bufferedAction = null;
+  return true;
 }

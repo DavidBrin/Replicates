@@ -697,15 +697,28 @@ const legacy: FighterDef = {
       // 120 frames", "Charges between 15-16"; before full "each charge frame
       // adding 0.085% damage to the hitboxes, for a maximum of 29.115%" (0.085
       // × 120 = 10.2 over the whole charge); full charge "changed directly":
-      // 35%, angle 361, same BK/KS. Interruptible 70. UNVERIFIED-simplified:
-      // the full-charge recoil (every 26 frames) and the full-charge
-      // intangibility/armour are not modelled.
+      // 35%, angle 361, same BK/KS. Interruptible 70.
+      //
+      // Held at full: SmashWiki "Charge" (https://www.ssbwiki.com/Charge): it
+      // "Can be held indefinitely"; "While fully charged, 1% damage is dealt to
+      // Kirby". The side special page: "Interval for recoil damage at full
+      // charge 26 frames", "Maximum percent for full charge recoil damage
+      // 100%". UNVERIFIED readings: the first burn comes 26 frames after the
+      // charge fills, and none at or above 100%.
+      //
+      // Published, not modelled: Kirby walking while he charges ("Kirby can move
+      // while charging": "Walk speed while charging 0.4", "Jump speed
+      // multiplier while charging 0.5"; carried to D58), and the full charge's
+      // own frames (hit 11-12 and interruptible 60 from release, intangible
+      // 2-10, super armour 11-17).
       specialCharge: {
         mode: "hold",
         frames: 120,
         loopFrame: 15,
         partial: { kind: "add", total: fx(10.2) },
         full: { 0: { damage: fx(35.0), angle: fx(361) } },
+        atFull: "hold",
+        recoil: { every: 26, damage: fx(1), below: fx(100) },
       },
       hitboxes: [
         {

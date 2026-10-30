@@ -571,9 +571,15 @@ const legacy: FighterDef = {
       // (https://www.ssbwiki.com/Link_(SSBU)/Neutral_special): "Total charge
       // time 60 frames", "Charges between 15-16", arrow "16-61 (1-46)" from
       // release, damage "4 + 8 * (charge frames / 60)", speed 2.6 uncharged →
-      // 10 full. UNVERIFIED-simplified: "with at least 36 charge frames, the
-      // move immediately skips to full charge" is not modelled.
-      specialCharge: { mode: "hold", frames: 60, loopFrame: 15 },
+      // 10 full, "Maximum hold time 180 frames". SmashWiki "Charge"
+      // (https://www.ssbwiki.com/Charge): it "Can be held indefinitely", so a
+      // full charge waits for B to come up, at most those 180 charge frames
+      // (UNVERIFIED that it fires by itself then; the page gives the maximum,
+      // not what follows). Published, not modelled: "with at least 36 charge
+      // frames, the move immediately skips to full charge", the animation's
+      // skip (the 60-frame charge "is only used for the arrows to scale in
+      // damage and speed", which they do here).
+      specialCharge: { mode: "hold", frames: 60, loopFrame: 15, atFull: "hold", maxHold: 180 },
       hitboxes: [],
       projectiles: [
         {
@@ -595,7 +601,8 @@ const legacy: FighterDef = {
           gravity: fx(0.014),
           lifetime: 46,
           destroyOnHit: true,
-          // Damage "4 + 8 * (charge frames / 60), rounded down"; speed linear.
+          // Damage "4 + 8 * (charge frames / 60), rounded down". UNVERIFIED:
+          // that the speed is linear between 2.6 and 10 (the page gives the ends).
           charged: { vx: fx(10.0), hitbox: { damage: fx(12.0) }, partial: { kind: "add", total: fx(8), floor: true } },
           visual: "arrow",
           // link_bowarrow `Fly`: `Reflectable=true`.

@@ -340,9 +340,17 @@ describe("the other character-defining mechanics", () => {
     }
   });
 
-  it("gives Donkey Kong super armour on his charged Giant Punch", () => {
-    expect(donkeyKong.moves.neutralB!.superArmourFrames).toEqual([9, 20]);
-    expect(donkeyKong.moves.neutralB!.specialCharge).toMatchObject({ mode: "store", frames: 110 });
+  it("gives Donkey Kong super armour on his fully charged Giant Punch only", () => {
+    // SmashWiki "Donkey Kong (SSBU)/Neutral special"
+    // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Neutral_special) lists super
+    // armour for the fully charged punch alone: grounded 9-20, aerial 15-20,
+    // from the press.
+    expect(donkeyKong.moves.neutralB!.superArmourFrames).toBeUndefined();
+    expect(donkeyKong.moves.neutralB!.specialCharge).toMatchObject({
+      mode: "store",
+      frames: 110,
+      fromStore: { start: "loop", interruptible: 48, superArmour: { grounded: [9, 20], aerial: [15, 20] } },
+    });
   });
 
   it("keeps every fighter's moveset mutually distinguishable", () => {

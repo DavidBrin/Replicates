@@ -18,7 +18,7 @@
  */
 
 import { toFloat } from "@/engine/fixed";
-import { PERFECT_SHIELD_WINDOW } from "@/engine/constants";
+import { PERFECT_SHIELD_WINDOW, SMASH_CHARGE_MAX } from "@/engine/constants";
 import type { FighterDef, FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
 import { moveTimingFor, poseTimeFor, type PosedFighter } from "./poses";
@@ -751,6 +751,9 @@ export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs
     const hold = moveTimingFor(defs?.[f.port], f.move)?.chargeHold;
     if (hold !== undefined && f.actionFrame > hold) continue;
     if (v.frame % 2 !== 0) continue;
+    // The hue ramps over the move's own full charge: a special's (Plan 5:
+    // Charge Shot 112, Hammer Flip 120), else a smash's 60.
+    const full = (f.move === null ? undefined : defs?.[f.port]?.moves[f.move]?.specialCharge?.frames) ?? SMASH_CHARGE_MAX;
     const a = rand(v) * Math.PI * 2;
     const r = 9 + rand(v) * 5;
     push(v, {
@@ -762,7 +765,7 @@ export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs
       life: 16,
       maxLife: 16,
       size: 0.8 + rand(v) * 0.8,
-      colour: mixHex("#FFE873", "#FF7A2A", Math.min(1, f.charge / 60)),
+      colour: mixHex("#FFE873", "#FF7A2A", Math.min(1, f.charge / full)),
       rotation: 0,
       spin: 0,
       gravity: 0,

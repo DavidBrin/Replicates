@@ -29,6 +29,7 @@ import {
   buttonPresses,
   handOff,
   hasMove,
+  moveEndFrame,
   presses,
   releaseGrab,
   startAction,
@@ -82,8 +83,9 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     return;
   }
   // `totalFrames` is UFD's "Total frames" T: the move's frames 1..T, and the
-  // fighter acts on frame T + 1, this one (`handOff`).
-  if (f.actionFrame >= move.totalFrames) {
+  // fighter acts on frame T + 1, this one (`handOff`). A stored full charge
+  // ends on its own published frame (`moveEndFrame`, Plan 5).
+  if (f.actionFrame >= moveEndFrame(f, move)) {
     handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
     return;
   }
