@@ -634,6 +634,8 @@ const legacy: FighterDef = {
           destroyOnHit: true,
           bounces: 8,
           visual: "spark",
+          // pikachu_dengekidama `Regular`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,

@@ -95,6 +95,7 @@ import {
   spawnProjectile,
 } from "./projectile";
 import { chargedHitbox } from "./specialCharge";
+import { reflectProjectiles } from "./reflect";
 import {
   blastZoneKO,
   clampShiftToStage,
@@ -791,6 +792,8 @@ export function step(
   const destroyed = new Set<number>();
   const candidates = gatherHitboxes(s, defs, prevPos, frozen, bones);
   appendProjectileCandidates(s, ctx, candidates, projectilePrev);
+  // Reflectors first: a reflected projectile neither clanks nor hits this frame (Plan 5).
+  reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
   resolveClanks(s, candidates, events, destroyed);
   resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed);
   if (destroyed.size > 0) {
@@ -854,6 +857,8 @@ export function step(
     f.combat.mash = 0;
     f.combat.launchSource = -1;
     f.combat.swingQueued = false;
+    // A new stock is a new airtime: its one special stall is back (Plan 5).
+    f.combat.specialStall = false;
     clearHitRecord(f);
     startAction(f, "dead");
     s.freezeFrames = KO_FREEZE_FRAMES;
@@ -1812,7 +1817,8 @@ function freezeVictim(victim: FighterState, lag: number): void {
  * pummels "continue until the opponent is eventually thrown or breaks free"). It
  * goes through the same staleness and 1v1 scaling as any hit, and joins the
  * staleness queue (SmashWiki "Pummel": pummelling is how a stale move is
- * restored). Being hit gives back the air dodge, as `applyHit` does.
+ * restored). Being hit gives back the air dodge and the special stall, as
+ * `applyHit` does.
  */
 function applyHeldHit(
   s: GameState,
@@ -1828,6 +1834,7 @@ function applyHeldHit(
   enterStaleQueue(attacker, c.slot, false);
   victim.damage += damage;
   victim.airDodged = false;
+  victim.combat.specialStall = false;
   const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
   freezeVictim(victim, lag);
   attacker.hitlag = lag;
@@ -2091,6 +2098,10 @@ function applyHit(
   // out of anything (Plan 3 final wave; the Task 7 review's minor). UNVERIFIED:
   // that reading of "get hit".
   victim.airDodged = false;
+  // So is the airtime's special stall (Plan 5): Fox's Reflector stalls "once
+  // until he lands or gets hit" (SmashWiki "Fox (SSBU)",
+  // https://www.ssbwiki.com/Fox_(SSBU)). The same reading of "get hit".
+  victim.combat.specialStall = false;
 
   const crouchCancel = isCrouching(victim);
 

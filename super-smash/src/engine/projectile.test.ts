@@ -626,6 +626,38 @@ describe("where a projectile comes from (Plan 5)", () => {
       expect(cloneState(q).projectiles[0], `clone dropped projectile.${name}`).toEqual(q.projectiles[0]);
     }
   });
+
+  // `step()` finds a projectile's def by `source`, never by its owner (the
+  // Plan 5 Task 1 review: nothing pinned it, as every source was its owner).
+  // A fighter with no projectiles of its own, and a context that knows only
+  // the ids it is given, as the game's roster context does.
+  const PLAIN: FighterDef = { ...DEF, id: "plain", moves: { jab1: DEF.moves.jab1 as MoveDef } };
+  const TWO: SimContext = { fighter: (id) => (id === "plain" ? PLAIN : DEF), stage: () => STAGE };
+  const STRICT: SimContext = {
+    fighter(id) {
+      if (id !== "zoner" && id !== "plain") throw new Error(`unregistered fighter: ${id}`);
+      return id === "plain" ? PLAIN : DEF;
+    },
+    stage: () => STAGE,
+  };
+
+  it("keeps flying when its owner's moveset has no such projectile (looked up by source)", () => {
+    const s = standing(fx(200));
+    s.fighters[1].defId = "plain";
+    const p = spawnProjectile(ARROW, fighter({ port: 1, defId: "plain", facing: -1, x: fx(100) }), 1, "zoner");
+    s.projectiles.push(p);
+    s.nextProjectileId = 2;
+    const next = step(s, [0, 0], { prevInputs: [0, 0], ctx: TWO }).state;
+    expect(next.projectiles).toHaveLength(1);
+    expect(next.projectiles[0].x).toBeLessThan(p.x);
+  });
+
+  it("throws, naming the id, for a source the context does not know (pins today's contract)", () => {
+    const s = standing(fx(200));
+    s.projectiles.push(spawnProjectile(ARROW, fighter({ port: 0 }), 1, "ghost"));
+    s.nextProjectileId = 2;
+    expect(() => step(s, [0, 0], { prevInputs: [0, 0], ctx: STRICT })).toThrow(/unregistered fighter: ghost/);
+  });
 });
 
 describe("def lookup", () => {

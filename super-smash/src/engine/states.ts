@@ -54,7 +54,7 @@ import {
 import { dodgeIntangible, groundDodgeOf, rollOf } from "./groundDodge";
 import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
-import { clearHitRecord } from "./hitbox";
+import { actionFrameOf, clearHitRecord } from "./hitbox";
 import {
   carrierOf,
   kineticAdopt,
@@ -478,12 +478,23 @@ export function dodgeWindow(f: FighterState, attrs: FighterAttributes): readonly
   }
 }
 
-export function updateDodgeIntangibility(f: FighterState, attrs: FighterAttributes): void {
-  const w = dodgeWindow(f, attrs);
+export function updateDodgeIntangibility(f: FighterState, def: FighterDef): void {
+  const w = dodgeWindow(f, def.attributes) ?? moveIntangibility(f, def);
   if (w === null) return;
   if (f.actionFrame >= w[0] && f.actionFrame <= w[1]) {
     f.intangible = Math.max(f.intangible, 1);
   }
+}
+
+/**
+ * A move's own intangible frames (Plan 5: `MoveDef.intangible`, quoted as game
+ * frames), as an `actionFrame` window for `updateDodgeIntangibility`. A move is
+ * entered on its frame 1 (`actionFrame` 0), so frame N is `actionFrame` N − 1.
+ */
+export function moveIntangibility(f: FighterState, def: FighterDef): readonly [number, number] | null {
+  if (f.move === null || (f.action !== "special" && f.action !== "attack")) return null;
+  const w = def.moves[f.move]?.intangible;
+  return w === undefined ? null : [actionFrameOf(w[0]), actionFrameOf(w[1])];
 }
 
 /* ------------------------------------------------------- move selection -- */
@@ -770,7 +781,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
  */
 export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContext, table: StatusTable = STATUS_TABLE): void {
   f.actionFrame += 1;
-  updateDodgeIntangibility(f, ctx.def.attributes);
+  updateDodgeIntangibility(f, ctx.def);
 
   const status = table[f.action];
   if (status === undefined) {
@@ -1034,6 +1045,7 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   f.launchSpeed = 0;
   f.jumpsUsed = 0;
   f.airDodged = false;
+  f.combat.specialStall = false;
   f.airTime = 0;
   // The hop is over, so the next one decides its own height and its own damage.
   f.shortHop = false;
@@ -1160,6 +1172,9 @@ export function grabLedge(
   // so the ground jump stays spent: a drop or a hit off the ledge leaves jump_count_max − 1.
   f.jumpsUsed = 1;
   f.airDodged = false;
+  // Plan 5. UNVERIFIED: SmashWiki "Fox (SSBU)" names landing and a hit, not a
+  // ledge; a ledge grab gives back the air dodge (SmashWiki "Air dodge").
+  f.combat.specialStall = false;
   f.fastFalling = false;
   f.shortHop = false;
   f.ledgeRegrabs += 1;

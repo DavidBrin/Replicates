@@ -17,6 +17,7 @@ import { SMASH_CHARGE_MAX } from "../constants";
 import { chargeHoldFrame, clearHitRecord } from "../hitbox";
 import { mashFrames } from "../shield";
 import { specialChargeMain } from "../specialCharge";
+import { reflectorMain, reflectorStallExec } from "../reflect";
 import {
   GRAB_MASH_BUTTON,
   GRAB_MASH_STICK,
@@ -60,6 +61,8 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     startAction(f, f.grounded ? "stand" : "fall");
     return;
   }
+  // A reflector loops and turns (Plan 5, `reflect.ts`).
+  if (f.action === "special" && move.reflector !== undefined && reflectorMain(f, intent, move.reflector)) return;
   // A charging special reads B, never the attack button (Plan 5).
   if (f.action === "special" && move.specialCharge !== undefined && specialChargeMain(f, intent, ctx, move.specialCharge)) {
     return;
@@ -95,12 +98,29 @@ export const STATUS_ATTACK: FighterStatus = {
   main: attackMain,
 };
 
+/** A special's per-move bookkeeping (Plan 5): nothing of one special rides into the next status. */
+function clearSpecialMove(f: FighterState): void {
+  f.combat.stalling = false;
+  f.combat.reflectHold = 0;
+}
+
 export const STATUS_SPECIAL: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_SPECIAL",
   action: "special",
   kineticType: "FALL",
-  pre: clearHitRecord,
+  pre(f) {
+    clearHitRecord(f);
+    // Plan 5: a special's per-move bookkeeping starts clean.
+    clearSpecialMove(f);
+  },
   main: attackMain,
+  exec(f, _intent, ctx) {
+    const r = f.move === null ? undefined : ctx.def.moves[f.move]?.reflector;
+    if (r !== undefined) reflectorStallExec(f, ctx, r);
+  },
+  // ...and ends clean, however the special ends: its own end, a hit, a grab, a
+  // ledge, a landing or a KO.
+  end: clearSpecialMove,
 };
 
 export const STATUS_CATCH: FighterStatus = {

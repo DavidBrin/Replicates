@@ -107,6 +107,20 @@ export interface CombatState {
    * and being hit; spent by the next use of that special.
    */
   storedCharge: number;
+  /**
+   * Plan 5: frames a reflector must stay up after reflecting something (Fox: 20).
+   * Per move: cleared when the special starts and when it ends, however it ends.
+   */
+  reflectHold: number;
+  /**
+   * Plan 5: this airtime's one special stall is spent (Reflector, Cape). Reset on
+   * landing, a ledge, a hit and a KO; not by a grab, as the air dodge is not
+   * (`applyHit`). SmashWiki "Fox (SSBU)": "he can only do it once until he lands
+   * or gets hit".
+   */
+  specialStall: boolean;
+  /** Plan 5: the current move is the one stalling (it took the airtime's stall). Per move, as `reflectHold`. */
+  stalling: boolean;
 }
 
 export function emptyCombat(): CombatState {
@@ -132,6 +146,9 @@ export function emptyCombat(): CombatState {
     autolinkPointY: 0,
     victimFreeze: false,
     storedCharge: 0,
+    reflectHold: 0,
+    specialStall: false,
+    stalling: false,
   };
 }
 
@@ -158,5 +175,8 @@ export function cloneCombat(c: CombatState): CombatState {
     autolinkPointY: c.autolinkPointY,
     victimFreeze: c.victimFreeze,
     storedCharge: c.storedCharge,
+    reflectHold: c.reflectHold,
+    specialStall: c.specialStall,
+    stalling: c.stalling,
   };
 }

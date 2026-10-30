@@ -598,6 +598,8 @@ const legacy: FighterDef = {
           // Damage "4 + 8 * (charge frames / 60), rounded down"; speed linear.
           charged: { vx: fx(10.0), hitbox: { damage: fx(12.0) }, partial: { kind: "add", total: fx(8), floor: true } },
           visual: "arrow",
+          // link_bowarrow `Fly`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,
@@ -643,6 +645,8 @@ const legacy: FighterDef = {
           destroyOnHit: false,
           returns: true,
           visual: "boomerang",
+          // link_boomerang `Fly`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,

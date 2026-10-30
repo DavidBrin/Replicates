@@ -681,6 +681,8 @@ const legacy: FighterDef = {
           lifetime: 22,
           destroyOnHit: false,
           visual: "energy",
+          // fox_blaster_bullet `Fly`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,
@@ -784,6 +786,31 @@ const legacy: FighterDef = {
       // 4 through 23** at 1.4x damage. See the correction in the file header:
       // this is not the frame-1 shine from Melee. Ultimate also lets it stall
       // his momentum only once per airtime.
+      //
+      // Plan 5 — SmashWiki "Fox (SSBU)/Down special"
+      // (https://www.ssbwiki.com/Fox_(SSBU)/Down_special): "Damage multiplier
+      // 1.4", "Speed multiplier 1.4", "Lifetime multiplier 1", "Size 8.5u",
+      // "Damage threshold 50%", "Intangibility 2-3", "Reflection 4-23",
+      // "Minimum reflection period 20 frames", "From frame 5 onward, Fox can
+      // also turn around", "Horizontal speed multiplier on startup 0.5", "Period
+      // before applying gravity 4 frames", "Gravity 0.027"; interruptible 37 is
+      // 14 frames after the loop's last frame. UNVERIFIED: the bubble's centre,
+      // put where the move's 2% hitbox is (script `top` Y 6.5).
+      intangible: [2, 3],
+      reflector: {
+        active: [4, 23],
+        radius: fx(8.5),
+        x: fx(0),
+        y: fx(6.5),
+        damage: fx(1.4),
+        speed: fx(1.4),
+        lifetime: fx(1),
+        maxDamage: fx(50),
+        holdAfterReflect: 20,
+        loop: [4, 23],
+        turnFrom: 5,
+        stall: { startX: fx(0.5), noGravityFrames: 4, gravity: fx(0.027) },
+      },
       hitboxes: [
         {
           id: 0,

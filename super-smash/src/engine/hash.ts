@@ -186,6 +186,9 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.autolinkPointY);
   x = mixBool(x, c.victimFreeze);
   x = mixInt(x, c.storedCharge);
+  x = mixInt(x, c.reflectHold);
+  x = mixBool(x, c.specialStall);
+  x = mixBool(x, c.stalling);
   return x;
 }
 

@@ -324,6 +324,35 @@ export interface ProjectileDef {
   readonly charged?: { readonly hitbox: ChargedHitbox; readonly vx: number; readonly partial?: PartialCharge };
   /** Drawing hint for the renderer. */
   readonly visual: "arrow" | "bomb" | "boomerang" | "energy" | "fire" | "spark" | "missile";
+  /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */
+  readonly reflectable?: boolean;
+}
+
+/**
+ * A reflector a move raises (Plan 5): Fox's Reflector, Mario's Cape. Frames
+ * are game frames of the move, quoted from one; multipliers are Q12.
+ */
+export interface ReflectorDef {
+  /** First and last frame the reflector is up. */
+  readonly active: readonly [number, number];
+  /** The bubble: radius, and its centre's offset from the origin (x facing-relative). */
+  readonly radius: number;
+  readonly x: number;
+  readonly y: number;
+  /** SmashWiki's "Damage multiplier", "Speed multiplier", "Lifetime multiplier". */
+  readonly damage: number;
+  readonly speed: number;
+  readonly lifetime: number;
+  /** "Damage threshold": a projectile hitting harder than this passes through. */
+  readonly maxDamage: number;
+  /** Frames the reflector stays up after a reflection however B is held (Fox: 20). */
+  readonly holdAfterReflect: number;
+  /** The reflecting frames repeat while B is held: first and last frame of the loop. */
+  readonly loop?: readonly [number, number];
+  /** From this frame, holding back turns the fighter round. */
+  readonly turnFrom?: number;
+  /** Once per airtime, the move stalls a fall (Fox's Reflector). */
+  readonly stall?: { readonly startX: number; readonly noGravityFrames: number; readonly gravity: number };
 }
 
 /** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */
@@ -387,6 +416,10 @@ export interface MoveDef {
   readonly chargeable?: boolean;
   /** A special that charges (Plan 5): on B, held or stored. See `SpecialCharge`. */
   readonly specialCharge?: SpecialCharge;
+  /** A reflector this move raises (Plan 5). */
+  readonly reflector?: ReflectorDef;
+  /** First and last move frame the fighter is intangible (Plan 5: SmashWiki "Intangibility a-b"). */
+  readonly intangible?: readonly [number, number];
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
   /** A jab that loops until the button is released. */
@@ -790,6 +823,8 @@ export interface ProjectileState {
    * The fighter whose moveset defines `defId` (Plan 5). Not `owner`: a reflector
    * makes a projectile its own, and Kirby's copied neutral special launches
    * another fighter's projectile, so the definition is looked up here.
+   * Must be an id the `SimContext` knows: `step()` throws on an unknown one, as
+   * it does for an unknown `FighterState.defId`.
    */
   source: string;
   /** The fraction of a full charge it was launched with, Q12 (`ONE` = full). Plan 5. */
@@ -920,6 +955,8 @@ export interface StepEvents {
   shieldBreaks: number[];
   smashBallBroken: number | null;
   finalSmashes: number[];
+  /** Projectiles sent back this frame, by whom and where (Plan 5). */
+  reflects: { port: number; x: number; y: number }[];
 }
 
 export function emptyEvents(): StepEvents {
@@ -933,5 +970,6 @@ export function emptyEvents(): StepEvents {
     shieldBreaks: [],
     smashBallBroken: null,
     finalSmashes: [],
+    reflects: [],
   };
 }

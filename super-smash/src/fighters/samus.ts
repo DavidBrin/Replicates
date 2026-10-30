@@ -667,6 +667,8 @@ const legacy: FighterDef = {
             hitbox: { damage: fx(28.0), angle: fx(40), baseKnockback: fx(46), knockbackGrowth: fx(50), radius: fx(8.0) },
           },
           visual: "energy",
+          // samus_cshot `Shoot`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,
@@ -711,6 +713,8 @@ const legacy: FighterDef = {
           lifetime: 118,
           destroyOnHit: true,
           visual: "missile",
+          // samus_missile `Homing`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,
@@ -809,6 +813,8 @@ const legacy: FighterDef = {
           destroyOnHit: true,
           bounces: 1,
           visual: "bomb",
+          // samus_bomb `Fall`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             // Live only at the end of its life — that is the detonation.
             id: 0,

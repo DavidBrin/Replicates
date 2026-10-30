@@ -639,6 +639,8 @@ const legacy: FighterDef = {
           destroyOnHit: true,
           bounces: 4,
           visual: "fire",
+          // mario_fireball `Regular`: `Reflectable=true`.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,

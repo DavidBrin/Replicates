@@ -159,7 +159,8 @@ export interface FighterStatus {
   readonly main: (f: FighterState, intent: Intent, ctx: StateContext) => void;
   /**
    * status_exec: per-frame extras after the kinetic type has run. Unused in
-   * Plan 2; the wall tech's hold is the one user (Plan 3, Task 12). Not called
+   * Plan 2; the wall tech's hold (Plan 3, Task 12) and a special's stall
+   * (Plan 5: Fox's Reflector, `reflectorStallExec`) use it. Not called
    * on the frames `applyMovement` returns early: hanging on a
    * ledge, under a live scripted-momentum hold, and in hitstun.
    */
