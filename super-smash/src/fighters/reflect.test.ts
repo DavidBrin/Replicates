@@ -517,7 +517,7 @@ describe("what the Reflector reflects", () => {
     expect(toFloat(end.fighters[0].damage)).toBeCloseTo(7 * 1.4 * 1.2, 2);
   });
 
-  it("starts a boomerang's flight over: it turns at half its renewed life and its new owner catches it (UNVERIFIED)", () => {
+  it("starts a boomerang's flight over: it slows from its reflected speed, turns, and its new owner catches it (UNVERIFIED)", () => {
     // Fox near the right edge so the boomerang turns before the blast zone.
     const s = duel("link", "fox");
     s.fighters[0].x = fx(30);
@@ -527,13 +527,17 @@ describe("what the Reflector reflects", () => {
     expect(reflected).toBeGreaterThan(0);
     const boomerang = (i: number) => states[i].projectiles.find((p) => p.defId === "boomerang");
     expect(boomerang(reflected)).toMatchObject({ owner: 1, age: 0, returning: false });
-    // Lifetime 125 renewed (×1): it turns on the frame its age reaches 63.
-    expect(boomerang(reflected + 62)?.vx).toBeLessThan(0);
-    expect(boomerang(reflected + 63)?.vx).toBeGreaterThan(0);
-    expect(boomerang(reflected + 63)?.returning).toBe(true);
+    // Sent back at its speed when it met the Reflector (×1), it slows 0.047 a frame
+    // and turns once it would be under 0.3 (Plan 5, Task 13c: its page's numbers).
+    const speed = -boomerang(reflected)!.vx;
+    const turn = Math.floor((speed - fx(0.3)) / fx(0.047)) + 1;
+    expect(boomerang(reflected + turn - 1)?.vx).toBeLessThan(0);
+    expect(boomerang(reflected + turn - 1)?.returning).toBe(false);
+    expect(boomerang(reflected + turn)?.vx).toBeGreaterThan(0);
+    expect(boomerang(reflected + turn)?.returning).toBe(true);
     // Caught by Fox, not hitting him.
-    const gone = states.findIndex((q, i) => i > reflected + 63 && boomerang(i) === undefined);
-    expect(gone).toBeGreaterThan(reflected + 63);
+    const gone = states.findIndex((q, i) => i > reflected + turn && boomerang(i) === undefined);
+    expect(gone).toBeGreaterThan(reflected + turn);
     expect(Math.abs(toFloat(boomerang(gone - 1)!.x) - 70)).toBeLessThan(12);
     expect(states[gone].fighters[1].damage).toBe(0);
   });

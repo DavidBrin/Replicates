@@ -694,7 +694,8 @@ const legacy: FighterDef = {
             baseKnockback: fx(14),
             knockbackGrowth: fx(42),
             effect: "electric",
-            transcendent: true,
+            // samus_cshot `Shoot`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON`, so it clanks
+            // (Plan 5, Task 13c; SmashWiki "Priority" names the full Charge Shot).
           },
         },
       ],
@@ -742,7 +743,7 @@ const legacy: FighterDef = {
             baseKnockback: fx(26),
             knockbackGrowth: fx(25),
             effect: "fire",
-            transcendent: true,
+            // samus_missile `Homing`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5, Task 13c).
           },
         },
       ],
@@ -812,16 +813,21 @@ const legacy: FighterDef = {
       name: "Bomb",
       totalFrames: 47,
       // She curls into Morph Ball and lays a bomb, generated on frame 11, which
-      // falls, settles, and explodes 72 frames later, on frames 83-100
-      // (SmashWiki "Samus (SSBU)/Down special",
+      // hops up, falls, bounces, settles, and explodes 72 frames later, on frames
+      // 83-100 (SmashWiki "Samus (SSBU)/Down special",
       // https://www.ssbwiki.com/Samus_(SSBU)/Down_special: "Bomb generation 11",
       // "Maximum duration before exploding 72 frames", "Explosion (early, mid,
-      // late) 83-94, 95-97, 98-100"; Plan 5, Task 6 fix round 1). Published, not
-      // modelled: the early, mid and late explosions' own numbers (one box
-      // here), the "Detection hitbox 33-82" that sets it off early, and the
-      // bomb's own fall ("Gravity 0.03", "Initial vertical speed 0.5"). The blast also pops
-      // Samus herself upward, which is a recovery mixup rather than a side
-      // effect.
+      // late) 83-94, 95-97, 98-100"; Plan 5, Task 6 fix round 1). Its flight is
+      // the same page's Bomb parameters (Plan 5, Task 13c): "Initial vertical
+      // speed 0.5", "Gravity 0.03", "Falling speed 1.2", "Speed multiplier when
+      // bouncing off ground 0.6", "Minimum speed to bounce off ground 0.2", and it
+      // leaves "Bomb Y offset 2" above her. Laid on the floor it bounces on frames
+      // 37, 61 and 75 of its life, goes off at 72 in a hop under a unit high, and
+      // rests from 83 (`projectiles.test.ts`). UNVERIFIED: the 1 forward. Published, not modelled: the early,
+      // mid and late explosions' own numbers (one box here; the early one's radius
+      // is 7.38), the "Detection hitbox 33-82" that sets it off early, and its
+      // "Rotation speed". The blast also pops Samus herself upward, which is a
+      // recovery mixup rather than a side effect.
       //
       // The 5% explosion is what the projectile carries; brushing the bomb
       // itself before it goes off is a separate 4% at the Sakurai angle.
@@ -831,13 +837,14 @@ const legacy: FighterDef = {
           id: "bomb",
           spawnFrame: 11,
           offsetX: fx(1.0),
-          offsetY: fx(4.0),
+          offsetY: fx(2.0),
           vx: fx(0),
-          vy: fx(0),
-          gravity: fx(0.08),
+          vy: fx(0.5),
+          gravity: fx(0.03),
+          maxFall: fx(1.2),
           lifetime: 90,
           destroyOnHit: true,
-          bounces: 1,
+          settle: { restitution: fx(0.6), minSpeed: fx(0.2) },
           visual: "bomb",
           // samus_bomb `Fall`: `Reflectable=true`.
           reflectable: true,
@@ -854,7 +861,7 @@ const legacy: FighterDef = {
             baseKnockback: fx(40),
             knockbackGrowth: fx(30),
             effect: "fire",
-            transcendent: true,
+            // samus_bomb `BurstAttack`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5, Task 13c).
           },
         },
       ],

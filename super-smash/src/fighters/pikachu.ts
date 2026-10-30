@@ -337,6 +337,9 @@ const legacy: FighterDef = {
           angle: fx(80),
           baseKnockback: fx(55),
           knockbackGrowth: fx(48),
+          // `game_attackhi4`'s late hit (frame 15, ids 0-2): `ATTACK_SETOFF_KIND_OFF` (Plan 5,
+          // Task 13c).
+          transcendent: true,
         },
       ],
     },
@@ -658,7 +661,11 @@ const legacy: FighterDef = {
             baseKnockback: fx(18),
             knockbackGrowth: fx(20),
             effect: "electric",
-            transcendent: true,
+            // pikachu_dengekidama and pikachu_dengeki `Regular`:
+            // `Clang_Rebound=ATTACK_SETOFF_KIND_THRU`, so it clanks and goes on, its
+            // hit blocked on the fighter it met (Plan 5, Task 13c; SmashWiki
+            // "Priority": "some projectiles that don't get destroyed by clanking").
+            noRebound: true,
           },
         },
       ],
@@ -750,6 +757,9 @@ const legacy: FighterDef = {
           baseKnockback: fx(20),
           knockbackGrowth: fx(50),
           effect: "electric",
+          // `game_specialhi1`, the first zip: `ATTACK_SETOFF_KIND_THRU`; the second zip's
+          // `game_specialhi2` is ON, as id 1 is (Plan 5, Task 13c).
+          noRebound: true,
         },
         {
           id: 1,

@@ -77,6 +77,9 @@ function projectile(over: Partial<ProjectileState> = {}): ProjectileState {
     charge: 0,
     reflected: 0,
     damageMul: fx(1),
+    mode: "fly",
+    life: 0,
+    ground: -1,
     ...over,
   };
 }
@@ -300,6 +303,11 @@ describe("hashState", () => {
     expect(withProjectile({ charge: fx(0.5) })).not.toBe(base);
     expect(withProjectile({ reflected: 1 })).not.toBe(base);
     expect(withProjectile({ damageMul: fx(1.2) })).not.toBe(base);
+    // Plan 5, Task 13c: lodged or knocked, its count, the platform it rests on.
+    expect(withProjectile({ mode: "lodged" })).not.toBe(base);
+    expect(withProjectile({ mode: "knocked" })).not.toBe(base);
+    expect(withProjectile({ life: 5 })).not.toBe(base);
+    expect(withProjectile({ ground: 0 })).not.toBe(base);
   });
 
   it("distinguishes two fighters swapped between ports", () => {

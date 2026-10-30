@@ -188,6 +188,58 @@ describe("Kirby's Inhale", () => {
     expect(fired.projectiles[0].damageMul).toBe(COPY_DAMAGE);
   });
 
+  /**
+   * The spit star clanks (Plan 5, Task 13c: rubendal 13.0.1 `kirby_starmissile`
+   * `Fly`, `Clang_Rebound=ATTACK_SETOFF_KIND_ON`), weighed at its rider's damage, the
+   * one its box carries in `chargeScale` (SmashWiki "Priority": "after most damage
+   * multipliers"). `defender` (port 2) presses `press` on the first step that clanks.
+   */
+  function starClank(defender: string, press: InputFrame) {
+    for (let k = 25; k <= 50; k++) {
+      // Kirby inhales Mario on 0 and spits him at `defender` on 30, as `inhaled` does.
+      const { states, events } = run(lineUp(["mario", defender], 10, FREE_FOR_ALL), 90, (i) => [i === 0 ? Btn.Special : i === 30 ? Btn.Attack : 0, 0, i === k ? press : 0]);
+      const at = events.findIndex((e) => e.clanks.length > 0);
+      if (at >= 0) return { at, states, events };
+    }
+    throw new Error("no timing clanked");
+  }
+
+  it("spits a star that clanks at its rider's 15%: it beats Fox's 1.8% jab, which rebounds, and flies on with Mario (Task 13c)", () => {
+    const { at, states } = starClank("fox", Btn.Attack);
+    expect(states[at].projectiles.map((p) => p.defId)).toEqual(["star"]);
+    expect(states[at].fighters[1].action).toBe("spatStar");
+    expect([states[at].fighters[2].action, states[at].fighters[2].move]).toEqual(["stand", null]);
+  });
+
+  it("lets the star's rider go when the star loses a clank: Marth's 18% forward smash, within 9% of it (Task 13c)", () => {
+    const { at, states } = starClank("marth", Btn.Left | Btn.Attack);
+    expect(states[at].projectiles).toEqual([]);
+    expect(states[at].fighters[1]).toMatchObject({ action: "fall", grabbedBy: -1 });
+    expect(states[at].fighters[1].combat.ride).toBe(0);
+  });
+
+  it("lets Donkey Kong's forward smash trample the star: the star is gone, and the smash swings on into Kirby, nothing blocked (Task 13c)", () => {
+    // Donkey Kong's smash (22%, ATTACK_SETOFF_KIND_THRU) and the star (15%) are
+    // within 9%: the star loses, and Donkey Kong, who cannot rebound, swings on. No
+    // fighter's box met his, so it hits Kirby, the star's owner, as freely as anyone
+    // (UNVERIFIED: SmashWiki's "blocked for other clanking character" names a fighter).
+    const held = holdingMario(["donkeyKong"], FREE_FOR_ALL);
+    let found: { at: number; events: StepEvents[]; states: GameState[] } | null = null;
+    for (let k = 0; k <= 20 && found === null; k++) {
+      const s = cloneState(held);
+      Object.assign(s.fighters[2], { x: s.fighters[0].x + fx(16), facing: -1 });
+      const out = run(s, 40, (i) => [i === 20 ? Btn.Attack : 0, 0, i === k ? Btn.Left | Btn.Attack : 0]);
+      const at = out.events.findIndex((e) => e.clanks.length > 0);
+      if (at >= 0) found = { at, ...out };
+    }
+    expect(found).not.toBeNull();
+    const { at, events, states } = found!;
+    expect(states[at].projectiles).toEqual([]);
+    expect(states[at].fighters[1].action).toBe("fall");
+    expect([states[at].fighters[2].action, states[at].fighters[2].move]).toEqual(["attack", "fsmash"]);
+    expect(events.slice(at + 1).some((e) => e.hits.some((h) => h.attacker === 2 && h.victim === 0))).toBe(true);
+  });
+
   it("spits Mario as a star that hits Fox for Mario's weight's 15%", () => {
     const { states, events } = inhaled(["mario", "fox"], (i) => (i === 30 ? Btn.Attack : 0), 90, () => 0, FREE_FOR_ALL);
     expect(states.some((s) => s.fighters[1].action === "spatStar")).toBe(true);
@@ -670,7 +722,9 @@ describe("the spit and the star", () => {
       ridden: true,
       reflectable: true,
     });
-    expect(star.hitbox).toMatchObject({ radius: fx(2.5), angle: fx(45), baseKnockback: fx(70), knockbackGrowth: fx(78), hitlagMultiplier: fx(2), transcendent: true });
+    expect(star.hitbox).toMatchObject({ radius: fx(2.5), angle: fx(45), baseKnockback: fx(70), knockbackGrowth: fx(78), hitlagMultiplier: fx(2) });
+    // It clanks (Plan 5, Task 13c): `kirby_starmissile` `Fly` is ATTACK_SETOFF_KIND_ON.
+    expect(star.hitbox.transcendent).toBeUndefined();
     expect(KIRBY.moves.inhaleSwallow!.release).toEqual({
       frame: 8,
       kind: "swallow",
@@ -1074,6 +1128,10 @@ describe("Inhale's own published shape (Task 9 fix round 1, ruling R-T9f)", () =
     expect(states[7].fighters[1]).toMatchObject({ action: "fall", grabbedBy: -1, x: states[7].fighters[0].x });
     expect(states.every((st) => st.fighters[1].action !== "spatStar")).toBe(true);
     states.forEach((st, k) => expect(stateInvariantBreaks(st, FD, k), `step ${k}`).toEqual([]));
+    // A refused spawn leaves nothing behind a rollback could disagree on (Plan 5,
+    // Task 13c; the Task 9 re-review 3's carry): from before, at and after it, the
+    // same inputs give the same states, hash for hash.
+    expectRollbackSafe(s, 30, (i) => [i === 0 ? Btn.Attack : 0, 0], [0, 5, 6, 7, 8, 12]);
   });
 
   it("stops the swallow's star short of the stage's solid body, and lets its rider go there", () => {

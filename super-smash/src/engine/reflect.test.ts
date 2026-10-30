@@ -66,7 +66,7 @@ const CTX: SimContext = { fighter: () => DEF, stage: () => STAGE };
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
 function shotAt(x: number, over: Partial<ProjectileState> = {}): ProjectileState {
-  return { instanceId: 1, defId: "shot", owner: 0, x, y: fx(6), vx: fx(2), vy: 0, facing: 1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [0], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, ...over };
+  return { instanceId: 1, defId: "shot", owner: 0, x, y: fx(6), vx: fx(2), vy: 0, facing: 1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [0], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1, ...over };
 }
 
 function scene(p: ProjectileState, damage = SHOT.hitbox.damage) {

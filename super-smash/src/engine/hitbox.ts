@@ -521,15 +521,21 @@ export type ClankOutcome =
  * frame itself**, which is the rule that stops a trade from being a free hit for
  * whoever happened to be scanned first.
  *
- * Transcendent hitboxes — most projectiles, Marth's blade — pass through instead
- * of clanking, so a projectile is not deleted by a jab.
+ * Transcendent hitboxes — a script's `ATTACK_SETOFF_KIND_OFF`: Marth's blade,
+ * Fox's blaster, F.L.U.D.D.'s water — pass through instead of clanking. Every
+ * other projectile clanks by the same rule (Plan 5, Task 13c; SmashWiki
+ * "Priority", https://www.ssbwiki.com/Priority, "Projectiles").
+ *
+ * `damageA` and `damageB` are what each side weighs: the step passes each
+ * swing's damage after its multipliers (`clankDamage`, `simulate.ts`); the
+ * boxes' own damage when not given.
  */
-export function resolveClank(a: Hitbox, b: Hitbox): ClankOutcome {
+export function resolveClank(a: Hitbox, b: Hitbox, damageA: number = a.damage, damageB: number = b.damage): ClankOutcome {
   if (a.transcendent || b.transcendent) return "none";
   // Grabs are not attacks: they have no priority to contest, they simply lose to
   // anything that hits them first.
   if (a.grabbing || b.grabbing) return "none";
-  const diff = a.damage - b.damage;
+  const diff = damageA - damageB;
   if (diff <= CLANK_RANGE && diff >= -CLANK_RANGE) return "rebound";
   return diff > 0 ? "aWins" : "bWins";
 }

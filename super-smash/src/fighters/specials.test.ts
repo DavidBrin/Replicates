@@ -565,19 +565,29 @@ describe("Donkey Kong's Headbutt", () => {
  */
 describe("a projectile fired into a wall from beside it", () => {
   const FD = STAGES.find((st) => st.id === "finalDestination")!;
+  // Plan 5, Task 13c (the Task 9 re-review 3's rows): a stored full Charge Shot
+  // (offset 8, the roster's widest), the Thunder Jolt and Link's Remote Bomb (offset
+  // 4: from 1 nearer the wall), and F.L.U.D.D.'s seven pumps, a stored full charge,
+  // its owner held where it starts so that every pump's spawn is in the wall.
   it.each([
-    ["mario", "Fireball", Btn.Special],
-    ["fox", "Blaster", Btn.Special],
-    ["samus", "Homing Missile", Btn.Special | Btn.Right],
-    ["link", "Hero's Bow", Btn.Special],
-    ["link", "Boomerang", Btn.Special | Btn.Right],
-  ] as const)("%s's %s never starts, or flies, inside it", (id, _name, key) => {
+    ["mario", "Fireball", Btn.Special, -84, {}, false],
+    ["fox", "Blaster", Btn.Special, -84, {}, false],
+    ["samus", "Homing Missile", Btn.Special | Btn.Right, -84, {}, false],
+    ["link", "Hero's Bow", Btn.Special, -84, {}, false],
+    ["link", "Boomerang", Btn.Special | Btn.Right, -84, {}, false],
+    ["samus", "stored full Charge Shot", Btn.Special, -84, { storedCharge: 112 }, false],
+    ["pikachu", "Thunder Jolt", Btn.Special, -83, {}, false],
+    ["mario", "F.L.U.D.D. water (stored full)", Btn.Down | Btn.Special, -84, { storedCharge: 80 }, true],
+    ["link", "Remote Bomb", Btn.Down | Btn.Special, -83, {}, false],
+  ] as const)("%s's %s never starts, or flies, inside it", (id, _name, key, x, combat, hover) => {
     let s = createInitialState("finalDestination", [{ defId: id }, { defId: "kirby" }], RULES, 9);
-    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(-84), y: fx(-30), facing: 1, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(x), y: fx(-30), facing: 1, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[0].combat, combat);
     Object.assign(s.fighters[1], { action: "stand", x: fx(40), y: 0, grounded: true, platform: 0 });
     let prev: InputFrame[] = [0, 0];
     let launches = 0;
     for (let i = 0; i < 60; i++) {
+      if (hover) Object.assign(s.fighters[0], { x: fx(x), y: fx(-30) });
       const now: InputFrame[] = [i === 0 ? key : 0, 0];
       const before = s.nextProjectileId;
       s = step(s, now, { prevInputs: prev }).state;
@@ -587,6 +597,23 @@ describe("a projectile fired into a wall from beside it", () => {
     }
     // Its spawn point was inside the wall, so nothing was launched.
     expect(launches).toBe(0);
+  });
+
+  it("Samus's bomb, laid with her held just under the stage's underside, never starts inside it (Task 13c)", () => {
+    // Its spawn, 2 above her ("Bomb Y offset 2"), is 1 inside Final Destination's underside.
+    const bottom = FD.platforms[0].y - fx(60);
+    let s = createInitialState("finalDestination", [{ defId: "samus" }, { defId: "kirby" }], RULES, 9);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: 0, y: bottom - fx(1), facing: 1, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[1], { action: "stand", x: fx(40), y: 0, grounded: true, platform: 0 });
+    let prev: InputFrame[] = [0, 0];
+    for (let i = 0; i < 30; i++) {
+      Object.assign(s.fighters[0], { x: 0, y: bottom - fx(1) });
+      const now: InputFrame[] = [i === 0 ? Btn.Down | Btn.Special : 0, 0];
+      s = step(s, now, { prevInputs: prev }).state;
+      prev = now;
+      for (const p of s.projectiles) expect(insideSolidBody(FD, s.frame, p.x, p.y), `${p.defId} at age ${p.age}`).toBe(false);
+    }
+    expect([s.nextProjectileId, s.fighters[0].move]).toEqual([1, "downB"]);
   });
 
   it("still launches one whose spawn point is in the open (the Fireball, facing away)", () => {

@@ -369,10 +369,51 @@ export interface ProjectileDef {
   readonly hitbox: Hitbox;
   /** Disappears on its first hit. False for a boomerang or a lingering flame. */
   readonly destroyOnHit?: boolean;
-  /** Bounces off surfaces this many times before expiring. */
+  /**
+   * Bounces off surfaces this many times before expiring: a floor or an
+   * underside turns its vertical speed round, a wall its horizontal one. With
+   * none of `bounces`, `lodge` and `settle`, the first surface it meets ends it
+   * (SmashWiki "Wall": "All walls will stop projectile attacks").
+   */
   readonly bounces?: number;
-  /** Returns to its owner partway through its life, like a boomerang. */
-  readonly returns?: boolean;
+  /**
+   * It sticks in the first surface it meets, a floor, a wall or an underside,
+   * and stays there this many frames with no hitbox (Plan 5, Task 13c: Link's
+   * arrow, SmashWiki "Lifetime stuck on a surface (single) 180 frames").
+   */
+  readonly lodge?: number;
+  /**
+   * A floor it lands on bounces it at `restitution` of its speed until it lands
+   * slower than `minSpeed`, and then it rests there, carried by the platform
+   * (Plan 5, Task 13c: Samus's bomb, "Speed multiplier when bouncing off ground
+   * 0.6", "Minimum speed to bounce off ground 0.2"). A wall or an underside
+   * stops its motion into it.
+   */
+  readonly settle?: { readonly restitution: number; readonly minSpeed: number };
+  /** The fastest it falls ("Falling speed"); absent, gravity has no limit. */
+  readonly maxFall?: number;
+  /**
+   * It flies out slowing by `deceleration` a frame, turns once it would be
+   * slower than `minSpeed`, and comes back gaining speed up to `maxSpeed`,
+   * turning towards its owner by at most the angle whose sine and cosine
+   * `homing` holds a frame; its owner catches it. On the way back it hits with
+   * `hit` (Plan 5, Task 13c: Link's boomerang, SmashWiki "Link (SSBU)/Side
+   * special").
+   */
+  readonly returns?: {
+    readonly deceleration: number;
+    readonly minSpeed: number;
+    readonly maxSpeed: number;
+    readonly homing: { readonly sin: number; readonly cos: number };
+    readonly hit: ChargedHitbox;
+  };
+  /**
+   * A clank it loses knocks it away rather than ending it: it flies off at
+   * (`vx` facing-relative, `vy`), falls under `gravity` up to `maxFall`, and is
+   * gone after `lifetime` frames, with no hitbox (Plan 5, Task 13c: Link's
+   * boomerang, "After clashing with an attack").
+   */
+  readonly clash?: { readonly lifetime: number; readonly vx: number; readonly vy: number; readonly gravity: number; readonly maxFall: number };
   /** Charge scales damage and speed by up to this multiplier at full charge. */
   readonly chargeScaling?: number;
   /**
@@ -1184,7 +1225,23 @@ export interface ProjectileState {
    * Task 9; `MoveDef.copyDamage`). Knockback's `d` leaves it out.
    */
   damageMul: number;
+  /**
+   * What it is doing (Plan 5, Task 13c): `"fly"`, its own flight; `"lodged"`,
+   * stuck in the stage (`ProjectileDef.lodge`); `"knocked"`, sent off by a clank
+   * it lost (`ProjectileDef.clash`). Lodged or knocked it has no hitbox.
+   */
+  mode: ProjectileMode;
+  /** Frames left lodged or knocked, this one included; 0 in flight. Plan 5, Task 13c. */
+  life: number;
+  /**
+   * The platform it rests on and is carried by, a settled bomb or an arrow lodged
+   * in it (its index in `StageDef.platforms`), or −1. Plan 5, Task 13c.
+   */
+  ground: number;
 }
+
+/** `ProjectileState.mode` (Plan 5, Task 13c). */
+export type ProjectileMode = "fly" | "lodged" | "knocked";
 
 export interface SmashBallState {
   active: boolean;

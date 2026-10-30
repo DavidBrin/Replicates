@@ -880,6 +880,9 @@ const legacy: FighterDef = {
           baseKnockback: fx(70),
           knockbackGrowth: fx(74),
           effect: "slash",
+          // `game_specialhi` ids 0-3: `ATTACK_SETOFF_KIND_OFF`; SmashWiki "Priority" lists
+          // Dolphin Slash (Plan 5, Task 13c).
+          transcendent: true,
         },
         {
           id: 1,
@@ -893,6 +896,8 @@ const legacy: FighterDef = {
           baseKnockback: fx(20),
           knockbackGrowth: fx(90),
           effect: "slash",
+          // `game_specialhi`: `ATTACK_SETOFF_KIND_OFF` (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },

@@ -69,10 +69,12 @@ export function reflectProjectile(p: ProjectileState, def: ProjectileDef, by: Fi
   // reading of SmashWiki's "Lifetime multiplier" — it renews the clock.
   p.age = def.lifetime - Math.trunc((def.lifetime * r.lifetime) / ONE);
   p.hitPorts.length = 0;
-  // UNVERIFIED: a reflected boomerang starts its flight over, so it turns at
-  // half its renewed life and comes back to the reflector, its owner now, who
-  // catches it (`advanceProjectile`). No source covers a reflected boomerang.
+  // UNVERIFIED: a reflected boomerang starts its flight over, so it slows from
+  // its reflected speed, turns, and comes back to the reflector, its owner now,
+  // who catches it (`advanceProjectile`). No source covers a reflected boomerang.
   p.returning = false;
+  // A bomb resting on the floor (Plan 5, Task 13c) stays where it rests: it rests
+  // with no speed, and the reflector's multiplier leaves it none.
   p.reflected += 1;
 }
 

@@ -251,6 +251,9 @@ export function mixProjectile(h: number, p: ProjectileState): number {
   x = mixInt(x, p.charge);
   x = mixInt(x, p.reflected);
   x = mixInt(x, p.damageMul);
+  x = mixString(x, p.mode);
+  x = mixInt(x, p.life);
+  x = mixInt(x, p.ground);
   return x;
 }
 

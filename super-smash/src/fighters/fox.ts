@@ -153,6 +153,8 @@ const legacy: FighterDef = {
           angle: fx(361),
           baseKnockback: fx(7),
           knockbackGrowth: fx(20),
+          // `game_attack100` ids 0-1: `ATTACK_SETOFF_KIND_OFF` (Plan 5, Task 13c).
+          transcendent: true,
         },
         {
           id: 1,
@@ -165,6 +167,9 @@ const legacy: FighterDef = {
           angle: fx(361),
           baseKnockback: fx(55),
           knockbackGrowth: fx(130),
+          // The finisher, rubendal 13.0.1 `game_attack100end` ids 0-2: `ATTACK_SETOFF_KIND_OFF`
+          // (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },
@@ -839,6 +844,8 @@ const legacy: FighterDef = {
           baseKnockback: fx(66),
           knockbackGrowth: fx(32),
           effect: "electric",
+          // `game_speciallwstart` ids 0-1: `ATTACK_SETOFF_KIND_OFF` (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },

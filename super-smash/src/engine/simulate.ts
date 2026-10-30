@@ -90,6 +90,7 @@ import {
   chargeFraction,
   cloneProjectile,
   findProjectileDef,
+  knockProjectile,
   markProjectileHit,
   projectileAlreadyHit,
   projectileHitbox,
@@ -901,10 +902,15 @@ export function step(
   appendProjectileCandidates(s, ctx, candidates, projectilePrev);
   // Reflectors first: a reflected projectile neither clanks nor hits this frame (Plan 5).
   reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
-  resolveClanks(s, candidates, events, destroyed);
+  resolveClanks(s, candidates, (p) => projectileDefOf(ctx, p), events, destroyed);
   resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed);
   resolveThrows(s, defs, frozen, beforeActionFrame, intents, events);
   if (destroyed.size > 0) {
+    // A star a clank ends lets its rider go, as one whose flight ends does (Plan 5,
+    // Task 13c: the star clanks now, `kirby_starmissile`'s `ATTACK_SETOFF_KIND_ON`).
+    for (const p of s.projectiles) {
+      if (destroyed.has(p.instanceId) && projectileDefOf(ctx, p)?.ridden === true) carryStarRider(s, p, false, stage);
+    }
     s.projectiles = s.projectiles.filter((p) => !destroyed.has(p.instanceId));
   }
 
@@ -1279,19 +1285,28 @@ function appendProjectileCandidates(
  * also a hit — the loser's move is cancelled outright, and on a rebound both
  * fighters are pushed back and returned to neutral.
  *
+ * The 9% rule weighs each side's damage after its multipliers and before the
+ * one-on-one bonus (`clankDamage`; SmashWiki "Priority",
+ * https://www.ssbwiki.com/Priority: "This comparison happens after most damage
+ * multipliers but before the 1v1 multiplier in Ultimate"; Plan 5, Task 13c).
+ *
  * A box that cannot rebound (`noRebound`, the script's THRU; Plan 5, Task 13 fix
  * round 1, ruling R-T13g) never loses its move: where it would rebound or lose,
  * it goes on, and the hit it met is blocked, its swing marked as having hit that
  * fighter, so this hit cannot land after the clank (SmashWiki "Priority",
- * https://www.ssbwiki.com/Priority, revision 2049993, "Moves that cannot
- * rebound": "they will continue their animations as if they did not collide at
- * all, but the hitbox will count as blocked for other clanking character ...
- * later hits can still connect as clanking blocks only the current hit"). The
- * other side keeps the 9% rule (`resolveClank`). A projectile is never one.
+ * revision 2049993, "Moves that cannot rebound": "they will continue their
+ * animations as if they did not collide at all, but the hitbox will count as
+ * blocked for other clanking character ... later hits can still connect as
+ * clanking blocks only the current hit"). The other side keeps the 9% rule
+ * (`resolveClank`).
+ *
+ * Projectiles clank by their own script's setting since Plan 5, Task 13c, by the
+ * same rule (`loseOrTrample`); `projectileDef` finds each one's definition.
  */
 function resolveClanks(
   s: GameState,
   candidates: Candidate[],
+  projectileDef: (p: ProjectileState) => ProjectileDef | undefined,
   events: StepEvents,
   destroyed: Set<number>,
 ): void {
@@ -1310,7 +1325,7 @@ function resolveClanks(
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
       if (ca.suppressed && cb.suppressed) continue;
       if (!capsulesOverlap(capsuleOf(ca), capsuleOf(cb))) continue;
-      const outcome = resolveClank(ca.hitbox, cb.hitbox);
+      const outcome = resolveClank(ca.hitbox, cb.hitbox, clankDamage(s, ca), clankDamage(s, cb));
       if (outcome === "none") continue;
 
       ca.suppressed = true;
@@ -1319,11 +1334,12 @@ function resolveClanks(
         x: Math.trunc((ca.x + cb.x) / 2),
         y: Math.trunc((ca.y + cb.y) / 2),
       });
-      if (outcome === "rebound" || outcome === "bWins") loseOrTrample(s, ca, cb, destroyed);
-      if (outcome === "rebound" || outcome === "aWins") loseOrTrample(s, cb, ca, destroyed);
+      if (outcome === "rebound" || outcome === "bWins") loseOrTrample(s, ca, cb, projectileDef, destroyed);
+      if (outcome === "rebound" || outcome === "aWins") loseOrTrample(s, cb, ca, projectileDef, destroyed);
     }
   }
   // A move cancelled by a clank keeps no live hitboxes for the rest of the frame.
+  // (A projectile knocked away clanked, so it is suppressed already.)
   for (const c of candidates) {
     if (c.projectile !== null) {
       if (destroyed.has(c.projectile.instanceId)) c.suppressed = true;
@@ -1334,21 +1350,62 @@ function resolveClanks(
   }
 }
 
-/** `c` lost a clank to `other`: it loses its move, or, if it cannot rebound, its hit on `other`'s fighter. */
-function loseOrTrample(s: GameState, c: Candidate, other: Candidate, destroyed: Set<number>): void {
-  if (c.hitbox.noRebound === true && c.projectile === null) {
-    markHit(s.fighters[c.attacker], other.attacker);
-    return;
-  }
-  loseClank(s, c, destroyed);
+/**
+ * What a clank weighs `c` at: its swing's damage after its charge, a short hop
+ * and staleness (`swingDamage`), and Kirby's Copy Ability's ×1.2, before the
+ * one-on-one bonus (SmashWiki "Priority"; Plan 5, Task 13c). A spat star's damage
+ * lives in its `chargeScale` (its rider's weight's row), so this is what lets it
+ * clank as the star it is.
+ */
+function clankDamage(s: GameState, c: Candidate): number {
+  return mul(swingDamage(s.fighters[c.attacker], c), c.damageMul);
 }
 
-/** Losing a clank ends a swing and deletes a projectile. */
-function loseClank(s: GameState, c: Candidate, destroyed: Set<number>): void {
+/**
+ * `c` lost a clank to `other` (SmashWiki "Priority",
+ * https://www.ssbwiki.com/Priority; Plan 5, Task 13c for every projectile line):
+ * - a projectile that cannot rebound (THRU: the Thunder Jolt) goes on, its hit
+ *   blocked on the fighter whose box it met ("there are some projectiles that
+ *   don't get destroyed by clanking. However, their hitboxes are generally
+ *   disabled for the character or object that clanked with them");
+ * - any other projectile is knocked away if its definition says how (Link's
+ *   boomerang, `knockProjectile`), else it is gone ("the projectile is destroyed");
+ * - a fighter's box in the air that met a projectile goes on ("the hitboxes of
+ *   aerial attacks can clank with projectiles ... but then the aerial will
+ *   continue"; "airborne attacks cannot be cancelled out, including airborne
+ *   special moves"). Not modelled: the freeze frames it takes first;
+ * - a fighter's box that cannot rebound goes on, its hit on `other`'s fighter
+ *   blocked; one that met a projectile blocks nothing, as no fighter met it
+ *   (UNVERIFIED);
+ * - any other fighter's box loses its move: the rebound (`loseClank`).
+ */
+function loseOrTrample(
+  s: GameState,
+  c: Candidate,
+  other: Candidate,
+  projectileDef: (p: ProjectileState) => ProjectileDef | undefined,
+  destroyed: Set<number>,
+): void {
   if (c.projectile !== null) {
-    destroyed.add(c.projectile.instanceId);
+    if (c.hitbox.noRebound === true) {
+      if (other.projectile === null) markProjectileHit(c.projectile, other.attacker);
+      return;
+    }
+    const def = projectileDef(c.projectile);
+    if (def === undefined || !knockProjectile(c.projectile, def)) destroyed.add(c.projectile.instanceId);
     return;
   }
+  const f = s.fighters[c.attacker];
+  if (other.projectile !== null && !f.grounded) return;
+  if (c.hitbox.noRebound === true) {
+    if (other.projectile === null) markHit(f, other.attacker);
+    return;
+  }
+  loseClank(s, c);
+}
+
+/** Losing a clank ends a swing: the rebound. */
+function loseClank(s: GameState, c: Candidate): void {
   // The rebound: the attack ends and the fighter is pushed back a little.
   const f = s.fighters[c.attacker];
   kineticSetX(f, -f.facing * fx(0.5));

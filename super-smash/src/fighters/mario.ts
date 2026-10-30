@@ -391,6 +391,9 @@ const legacy: FighterDef = {
           baseKnockback: fx(25),
           knockbackGrowth: fx(99),
           effect: "fire",
+          // `game_attacks4` id 1 (all three angles): `ATTACK_SETOFF_KIND_OFF`; SmashWiki
+          // "Priority" lists Mario's forward smash sweetspot (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },
@@ -728,7 +731,9 @@ const legacy: FighterDef = {
             baseKnockback: fx(20),
             knockbackGrowth: fx(30),
             effect: "fire",
-            transcendent: true,
+            // mario_fireball `Regular`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON`, so it
+            // clanks (Plan 5, Task 13c; SmashWiki "Priority"'s Fireball against
+            // Sonic's jab).
           },
         },
       ],
@@ -811,6 +816,9 @@ const legacy: FighterDef = {
           fixedKnockback: fx(80),
           knockbackGrowth: fx(100),
           reverse: true,
+          // `game_specials` ids 0-1: `ATTACK_SETOFF_KIND_OFF`; SmashWiki "Priority" lists the
+          // Cape (Plan 5, Task 13c).
+          transcendent: true,
         },
         {
           id: 1,
@@ -825,6 +833,8 @@ const legacy: FighterDef = {
           fixedKnockback: fx(80),
           knockbackGrowth: fx(100),
           reverse: true,
+          // `game_specials`: `ATTACK_SETOFF_KIND_OFF` (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },

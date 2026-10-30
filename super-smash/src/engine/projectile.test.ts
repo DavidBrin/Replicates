@@ -9,13 +9,16 @@ import {
   advanceProjectile,
   cloneProjectile,
   findProjectileDef,
+  knockProjectile,
   markProjectileHit,
   projectileAlreadyHit,
   projectileChargeScale,
+  projectileHitbox,
   projectileHitboxActive,
   projectilesDueOnFrame,
   spawnProjectile,
 } from "./projectile";
+import { platformCentreX } from "./physics";
 import { emptyCombat } from "./combat";
 import { emptyKinetic } from "./kinetic";
 import { Btn } from "./types";
@@ -103,7 +106,10 @@ const BOMB: ProjectileDef = {
   visual: "bomb",
 };
 
-/** A boomerang: turns around halfway and comes home. */
+/**
+ * A boomerang: slows by 0.25 a frame from 3, turns once it would be slower than
+ * 0.5 (age 11), and comes home up to 3 a frame, turning at most 1° a frame.
+ */
 const BOOMERANG: ProjectileDef = {
   id: "boomerang",
   spawnFrame: 4,
@@ -114,8 +120,31 @@ const BOOMERANG: ProjectileDef = {
   gravity: 0,
   lifetime: 60,
   hitbox: hitbox({ damage: fx(7) }),
-  returns: true,
+  returns: {
+    deceleration: fx(0.25),
+    minSpeed: fx(0.5),
+    maxSpeed: fx(3),
+    // sin 1°, cos 1°.
+    homing: { sin: fx(0.0174524), cos: fx(0.9998477) },
+    hit: { damage: fx(2), radius: fx(3) },
+  },
+  clash: { lifetime: 20, vx: fx(-0.5), vy: fx(1), gravity: fx(0.1), maxFall: fx(1.5) },
   visual: "boomerang",
+};
+
+/** An arrow that sticks: it lodges in the first surface it meets, for 30 frames. */
+const DART: ProjectileDef = { ...ARROW, id: "dart", gravity: fx(0.5), lodge: 30 };
+
+/** A pebble that bounces at half its landing speed until it lands slower than 0.3, and rests. */
+const PEBBLE: ProjectileDef = {
+  ...ARROW,
+  id: "pebble",
+  vx: 0,
+  gravity: fx(0.1),
+  maxFall: fx(1),
+  lifetime: 300,
+  settle: { restitution: fx(0.5), minSpeed: fx(0.3) },
+  visual: "bomb",
 };
 
 /** A charge shot: scales with how long the button was held. */
@@ -390,16 +419,27 @@ describe("bouncing", () => {
   });
 });
 
-describe("returning", () => {
-  it("turns around at the halfway point of its life", () => {
+describe("returning (Plan 5, Task 13c)", () => {
+  it("slows by its deceleration and turns once it would be slower than its minimum speed", () => {
     const p = spawnProjectile(BOOMERANG, fighter(), 1);
-    for (let i = 0; i < BOOMERANG.lifetime / 2 - 1; i++) {
-      advanceProjectile(p, BOOMERANG, STAGE, null, i);
-      expect(p.returning).toBe(false);
+    // 3 − 0.25 a frame: 0.5 at age 10, under it at 11, where it turns.
+    for (let age = 1; age <= 10; age++) {
+      advanceProjectile(p, BOOMERANG, STAGE, null, age);
+      expect([p.returning, p.vx, p.vy], `age ${age}`).toEqual([false, fx(3) - age * fx(0.25), 0]);
     }
-    advanceProjectile(p, BOOMERANG, STAGE, null, 0);
-    expect(p.returning).toBe(true);
-    expect(p.vx).toBeLessThan(0);
+    advanceProjectile(p, BOOMERANG, STAGE, null, 11);
+    expect([p.returning, p.vx, p.vy]).toEqual([true, -fx(0.5), 0]);
+  });
+
+  it("gains its deceleration back each frame on the way home, up to its maximum speed", () => {
+    const p = spawnProjectile(BOOMERANG, fighter(), 1);
+    for (let age = 1; age <= 11; age++) advanceProjectile(p, BOOMERANG, STAGE, null, age);
+    const speeds: number[] = [];
+    for (let age = 12; age <= 25; age++) {
+      advanceProjectile(p, BOOMERANG, STAGE, null, age);
+      speeds.push(Math.abs(p.vx));
+    }
+    expect(speeds).toEqual(speeds.map((_, i) => Math.min(fx(0.5) + (i + 1) * fx(0.25), fx(3))));
   });
 
   it("comes back to its owner and is caught", () => {
@@ -414,6 +454,141 @@ describe("returning", () => {
     // Caught rather than timed out: it ended before its life ran down.
     expect(frames).toBeLessThan(BOOMERANG.lifetime);
     expect(p.returning).toBe(true);
+  });
+
+  it("turns towards its owner by at most its homing angle a frame, the shorter way, and straight at him once within it", () => {
+    // Its owner well above where it turns: the way back bends up towards him.
+    const owner = fighter({ y: fx(60) });
+    const p = spawnProjectile(BOOMERANG, fighter(), 1);
+    // sin 1°, and a little for rounding.
+    const sin1 = 0.0174524 + 1e-3;
+    let alive = true;
+    let turned = 0;
+    for (let age = 1; alive && age < BOOMERANG.lifetime; age++) {
+      const [vx, vy] = [p.vx, p.vy];
+      alive = advanceProjectile(p, BOOMERANG, STAGE, owner, age).alive;
+      if (!alive || age <= 11) continue;
+      // The sine of the turn this frame, from the cross product of the two velocities.
+      const turn = (vx * p.vy - vy * p.vx) / (Math.hypot(vx, vy) * Math.hypot(p.vx, p.vy));
+      expect(Math.abs(turn), `age ${age}`).toBeLessThanOrEqual(sin1);
+      // Up towards him: counter-clockwise, flying back to the left.
+      expect(turn, `age ${age}`).toBeLessThanOrEqual(1e-9);
+      if (turn < -1e-9) turned += 1;
+    }
+    expect(turned).toBeGreaterThan(5);
+    expect(p.vy).toBeGreaterThan(0);
+  });
+
+  it("hits with its way-back box once it has turned", () => {
+    const p = spawnProjectile(BOOMERANG, fighter(), 1);
+    expect(projectileHitbox(p, BOOMERANG)).toBe(BOOMERANG.hitbox);
+    p.returning = true;
+    expect(projectileHitbox(p, BOOMERANG)).toEqual({ ...BOOMERANG.hitbox, damage: fx(2), radius: fx(3) });
+  });
+});
+
+describe("surfaces (Plan 5, Task 13c)", () => {
+  /** Put `p` at (x, y) moving (vx, vy), and advance it one frame. */
+  function at(def: ProjectileDef, x: number, y: number, vx: number, vy: number): { p: ReturnType<typeof spawnProjectile>; alive: boolean } {
+    const p = spawnProjectile(def, fighter(), 1);
+    Object.assign(p, { x, y, vx, vy });
+    return { p, alive: advanceProjectile(p, def, STAGE, null, 1).alive };
+  }
+
+  it("stops a projectile at an underside, by its own wall rule: gone, bounced, or lodged", () => {
+    // The stage's underside is 60 below its floor; each rises into it from 1 below.
+    expect(at(ARROW, fx(10), fx(-61), 0, fx(2)).alive).toBe(false);
+    const bounced = at(BOMB, fx(10), fx(-61), 0, fx(2));
+    expect([bounced.alive, bounced.p.y, bounced.p.vy, bounced.p.bouncesLeft]).toEqual([true, fx(-60), -(fx(2) - BOMB.gravity), 1]);
+    const lodged = at(DART, fx(10), fx(-61), 0, fx(2));
+    expect([lodged.alive, lodged.p.mode, lodged.p.y, lodged.p.life, lodged.p.ground]).toEqual([true, "lodged", fx(-60), 30, 0]);
+  });
+
+  it("leaves a projectile rising past the stage's side alone", () => {
+    expect(at(ARROW, fx(90), fx(-61), 0, fx(2)).alive).toBe(true);
+  });
+
+  it("lodges a sticking projectile in the floor or a wall, harmless, for its lodge frames, carried nowhere", () => {
+    const floor = at(DART, fx(10), fx(1), fx(4), -fx(2));
+    expect([floor.p.mode, floor.p.x, floor.p.y, floor.p.ground]).toEqual(["lodged", fx(14), 0, 0]);
+    const wall = at(DART, fx(-82), fx(-10), fx(4), 0);
+    expect([wall.p.mode, wall.p.x, wall.p.y]).toEqual(["lodged", fx(-80), fx(-10.5)]);
+    const p = floor.p;
+    expect(projectileHitboxActive(p, DART)).toBe(false);
+    // Its 30 frames count the one it lodged on: it is gone on the 31st.
+    for (let i = 2; i <= 31; i++) expect(advanceProjectile(p, DART, STAGE, null, i).alive, `lodged frame ${i}`).toBe(i <= 30);
+    expect([p.x, p.y]).toEqual([fx(14), 0]);
+  });
+
+  it("bounces a settling projectile at its restitution until it lands slower than its minimum, then rests on the floor", () => {
+    const p = spawnProjectile(PEBBLE, fighter({ y: fx(20) }), 1);
+    const landings: number[] = [];
+    let age = 0;
+    while (p.ground < 0 && age < 300) {
+      const before = p.vy;
+      advanceProjectile(p, PEBBLE, STAGE, null, ++age);
+      if (p.y === 0) landings.push(before - PEBBLE.gravity < -PEBBLE.maxFall! ? -PEBBLE.maxFall! : before - PEBBLE.gravity);
+    }
+    // It lands at its 1-a-frame fall cap, then at half of each bounce's speed, until under 0.3.
+    expect(landings[0]).toBe(-fx(1));
+    expect(landings.slice(0, -1).every((v) => -v >= fx(0.3))).toBe(true);
+    expect(-landings[landings.length - 1]).toBeLessThan(fx(0.3));
+    expect([p.y, p.vx, p.vy, p.ground, p.mode]).toEqual([0, 0, 0, 0, "fly"]);
+    // At rest it stays, its hitbox live as ever.
+    for (let i = 0; i < 20; i++) advanceProjectile(p, PEBBLE, STAGE, null, ++age);
+    expect([p.y, p.vy]).toEqual([0, 0]);
+    expect(projectileHitboxActive(p, PEBBLE)).toBe(true);
+  });
+
+  it("stops a settling projectile at a wall or an underside, alive", () => {
+    const wall = at(PEBBLE, fx(-82), fx(-10), fx(4), 0);
+    expect([wall.alive, wall.p.x, wall.p.vx]).toEqual([true, fx(-80), 0]);
+    const under = at(PEBBLE, fx(10), fx(-61), 0, fx(2));
+    expect([under.alive, under.p.y, under.p.vy]).toEqual([true, fx(-60), 0]);
+  });
+
+  it("carries a resting projectile with its moving platform", () => {
+    const moving: StageDef = {
+      ...STAGE,
+      platforms: [...STAGE.platforms, { x: 0, y: fx(30), halfWidth: fx(20), soft: true, ledges: false, motion: { kind: "sweep", amplitude: fx(40), periodFrames: 400 } }],
+    };
+    const p = spawnProjectile(PEBBLE, fighter({ y: fx(30) }), 1);
+    Object.assign(p, { x: 0, y: fx(30), vy: 0, ground: 1 });
+    advanceProjectile(p, PEBBLE, moving, null, 100);
+    expect(p.x).toBe(platformCentreX(moving.platforms[1], 100) - platformCentreX(moving.platforms[1], 99));
+    expect(p.y).toBe(fx(30));
+  });
+
+  it("caps a projectile's fall at its falling speed", () => {
+    const p = spawnProjectile(PEBBLE, fighter({ y: fx(100) }), 1);
+    for (let age = 1; age <= 30; age++) advanceProjectile(p, PEBBLE, STAGE, null, age);
+    expect(p.vy).toBe(-fx(1));
+  });
+});
+
+describe("a clank it loses (Plan 5, Task 13c)", () => {
+  it("knocks a projectile with a clash rule away: no hitbox, the clash's flight, gone after its lifetime", () => {
+    const p = spawnProjectile(BOOMERANG, fighter({ y: fx(40) }), 1);
+    expect(knockProjectile(p, BOOMERANG)).toBe(true);
+    expect([p.mode, p.life, p.vx, p.vy]).toEqual(["knocked", 20, -fx(0.5), fx(1)]);
+    expect(projectileHitboxActive(p, BOOMERANG)).toBe(false);
+    advanceProjectile(p, BOOMERANG, STAGE, null, 1);
+    expect(p.vy).toBe(fx(1) - fx(0.1));
+    // Its 20 frames count the clank's: the 19 after it, gone on the 20th.
+    for (let i = 2; i <= 20; i++) expect(advanceProjectile(p, BOOMERANG, STAGE, null, i).alive, `knocked frame ${i}`).toBe(i < 20);
+  });
+
+  it("is gone on the stage it meets while knocked away", () => {
+    const p = spawnProjectile(BOOMERANG, fighter(), 1);
+    knockProjectile(p, BOOMERANG);
+    Object.assign(p, { y: fx(1), vy: -fx(2) });
+    expect(advanceProjectile(p, BOOMERANG, STAGE, null, 1).alive).toBe(false);
+  });
+
+  it("knocks nothing without a clash rule: the clank ends it", () => {
+    const p = spawnProjectile(ARROW, fighter(), 1);
+    expect(knockProjectile(p, ARROW)).toBe(false);
+    expect(p.mode).toBe("fly");
   });
 });
 
@@ -617,11 +792,16 @@ describe("where a projectile comes from (Plan 5)", () => {
     const p = spawnProjectile(ARROW, fighter(), 1);
     const c = cloneProjectile(p);
     expect(Object.keys(c).sort()).toEqual(Object.keys(p).sort());
+    // Launched in flight, resting on nothing, with no count of its own (Task 13c).
+    expect([p.mode, p.life, p.ground]).toEqual(["fly", 0, -1]);
     const s = fire(standing(fx(200)), [Btn.Special, 0], 6);
     for (const [name, mutate] of [
       ["source", (q: GameState) => (q.projectiles[0].source = "other")],
       ["charge", (q: GameState) => (q.projectiles[0].charge += 1)],
       ["reflected", (q: GameState) => (q.projectiles[0].reflected += 1)],
+      ["mode", (q: GameState) => (q.projectiles[0].mode = "lodged")],
+      ["life", (q: GameState) => (q.projectiles[0].life += 1)],
+      ["ground", (q: GameState) => (q.projectiles[0].ground += 1)],
     ] as const) {
       const q = cloneState(s);
       mutate(q);

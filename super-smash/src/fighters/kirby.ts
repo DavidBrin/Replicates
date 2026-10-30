@@ -171,6 +171,10 @@ const legacy: FighterDef = {
           angle: fx(361),
           baseKnockback: fx(7),
           knockbackGrowth: fx(35),
+          // `game_attack100` id 0: `ATTACK_SETOFF_KIND_OFF`; SmashWiki "Priority": as of 9.0.0
+          // "many rapid jabs and their finishers in Ultimate are transcendent" (Plan 5, Task
+          // 13c).
+          transcendent: true,
         },
         {
           id: 1,
@@ -183,6 +187,9 @@ const legacy: FighterDef = {
           angle: fx(361),
           baseKnockback: fx(70),
           knockbackGrowth: fx(115),
+          // The finisher, rubendal 13.0.1 `game_attack100end` ids 0-2: `ATTACK_SETOFF_KIND_OFF`
+          // (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },
@@ -768,8 +775,8 @@ const legacy: FighterDef = {
           // `chargeScale` the rest); "its speed ... 2.8 + 0.008(t - k)" (2.8 here,
           // and the release sets the rest), slowing "by 0.05 per frame", letting go
           // "below 0.4", for "a maximum of 60" frames. Reflectable (the table).
-          // UNVERIFIED-simplified: the table's clang (projectiles here are
-          // transcendent, `schema.test.ts`).
+          // It clanks (Plan 5, Task 13c): rubendal 13.0.1 `kirby_starmissile` `Fly`,
+          // `Clang_Rebound=ATTACK_SETOFF_KIND_ON`, weighed at its rider's damage.
           id: "star",
           spawnFrame: 8,
           offsetX: fx(7.0),
@@ -795,7 +802,6 @@ const legacy: FighterDef = {
             baseKnockback: fx(70),
             knockbackGrowth: fx(78),
             hitlagMultiplier: fx(2.0),
-            transcendent: true,
           },
         },
       ],
@@ -852,6 +858,8 @@ const legacy: FighterDef = {
           baseKnockback: fx(60),
           knockbackGrowth: fx(78),
           effect: "fire",
+          // `game_specials` ids 0-1: `ATTACK_SETOFF_KIND_OFF` (Plan 5, Task 13c).
+          transcendent: true,
         },
       ],
     },
@@ -966,6 +974,11 @@ const legacy: FighterDef = {
           baseKnockback: fx(69),
           knockbackGrowth: fx(76),
           whileGrounded: false,
+          // The falling hit, rubendal 13.0.1 `game_specialairlw` (not imported) id 0:
+          // `ATTACK_SETOFF_KIND_OFF`, as
+          // `game_speciallw`'s landing boxes are (SmashWiki "Kirby (SSBU)/Down special":
+          // `clang=f`; Plan 5, Task 13c).
+          transcendent: true,
         },
         // The landing hit, one frame, a box each side (the page's "Landing" table:
         // 14.0%, 25°, BK 86, KS 30, FKV 0, radius 6.0 on `top` at y 4.0, z ±6.0, hitlag

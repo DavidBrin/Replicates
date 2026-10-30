@@ -122,6 +122,9 @@ export function makeProjectile(over: Partial<ProjectileState> = {}): ProjectileS
     charge: 0,
     reflected: 0,
     damageMul: ONE,
+    mode: "fly",
+    life: 0,
+    ground: -1,
     ...over,
   };
 }

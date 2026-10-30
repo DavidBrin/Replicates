@@ -341,6 +341,9 @@ const legacy: FighterDef = {
           baseKnockback: fx(60),
           knockbackGrowth: fx(101),
           effect: "slash",
+          // `game_attackhi4`'s final hit (frame 41, ids 0-3): `ATTACK_SETOFF_KIND_OFF` (Plan 5,
+          // Task 13c).
+          transcendent: true,
         },
       ],
     },
@@ -601,6 +604,12 @@ const legacy: FighterDef = {
           gravity: fx(0.014),
           lifetime: 46,
           destroyOnHit: true,
+          // It sticks in the floor, wall or underside it meets, harmless, for
+          // "Lifetime stuck on a surface (single) 180 frames" (Plan 5, Task 13c;
+          // the same page). Published, not modelled: its "Minimum stick angle 9°",
+          // its "Gravity 0.054" (the replica's droop above is its own), and the
+          // stuck arrow being an item anyone can pick up and throw.
+          lodge: 180,
           // Damage "4 + 8 * (charge frames / 60), rounded down". UNVERIFIED:
           // that the speed is linear between 2.6 and 10 (the page gives the ends).
           charged: { vx: fx(10.0), hitbox: { damage: fx(12.0) }, partial: { kind: "add", total: fx(8), floor: true } },
@@ -619,7 +628,7 @@ const legacy: FighterDef = {
             baseKnockback: fx(10),
             knockbackGrowth: fx(71),
             effect: "stab",
-            transcendent: true,
+            // link_bowarrow `Fly`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5, Task 13c).
           },
         },
       ],
@@ -644,16 +653,39 @@ const legacy: FighterDef = {
           // The return leg does only 3% but drags victims back toward him,
           // which is what makes it a combo starter into his sword rather than
           // a poke. It does not die on contact — it keeps going.
+          //
+          // Its flight is the page's Boomerang parameters (Plan 5, Task 13c): out at
+          // "Initial speed 2.4 (tilt)", slowing by "Deceleration 0.047" until it
+          // would be under "Minimum speed 0.3", which is frame 45 of its life, where
+          // the returning hitbox starts (72 − 27); back up to "Maximum returning
+          // speed 3", steering at Link by "Angle deviation per frame when returning
+          // 0.75°" (its sine and cosine below). Not modelled: "Distance spent
+          // turning back 16", the smash throw's 3.1 and 167 frames, the clean hit's
+          // 8% giving way to the late 6% on frame 10 (the box below is the clean
+          // one, at the replica's radius), and the floor bounce ("Minimum bounce
+          // angle off ground 16°").
           id: "boomerang",
           spawnFrame: 27,
           offsetX: fx(9.0),
           offsetY: fx(7.0),
-          vx: fx(2.6),
+          vx: fx(2.4),
           vy: fx(0),
           gravity: fx(0),
           lifetime: 125,
           destroyOnHit: false,
-          returns: true,
+          returns: {
+            deceleration: fx(0.047),
+            minSpeed: fx(0.3),
+            maxSpeed: fx(3.0),
+            homing: { sin: fx(0.0130896), cos: fx(0.9999143) },
+            // The "Returning" row: 3.0%, 70°, BK 50, KS 40, radius 3.6
+            // (link_boomerang `Turn`).
+            hit: { damage: fx(3.0), angle: fx(70), baseKnockback: fx(50), knockbackGrowth: fx(40), radius: fx(3.6) },
+          },
+          // A clank it loses knocks it away (Plan 5, Task 13c): "After clashing with
+          // an attack": "Lifetime 60 frames", "Horizontal speed -0.15", "Vertical
+          // speed 1.25", "Gravity 0.09", "Falling speed 1.4".
+          clash: { lifetime: 60, vx: fx(-0.15), vy: fx(1.25), gravity: fx(0.09), maxFall: fx(1.4) },
           visual: "boomerang",
           // link_boomerang `Fly`: `Reflectable=true`.
           reflectable: true,
@@ -668,7 +700,8 @@ const legacy: FighterDef = {
             angle: fx(70),
             baseKnockback: fx(80),
             knockbackGrowth: fx(40),
-            transcendent: true,
+            // link_boomerang `Fly` and `Turn`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5,
+            // Task 13c).
           },
         },
       ],
@@ -794,6 +827,9 @@ const legacy: FighterDef = {
             baseKnockback: fx(60),
             knockbackGrowth: fx(115),
             effect: "fire",
+            // UNVERIFIED (Plan 5, Task 13c): no article script publishes its clang; it
+            // is an item (HP 50, "Hit by attack"), which this replica does not model,
+            // so attacks pass it rather than end it.
             transcendent: true,
           },
         },

@@ -256,6 +256,9 @@ const legacy: FighterDef = {
           angle: fx(46),
           baseKnockback: fx(21),
           knockbackGrowth: fx(88),
+          // `game_attacks4` ids 0-1: `ATTACK_SETOFF_KIND_THRU`, it tramples (ruling
+          // R-T13g; Plan 5, Task 13c).
+          noRebound: true,
         },
         {
           id: 1,
@@ -268,6 +271,8 @@ const legacy: FighterDef = {
           angle: fx(361),
           baseKnockback: fx(18),
           knockbackGrowth: fx(86),
+          // `game_attacks4`: `ATTACK_SETOFF_KIND_THRU` (Plan 5, Task 13c).
+          noRebound: true,
         },
       ],
     },
@@ -290,6 +295,8 @@ const legacy: FighterDef = {
           angle: fx(90),
           baseKnockback: fx(40),
           knockbackGrowth: fx(84),
+          // `game_attackhi4` ids 0-1: `ATTACK_SETOFF_KIND_THRU` (Plan 5, Task 13c).
+          noRebound: true,
         },
       ],
     },
@@ -311,6 +318,8 @@ const legacy: FighterDef = {
           angle: fx(70),
           baseKnockback: fx(35),
           knockbackGrowth: fx(88),
+          // `game_attacklw4` ids 0-3: `ATTACK_SETOFF_KIND_THRU` (Plan 5, Task 13c).
+          noRebound: true,
         },
         {
           // The late half is the *stronger* one, at 18% and a flatter 55°.
@@ -324,6 +333,8 @@ const legacy: FighterDef = {
           angle: fx(55),
           baseKnockback: fx(30),
           knockbackGrowth: fx(88),
+          // `game_attacklw4`: `ATTACK_SETOFF_KIND_THRU` (Plan 5, Task 13c).
+          noRebound: true,
         },
       ],
     },
@@ -534,6 +545,8 @@ const legacy: FighterDef = {
           angle: fx(361),
           baseKnockback: fx(45),
           knockbackGrowth: fx(70),
+          // `game_specialn` ids 0-2: `ATTACK_SETOFF_KIND_THRU` (Plan 5, Task 13c).
+          noRebound: true,
         },
       ],
     },

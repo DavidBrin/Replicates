@@ -295,14 +295,11 @@ describe("projectiles", () => {
     }
   });
 
-  it.each(each)("%s makes every projectile transcendent", (_name, fighter) => {
-    // A projectile that clanks would be deleted by any jab, which is not how
-    // Ultimate works — projectiles pass through opposing hitboxes.
+  // Each projectile clanks as its article's script says (Plan 5, Task 13c): the
+  // table and its sources are `projectiles.test.ts`'s. A projectile is never both.
+  it.each(each)("%s gives no projectile both no-clank and no-rebound", (_name, fighter) => {
     for (const { slot, projectile } of everyProjectile(fighter)) {
-      expect(
-        projectile.hitbox.transcendent,
-        `${fighter.name}'s ${slot} projectile ${projectile.id} is not transcendent`
-      ).toBe(true);
+      expect(projectile.hitbox.transcendent === true && projectile.hitbox.noRebound === true, `${fighter.name}'s ${slot} ${projectile.id}`).toBe(false);
     }
   });
 
@@ -334,7 +331,8 @@ describe("projectiles", () => {
     const boomerang = everyProjectile(getFighterOrThrow("link")).find(
       (p) => p.projectile.id === "boomerang"
     )!.projectile;
-    expect(boomerang.returns).toBe(true);
+    // Its way back, from its page (Plan 5, Task 13c; `projectiles.test.ts` pins the numbers).
+    expect(boomerang.returns).toBeDefined();
     // It has to survive the hit, or it could never come back.
     expect(boomerang.destroyOnHit).toBe(false);
   });

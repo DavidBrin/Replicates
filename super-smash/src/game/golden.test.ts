@@ -9,6 +9,7 @@ import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { launchWorldAngle } from "@/engine/knockback";
 import { toFloat } from "@/engine/fixed";
+import { findProjectileDef, projectileHitboxActive } from "@/engine/projectile";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -24,11 +25,12 @@ import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
 import { INHALE_LAB } from "./goldenInhaleLab";
 import { CRAWL_LAB } from "./goldenCrawlLab";
 import { STATES_LAB } from "./goldenStatesLab";
+import { PROJECTILE_LAB } from "./goldenProjectileLab";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Nine matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Ten matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
@@ -39,7 +41,10 @@ import { STATES_LAB } from "./goldenStatesLab";
  * Kong's cargo first and the footstools after (Task 11), a 400-frame Inhale lab (`goldenInhaleLab.ts`, Task 9,
  * ruling R-T8e): Kirby against Mario, the spit and the swallow, and a 200-frame
  * crawl lab (`goldenCrawlLab.ts`, Task 12, ruling R-T8e): Pikachu crawls, down
- * tilts out of the crawl, and crawls off the stage's edge onto the ledge.
+ * tilts out of the crawl, and crawls off the stage's edge onto the ledge, and a
+ * 200-frame projectile lab (`goldenProjectileLab.ts`, Task 13c, ruling R-T8e):
+ * Samus's bomb settles and goes off on its timer, her Charge Shot and Link's arrow
+ * clank, and a Charge Shot flies out its life.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -164,10 +169,17 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => CRAWL_LAB.inputs(frame);
     },
   },
+  {
+    ...PROJECTILE_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => PROJECTILE_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the nine matches must visit between them: all 57. A
+ * Every `ActionState` the ten matches must visit between them: all 57. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
@@ -314,6 +326,17 @@ const SOFT_PATHS: readonly SoftPath[] = ["walk", "tilt", "DI"];
  * Fox's shield and his KO are checked by count.
  */
 const SCRIPT_HITS: readonly string[] = ["fthrow", "fsmash", "ftilt", "neutralB", "nair (short hop)"];
+
+/**
+ * What a projectile's life can come to, each of which some match must reach
+ * (Plan 5, Task 13c; the Task 6 carry: no golden match let a projectile reach the
+ * end of its life): its end ("expired": gone on the last frame of its life), a
+ * rest ("settled": Samus's bomb on the floor), a box that comes out late going
+ * live ("exploded": the bomb's, on its timer), and a clank that ended it
+ * ("clanked"). The projectile lab reaches all four; a CPU match may too.
+ */
+type ProjectilePath = "expired" | "settled" | "exploded" | "clanked";
+const PROJECTILE_PATHS: readonly ProjectilePath[] = ["expired", "settled", "exploded", "clanked"];
 const TILTS: readonly MoveSlot[] = ["ftilt", "utilt", "dtilt"];
 const DIRECTIONS = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
 
@@ -429,7 +452,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all nine matches.
+ * on every frame of all ten matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -463,6 +486,8 @@ interface Played {
   readonly soft: ReadonlySet<SoftPath>;
   /** Every kind of hit landed, as `hitKind` names it. */
   readonly hitKinds: ReadonlySet<string>;
+  /** What the match's projectiles came to (`ProjectilePath`). */
+  readonly projectilePaths: ReadonlySet<ProjectilePath>;
   /** The first few frames that broke `invariantBreaks`, if any did. */
   readonly invariantBreaks: readonly string[];
 }
@@ -483,6 +508,7 @@ function play(match: Match): Played {
   const actions = new Set<ActionState>();
   const soft = new Set<SoftPath>();
   const hitKinds = new Set<string>();
+  const projectilePaths = new Set<ProjectilePath>();
   const breaks: string[] = [];
   let hits = 0;
   let shieldHits = 0;
@@ -497,6 +523,7 @@ function play(match: Match): Played {
       if (breaks.length < 5) breaks.push(...invariantBreaks(after, frame));
     }
     if (breaks.length < 5) breaks.push(...stateInvariantBreaks(out.state, CTX.stage(match.stage), frame));
+    for (const p of projectilePathsOf(state, out.state, out.events.clanks.length > 0)) projectilePaths.add(p);
     state = out.state;
     prev = inputs;
     hits += out.events.hits.length;
@@ -506,7 +533,26 @@ function play(match: Match): Played {
     roll = mixInt(roll, digest(state));
     if (frame % EVERY === 0) digests.push(roll >>> 0);
   }
-  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, invariantBreaks: breaks };
+  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, invariantBreaks: breaks };
+}
+
+/** What became of the projectiles over one step, from the states either side of it (`ProjectilePath`). */
+function projectilePathsOf(before: GameState, after: GameState, clanked: boolean): ProjectilePath[] {
+  const out: ProjectilePath[] = [];
+  const defOf = (p: GameState["projectiles"][number]) => findProjectileDef(CTX.fighter(p.source), p.defId);
+  for (const p of before.projectiles) {
+    if (after.projectiles.some((q) => q.instanceId === p.instanceId)) continue;
+    const def = defOf(p);
+    const lastFrame = p.mode === "fly" ? def !== undefined && p.age === def.lifetime - 1 : p.life === 1;
+    if (lastFrame) out.push("expired");
+    else if (clanked) out.push("clanked");
+  }
+  for (const p of after.projectiles) {
+    const def = defOf(p);
+    if (p.mode === "fly" && p.ground >= 0) out.push("settled");
+    if (def !== undefined && def.hitbox.startFrame > 0 && projectileHitboxActive(p, def)) out.push("exploded");
+  }
+  return out;
 }
 
 describe("engine golden trace", () => {
@@ -686,6 +732,16 @@ describe("engine golden trace", () => {
   // and 1 there. link-samus, the script and the four labs are byte-identical. So now:
   // hits 34/22/18/20, 6, 0, 1, 4 and 1; shield hits 2/1/0/0, 3, 0, 0, 0 and 0; KOs
   // 1/2/1/1, 1, 2, 0, 0 and 0.
+  // Plan 5 Task 13c (projectiles bounce, settle, lodge, turn and home as their pages
+  // publish and stop at undersides; each clanks by its script's Clang_Rebound, a
+  // clank weighs each side after its multipliers, and fifteen legacy moves' boxes
+  // take their scripts' clang) left all nine traces byte-identical: the few
+  // projectiles the CPU matches throw meet nothing those rules changed, and no clank
+  // in them changes its outcome. It added the projectile lab (ruling R-T8e; the Task
+  // 6 carry): Samus's bomb settles and goes off on its timer, a Charge Shot and an
+  // arrow clank, and a Charge Shot flies out its life (`PROJECTILE_PATHS`), with no
+  // hit, shield hit or KO. So now: hits 34/22/18/20, 6, 0, 1, 4, 1 and 0; shield hits
+  // 2/1/0/0, 3, 0, 0, 0, 0 and 0; KOs 1/2/1/1, 1, 2, 0, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -717,6 +773,15 @@ describe("engine golden trace", () => {
     expect(script.kos, "Fox's self-destruct").toBeGreaterThanOrEqual(1);
   }
 
+  // The projectile lab is there to reach these (Task 13c): a re-tuned step that
+  // stops one shows here, not just in its digest.
+  function expectProjectilePaths(): void {
+    const paths = new Set(all.flatMap((p) => [...p.projectilePaths]));
+    expect(PROJECTILE_PATHS.filter((p) => !paths.has(p)), "projectile ends no match reaches").toEqual([]);
+    const lab = played.get(PROJECTILE_LAB.name)!;
+    expect(PROJECTILE_PATHS.filter((p) => !lab.projectilePaths.has(p)), "projectile ends the projectile lab no longer reaches").toEqual([]);
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -725,6 +790,7 @@ describe("engine golden trace", () => {
   it("exercises combat, not an idle screen", expectCombat);
   it("visits every action state and every soft-stick path", expectCoverage);
   it("lands every kind of hit the scripted match lands", expectScriptHits);
+  it("lets a projectile expire, settle, explode and clank", expectProjectilePaths);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -733,6 +799,7 @@ describe("engine golden trace", () => {
       expectCombat();
       expectCoverage();
       expectScriptHits();
+      expectProjectilePaths();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;

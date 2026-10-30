@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
-import type { AcmdScript } from "@/engine/acmd/types";
+import type { AcmdScript, AttackSetoff } from "@/engine/acmd/types";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import { readBakeFromDisk } from "@/game/bakeNode";
@@ -65,6 +65,14 @@ import { withLimbScripts } from "./limb";
  * the from-release timeline) is compared with its reference script led the same
  * frames (`gameScriptOf`). The lead is the published start, not a disagreement: with
  * it the running move hits on 7-39 and is actionable on 77, as SmashWiki publishes.
+ *
+ * Plan 5 Task 13c (the Task 13 review's M1) compares clang too, box by box: every
+ * box a legacy move runs must clank as its script's box of the same id does
+ * (`clangDisagreements`). Fifteen legacy moves disagreed, twenty boxes, and were
+ * set from their scripts, ten to `transcendent` (OFF) and five to `noRebound`
+ * (THRU), so the list gained no entry. Two more the Task 13 review named have
+ * nothing to set: the OFF boxes of Link's dash attack (id 2, on his arm) and
+ * Kirby's up throw (id 0, its landing) have no legacy box.
  */
 
 const ALLOW_FILE = join(process.cwd(), "src", "fighters", "acmd", "reconcile.allow.json");
@@ -116,6 +124,46 @@ function referenceFacts(fighter: string, key: string, move: MoveDef): Facts | nu
   return scriptFacts(gameScriptOf(move, REFERENCE_SCRIPTS[fighter].scripts[key]), HORIZON);
 }
 
+const SETOFF: Readonly<Record<AttackSetoff, string>> = {
+  ATTACK_SETOFF_KIND_ON: "ON",
+  ATTACK_SETOFF_KIND_OFF: "OFF",
+  ATTACK_SETOFF_KIND_THRU: "THRU",
+};
+
+/**
+ * Each box a legacy move runs against its script's box of the same id, by clang
+ * (`attackFromHitbox` writes `transcendent` as OFF and `noRebound` as THRU; Plan 5,
+ * Task 13c). On a frame where both are live they must agree. Where the script's box
+ * of that id is never live with it (the legacy table keeps its own timing), the
+ * legacy box must take one of the settings the script gives that id anywhere. A
+ * legacy box whose id the script never uses has nothing to agree with, and a throw's
+ * launch, an `ATTACK_ABS`, never clanks.
+ */
+function clangDisagreements(def: FighterDef, slot: MoveSlot, move: MoveDef, key: string): Record<string, string> {
+  const mine = gameScriptFor(def, slot);
+  if (mine === null) return {};
+  const theirs = gameScriptOf(move, REFERENCE_SCRIPTS[def.id].scripts[key]);
+  const settings = new Map<number, Set<AttackSetoff>>();
+  for (const c of theirs.commands) {
+    if (c.op !== "attack") continue;
+    const seen = settings.get(c.params.id) ?? new Set<AttackSetoff>();
+    seen.add(c.params.clang);
+    settings.set(c.params.id, seen);
+  }
+  const out: Record<string, string> = {};
+  for (let g = 1; g <= move.totalFrames + 1; g++) {
+    const live = runScript(theirs, g).attacks;
+    for (const a of runScript(mine, g).attacks) {
+      const same = live.find((b) => b.id === a.id);
+      const allowed = same !== undefined ? [same.clang] : [...(settings.get(a.id) ?? [])];
+      if (allowed.length > 0 && !allowed.includes(a.clang)) {
+        out[`${def.id} ${slot} clang id${a.id}`] = `legacy ${SETOFF[a.clang]} / ${key} ${allowed.map((c) => SETOFF[c]).join("+")}`;
+      }
+    }
+  }
+  return out;
+}
+
 function disagreements(): Record<string, string> {
   const out: Record<string, string> = {};
   // The game's fighters: Plan 3's root-bone scripts and Plan 4's limb-bone ones,
@@ -143,6 +191,8 @@ function disagreements(): Record<string, string> {
       const cancel = ref.faf[key];
       const faf = cancel === undefined ? undefined : gameFafOf(move, ref.scripts[key], cancel);
       if (faf !== undefined && move.totalFrames + 1 !== faf) out[`${def.id} ${slot} faf`] = `legacy ${move.totalFrames + 1} / ${key} ${faf}`;
+      // Clang, box by box, for a move the roster runs from its legacy table (Plan 5, Task 13c).
+      if (def.scripts?.[slot] === undefined) Object.assign(out, clangDisagreements(def, slot, move, key));
     }
   }
   return out;
