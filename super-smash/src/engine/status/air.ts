@@ -67,7 +67,9 @@ export function airMain(f: FighterState, intent: Intent, ctx: StateContext): voi
   // tries before a wall jump, and after a special, an air dodge or an aerial
   // pressed with it (`airActionFirst`).
   if (tryFootstool(f, intent, ctx)) return;
-  // A fresh press away from a wall just touched (Plan 5, Task 10: `wallJump.ts`).
+  // A fresh press away from a wall just touched (Plan 5, Task 10: `wallJump.ts`),
+  // after a footstool, and after a special, an air dodge or an aerial pressed with
+  // it (`airActionFirst`; fix round 1, ruling R-T10e).
   if (tryWallJump(f, intent, ctx)) return;
   if (handleActionable(f, intent, ctx)) return;
   fastFallOnPress(f, intent, ctx);

@@ -15,7 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { fx } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
-import { kineticLaunch } from "@/engine/kinetic";
+import { kineticLaunch, kineticSetY } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -126,7 +126,11 @@ describe("wall jumps", () => {
 
   for (const id of ["donkeyKong", "link", "kirby", "marth"]) {
     it(`${id} cannot`, () => {
-      const states = run(besideTheWall(id), KICK_OFF);
+      // Started at the wall, so every body touches it well before the press away
+      // (from x 84 Link's first touched on the press's own frame, and this test
+      // could not fail; fix round 1).
+      const states = run(besideTheWall(id, { x: fx(82.5) }), KICK_OFF);
+      expect(states[7].fighters[0].combat.wallSide).toBe(-1);
       expect(states.every((s) => s.fighters[0].combat.wallJumps === 0)).toBe(true);
     });
   }
@@ -138,7 +142,7 @@ describe("wall jumps", () => {
       const states = run(besideTheWall(id), [...KICK_OFF, ...idle(80)]);
       const from = states[7].fighters[0].y;
       const top = Math.max(...states.slice(8).map((s) => s.fighters[0].y));
-      expect((top - from) / 4096).toBeCloseTo(height, 0);
+      expect((top - from) / 4096).toBeCloseTo(height, 1);
     });
   }
 
@@ -158,6 +162,42 @@ describe("wall jumps", () => {
     const states = run(besideTheWall("mario", { x: fx(82.5), vx: -fx(2) }), Array<InputFrame>(6).fill(Btn.Right));
     expect(states[0].fighters[0].combat.wallSide).toBe(-1);
     expect(states.every((s) => s.fighters[0].combat.wallJumps === 0)).toBe(true);
+  });
+
+  // Fix round 1, ruling R-T10d: the press must be the stick's AWAY from the wall.
+  for (const [name, other] of [["Down (a fast fall)", Btn.Down], ["Up", Btn.Up]] as const) {
+    it(`needs the press to be away: holding away, a fresh ${name} does not kick off`, () => {
+      const states = run(besideTheWall("mario", { x: fx(82.5), vx: -fx(2) }), [Btn.Right, Btn.Right, Btn.Right | other, Btn.Right | other, Btn.Right | other]);
+      expect(states[0].fighters[0].combat.wallSide).toBe(-1);
+      expect(states[2].fighters[0].combat.wallFrames).toBeLessThanOrEqual(3);
+      expect(states.every((s) => s.fighters[0].combat.wallJumps === 0)).toBe(true);
+      if (other === Btn.Down) expect(states[2].fighters[0]).toMatchObject({ action: "fall", fastFalling: true });
+    });
+  }
+
+  // Fix round 1, ruling R-T10e: the game's airborne checks run special, air dodge,
+  // attack, footstool, wall jump, midair jump (WuBor Patch's reimplementation,
+  // `sub_air_check_fall_common`; `airActionFirst`). A press of one of the first
+  // three with the flick away is that action, and no wall jump.
+  for (const [name, key, action] of [["special", Btn.Special, "special"], ["air dodge", Btn.Shield, "airDodge"], ["aerial", Btn.Attack, "attack"]] as const) {
+    it(`gives way to ${name === "special" ? "a" : "an"} ${name} pressed with the flick away`, () => {
+      const kick = [...Array<InputFrame>(8).fill(Btn.Left), Btn.Right | key, ...idle(3)];
+      const states = run(besideTheWall("mario"), kick);
+      expect(states[7].fighters[0].combat.wallSide).toBe(-1);
+      expect(states[8].fighters[0].action).toBe(action);
+      expect(states.every((s) => s.fighters[0].combat.wallJumps === 0)).toBe(true);
+    });
+  }
+
+  it("ends a fast fall: a fast-falling Mario kicks off and later falls at 1.5, not 2.4", () => {
+    const p = fighterParams(BY_ID.get("mario")!);
+    // Fast falling as a press of down past the apex leaves it (`fastFallOnPress`).
+    const s = besideTheWall("mario", { fastFalling: true });
+    kineticSetY(s.fighters[0], -p.dive_speed_y);
+    const states = run(s, [...KICK_OFF, ...idle(70)]);
+    expect(states[7].fighters[0]).toMatchObject({ fastFalling: true, vy: -p.dive_speed_y });
+    expect(states[8].fighters[0]).toMatchObject({ action: "jump", fastFalling: false });
+    expect(Math.min(...states.slice(8).map((s) => s.fighters[0].vy))).toBe(-p.air_speed_y_stable);
   });
 
   it("ends a short hop's damage penalty, as an air jump does (UNVERIFIED)", () => {
@@ -209,6 +249,11 @@ describe("wall jumps", () => {
   });
 
   it("kicks off from a tumble's fall too (DAMAGE_FALL shares the fall's main)", () => {
+    // SmashWiki "Tumbling" (https://www.ssbwiki.com/Tumbling): "After hitstun ends,
+    // tumbling characters can carry out most normal airborne actions"; the vanilla
+    // `set_damage_fall_transition`, kept in comments in WuBor Patch
+    // `fighters/common/src/status/damage/damage_fall.rs` L87-117 @9d5e5cf, enables
+    // `FIGHTER_STATUS_TRANSITION_GROUP_CHK_AIR_WALL_JUMP` in DAMAGE_FALL.
     const states = run(besideTheWall("fox", { action: "tumbleFall" }), KICK_OFF);
     expect(states[8].fighters[0]).toMatchObject({ action: "jump", facing: 1 });
     expect(states[8].fighters[0].combat.wallJumps).toBe(1);
@@ -387,7 +432,7 @@ describe("wall tech jumps", () => {
       const top = Math.max(...states.slice(t + 1).map((q) => q.fighters[0].y));
       return (top - states[t].fighters[0].y) / 4096;
     };
-    expect(rise("fox")).toBeCloseTo(WALL_JUMP_HEIGHT.fox, 0);
-    expect(rise("donkeyKong")).toBeCloseTo(fighterParams(BY_ID.get("donkeyKong")!).jump_aerial_y / 4096, 0);
+    expect(rise("fox")).toBeCloseTo(WALL_JUMP_HEIGHT.fox, 1);
+    expect(rise("donkeyKong")).toBeCloseTo(fighterParams(BY_ID.get("donkeyKong")!).jump_aerial_y / 4096, 1);
   });
 });

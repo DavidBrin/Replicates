@@ -25,13 +25,22 @@
  * still kicks off (`WALL_JUMP_WINDOW`), the wall tech's frames in which a jump is
  * a wall tech jump (`WALL_TECH_JUMP_FRAMES`), and the speed away from the wall:
  * the fighter's air speed, 0.96× per repeat like the rise.
+ *
+ * UNVERIFIED: air control from the first frame after the kick. The game's wall
+ * jump holds the stick's control off for a while
+ * (`FIGHTER_STATUS_WALL_JUMP_WORK_INT_DISABLE_CONT_FRAME`, read by the WALL_JUMP
+ * control energy in WuBor Patch's reimplementation, `src/system/energy/control.rs`
+ * L155-161 at
+ * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/src/system/energy/control.rs#L155-L161),
+ * for a length no source publishes; the replica's `jump` air-controls at once.
  */
 
 import { ONE, fx, mul } from "./fixed";
 import { jumpLaunchSpeed, kineticJump, kineticSetX } from "./kinetic";
 import { fighterParams } from "./params";
-import { peekBuffer, startAction } from "./states";
+import { airActionFirst, peekBuffer, startAction } from "./states";
 import type { Intent, StateContext } from "./states";
+import { Btn } from "./types";
 import type { FighterState } from "./types";
 
 /** Frames after touching a wall that a fresh press away still wall-jumps. UNVERIFIED. */
@@ -99,7 +108,30 @@ function launchOffWall(f: FighterState, ctx: StateContext, away: number): void {
 /**
  * From the fall's main (`airMain`: JUMP, FALL and DAMAGE_FALL): a fresh press
  * away from a wall touched in the last `WALL_JUMP_WINDOW` frames. Returns true if
- * it jumped. Not from special fall, whose main reads no press but the fast fall's
+ * it jumped.
+ *
+ * The press is the stick's, away (fix round 1, ruling R-T10d): the direction
+ * freshly pressed this frame is the one opposite the wall (SmashWiki "Wall jump":
+ * "pressing the control stick or d-pad in the direction opposite to the wall"). A
+ * fresh down (a fast fall) or up while the stick is already held away is not one.
+ *
+ * It gives way to a special, an air dodge or an aerial pressed on the same frame
+ * (`airActionFirst`; ruling R-T10e), which `handleActionable` then starts: the
+ * game's airborne checks run special, item throw, lasso, air dodge, attack,
+ * footstool, wall jump, midair jump, as WuBor Patch reimplements them (a mod, not
+ * first-party: `sub_air_check_fall_common`, `fighters/common/src/status/sub_transitions.rs`
+ * L486-519 at
+ * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/sub_transitions.rs#L486-L519).
+ * UNVERIFIED beyond that reimplementation. A footstool, before it, is
+ * `airMain`'s.
+ *
+ * From DAMAGE_FALL too: SmashWiki "Tumbling" (https://www.ssbwiki.com/Tumbling):
+ * "After hitstun ends, tumbling characters can carry out most normal airborne
+ * actions"; the vanilla `set_damage_fall_transition`, kept in comments in WuBor
+ * Patch `fighters/common/src/status/damage/damage_fall.rs` L87-117 @9d5e5cf,
+ * enables `FIGHTER_STATUS_TRANSITION_GROUP_CHK_AIR_WALL_JUMP` there.
+ *
+ * Not from special fall, whose main reads no press but the fast fall's
  * (SmashWiki "Helpless", https://www.ssbwiki.com/Helpless: "unable to take any
  * action, with the exception of grabbing a ledge, maneuvering left/right,
  * fastfalling, or climbing a ladder").
@@ -108,7 +140,9 @@ export function tryWallJump(f: FighterState, intent: Intent, ctx: StateContext):
   if (!ctx.def.attributes.canWallJump || f.grounded) return false;
   const side = f.combat.wallSide;
   if (side === 0 || f.combat.wallFrames > WALL_JUMP_WINDOW) return false;
-  if (f.framesSinceDirPress !== 0 || intent.x !== -side) return false;
+  const away = side < 0 ? Btn.Right : Btn.Left;
+  if (f.framesSinceDirPress !== 0 || f.lastDirPressed !== away || intent.x !== -side) return false;
+  if (airActionFirst(f, intent, ctx)) return false;
   launchOffWall(f, ctx, -side);
   return true;
 }
@@ -116,7 +150,13 @@ export function tryWallJump(f: FighterState, intent: Intent, ctx: StateContext):
 /**
  * From a wall tech (`techWall`), for any fighter: a jump input, pressed or held
  * (SmashWiki "Tech": "such as holding up or pressing a jump button"), in its first
- * `WALL_TECH_JUMP_FRAMES` frames. Returns true if it jumped.
+ * `WALL_TECH_JUMP_FRAMES` frames. Returns true if it jumped. WuBor Patch's
+ * reimplementation of the game's check agrees on the held input: the jump button
+ * held, or the stick up past `jump_stick_y` (`sub_AirChkPassiveWallJump`,
+ * `fighters/common/src/status/passive.rs` L128-156 @9d5e5cf). It decides on the
+ * touch itself and goes straight to the wall tech jump; here the jump comes from
+ * the wall tech's frames 1-5 (ruling R-T10c, UNVERIFIED), a frame later at the
+ * soonest.
  */
 export function tryWallTechJump(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   if (f.actionFrame > WALL_TECH_JUMP_FRAMES || f.combat.wallSide === 0) return false;
