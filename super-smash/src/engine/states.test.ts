@@ -425,6 +425,7 @@ describe("tilt versus smash", () => {
       attackPressed: false,
       attackHeld: false,
       specialPressed: false,
+      specialHeld: false,
       shieldHeld: false,
       shieldPressed: false,
       shieldReleased: false,

@@ -276,18 +276,16 @@ describe("projectiles", () => {
     const chargeShot = everyProjectile(getFighterOrThrow("samus")).find(
       (p) => p.projectile.id === "chargeShot"
     )!.projectile;
-    // 5% uncharged to 28% at full charge.
-    expect(toFloat(chargeShot.chargeScaling!)).toBeCloseTo(5.6, 2);
-    expect(toFloat(chargeShot.hitbox.damage) * toFloat(chargeShot.chargeScaling!)).toBeCloseTo(
-      28,
-      1
-    );
+    // 5% uncharged to 28% at full charge (Plan 5: interpolated, `charged`).
+    expect(toFloat(chargeShot.hitbox.damage)).toBeCloseTo(5, 2);
+    expect(toFloat(chargeShot.charged!.hitbox.damage!)).toBeCloseTo(28, 2);
 
     const arrow = everyProjectile(getFighterOrThrow("link")).find(
       (p) => p.projectile.id === "arrow"
     )!.projectile;
     // 4% uncharged to 12% at full charge.
-    expect(toFloat(arrow.hitbox.damage) * toFloat(arrow.chargeScaling!)).toBeCloseTo(12, 1);
+    expect(toFloat(arrow.hitbox.damage)).toBeCloseTo(4, 2);
+    expect(toFloat(arrow.charged!.hitbox.damage!)).toBeCloseTo(12, 2);
   });
 
   it("gives Fox's Blaster no knockback, no hitlag and no flinch whatsoever", () => {

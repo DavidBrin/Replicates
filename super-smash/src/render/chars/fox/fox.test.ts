@@ -981,6 +981,7 @@ describe("the Blaster bolt is his own graphic", () => {
       dir: 1,
       heading: 0,
       charge: 1,
+      fraction: 0,
       returning: false,
       frame: 40,
     });

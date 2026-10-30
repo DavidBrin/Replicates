@@ -83,7 +83,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * the tell for "hitting him now will not stop this".
    */
   neutralB: ({ ctx, f, def, x, y, u, dir, frame, height, over }) => {
-    const charge = Math.min(1, f.charge / SMASH_CHARGE_MAX);
+    // Plan 5: a special's charge runs to its own length, not a smash's 60.
+    const charge = Math.min(1, f.charge / (def.moves.neutralB?.specialCharge?.frames ?? SMASH_CHARGE_MAX));
     const full = charge > 0.985;
     // The wind-up is a circle centred on the shoulder — measured at 0.6 of his
     // height in radius, which is the arm — and the fist runs round it up the

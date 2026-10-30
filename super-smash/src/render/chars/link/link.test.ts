@@ -1064,6 +1064,7 @@ describe("the projectiles are his own", () => {
           dir: 1,
           heading: 0.3,
           charge: 1.4,
+          fraction: 0.4,
           returning: age > 40,
           frame: age,
         } as unknown as ProjectileContext);
@@ -1073,17 +1074,20 @@ describe("the projectiles are his own", () => {
   });
 
   it("scales the arrow with its charge, because the charge is the move", () => {
-    const reach = (charge: number) => {
+    // Plan 5: sized by `fraction`, how charged it was loosed (P5-R2); `charge`,
+    // the old multiplier, is 1 for every arrow now.
+    const reach = (fraction: number) => {
       const ctx = createMockContext();
       projectiles.arrow({
-        ctx, u: 12, age: 5, dir: 1, heading: 0, charge, returning: false, frame: 5,
+        ctx, u: 12, age: 5, dir: 1, heading: 0, charge: 1, fraction, returning: false, frame: 5,
       } as unknown as ProjectileContext);
       const xs = ctx.calls
         .filter((c) => c.method === "lineTo" || c.method === "moveTo")
         .map((c) => Math.abs(Number(c.args[0])));
       return Math.max(...xs);
     };
-    expect(reach(1.6)).toBeGreaterThan(reach(1) * 1.2);
+    expect(reach(1)).toBeGreaterThan(reach(0) * 1.2);
+    expect(reach(0.5)).toBeGreaterThan(reach(0));
   });
 
   it("gives the arrow a hitbox worth the size it is drawn at", () => {

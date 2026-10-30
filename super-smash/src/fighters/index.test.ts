@@ -324,8 +324,9 @@ describe("the other character-defining mechanics", () => {
   it("gives Samus a Charge Shot that is chargeable and holds its charge", () => {
     const chargeShot = samus.moves.neutralB!;
     expect(chargeShot.name).toBe("Charge Shot");
-    expect(chargeShot.chargeable).toBe(true);
-    expect(chargeShot.projectiles![0].chargeScaling).toBeGreaterThan(0);
+    // Plan 5: a store-mode special charge, 112 frames, and a full-charge shot.
+    expect(chargeShot.specialCharge).toMatchObject({ mode: "store", frames: 112 });
+    expect(chargeShot.projectiles![0].charged).toBeDefined();
   });
 
   it("makes every smash attack chargeable and nothing else that shouldn't be", () => {
@@ -341,7 +342,7 @@ describe("the other character-defining mechanics", () => {
 
   it("gives Donkey Kong super armour on his charged Giant Punch", () => {
     expect(donkeyKong.moves.neutralB!.superArmourFrames).toEqual([9, 20]);
-    expect(donkeyKong.moves.neutralB!.chargeable).toBe(true);
+    expect(donkeyKong.moves.neutralB!.specialCharge).toMatchObject({ mode: "store", frames: 110 });
   });
 
   it("keeps every fighter's moveset mutually distinguishable", () => {

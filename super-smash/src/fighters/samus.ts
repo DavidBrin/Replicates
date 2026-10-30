@@ -629,36 +629,43 @@ const legacy: FighterDef = {
       slot: "neutralB",
       name: "Charge Shot",
       totalFrames: 44,
-      chargeable: true,
-      // PROJECTILE: a plasma ball spawned at the arm cannon and travelling flat
-      // forward. 13 frames to enter the charge state, **125 frames to fill**,
-      // then release on frame 3 (16 from a stored full charge). Damage runs
-      // 5% → 28%, and the *angle changes with it*: uncharged fires at the
-      // Sakurai angle with KBG 42, fully charged at a fixed 40 degrees with
-      // KBG 50 and BKB 46. Charge is stored between uses and survives shielding
-      // and dodging, and Ultimate is the first game where it can be charged in
-      // midair. Being hit while charging loses the lot.
+      // Store mode (Plan 5): 13 frames to enter the charge state, then 112
+      // charge frames to full — SmashWiki "Samus (SSBU)/Neutral special"
+      // (https://www.ssbwiki.com/Samus_(SSBU)/Neutral_special): "Total charge
+      // time 112 frames"; UFD's "125 frames to reach full charge" counts the 13
+      // as well. Shield or jump puts the charge away; B fires it, the shot
+      // leaving 3 frames after release (hitbox 16 = 13 + 3); a stored full
+      // charge fires straight from the loop. Being hit while charging loses the
+      // charge built this time. UNVERIFIED-simplified: SSBU's 4-frame
+      // charge-cancel lag and the longer full-charge FAF (61 against 45) are
+      // not modelled.
       //
-      // UNVERIFIED: whether the charge survives a KO. It is widely believed to,
-      // but SmashWiki's chargeable-specials table lists only Oil Panic and
-      // Wario Waft as surviving a stock loss and gives Charge Shot no such
-      // note, which implies it does not. Not asserted either way.
-      //
-      // The projectile below is the uncharged shot; `chargeScaling` 5.6 takes
-      // its 5% to the 28% of a full charge.
+      // UNVERIFIED: whether a stored charge survives a KO. SmashWiki's
+      // chargeable-specials table lists only Oil Panic and Wario Waft as
+      // surviving a stock loss; the replica keeps it.
+      specialCharge: { mode: "store", frames: 112, loopFrame: 13 },
       hitboxes: [],
       projectiles: [
         {
+          // samus_cshot `Shoot` (rubendal Data Viewer 13.0.1): ATTACK 0 is the
+          // uncharged shot, ATTACK 1 the full charge, and
+          // `attack(MA_MSC_CMD_ATTACK_SET_LERP, 0, 1)` interpolates between
+          // them by charge. SmashWiki: damage 5 + 23·c/112, BK 14 + 32·c/112,
+          // KS 42 + 8·c/112, radius 1.9 + 6.1·c/112; speed 1.6 → 3.3;
+          // lifetime 60.
           id: "chargeShot",
-          spawnFrame: 3,
+          spawnFrame: 16,
           offsetX: fx(8.0),
           offsetY: fx(7.0),
-          vx: fx(3.0),
+          vx: fx(1.6),
           vy: fx(0),
           gravity: fx(0),
           lifetime: 60,
           destroyOnHit: true,
-          chargeScaling: fx(5.6),
+          charged: {
+            vx: fx(3.3),
+            hitbox: { damage: fx(28.0), angle: fx(40), baseKnockback: fx(46), knockbackGrowth: fx(50), radius: fx(8.0) },
+          },
           visual: "energy",
           hitbox: {
             id: 0,
@@ -666,7 +673,7 @@ const legacy: FighterDef = {
             endFrame: 60,
             x: fx(0),
             y: fx(0),
-            radius: fx(2.5),
+            radius: fx(1.9),
             damage: fx(5.0),
             angle: fx(361),
             baseKnockback: fx(14),

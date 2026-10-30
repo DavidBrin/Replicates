@@ -491,20 +491,30 @@ const legacy: FighterDef = {
     neutralB: {
       slot: "neutralB",
       name: "Giant Punch",
-      totalFrames: 62,
-      chargeable: true,
-      // Ultimate replaced the classic ten wind-ups with a continuous 110-frame
-      // charge: damage is `base + 18 * (chargeFrames / 110)`, so the grounded
-      // punch runs 10% → 28%. Full charge is also *faster* — FAF drops from 62
-      // to 47 — and grants super armour on frames 9-20. The charge is stored
-      // until DK takes knockback, and may be cancelled into shield, jump or
-      // roll. The hitbox below is the uncharged punch.
+      totalFrames: 69,
+      // Store mode (Plan 5), SmashWiki "Donkey Kong (SSBU)/Neutral special"
+      // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Neutral_special): "Total
+      // charge time 110 frames (6.0.0 onward)", "Charges between 7-8", damage
+      // "base damage + 18 * (charge frames / 110)" (10% → 28%), hitbox "26-27
+      // (19-20)" from release, interruptible 70, super armour 9-20 grounded.
+      // Shield or jump stores the charge; a stored full charge punches straight
+      // from the loop, so its hitbox comes 19 frames later.
+      // UNVERIFIED-simplified: the full punch's shorter FAF (48) and the
+      // 4-frame charge-cancel lag are not modelled.
+      specialCharge: {
+        mode: "store",
+        frames: 110,
+        loopFrame: 7,
+        // "base damage + 18 * (charge frames / 110), rounded down".
+        partial: { kind: "add", total: fx(18), floor: true },
+        full: { 0: { damage: fx(28.0) } },
+      },
       superArmourFrames: [9, 20],
       hitboxes: [
         {
           id: 0,
-          startFrame: 19,
-          endFrame: 20,
+          startFrame: 26,
+          endFrame: 27,
           x: fx(10.0),
           y: fx(8.0),
           radius: fx(5.5),

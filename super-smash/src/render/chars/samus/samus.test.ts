@@ -550,9 +550,9 @@ function biggestSolid(t: Trace, u = 10): number {
 }
 
 describe("the effects paint on the frames they claim to", () => {
-  it("Charge Shot paints nothing before the shot and a flash on frame 3", () => {
+  it("Charge Shot paints nothing before the shot and a flash as it leaves (Plan 5: frame 16)", () => {
     expect(fxAt("neutralB", 0)).toBe(0);
-    expect(fxAt("neutralB", 3)).toBeGreaterThan(0);
+    expect(fxAt("neutralB", 16)).toBeGreaterThan(0);
   });
 
   it("the held charge grows with the charge and is drawn the whole time", () => {
@@ -622,13 +622,15 @@ describe("the effects paint on the frames they claim to", () => {
   it("every projectile painter draws something", () => {
     for (const [id, painter] of Object.entries(projectiles)) {
       const { ctx, drawn } = recordingContext();
-      painter({ ctx, u: 10, age: 4, dir: 1, heading: 0.2, charge: 2, returning: false, frame: 7 });
+      painter({ ctx, u: 10, age: 4, dir: 1, heading: 0.2, charge: 2, fraction: 0.5, returning: false, frame: 7 });
       expect(drawn(), `${id} painted nothing`).toBeGreaterThan(0);
     }
   });
 
   it("the Charge Shot grows in flight with how long it was held", () => {
-    const radiusAt = (charge: number) => {
+    // Plan 5: sized by `fraction`, how charged it left (P5-R2); `charge`, the
+    // old multiplier, is 1 for every Charge Shot now.
+    const radiusAt = (fraction: number) => {
       let biggest = 0;
       const ctx = {
         ...recordingContext().ctx,
@@ -637,11 +639,12 @@ describe("the effects paint on the frames they claim to", () => {
         },
       } as unknown as CanvasRenderingContext2D;
       projectiles.chargeShot({
-        ctx, u: 10, age: 3, dir: 1, heading: 0, charge, returning: false, frame: 3,
+        ctx, u: 10, age: 3, dir: 1, heading: 0, charge: 1, fraction, returning: false, frame: 3,
       });
       return biggest;
     };
-    expect(radiusAt(5.6)).toBeGreaterThan(radiusAt(1) * 1.5);
+    expect(radiusAt(1)).toBeGreaterThan(radiusAt(0) * 1.5);
+    expect(radiusAt(0.5)).toBeGreaterThan(radiusAt(0));
   });
 });
 
@@ -840,17 +843,18 @@ describe("Charge Shot", () => {
   }
 
   /**
-   * The charge pins `actionFrame` to 1 and `frame` is `actionFrame + 1`, so the
-   * whole of the hold is frame 2 and the plasma leaves on frame 3.
+   * Plan 5: the charge loops on game frame 13 (SmashWiki: 13 frames to enter
+   * the charge state), so the whole of the hold is frame 13; 112 frames is full.
    */
-  const HOLDING = 2;
+  const HOLDING = 13;
+  const FULL = 112;
 
   it("holds a ball that is most of her own height at full charge", () => {
     // Measured off the game's own hurtbox renders: the full-charge sphere is
     // around three quarters of her standing height across. At half that it
     // reads as a slightly bigger tap, and the only decision a player makes
     // against Samus is whether the ball is worth respecting yet.
-    const r = biggest(HOLDING, SMASH_CHARGE_MAX);
+    const r = biggest(HOLDING, FULL);
     expect(r * 2, `a full charge is ${(r * 2).toFixed(1)} rig units across`).toBeGreaterThan(8.0);
   });
 
@@ -859,7 +863,7 @@ describe("Charge Shot", () => {
     // its inboard half behind the barrel, and since the ball is painted under
     // the fighter that half is not drawn at all — a full charge came out
     // looking like a half one.
-    const t = fxTrace("neutralB", HOLDING, { charge: SMASH_CHARGE_MAX });
+    const t = fxTrace("neutralB", HOLDING, { charge: FULL });
     const centres = t.under.arcs.filter((a) => a.solid).map((a) => (a.x - 400) / 10);
     // The bore is at about 7.2 units. A fully charged ball is 4.4 units in
     // radius, so standing it off by half of that puts its centre past 9.
@@ -872,20 +876,20 @@ describe("Charge Shot", () => {
     // alone kept a fully charged ball hanging at the muzzle through all
     // forty-one frames of recovery, while the shot it fired was already
     // exploding on somebody.
-    expect(biggest(HOLDING, SMASH_CHARGE_MAX)).toBeGreaterThan(4);
+    expect(biggest(HOLDING, FULL)).toBeGreaterThan(4);
     // Once it has left, nothing on screen may still depend on how full the bar
     // was — the flash and the steam are the same whatever she fired.
-    for (const frame of [4, 9, 20]) {
+    for (const frame of [15, 20, 31]) {
       expect(
-        biggest(frame, SMASH_CHARGE_MAX),
+        biggest(frame, FULL),
         `frame ${frame} still draws something that scales with the charge`,
       ).toBeCloseTo(biggest(frame, 0), 5);
     }
   });
 
   it("still flashes and vents on the frames the shot is leaving", () => {
-    expect(fxAt("neutralB", 3, SMASH_CHARGE_MAX)).toBeGreaterThan(0);
-    expect(fxAt("neutralB", 9, SMASH_CHARGE_MAX)).toBeGreaterThan(0);
+    expect(fxAt("neutralB", 14, FULL)).toBeGreaterThan(0);
+    expect(fxAt("neutralB", 20, FULL)).toBeGreaterThan(0);
   });
 });
 

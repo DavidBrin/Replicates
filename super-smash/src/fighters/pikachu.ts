@@ -657,7 +657,18 @@ const legacy: FighterDef = {
       name: "Skull Bash",
       totalFrames: 96,
       momentum: [{ frame: 22, x: fx(4.0), y: fx(0.5), hold: 10 }],
-      chargeable: true,
+      // Hold mode (Plan 5), SmashWiki "Pikachu (SSBU)/Side special"
+      // (https://www.ssbwiki.com/Pikachu_(SSBU)/Side_special): "Total charge
+      // time 80 frames", "Charges between 13-14", damage "6.2 + 15.2 * (charge
+      // frames / 80)" — the damage alone. UNVERIFIED: the release speed 1.6 →
+      // 3.2, which the momentum does not scale.
+      specialCharge: {
+        mode: "hold",
+        frames: 80,
+        loopFrame: 13,
+        partial: { kind: "add", total: fx(15.2) },
+        full: { 0: { damage: fx(21.4) }, 1: { damage: fx(21.4) } },
+      },
       hitboxes: [
         {
           // Charges from frames 13-14 and launches him forward. Damage scales

@@ -414,7 +414,9 @@ export interface MoveTiming {
   /**
    * A chargeable move's hold frame, the `actionFrame` a held charge pins it on
    * (`chargeHoldFrame`, the engine's own rule): the frame before `firstActive`,
-   * and never before frame 1, so no hitbox is live while it charges. Absent
+   * and never before frame 1, so no hitbox is live while it charges. A special
+   * that charges on B holds on its loop frame instead, `loopFrame − 1` (Plan 5,
+   * `specialChargeMain`; P5-R1), and carries on past it once released. Absent
    * for a move that cannot charge.
    */
   readonly chargeHold?: number;
@@ -440,7 +442,11 @@ export function moveTimingFor(
     total: m.totalFrames,
     firstActive: first < 0 ? -1 : actionFrameOf(first),
     lastActive: last < 0 ? -1 : actionFrameOf(last),
-    ...(m.chargeable ? { chargeHold: chargeHoldFrame(m) } : {}),
+    ...(m.specialCharge !== undefined
+      ? { chargeHold: m.specialCharge.loopFrame - 1 }
+      : m.chargeable
+        ? { chargeHold: chargeHoldFrame(m) }
+        : {}),
   };
 }
 

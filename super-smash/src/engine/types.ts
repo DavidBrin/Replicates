@@ -316,8 +316,56 @@ export interface ProjectileDef {
   readonly returns?: boolean;
   /** Charge scales damage and speed by up to this multiplier at full charge. */
   readonly chargeScaling?: number;
+  /**
+   * What a full charge launches instead (Plan 5): the hitbox it interpolates
+   * towards (`chargedHitbox`) and its speed. Samus's Charge Shot is SSBU's
+   * `ATTACK_SET_LERP` between an uncharged and a full-charge box.
+   */
+  readonly charged?: { readonly hitbox: ChargedHitbox; readonly vx: number; readonly partial?: PartialCharge };
   /** Drawing hint for the renderer. */
   readonly visual: "arrow" | "bomb" | "boomerang" | "energy" | "fire" | "spark" | "missile";
+}
+
+/** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */
+export type ChargedHitbox = Partial<Pick<Hitbox, "damage" | "angle" | "baseKnockback" | "knockbackGrowth" | "radius">>;
+
+/**
+ * How a partly charged special's boxes grow before a full charge replaces them
+ * with the `full` values outright (SmashWiki, per move; `c` the charge frames,
+ * `frames` the total charge time):
+ * - `"lerp"`: every number moves linearly from the uncharged box to the full
+ *   one (Charge Shot: "damage, shield damage, base knockback, knockback scaling,
+ *   and radius are linearly scaled"); `floor` rounds the damage down to a whole
+ *   percent;
+ * - `"add"`: the damage alone grows by `total · c / frames` (Giant Punch
+ *   `base + 18·c/110` rounded down, Hammer Flip 0.085% a frame, Skull Bash
+ *   `6.2 + 15.2·c/80`, the bow `4 + 8·c/60` rounded down);
+ * - `"multiply"`: the damage alone is multiplied by `1 + by · c / frames`
+ *   (Shield Breaker `1 + 1.2·c/60`).
+ */
+export type PartialCharge =
+  | { readonly kind: "lerp"; readonly floor?: boolean }
+  | { readonly kind: "add"; readonly total: number; readonly floor?: boolean }
+  | { readonly kind: "multiply"; readonly by: number };
+
+/**
+ * A special move that charges (Plan 5). SSBU has two kinds:
+ * - `"hold"`: charges while B is held, fires on release (Hero's Bow, Shield
+ *   Breaker, Hammer Flip, Skull Bash);
+ * - `"store"`: loops after one press; B fires, shield or jump puts the charge
+ *   away for later (`CombatState.storedCharge`), and a full charge stores
+ *   itself (Charge Shot, Giant Punch, F.L.U.D.D.).
+ */
+export interface SpecialCharge {
+  readonly mode: "hold" | "store";
+  /** Frames from empty to full: SmashWiki's "Total charge time". */
+  readonly frames: number;
+  /** The move frame the charge loops on: SmashWiki's "Charges between a–b", a. */
+  readonly loopFrame: number;
+  /** Full-charge values per hitbox id, reached only at a full charge. */
+  readonly full?: Readonly<Record<number, ChargedHitbox>>;
+  /** How the boxes grow before that (`PartialCharge`); linear in every number when absent. */
+  readonly partial?: PartialCharge;
 }
 
 export interface MoveDef {
@@ -337,6 +385,8 @@ export interface MoveDef {
   readonly autoCancelAfter?: number;
   /** Smash attacks may be held to charge. */
   readonly chargeable?: boolean;
+  /** A special that charges (Plan 5): on B, held or stored. See `SpecialCharge`. */
+  readonly specialCharge?: SpecialCharge;
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
   /** A jab that loops until the button is released. */

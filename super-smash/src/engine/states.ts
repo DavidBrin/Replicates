@@ -154,6 +154,8 @@ export interface Intent {
   readonly attackPressed: boolean;
   readonly attackHeld: boolean;
   readonly specialPressed: boolean;
+  /** B is down: what a hold-mode special charge reads (Plan 5). */
+  readonly specialHeld: boolean;
   readonly shieldHeld: boolean;
   readonly shieldPressed: boolean;
   readonly shieldReleased: boolean;
@@ -272,6 +274,7 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     attackPressed: pressed(input, prev, Btn.Attack),
     attackHeld: held(input, Btn.Attack),
     specialPressed: pressed(input, prev, Btn.Special),
+    specialHeld: held(input, Btn.Special),
     shieldHeld: held(input, Btn.Shield),
     shieldPressed: pressed(input, prev, Btn.Shield),
     shieldReleased: released(input, prev, Btn.Shield),
@@ -554,8 +557,17 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
 }
 
 export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot): boolean {
-  if (!hasMove(ctx, slot)) return false;
+  const move = ctx.def.moves[slot];
+  if (move === undefined) return false;
   startMove(f, "special", slot);
+  // A stored charge comes back out (Plan 5): a full one fires at once, from the
+  // loop frame; a partial one keeps charging from where it left off.
+  const sc = move.specialCharge;
+  if (sc?.mode === "store" && f.combat.storedCharge > 0) {
+    f.charge = f.combat.storedCharge;
+    f.combat.storedCharge = 0;
+    if (f.charge >= sc.frames) f.actionFrame = sc.loopFrame;
+  }
   return true;
 }
 

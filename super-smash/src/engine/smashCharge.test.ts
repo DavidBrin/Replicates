@@ -11,8 +11,10 @@
  * holds one.
  *
  * The second half is the rule itself, read off every chargeable move on the
- * roster (smashes and specials alike, not just the smashes the step() tests
- * above drive): the hold frame comes before the move's earliest live frame.
+ * roster (every smash, not just the smashes the step() tests above drive): the
+ * hold frame comes before the move's earliest live frame. A special that
+ * charges on B (Plan 5, `MoveDef.specialCharge`) holds on its own loop frame
+ * instead, and the same rule is read off those.
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -119,15 +121,36 @@ describe("chargeHoldFrame, for every chargeable move on the roster", () => {
     ),
   );
 
-  it("covers the 24 smashes and the chargeable specials, so the rule below is not vacuous", () => {
+  it("covers the 24 smashes and nothing else, so the rule below is not vacuous", () => {
     const smashes = chargeable.filter(({ slot }) => SMASHES.some(([smash]) => smash === slot));
     expect(smashes).toHaveLength(FIGHTERS.length * SMASHES.length);
-    expect(chargeable.length, "no chargeable special on the roster").toBeGreaterThan(smashes.length);
+    // Plan 5: specials charge on B (`MoveDef.specialCharge`), never on attack.
+    expect(chargeable.length, "a special is `chargeable` on the attack button").toBe(smashes.length);
   });
 
   it.each(chargeable.map((c) => [c.name, c.move] as const))("%s holds before its earliest live frame", (_name, move) => {
     if (move.hitboxes.length === 0) return; // nothing live to hold before
     const earliestLive = actionFrameOf(Math.min(...move.hitboxes.map((h) => h.startFrame)));
     expect(chargeHoldFrame(move)).toBeLessThan(earliestLive);
+  });
+});
+
+describe("a special's charge loop, for every special that charges on B and swings a box", () => {
+  // The loop holds on `actionFrame` `loopFrame − 1` (`specialChargeMain`), so a
+  // box live there would hit for as long as B is held, as a smash parked on a
+  // live frame would.
+  const charging = FIGHTERS.flatMap((def) =>
+    (Object.entries(def.moves) as [MoveSlot, MoveDef | undefined][]).flatMap(([slot, move]) =>
+      move?.specialCharge !== undefined && move.hitboxes.length > 0 ? [{ name: `${def.id} ${slot}`, move }] : [],
+    ),
+  );
+
+  it("covers Giant Punch, Hammer Flip, Shield Breaker and Skull Bash, so the rule below is not vacuous", () => {
+    expect(charging.map((c) => c.name).sort()).toEqual(["donkeyKong neutralB", "kirby sideB", "marth neutralB", "pikachu sideB"]);
+  });
+
+  it.each(charging.map((c) => [c.name, c.move] as const))("%s loops before its earliest live frame", (_name, move) => {
+    const earliestLive = actionFrameOf(Math.min(...move.hitboxes.map((h) => h.startFrame)));
+    expect(move.specialCharge!.loopFrame - 1).toBeLessThan(earliestLive);
   });
 });

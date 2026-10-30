@@ -16,6 +16,7 @@
 import { SMASH_CHARGE_MAX } from "../constants";
 import { chargeHoldFrame, clearHitRecord } from "../hitbox";
 import { mashFrames } from "../shield";
+import { specialChargeMain } from "../specialCharge";
 import {
   GRAB_MASH_BUTTON,
   GRAB_MASH_STICK,
@@ -59,9 +60,13 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     startAction(f, f.grounded ? "stand" : "fall");
     return;
   }
+  // A charging special reads B, never the attack button (Plan 5).
+  if (f.action === "special" && move.specialCharge !== undefined && specialChargeMain(f, intent, ctx, move.specialCharge)) {
+    return;
+  }
   // Charging a smash holds the animation on the frame before its earliest
   // hitbox goes live (`chargeHoldFrame`), so nothing can be hit while it charges.
-  if (move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
+  if (f.action === "attack" && move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
     const holdFrame = chargeHoldFrame(move);
     if (f.actionFrame >= holdFrame) {
       f.actionFrame = holdFrame;

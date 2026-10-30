@@ -733,10 +733,11 @@ export type ChargeDefs = readonly (Pick<FighterDef, "moves"> | null | undefined)
 /**
  * Smash-charge motes, spiralling into the charging fighter.
  *
- * `charge` counts up only in an attack or special (`status/attack.ts`, a
- * chargeable move held); everywhere else it is a length or a code — a landing's
- * frames (`onLanded`), an air dodge's direction (`airDodgeCharge`, 1-9) — and
- * must not glow.
+ * `charge` counts up only in an attack or special (`status/attack.ts`: a
+ * chargeable smash held, or a special charging on B, `specialChargeMain`, which
+ * a stored charge also brings back out); everywhere else it is a length or a
+ * code — a landing's frames (`onLanded`), an air dodge's direction
+ * (`airDodgeCharge`, 1-9) — and must not glow.
  *
  * Nor does it stop when the button comes up: the engine keeps it, frozen, until
  * the move ends. So with the fighters' definitions to hand (`defs`, by port), a
@@ -1046,6 +1047,7 @@ export function drawProjectiles(
         dir: p.facing >= 0 ? 1 : -1,
         heading,
         charge,
+        fraction: toFloat(p.charge),
         returning: Boolean(p.returning),
         frame: state.frame + p.instanceId * 7,
       });

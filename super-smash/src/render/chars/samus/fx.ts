@@ -210,9 +210,13 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * Anchored on the projectile's own spawn point (8.0, 7.0) pulled back to the
    * muzzle, so the ball is born exactly where it was hanging.
    */
-  neutralB: ({ ctx, f, x, y, u, dir, frame }) => {
+  neutralB: ({ ctx, f, def, x, y, u, dir, frame }) => {
     const my = y - u * 7.0;
-    const charge = Math.min(1, f.charge / SMASH_CHARGE_MAX);
+    // Plan 5: a special's charge runs to its own length, not a smash's 60, and
+    // loops on its own frame (13), after which the shot is on its way.
+    const sc = def.moves.neutralB?.specialCharge;
+    const charge = Math.min(1, f.charge / (sc?.frames ?? SMASH_CHARGE_MAX));
+    const loopFrame = sc?.loopFrame ?? 2;
 
     /**
      * Still holding it, as opposed to having just fired it.
@@ -224,11 +228,12 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
      * A capture of it shows her holding a fully charged shot while the shot she
      * fired is exploding on an opponent.
      *
-     * The charge pins `actionFrame` to 1 and `frame` is `actionFrame + 1`, so
-     * "she is still charging" is exactly `frame <= 2`, and the plasma leaves on
-     * frame 3.
+     * The charge holds `actionFrame` on `loopFrame − 1` (Plan 5,
+     * `specialChargeMain`) and `frame` is `actionFrame + 1`, so "she is still
+     * charging" is exactly `frame <= loopFrame` (13), and the plasma leaves on
+     * frame 16, three frames after the release.
      */
-    if (f.charge > 0 && frame <= 2) {
+    if (f.charge > 0 && frame <= loopFrame) {
       /**
        * Radius runs 1.0 → 4.4 world units, so a full charge is **nine units
        * across against a twelve-unit fighter** — three quarters of her own
@@ -302,9 +307,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       return NOTHING;
     }
 
-    // The shot leaving. Frame 3 is the spawn; the flare covers it either side.
+    // The shot leaving: timed from the end of the loop (Plan 5), so `at` is 2
+    // on the last held frame; the flare covers the spawn either side.
+    const at = frame - (loopFrame - 2);
     const mx = x + u * 7.2 * dir;
-    const k = decay(frame, 2, 7);
+    const k = decay(at, 2, 7);
     if (k > 0) {
       muzzleCone(ctx, mx, my, dir, u * 5.5 * k, u * 2.4 * k, k, PLASMA_PALE);
       blast(ctx, mx, my, u * 2.6, k, "#FFFFFF", PLASMA);
@@ -314,7 +321,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     // is, and the reason a Charge Shot reads as heavy from across the stage.
     // It outlives the flash by a long way, which is what separates it from the
     // muzzle bloom rather than doubling it.
-    const s = decay(frame, 3, 20);
+    const s = decay(at, 3, 20);
     if (s > 0) {
       for (let i = 0; i < 6; i++) {
         const age = (1 - s) * 20 - i * 2.2;
@@ -1020,24 +1027,27 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
   /**
    * The Charge Shot itself.
    *
-   * `charge` arrives as the damage multiplier — 1 for a tap, up to 5.6 fully
-   * charged — and the ball is sized off it, because the one thing a player must
-   * be able to do is tell a 5% pip from a 28% kill move *while it is in the
-   * air*. Uncharged it is barely bigger than the muzzle; charged it is most of
-   * her own height, which is what makes the shield-or-jump decision readable.
+   * `fraction` arrives as how charged it left — 0 for a tap, 1 fully charged
+   * (Plan 5, P5-R2) — and the ball is sized off it, because the one thing a
+   * player must be able to do is tell a 5% pip from a 28% kill move *while it
+   * is in the air*. Uncharged it is barely bigger than the muzzle; charged it is
+   * most of her own height, which is what makes the shield-or-jump decision
+   * readable.
    */
-  chargeShot: ({ ctx, u, age, dir, charge }) => {
-    // Floor of 1.4 world units even uncharged: the hitbox is 2.5, and a pip
-    // smaller than a pixel of its own hurtbox is a projectile players lose. The
-    // top end matches the ball she was holding — a shot that shrinks the
-    // instant it leaves the barrel is the tell that the two were drawn by
-    // different hands.
-    const r = u * (1.4 + 0.62 * (charge - 1));
+  chargeShot: ({ ctx, u, age, dir, fraction }) => {
+    // The old 1 → 5.6 damage multiplier the ball was sized by, so a full charge
+    // reads exactly as large in flight as it did before Plan 5.
+    const scale = 1 + 4.6 * Math.min(1, Math.max(0, fraction));
+    // Floor of 1.4 world units even uncharged: a pip smaller than a pixel of
+    // its own hitbox (1.9 uncharged) is a projectile players lose. The top end
+    // matches the ball she was holding — a shot that shrinks the instant it
+    // leaves the barrel is the tell that the two were drawn by different hands.
+    const r = u * (1.4 + 0.62 * (scale - 1));
     // A comet tail, longer the bigger it is.
     ctx.fillStyle = withAlpha(PLASMA, 0.3);
     ctx.beginPath();
     ctx.moveTo(0, -r * 0.75);
-    ctx.lineTo(-dir * r * (2.6 + charge * 0.7), 0);
+    ctx.lineTo(-dir * r * (2.6 + scale * 0.7), 0);
     ctx.lineTo(0, r * 0.75);
     ctx.closePath();
     ctx.fill();

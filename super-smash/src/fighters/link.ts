@@ -567,7 +567,13 @@ const legacy: FighterDef = {
       slot: "neutralB",
       name: "Hero's Bow",
       totalFrames: 44,
-      chargeable: true,
+      // Hold mode (Plan 5), SmashWiki "Link (SSBU)/Neutral special"
+      // (https://www.ssbwiki.com/Link_(SSBU)/Neutral_special): "Total charge
+      // time 60 frames", "Charges between 15-16", arrow "16-61 (1-46)" from
+      // release, damage "4 + 8 * (charge frames / 60)", speed 2.6 uncharged →
+      // 10 full. UNVERIFIED-simplified: "with at least 36 charge frames, the
+      // move immediately skips to full charge" is not modelled.
+      specialCharge: { mode: "hold", frames: 60, loopFrame: 15 },
       hitboxes: [],
       projectiles: [
         {
@@ -575,7 +581,7 @@ const legacy: FighterDef = {
           // arcing down and sticking in the ground for three seconds, where it
           // becomes an item anyone can pick up. Charge runs frames 16 to 52 and
           // scales damage as `4 + 8 * (chargeFrames / 60)` — 4% uncharged to
-          // 12% full, hence `chargeScaling: 3`. Firing with a stuck arrow
+          // 12% full (`charged` below). Firing with a stuck arrow
           // already in hand looses *two* at once, each scaled 0.8x for 6% → 18%
           // total; the double arrow is the harder launcher (BKB 25 / KBG 110
           // against 10 / 71). Reflectable and absorbable.
@@ -583,13 +589,14 @@ const legacy: FighterDef = {
           spawnFrame: 16,
           offsetX: fx(9.0),
           offsetY: fx(7.0),
-          vx: fx(3.4),
+          vx: fx(2.6),
           vy: fx(0),
           // Flat for most of its life; the late droop is the small gravity.
           gravity: fx(0.014),
           lifetime: 46,
           destroyOnHit: true,
-          chargeScaling: fx(3),
+          // Damage "4 + 8 * (charge frames / 60), rounded down"; speed linear.
+          charged: { vx: fx(10.0), hitbox: { damage: fx(12.0) }, partial: { kind: "add", total: fx(8), floor: true } },
           visual: "arrow",
           hitbox: {
             id: 0,

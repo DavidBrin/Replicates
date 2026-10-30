@@ -97,7 +97,8 @@ describe("Samus's Charge Shot shows its charge", () => {
   });
 
   it("draws nothing of the charge once it has been fired", () => {
-    const { ctx } = draw("samus", "neutralB", 30, { charge: 0 });
+    // Plan 5: the shot leaves 13 frames later than it used to (the charge loop).
+    const { ctx } = draw("samus", "neutralB", 41, { charge: 0 });
     expect(countOf(ctx, "arc")).toBe(0);
   });
 });

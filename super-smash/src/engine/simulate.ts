@@ -85,13 +85,16 @@ import type { Capsule } from "./hitbox";
 import type { Ecb, Point } from "./physics";
 import {
   advanceProjectile,
+  chargeFraction,
   cloneProjectile,
   findProjectileDef,
   markProjectileHit,
   projectileAlreadyHit,
+  projectileHitbox,
   projectileHitboxActive,
   spawnProjectile,
 } from "./projectile";
+import { chargedHitbox } from "./specialCharge";
 import {
   blastZoneKO,
   clampShiftToStage,
@@ -959,7 +962,12 @@ function gatherHitboxes(
     // moves only ever clear by id, and keep one hit per swing (Plan 3, Task 16).
     if (run.state.fired.some((cmd) => cmd.op === "clearAll")) clearHitRecord(f);
     const live = scriptHitboxes(run.state, defs[i].id, run.script.motion, run.gameFrame, bones);
-    for (const hb of live) {
+    // A charged special's boxes grow towards their full-charge values (Plan 5);
+    // a smash's charge stays the damage multiplier it always was.
+    const sc = defs[i].moves[f.move]?.specialCharge;
+    const chargeT = sc === undefined ? 0 : chargeFraction(f.charge, sc.frames);
+    for (const raw of live) {
+      const hb = sc === undefined ? raw : chargedHitbox(raw, sc.full?.[raw.id], chargeT, sc.partial);
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
       const was = hitboxWorldPos(prevPos[i].x, prevPos[i].y, f.facing, hb);
       // The far end mirrors with facing exactly as the near end does.
@@ -978,7 +986,7 @@ function gatherHitboxes(
         dy: far.y - now.y,
         slot: f.move,
         projectile: null,
-        chargeScale: chargeMultiplier(f.charge),
+        chargeScale: f.action === "attack" ? chargeMultiplier(f.charge) : ONE,
         destroyOnHit: false,
         onlyPort: f.action === "pummel" || f.action === "throw" ? f.grabbing : null,
         suppressed: false,
@@ -1057,7 +1065,8 @@ function spawnDueProjectiles(
       // The script says which and when; what flies is still the move's `ProjectileDef`.
       const def = findProjectileDef(defs[i], cmd.id);
       if (def === undefined) continue;
-      const p = spawnProjectile(def, f, s.nextProjectileId);
+      const sc = defs[i].moves[f.move]?.specialCharge;
+      const p = spawnProjectile(def, f, s.nextProjectileId, defs[i].id, sc?.frames);
       s.nextProjectileId += 1;
       s.projectiles.push(p);
       prev.set(p.instanceId, { x: p.x, y: p.y });
@@ -1076,14 +1085,15 @@ function appendProjectileCandidates(
     const def = projectileDefOf(ctx, p);
     if (def === undefined || !projectileHitboxActive(p, def)) continue;
     const was = prev.get(p.instanceId) ?? { x: p.x, y: p.y };
-    const offsetX = p.facing >= 0 ? def.hitbox.x : -def.hitbox.x;
+    const hitbox = projectileHitbox(p, def);
+    const offsetX = p.facing >= 0 ? hitbox.x : -hitbox.x;
     candidates.push({
       attacker: p.owner,
-      hitbox: def.hitbox,
+      hitbox,
       x: p.x + offsetX,
-      y: p.y + def.hitbox.y,
+      y: p.y + hitbox.y,
       prevX: was.x + offsetX,
-      prevY: was.y + def.hitbox.y,
+      prevY: was.y + hitbox.y,
       dx: 0,
       dy: 0,
       slot: null,

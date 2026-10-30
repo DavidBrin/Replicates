@@ -761,7 +761,19 @@ const legacy: FighterDef = {
       slot: "neutralB",
       name: "Shield Breaker",
       totalFrames: 50,
-      chargeable: true,
+      // Hold mode (Plan 5), SmashWiki "Marth (SSBU)/Neutral special"
+      // (https://www.ssbwiki.com/Marth_(SSBU)/Neutral_special): "Total charge
+      // time 60 frames", "Charges between 11-12"; before full "the damage
+      // multiplier is equal to 1 + 1.2 * (charge frames / 60)" (17.44% / 19.62%
+      // at most), and "when fully charged, the hitboxes are instead changed
+      // directly": 24% (tip) and 22% (body), the knockback unchanged.
+      specialCharge: {
+        mode: "hold",
+        frames: 60,
+        loopFrame: 11,
+        partial: { kind: "multiply", by: fx(1.2) },
+        full: { 0: { damage: fx(24.0) }, 1: { damage: fx(22.0) } },
+      },
       // Charge scales **damage and shield damage only** — angle, base knockback
       // and growth are frozen across the whole range (361 / 30 / 90 on the
       // body, 361 / 60 / 100 on the tip). Damage runs 8% → 22% on the body and

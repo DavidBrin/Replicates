@@ -19,9 +19,11 @@
 import { ONE, fx, abs, mul } from "./fixed";
 import { SMASH_CHARGE_MAX } from "./constants";
 import { HARD_PLATFORM_DEPTH, platformCentreX } from "./physics";
+import { chargedHitbox } from "./specialCharge";
 import type {
   FighterDef,
   FighterState,
+  Hitbox,
   MoveDef,
   ProjectileDef,
   ProjectileState,
@@ -63,17 +65,18 @@ export function findProjectileDef(def: FighterDef, id: string): ProjectileDef | 
 }
 
 /**
- * How much a held charge multiplies this projectile.
+ * How much a held charge multiplies this projectile, over a charge of `frames`.
  *
- * Samus's charge shot is the whole reason this exists: the same `ProjectileDef`
- * has to cover the tap and the full charge, and the difference is one scalar
- * applied to both damage and speed. Never below 1 — a mis-authored scaling makes
- * a projectile no weaker than its uncharged self rather than deleting it.
+ * One scalar applied to both damage and speed, for a projectile authored with
+ * `chargeScaling`. Plan 5's charged specials (Charge Shot, the bow) carry a
+ * full-charge variant instead (`ProjectileDef.charged`, `projectileHitbox`) and
+ * scale by 1 here. Never below 1 — a mis-authored scaling makes a projectile no
+ * weaker than its uncharged self rather than deleting it.
  */
-export function projectileChargeScale(def: ProjectileDef, charge: number): number {
+export function projectileChargeScale(def: ProjectileDef, charge: number, frames: number = SMASH_CHARGE_MAX): number {
   if (def.chargeScaling === undefined || charge <= 0) return ONE;
-  const held = Math.min(charge, SMASH_CHARGE_MAX);
-  const scale = ONE + Math.trunc(((def.chargeScaling - ONE) * held) / SMASH_CHARGE_MAX);
+  const held = Math.min(charge, frames);
+  const scale = ONE + Math.trunc(((def.chargeScaling - ONE) * held) / frames);
   return scale < ONE ? ONE : scale;
 }
 
@@ -89,16 +92,21 @@ export function spawnProjectile(
   owner: FighterState,
   instanceId: number,
   source: string = owner.defId,
+  chargeFrames: number = SMASH_CHARGE_MAX,
 ): ProjectileState {
   const facing = owner.facing >= 0 ? 1 : -1;
-  const chargeScale = projectileChargeScale(def, owner.charge);
+  const chargeScale = projectileChargeScale(def, owner.charge, chargeFrames);
+  const charge = chargeFraction(owner.charge, chargeFrames);
+  // A full-charge variant interpolates its speed (Plan 5); otherwise the
+  // multiplier scales it, as it scales the damage.
+  const vx = def.charged !== undefined ? def.vx + Math.trunc(((def.charged.vx - def.vx) * charge) / ONE) : mul(def.vx, chargeScale);
   return {
     instanceId,
     defId: def.id,
     owner: owner.port,
     x: owner.x + facing * def.offsetX,
     y: owner.y + def.offsetY,
-    vx: facing * mul(def.vx, chargeScale),
+    vx: facing * vx,
     vy: def.vy,
     facing,
     age: 0,
@@ -107,7 +115,7 @@ export function spawnProjectile(
     hitPorts: [],
     returning: false,
     source,
-    charge: chargeFraction(owner.charge, SMASH_CHARGE_MAX),
+    charge,
     reflected: 0,
   };
 }
@@ -122,6 +130,11 @@ export function chargeFraction(charge: number, frames: number): number {
 export function projectilesDueOnFrame(move: MoveDef, moveFrame: number): readonly ProjectileDef[] {
   if (move.projectiles === undefined) return [];
   return move.projectiles.filter((p) => p.spawnFrame === moveFrame);
+}
+
+/** This projectile's hitbox, at the charge it was launched with (Plan 5). */
+export function projectileHitbox(p: ProjectileState, def: ProjectileDef): Hitbox {
+  return def.charged === undefined ? def.hitbox : chargedHitbox(def.hitbox, def.charged.hitbox, p.charge, def.charged.partial);
 }
 
 /** Is this projectile's hitbox live? Its frames are counted from the spawn. */

@@ -289,6 +289,12 @@ export interface ProjectileContext {
   readonly heading: number;
   /** Charge multiplier, 1 for an uncharged shot. */
   readonly charge: number;
+  /**
+   * How charged the shot was when it left, 0 (a tap) to 1 (full): the
+   * projectile's own `charge` (Plan 5). A charged special's shot (Charge Shot,
+   * the bow) is sized by this, since its `charge` multiplier stays 1 (P5-R2).
+   */
+  readonly fraction: number;
   /** True once a returning projectile has turned round. */
   readonly returning: boolean;
   /** The global frame, for anything that should flicker on its own clock. */

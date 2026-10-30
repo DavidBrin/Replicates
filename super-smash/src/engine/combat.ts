@@ -101,6 +101,12 @@ export interface CombatState {
    * at its captor whatever SDI did (`holdAtCaptor`).
    */
   victimFreeze: boolean;
+  /**
+   * Plan 5: frames of a store-mode special's charge put away for later (Charge
+   * Shot, Giant Punch, F.L.U.D.D.); 0 for none. Survives shielding, jumping
+   * and being hit; spent by the next use of that special.
+   */
+  storedCharge: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -125,6 +131,7 @@ export function emptyCombat(): CombatState {
     autolinkPointX: 0,
     autolinkPointY: 0,
     victimFreeze: false,
+    storedCharge: 0,
   };
 }
 
@@ -150,5 +157,6 @@ export function cloneCombat(c: CombatState): CombatState {
     autolinkPointX: c.autolinkPointX,
     autolinkPointY: c.autolinkPointY,
     victimFreeze: c.victimFreeze,
+    storedCharge: c.storedCharge,
   };
 }

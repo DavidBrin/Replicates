@@ -799,10 +799,11 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
   /**
    * The arrow. Translated to the projectile but not rotated, so it noses over
    * as gravity takes it — which for an arrow is the whole tell that the shot is
-   * running out of steam.
+   * running out of steam. Sized by `fraction`, how charged it was loosed (Plan
+   * 5, P5-R2): 1× a tap to 1.6× full.
    */
-  arrow: ({ ctx, u, heading, charge, age }) => {
-    const k = Math.min(1.6, charge);
+  arrow: ({ ctx, u, heading, fraction, age }) => {
+    const k = 1 + 0.6 * Math.min(1, Math.max(0, fraction));
     ctx.save();
     ctx.rotate(heading);
 

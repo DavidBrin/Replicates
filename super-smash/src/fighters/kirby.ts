@@ -691,8 +691,22 @@ const legacy: FighterDef = {
     sideB: {
       slot: "sideB",
       name: "Hammer Flip",
-      totalFrames: 54,
-      chargeable: true,
+      totalFrames: 69,
+      // Hold mode (Plan 5), SmashWiki "Kirby (SSBU)/Side special"
+      // (https://www.ssbwiki.com/Kirby_(SSBU)/Side_special): "Total charge time
+      // 120 frames", "Charges between 15-16"; before full "each charge frame
+      // adding 0.085% damage to the hitboxes, for a maximum of 29.115%" (0.085
+      // × 120 = 10.2 over the whole charge); full charge "changed directly":
+      // 35%, angle 361, same BK/KS. Interruptible 70. UNVERIFIED-simplified:
+      // the full-charge recoil (every 26 frames) and the full-charge
+      // intangibility/armour are not modelled.
+      specialCharge: {
+        mode: "hold",
+        frames: 120,
+        loopFrame: 15,
+        partial: { kind: "add", total: fx(10.2) },
+        full: { 0: { damage: fx(35.0), angle: fx(361) } },
+      },
       hitboxes: [
         {
           // Uncharged this launches at 48 degrees for 19%. A **full charge

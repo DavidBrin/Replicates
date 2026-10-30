@@ -1012,6 +1012,7 @@ function jolt(age: number) {
     dir: 1,
     heading: 0.2,
     charge: 1,
+    fraction: 0,
     returning: false,
     frame: age,
   });

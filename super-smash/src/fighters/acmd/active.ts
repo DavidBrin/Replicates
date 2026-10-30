@@ -12,8 +12,9 @@
  * - the move is not one a status drives rather than its script: a throw
  *   (`ATTACK_ABS`) or a pummel (`set_catch_only_all`);
  * - its legacy move carries nothing the script would drop: no scripted
- *   momentum, projectile, super armour or smash charge (those stay on the
- *   compiled legacy script until the energies and the charge read the script);
+ *   momentum, projectile, super armour, smash charge or special charge (those
+ *   stay on the compiled legacy script until the energies and the charge read
+ *   the script);
  * - every command is one the interpreter runs, or a cosmetic one listed below;
  * - the script clears its own boxes — one that leaves them for its status to
  *   clear (Fox's Reflector) would keep them live for the whole move here;
@@ -105,7 +106,7 @@ export function activatable(
 ): boolean {
   if (move === undefined || STATUS_DRIVEN.has(slot)) return false;
   if (move.momentum !== undefined || move.projectiles !== undefined) return false;
-  if (move.superArmourFrames !== undefined || move.chargeable === true) return false;
+  if (move.superArmourFrames !== undefined || move.chargeable === true || move.specialCharge !== undefined) return false;
   const bones = new Set<string>();
   if (!runnable(script.commands, bones)) return false;
   if (bones.size === 0 || ![...bones].every(placeable)) return false;

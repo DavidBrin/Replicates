@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fx } from "@/engine/fixed";
+import { ONE, fx } from "@/engine/fixed";
 import { FIGHTER_UNITS, MAX_ZOOM, createCamera } from "./camera";
 import { PORT_COLOURS, hexToRgb } from "./characterArt";
 import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
@@ -10,6 +10,7 @@ import {
   createVfx,
   drawKoFlash,
   drawParticles,
+  drawProjectiles,
   drawSmashBall,
   drawStarKos,
   hitFlashAmount,
@@ -22,7 +23,8 @@ import {
   trackLaunchTrails,
   updateVfx,
 } from "./vfx";
-import { makeDef, makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
+import { makeDef, makeEvents, makeFighter, makeProjectile, makeStage, makeState } from "./testFixtures";
+import type { ProjectileContext } from "./fxKit";
 
 const stage = makeStage();
 const cam = createCamera(stage);
@@ -394,6 +396,25 @@ describe("continuous effects", () => {
     expect(v.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
   });
 
+  it("emits no new motes once a special charging on B is let go (Plan 5: it holds on its loop frame)", () => {
+    // A special that charges on B holds on `actionFrame` `loopFrame − 1`
+    // (`specialChargeMain`) and, released, carries on past it with `charge`
+    // still set, as a released smash does (P5-R1: `MoveTiming.chargeHold`).
+    const bow = { mode: "hold", frames: 60, loopFrame: 15 } as const;
+    const defs = [makeDef({ moves: { neutralB: { slot: "neutralB", name: "Hero's Bow", totalFrames: 44, hitboxes: [], specialCharge: bow } } })];
+    const at = (actionFrame: number, charge: number) =>
+      makeState({ fighters: [makeFighter({ action: "special", move: "neutralB", actionFrame, charge })] });
+    const v = createVfx();
+    const motes = () => v.particles.filter((p) => p.kind === "chargeMote").length;
+    for (let held = 1; held <= 8; held++) stepVfx(v, null, at(bow.loopFrame - 1, held), defs);
+    expect(motes(), "no motes while B was held").toBeGreaterThan(0);
+    for (let frame = bow.loopFrame; frame <= bow.loopFrame + 10; frame++) {
+      const before = motes();
+      stepVfx(v, null, at(frame, 8), defs);
+      expect(motes(), `a new mote on frame ${frame}, after the release`).toBeLessThanOrEqual(before);
+    }
+  });
+
   it.each([
     // `charge` also carries a landing's length (ordinary and aerial: `onLanded`) and an air dodge's
     // direction (`airDodgeCharge`: 1-9; 1 is down-left). None of those is a charge, so none glows.
@@ -427,6 +448,21 @@ describe("continuous effects", () => {
     drawSmashBall(on, makeState({ smashBall: { active: true, x: 0, y: fx(50), vx: 0, vy: 0, health: fx(40), driftTimer: 0 } }), cam);
     const hues = assignmentsTo(on, "strokeStyle").filter((s) => String(s).startsWith("hsla"));
     expect(new Set(hues.map(String)).size).toBeGreaterThan(3);
+  });
+});
+
+describe("projectiles", () => {
+  it("hand a painter how charged the shot was (Plan 5: `ProjectileState.charge`, 0 to 1)", () => {
+    // A special's charge no longer rides in `chargeScale` (that stays 1 for a
+    // shot with a full-charge variant), so a painter that sizes a charged shot
+    // reads `fraction` (P5-R2).
+    const seen: number[] = [];
+    const paint = (c: ProjectileContext) => void seen.push(c.fraction);
+    for (const charge of [0, ONE / 2, ONE]) {
+      const state = makeState({ projectiles: [makeProjectile({ charge })] });
+      drawProjectiles(createMockContext(), state, cam, () => ({ visual: "arrow", paint }));
+    }
+    expect(seen).toEqual([0, 0.5, 1]);
   });
 });
 
