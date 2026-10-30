@@ -7,7 +7,7 @@ import { localBuild } from "@/game/onlineConfig";
 import { useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession } from "@/net/online/session";
-import { NO_WEBGL } from "@/render3d/webgl";
+import { NO_WEBGL, webglCheck } from "@/render3d/webgl";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
 import type { Role, RoomIntent } from "@/net/signalProtocol";
 import { OnlineLobby, type OpenSession } from "./OnlineLobby";
@@ -33,7 +33,8 @@ function harness() {
     opened.push(fake);
     return fake.session;
   });
-  const { unmount } = render(<OnlineLobby openSession={openSession} />);
+  // A WebGL check of its own, as a fresh page has: the real probe, on the stubbed `getContext` below.
+  const { unmount } = render(<OnlineLobby openSession={openSession} canDrawWorld={webglCheck()} />);
   return { opened, openSession, unmount };
 }
 
@@ -110,15 +111,37 @@ describe("OnlineLobby, WebGL before a room (part 1 re-review)", () => {
     expect(openSession).not.toHaveBeenCalled();
   });
 
-  it("asks again on every try: with WebGL back (acceleration turned on), the next Create opens the room", async () => {
+  // codex confirm pass, P3: each check used to make a WebGL context, and without WEBGL_lose_context none was
+  // given back, so repeated clicks used up the page's few. The page asks once and keeps the answer.
+  it("asks the browser once for the page, however many times Create and Join are pressed", async () => {
     getContext.mockReturnValue(null);
     const { openSession } = harness();
     await create();
-    expect(openSession).not.toHaveBeenCalled();
-    getContext.mockImplementation(((kind: string) => (kind === "webgl2" ? WEBGL2 : null)) as never);
     await create();
-    expect(openSession).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("alert")).toBeNull();
+    await join("QRST");
+    expect(screen.getByRole("alert")).toHaveTextContent(NO_WEBGL);
+    expect(openSession).not.toHaveBeenCalled();
+    expect(getContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a room on every try once the page's one check said yes, without asking again", async () => {
+    const { openSession } = harness();
+    await create();
+    // Back out of the room (the lobby stays on screen here), then make another.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /back to the main menu/i }));
+    });
+    await create();
+    expect(openSession).toHaveBeenCalledTimes(2);
+    expect(getContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the page's own check when none is given", async () => {
+    // The only render here without `canDrawWorld`: the module's check, which then keeps its answer for the file.
+    getContext.mockReturnValue(null);
+    render(<OnlineLobby openSession={vi.fn<OpenSession>()} />);
+    await create();
+    expect(screen.getByRole("alert")).toHaveTextContent(NO_WEBGL);
   });
 });
 
@@ -159,12 +182,13 @@ describe("OnlineLobby, the bake first (Plan 4)", () => {
   });
 
   /**
-   * codex P1-1: a bake that never arrives ends at its deadline (`BAKE_TIMEOUT_MS`)
-   * in a sentence that says trying again may help, and trying again works: the
-   * next connect asks for the bake afresh, and opens the room once it is in.
+   * codex P1-1: a bake that stalls or crawls is given up on (`BAKE_IDLE_TIMEOUT_MS`,
+   * `BAKE_TOTAL_TIMEOUT_MS`) in a sentence that says trying again may help, and
+   * trying again works: the next connect asks for the bake afresh, and opens the
+   * room once it is in.
    */
-  it("says the bake took too long, and a second try opens the room once it is in", async () => {
-    const sentence = "The fighters' animation data took too long to download. Check your connection and try again.";
+  it("says the bake stalled or was too slow, and a second try opens the room once it is in", async () => {
+    const sentence = "The fighters' animation data stalled, or was too slow to finish downloading. Check your connection and try again.";
     bake.next = Promise.reject(new Error(sentence));
     const { openSession } = harness();
     await create();
@@ -313,7 +337,7 @@ describe("OnlineLobby", () => {
     const openSession = vi.fn<OpenSession>(async () => {
       throw new Error("offline");
     });
-    render(<OnlineLobby openSession={openSession} />);
+    render(<OnlineLobby openSession={openSession} canDrawWorld={webglCheck()} />);
     await join("ABCD");
     expect(screen.getByRole("alert")).toHaveTextContent(/Could not reach the online service/);
     expect(useOnlineStore.getState().errorReason).toBe("unreachable");
@@ -356,7 +380,7 @@ describe("OnlineLobby", () => {
           opens = resolve;
         }),
     );
-    render(<OnlineLobby openSession={openSession} />);
+    render(<OnlineLobby openSession={openSession} canDrawWorld={webglCheck()} />);
     await create();
     fireEvent.click(screen.getByRole("button", { name: "Back to the main menu" }));
 
@@ -377,7 +401,7 @@ describe("OnlineLobby", () => {
           fails = reject;
         }),
     );
-    render(<OnlineLobby openSession={openSession} />);
+    render(<OnlineLobby openSession={openSession} canDrawWorld={webglCheck()} />);
     await create();
     fireEvent.click(screen.getByRole("button", { name: "Back to the main menu" }));
 
@@ -471,7 +495,7 @@ describe("OnlineLobby", () => {
             opens = resolve;
           }),
       );
-      const { unmount } = render(<OnlineLobby openSession={openSession} />);
+      const { unmount } = render(<OnlineLobby openSession={openSession} canDrawWorld={webglCheck()} />);
       await create();
       unmount();
 

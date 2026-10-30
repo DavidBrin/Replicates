@@ -2,8 +2,9 @@
  * Loading the bake in the browser and installing it in the game's context
  * (Plan 4).
  *
- * `public/bake/roster.bin.gz` is fetched once, within a deadline
- * (`BAKE_TIMEOUT_MS`), gunzipped with the platform's `DecompressionStream`,
+ * `public/bake/roster.bin.gz` is fetched once, given up on when it stalls
+ * (`BAKE_IDLE_TIMEOUT_MS`) or runs too long (`BAKE_TOTAL_TIMEOUT_MS`),
+ * gunzipped with the platform's `DecompressionStream`,
  * checked against the digest compiled into this build (`BAKE_DIGEST`) and
  * decoded into the tables the sim reads. A file that does not match is
  * refused: a stale cached bake would put hitboxes somewhere other than where
@@ -31,17 +32,31 @@ export const BAKE_URL = "/bake/roster.bin.gz";
 export type FetchLike = (url: string, init: { readonly signal: AbortSignal }) => Promise<Pick<Response, "ok" | "status" | "body">>;
 
 /**
- * The longest the bake's request and the read of its body may take, together.
- * The file is about 1.8 MB gzipped (1,845,102 bytes when this was written), so
- * thirty seconds lets it through a connection of half a megabit a second
- * (14.8 Mbit in 30 s). Without a deadline a request that never answers, or a
- * body that never closes, leaves the player on the lobby's "Connecting…" or
- * `/play`'s "Loading fighters…" for ever (codex P1-1).
+ * How long the download may go with no bytes at all, before the answer or
+ * between two chunks of the body. Without it a request that never answers, or a
+ * body that stops, leaves the player on the lobby's "Connecting…" or `/play`'s
+ * "Loading fighters…" for ever (codex P1-1). It resets on every chunk, so a
+ * slow link that keeps delivering is never cut off by it: a single deadline
+ * over the whole file did that (30 s failed a steady 0.5 Mbit/s link, codex
+ * confirm pass, P2). UNVERIFIED (a judgement, not measured): a link that is
+ * moving at all sends far more often than this, and fifteen seconds of
+ * nothing reads as stopped.
  */
-export const BAKE_TIMEOUT_MS = 30_000;
+export const BAKE_IDLE_TIMEOUT_MS = 15_000;
 
-/** On the deadline. Trying again may well work, so it says so. */
-const TOO_SLOW = "The fighters' animation data took too long to download. Check your connection and try again.";
+/**
+ * The longest the whole download may take however it is going, so a trickle
+ * that never stalls for `BAKE_IDLE_TIMEOUT_MS` cannot hold the player for
+ * ever. The file is about 1.8 MB gzipped (1,845,102 bytes when this was
+ * written, 14.8 Mbit), so five minutes lets it through a link of about
+ * 50 kbit/s, a tenth of the half a megabit a second the old 30 s deadline
+ * assumed. UNVERIFIED (a judgement): past five minutes a player is better told
+ * than kept waiting.
+ */
+export const BAKE_TOTAL_TIMEOUT_MS = 300_000;
+
+/** On either limit: the download stalled, or crawled. Trying again may well work, so it says so. */
+const TOO_SLOW = "The fighters' animation data stalled, or was too slow to finish downloading. Check your connection and try again.";
 
 /**
  * The request failed before any answer (offline, DNS, a refused connection),
@@ -65,19 +80,27 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
 /**
  * `BAKE_URL`'s body, every byte of it, or a rejection in a sentence a player
  * can read: `UNREACHABLE` or `BROKE_OFF` when the network fails, the HTTP
- * status when the server refuses, or `TOO_SLOW` once `BAKE_TIMEOUT_MS` has
- * passed since asking, whether the request never answered or its body never
- * closed. On the deadline the fetch is aborted, which ends its body's stream too.
+ * status when the server refuses, or `TOO_SLOW` when nothing has arrived for
+ * `BAKE_IDLE_TIMEOUT_MS` (no answer yet, or no chunk since the last) or the
+ * whole download has run `BAKE_TOTAL_TIMEOUT_MS`. Then the fetch is aborted,
+ * which ends its body's stream too.
  */
 async function download(fetchFn: FetchLike): Promise<Uint8Array> {
   const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+  let giveUp!: () => void;
+  const tooSlow = new Promise<never>((_, reject) => {
+    giveUp = () => {
       reject(new Error(TOO_SLOW));
       controller.abort();
-    }, BAKE_TIMEOUT_MS);
+    };
   });
+  let idle = setTimeout(giveUp, BAKE_IDLE_TIMEOUT_MS);
+  const total = setTimeout(giveUp, BAKE_TOTAL_TIMEOUT_MS);
+  /** Bytes arrived (or the answer did): the idle wait starts again. */
+  const progress = () => {
+    clearTimeout(idle);
+    idle = setTimeout(giveUp, BAKE_IDLE_TIMEOUT_MS);
+  };
   const read = (async () => {
     let res: Awaited<ReturnType<FetchLike>>;
     try {
@@ -86,18 +109,36 @@ async function download(fetchFn: FetchLike): Promise<Uint8Array> {
       throw new Error(UNREACHABLE, { cause: e });
     }
     if (!res.ok || res.body === null) throw new Error(`Could not load the fighters' animation data (HTTP ${res.status}).`);
+    progress();
+    const chunks: Uint8Array[] = [];
+    let length = 0;
     try {
-      return new Uint8Array(await new Response(res.body).arrayBuffer());
+      const reader = res.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        length += value.length;
+        progress();
+      }
     } catch (e) {
       throw new Error(BROKE_OFF, { cause: e });
     }
+    const bytes = new Uint8Array(length);
+    let at = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, at);
+      at += chunk.length;
+    }
+    return bytes;
   })();
-  // What the abort makes of a download the deadline already ended is nobody's to hear.
+  // What the abort makes of a download a limit already ended is nobody's to hear.
   read.catch(() => {});
   try {
-    return await Promise.race([read, deadline]);
+    return await Promise.race([read, tooSlow]);
   } finally {
-    clearTimeout(timer);
+    clearTimeout(idle);
+    clearTimeout(total);
   }
 }
 
@@ -119,8 +160,8 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 /**
  * Fetch, verify and decode the bake. Rejects with a sentence a player can read:
- * the file missing, unreachable or cut off by the network, too slow to arrive
- * (`BAKE_TIMEOUT_MS`), anything that is
+ * the file missing, unreachable or cut off by the network, stalled or too slow
+ * to arrive (`BAKE_IDLE_TIMEOUT_MS`, `BAKE_TOTAL_TIMEOUT_MS`), anything that is
  * not exactly this build's bake (another build's, cut short, corrupt, or a page
  * that is not a bake at all), or a page that cannot check it. The length and
  * digest are checked before the decoder reads a byte.

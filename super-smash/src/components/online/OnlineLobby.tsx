@@ -29,7 +29,14 @@ const NO_FREE_CODE = "Could not find a free room code. Try again.";
  * screens — the host to stage select (the host picks the stage), the guest
  * straight to character select.
  */
-export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?: OpenSession }) {
+export function OnlineLobby({
+  openSession = OnlineSession.open,
+  canDrawWorld = canDrawWebGL,
+}: {
+  openSession?: OpenSession;
+  /** Whether this browser can draw the match (`render3d/webgl.ts`): the page's own check, which asks the browser once. */
+  canDrawWorld?: () => boolean;
+}) {
   const router = useRouter();
   const storeStatus = useOnlineStore((s) => s.status);
   const role = useOnlineStore((s) => s.role);
@@ -93,8 +100,9 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
     // WebGL before anything (D57: a match is drawn only in 3D). A browser that
     // cannot draw the match opens no room: the other player would wait on a
     // match that never starts until their link monitor gave up, about ten
-    // seconds. Asked on every try, so turning acceleration on and trying again works.
-    if (!canDrawWebGL()) {
+    // seconds. The page asks the browser once (`webglCheck`): a refusal stands
+    // until a new page, which turning hardware acceleration on needs anyway.
+    if (!canDrawWorld()) {
       useOnlineStore.getState().patch({ status: "error", error: NO_WEBGL });
       return;
     }

@@ -15,7 +15,7 @@ import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "@/fighters/acmd/limb";
 import { BAKE_DIGEST } from "@/fighters/bake/digest";
 import { STAGES } from "@/stages";
-import { BAKE_TIMEOUT_MS, bakedContext, fetchBake, installBake, prepareRoster } from "./bake";
+import { BAKE_IDLE_TIMEOUT_MS, BAKE_TOTAL_TIMEOUT_MS, bakedContext, fetchBake, installBake, prepareRoster, type FetchLike } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
 import { bootstrapEngine } from "./bootstrap";
 import { localBuild } from "./onlineConfig";
@@ -139,12 +139,15 @@ describe("loading the bake in the browser", () => {
 /**
  * codex P1-1: the lobby waits for the bake before it opens a room, and `/play`
  * before it mounts a match, so a request that never answers, or a body that
- * never closes, must not leave a player waiting for ever. The request and the
- * body share one deadline; on it the fetch is aborted and the player is told,
- * in a sentence that says trying again may help.
+ * stops, must not leave a player waiting for ever. But a slow link that keeps
+ * delivering must get the file (codex confirm pass, P2: a total deadline of
+ * 30 s failed a steady 0.5 Mbit/s link every time, and so every retry). So the
+ * download gives up after `BAKE_IDLE_TIMEOUT_MS` with no bytes, and after
+ * `BAKE_TOTAL_TIMEOUT_MS` however it is going; either way the fetch is aborted
+ * and the player is told, in a sentence that says trying again may help.
  */
 describe("a bake that does not arrive in time", () => {
-  const TOO_SLOW = "The fighters' animation data took too long to download. Check your connection and try again.";
+  const TOO_SLOW = "The fighters' animation data stalled, or was too slow to finish downloading. Check your connection and try again.";
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -155,9 +158,12 @@ describe("a bake that does not arrive in time", () => {
 
   /** `p`, watched: whether it has settled yet, and what it settled with. */
   function watch<T>(p: Promise<T>) {
-    const seen = { settled: false, error: undefined as unknown };
+    const seen = { settled: false, value: undefined as T | undefined, error: undefined as unknown };
     p.then(
-      () => (seen.settled = true),
+      (v) => {
+        seen.settled = true;
+        seen.value = v;
+      },
       (e: unknown) => {
         seen.settled = true;
         seen.error = e;
@@ -166,7 +172,40 @@ describe("a bake that does not arrive in time", () => {
     return seen;
   }
 
-  it("gives up on a request that never answers, aborts it, and says to try again", async () => {
+  /**
+   * The bake as a link delivers it: the headers after `latencyMs`, then `bytes`
+   * of the file every `everyMs` (fake time), for `chunks` chunks (all of it by
+   * default) and then nothing more, ever. Each fetch's signal goes to `signals`.
+   */
+  function link(opts: { bytes: number; everyMs: number; latencyMs?: number; chunks?: number }, signals: AbortSignal[] = []): FetchLike {
+    return (_url, init) => {
+      signals.push(init.signal);
+      return new Promise((resolve) =>
+        setTimeout(() => {
+          let at = 0;
+          let sent = 0;
+          const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
+            pull: (c) =>
+              sent === opts.chunks
+                ? new Promise<void>(() => {})
+                : new Promise<void>((done) =>
+                    setTimeout(() => {
+                      const end = Math.min(GZ.length, at + opts.bytes);
+                      c.enqueue(new Uint8Array(GZ.subarray(at, end)));
+                      at = end;
+                      sent += 1;
+                      if (at >= GZ.length) c.close();
+                      done();
+                    }, opts.everyMs),
+                  ),
+          });
+          resolve({ ok: true, status: 200, body });
+        }, opts.latencyMs ?? 0),
+      );
+    };
+  }
+
+  it("gives up on a request that never answers once BAKE_IDLE_TIMEOUT_MS passes with nothing, aborts it, and says to try again", async () => {
     let signal: AbortSignal | undefined;
     const seen = watch(
       fetchBake((_url, init) => {
@@ -174,7 +213,7 @@ describe("a bake that does not arrive in time", () => {
         return new Promise(() => {});
       }),
     );
-    await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(BAKE_IDLE_TIMEOUT_MS - 1);
     expect(seen.settled).toBe(false);
     expect(signal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
@@ -183,21 +222,47 @@ describe("a bake that does not arrive in time", () => {
     expect(signal?.aborted).toBe(true);
   });
 
-  it("gives up on a body that never closes, under the same deadline as the request", async () => {
-    let signal: AbortSignal | undefined;
-    // The headers at once, the first kilobyte of the file, then nothing more, ever.
-    const stalled = () => new ReadableStream<Uint8Array<ArrayBuffer>>({ start: (c) => c.enqueue(new Uint8Array(GZ.subarray(0, 1024))) });
-    const seen = watch(
-      fetchBake(async (_url, init) => {
-        signal = init.signal;
-        return { ok: true, status: 200, body: stalled() };
-      }),
-    );
-    await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS - 1);
+  it("gives up on a body that stops partway, BAKE_IDLE_TIMEOUT_MS after the last bytes it sent", async () => {
+    // The headers after a second, five chunks a second apart (the last at 6 s), then nothing more, ever.
+    const signals: AbortSignal[] = [];
+    const seen = watch(fetchBake(link({ bytes: 62_500, everyMs: 1000, latencyMs: 1000, chunks: 5 }, signals)));
+    await vi.advanceTimersByTimeAsync(6000 + BAKE_IDLE_TIMEOUT_MS - 1);
     expect(seen.settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect((seen.error as Error).message).toBe(TOO_SLOW);
-    expect(signal?.aborted).toBe(true);
+    expect(signals[0].aborted).toBe(true);
+  });
+
+  it("lets a slow, steady link finish: the whole file at 0.5 Mbit/s, past the 30 s the old deadline allowed (codex P2)", async () => {
+    // 62,500 bytes a second is 0.5 Mbit/s: 30 chunks after a second's latency, the last at 31 s.
+    expect(GZ.length / 62_500).toBeGreaterThan(29);
+    const seen = watch(fetchBake(link({ bytes: 62_500, everyMs: 1000, latencyMs: 1000 })));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(seen.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(seen.settled).toBe(true));
+    expect(seen.error).toBeUndefined();
+    expect(seen.value?.fingerprint).toBe(BAKE_DIGEST);
+  });
+
+  it("counts the answer as progress: a server that answers at 14 s and then sends a chunk every 14 s is never idle long enough", async () => {
+    const seen = watch(fetchBake(link({ bytes: 1_000_000, everyMs: 14_000, latencyMs: 14_000 })));
+    await vi.advanceTimersByTimeAsync(14_000 * 3 + 1000);
+    await vi.waitFor(() => expect(seen.settled).toBe(true));
+    expect(seen.error).toBeUndefined();
+    expect(seen.value?.fingerprint).toBe(BAKE_DIGEST);
+  });
+
+  it("gives up on a trickle that never stalls once BAKE_TOTAL_TIMEOUT_MS has passed, so no link holds a player for ever", async () => {
+    // A byte every ten seconds: never idle long enough, never done (the file would take about seven months).
+    const signals: AbortSignal[] = [];
+    const seen = watch(fetchBake(link({ bytes: 1, everyMs: 10_000 }, signals)));
+    await vi.advanceTimersByTimeAsync(BAKE_TOTAL_TIMEOUT_MS - 1);
+    expect(seen.settled).toBe(false);
+    expect(signals[0].aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((seen.error as Error).message).toBe(TOO_SLOW);
+    expect(signals[0].aborted).toBe(true);
   });
 
   it("hands the deadline's signal to the browser's own fetch when no fetch is given (part 1 re-review)", async () => {
@@ -216,7 +281,7 @@ describe("a bake that does not arrive in time", () => {
       expect(url).toBe("/bake/roster.bin.gz");
       expect(init?.cache).toBe("no-cache");
       expect(init?.signal?.aborted).toBe(false);
-      await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(BAKE_IDLE_TIMEOUT_MS);
       expect((seen.error as Error).message).toBe(TOO_SLOW);
       expect(init?.signal?.aborted).toBe(true);
     } finally {
@@ -224,7 +289,7 @@ describe("a bake that does not arrive in time", () => {
     }
   });
 
-  it("leaves no deadline running once the bake is in, or once the file is refused", async () => {
+  it("leaves no timer running once the bake is in, or once the file is refused", async () => {
     await fetchBake(serve(new Uint8Array(GZ)));
     expect(vi.getTimerCount()).toBe(0);
     await expect(fetchBake(serve(new Uint8Array(0), 404))).rejects.toThrow(/HTTP 404/);
@@ -234,7 +299,7 @@ describe("a bake that does not arrive in time", () => {
   it("is retried by the next page that asks, and that try can succeed", async () => {
     const { ensureBakeInstalled, GAME_SIM_CONTEXT: ctx } = await fresh();
     const seen = watch(ensureBakeInstalled(() => new Promise(() => {})));
-    await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(BAKE_IDLE_TIMEOUT_MS);
     expect((seen.error as Error).message).toBe(TOO_SLOW);
     expect(ctx.bake).toBeUndefined();
     vi.useRealTimers();

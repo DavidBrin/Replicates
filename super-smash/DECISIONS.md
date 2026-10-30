@@ -3019,14 +3019,18 @@ against the model manifest.
   browser without WebGL gets no match, and the page says why in our words (`NO_WEBGL`: "This
   browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or
   try another browser."), not three.js's. Online, the lobby asks a scratch canvas for WebGL 2
-  before it creates or joins a room (`render3d/webgl.ts`, three-free) and refuses in the same
+  before it creates or joins a room (`render3d/webgl.ts`, three-free; once a page, since a probe's
+  context cannot always be given back and a page may hold only a few) and refuses in the same
   words, so the other player is not left waiting on a match that never starts until their link
   monitor gives up, about 10 s. A context the browser loses and has not given back after 5 s
   (`CONTEXT_RESTORE_WAIT_MS`, a judgement, UNVERIFIED) brings up a notice over the match, which
   keeps running: a reload brings the picture back (online, it also leaves the match).
-- *The bake download has a deadline.* The request and its body share `BAKE_TIMEOUT_MS`, 30 s (the
-  1.8 MB file through a 0.5 Mbit/s link); past it the download is aborted with "The fighters'
-  animation data took too long to download. Check your connection and try again.", in the lobby
+- *The bake download gives up when it stalls or crawls.* It is aborted after 15 s with no bytes
+  (`BAKE_IDLE_TIMEOUT_MS`, reset by the answer and by every chunk) or 5 minutes in all
+  (`BAKE_TOTAL_TIMEOUT_MS`, the 1.8 MB file at about 50 kbit/s), both judgements and UNVERIFIED.
+  A single 30 s deadline over the whole file came first and failed a steady 0.5 Mbit/s link every
+  time (codex confirm pass). Either way the player reads "The fighters' animation data stalled,
+  or was too slow to finish downloading. Check your connection and try again.", in the lobby
   (which offers Create and Join again) or over `/play`, and the next try asks afresh. A request
   that fails outright, or a body that breaks off, is said in the same style ("Couldn't reach the
   fighters' animation data…", "…stopped downloading partway…"), with the browser's own error kept
@@ -3061,7 +3065,7 @@ motion that depends on `charge`, as the air dodge's direction and the roll's way
 `DODGE_CHARGES` entry in `render3d/bake/bake.ts`, or `bake.test.ts` fails because the bake never
 plays it; then re-bake, and run the reach, limb and hurt ratchets.
 
-**The plan-final wave** (after the whole-plan review and codex's pass), beyond the bake deadline
+**The plan-final wave** (after the whole-plan review and codex's pass), beyond the bake's limits
 and the WebGL sentence above. Node is pinned to 26 (`engines` and `.nvmrc`), because the bake's
 digest depends on V8's float maths and `import.meta.main` needs Node 24.2 or later;
 `nodeVersion.test.ts` fails on any other major. The stage rule is one shared helper
