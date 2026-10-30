@@ -19,7 +19,8 @@
  * One narrowing is NOT refused, because a `Hitbox` has no field for what is
  * dropped; Plan 3 owns it, by reading `AttackParams` directly: a
  * `collisionAttr` with no `HitEffect` (not in `EFFECT_OF_ATTR`) becomes a plain
- * normal hit.
+ * normal hit. `collision_attr_turn` is one, and also sets `reverse`: the hit
+ * turns its victim round (Plan 5, Task 4: Mario's Cape).
  */
 
 import { ONE, fx } from "../fixed";
@@ -113,6 +114,7 @@ function attackHitbox(
     ...(a.setWeight ? { setWeight: true } : {}),
     ...(SITUATION[a.situation] !== undefined ? { situation: SITUATION[a.situation] } : {}),
     ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
+    ...(a.collisionAttr === "collision_attr_turn" ? { reverse: true } : {}),
   };
 }
 

@@ -160,7 +160,7 @@ export interface FighterStatus {
   /**
    * status_exec: per-frame extras after the kinetic type has run. Unused in
    * Plan 2; the wall tech's hold (Plan 3, Task 12) and a special's stall
-   * (Plan 5: Fox's Reflector, `reflectorStallExec`) use it. Not called
+   * (Plan 5: Fox's Reflector, Mario's Cape, `specialStallExec`) use it. Not called
    * on the frames `applyMovement` returns early: hanging on a
    * ledge, under a live scripted-momentum hold, and in hitstun.
    */

@@ -88,7 +88,8 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     noHitlag: false,
     direct: true,
     situation: "COLLISION_SITUATION_MASK_GA",
-    collisionAttr: ATTR_OF_EFFECT[hb.effect ?? "normal"],
+    // Plan 5: a turning hit is SSBU's `collision_attr_turn` (Mario's Cape).
+    collisionAttr: hb.reverse === true ? "collision_attr_turn" : ATTR_OF_EFFECT[hb.effect ?? "normal"],
     region: "ATTACK_REGION_NONE",
     // Explicit either way, so the hitbox pipeline never classifies a legacy
     // move's angle as a meteor on its own (Plan 3, Task 16).

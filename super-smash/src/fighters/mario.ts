@@ -664,20 +664,61 @@ const legacy: FighterDef = {
       name: "Cape",
       totalFrames: 35,
       // The Cape's real job is not its 7%: it reverses an opponent's facing and
-      // reflects projectiles at 1.5x. Neither is expressible in `Hitbox`, so
-      // both are engine behaviour keyed off this slot.
+      // reflects projectiles at 1.5x (Plan 5). SmashWiki "Mario (SSBU)/Side
+      // special" (https://www.ssbwiki.com/Mario_(SSBU)/Side_special): reflects
+      // frames 9-20; "Damage multiplier 1.5", "Speed multiplier 1", "Lifetime
+      // multiplier 0.75", "Size 6.5u", "Damage threshold 50%"; the stall:
+      // "Horizontal speed divisor 2.5", "Vertical speed added 0.3", "Gravity
+      // 0.031", "Falling speed 1". UNVERIFIED: that the stall is once per
+      // airtime (Super Mario Wiki only) and the reflector's centre (put on the
+      // hitbox's, `top` Y 6.7, Z 5).
+      //
+      // The hitboxes are `game_specials` (rubendal Data Viewer 13.0.1): 7%,
+      // angle 110, KBG 100, FKB 80 with BKB 0, `collision_attr_turn`, frames
+      // 12-14 — the legacy 70°/BKB 50/KBG 60 box was not the game's.
+      reflector: {
+        active: [9, 20],
+        radius: fx(6.5),
+        x: fx(5.0),
+        y: fx(6.7),
+        damage: fx(1.5),
+        speed: fx(1),
+        lifetime: fx(0.75),
+        maxDamage: fx(50),
+        holdAfterReflect: 0,
+      },
+      // The stall, from the same page's aerial parameters: speed ÷ 2.5 (×0.4),
+      // +0.3 up, gravity 0.031, falling speed 1. UNVERIFIED-simplified: its
+      // "Air friction 0.0025" is not modelled (Mario keeps his own).
+      stall: { startX: fx(0.4), boostY: fx(0.3), noGravityFrames: 0, gravity: fx(0.031), fallSpeed: fx(1) },
       hitboxes: [
         {
           id: 0,
           startFrame: 12,
           endFrame: 14,
-          x: fx(5.6),
-          y: fx(6.0),
-          radius: fx(4.0),
+          x: fx(9.7),
+          y: fx(6.7),
+          radius: fx(7.5),
           damage: fx(7.0),
-          angle: fx(70),
-          baseKnockback: fx(50),
-          knockbackGrowth: fx(60),
+          angle: fx(110),
+          baseKnockback: fx(0),
+          fixedKnockback: fx(80),
+          knockbackGrowth: fx(100),
+          reverse: true,
+        },
+        {
+          id: 1,
+          startFrame: 12,
+          endFrame: 14,
+          x: fx(5.0),
+          y: fx(6.7),
+          radius: fx(5.0),
+          damage: fx(7.0),
+          angle: fx(110),
+          baseKnockback: fx(0),
+          fixedKnockback: fx(80),
+          knockbackGrowth: fx(100),
+          reverse: true,
         },
       ],
     },

@@ -17,7 +17,7 @@ import { SMASH_CHARGE_MAX } from "../constants";
 import { chargeHoldFrame, clearHitRecord } from "../hitbox";
 import { mashFrames } from "../shield";
 import { specialChargeMain } from "../specialCharge";
-import { reflectorMain, reflectorStallExec } from "../reflect";
+import { reflectorMain, specialStallExec } from "../reflect";
 import {
   GRAB_MASH_BUTTON,
   GRAB_MASH_STICK,
@@ -115,8 +115,8 @@ export const STATUS_SPECIAL: FighterStatus = {
   },
   main: attackMain,
   exec(f, _intent, ctx) {
-    const r = f.move === null ? undefined : ctx.def.moves[f.move]?.reflector;
-    if (r !== undefined) reflectorStallExec(f, ctx, r);
+    const stall = f.move === null ? undefined : ctx.def.moves[f.move]?.stall;
+    if (stall !== undefined) specialStallExec(f, ctx, stall);
   },
   // ...and ends clean, however the special ends: its own end, a hit, a grab, a
   // ledge, a landing or a KO.

@@ -254,6 +254,8 @@ export interface Hitbox {
    * that read it (a bury, Plan 5).
    */
   readonly meteor?: boolean;
+  /** `collision_attr_turn` (SmashWiki "Reverse"): the victim is turned round (Plan 5: Cape). */
+  readonly reverse?: boolean;
   /** This hitbox grabs rather than damages. */
   readonly grabbing?: boolean;
   /**
@@ -351,8 +353,20 @@ export interface ReflectorDef {
   readonly loop?: readonly [number, number];
   /** From this frame, holding back turns the fighter round. */
   readonly turnFrom?: number;
-  /** Once per airtime, the move stalls a fall (Fox's Reflector). */
-  readonly stall?: { readonly startX: number; readonly noGravityFrames: number; readonly gravity: number };
+}
+
+/** A special's once-per-airtime stall (Plan 5): Fox's Reflector, Mario's Cape. Q12. */
+export interface StallDef {
+  /** Horizontal speed multiplier on the first frame (Cape: 1 / 2.5). */
+  readonly startX: number;
+  /** Vertical speed added on the first frame (Cape: 0.3). */
+  readonly boostY: number;
+  /** Frames with no gravity at all (Reflector: 4). */
+  readonly noGravityFrames: number;
+  /** The move's own gravity after that. */
+  readonly gravity: number;
+  /** The move's own falling speed, if it has one (Cape: 1). */
+  readonly fallSpeed?: number;
 }
 
 /** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */
@@ -418,6 +432,8 @@ export interface MoveDef {
   readonly specialCharge?: SpecialCharge;
   /** A reflector this move raises (Plan 5). */
   readonly reflector?: ReflectorDef;
+  /** The move stalls a fall, once per airtime (Plan 5). */
+  readonly stall?: StallDef;
   /** First and last move frame the fighter is intangible (Plan 5: SmashWiki "Intangibility a-b"). */
   readonly intangible?: readonly [number, number];
   /** Frames the fighter may not be interrupted, for specials with armour. */

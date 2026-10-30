@@ -809,8 +809,8 @@ const legacy: FighterDef = {
         holdAfterReflect: 20,
         loop: [4, 23],
         turnFrom: 5,
-        stall: { startX: fx(0.5), noGravityFrames: 4, gravity: fx(0.027) },
       },
+      stall: { startX: fx(0.5), boostY: 0, noGravityFrames: 4, gravity: fx(0.027) },
       hitboxes: [
         {
           id: 0,

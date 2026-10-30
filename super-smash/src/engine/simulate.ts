@@ -2274,6 +2274,10 @@ function applyHit(
   // victim in `grabbed` — whose only exit is `grabbedBy < 0` — for good.
   releaseGrab(victim, s.fighters);
   startAction(victim, tumbles ? "tumble" : "hitstun");
+  // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round.
+  // SmashWiki "Reverse" (https://www.ssbwiki.com/Reverse_(effect)): "A fighter
+  // hit by a reverse attack is forcibly turned around to face the opposite direction".
+  if (hb.reverse === true) victim.facing = -victim.facing;
 
   events.hits.push({
     attacker: attacker.port,

@@ -169,6 +169,9 @@ const MATCHES: readonly Match[] = [
  * lab, unchanged, cover those. Task 13b's fix round 1 (Link's and Marth's blades
  * held along the drawn ones): 31 — a shield is stunned now, and none crouches,
  * grabs, spot-dodges, techs, ledge-rolls, breaks a shield or trumps a ledge.
+ * Plan 5 Task 4 (Mario's Cape, which moves mario-fox): 33 — mario-fox crouches and
+ * trumps a ledge now, and no CPU ledge-attacks; none grabs, spot-dodges, techs,
+ * ledge-rolls or breaks a shield.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -451,6 +454,12 @@ describe("engine golden trace", () => {
   // shield hits 0, KOs 2; the other four are unchanged. Its fix round 1 (Link's and
   // Marth's blades held along the drawn ones) moved link-samus and kirby-marth from
   // the first sample: hits 18 and 13, shield hits 0 and 1, KOs 4 and 2.
+  // Plan 5 Task 4 (Mario's Cape turns its victim, stalls, and has the game's 110°,
+  // FKB 80 boxes) moved only mario-fox, from the 201-300 sample: the CPU's up-B
+  // press, buffered through a fair offstage, comes out as a Cape on frame 300, which
+  // now stalls, so Mario's first stock goes on frame 370, not 338, and the match
+  // differs from there: hits 11, shield hits 0, KOs 4 (were 19, 0 and 1). So now:
+  // hits 11/36/18/13, 6 and 0; shield hits 0/3/0/1, 3 and 0; KOs 4/1/4/2, 1 and 2.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

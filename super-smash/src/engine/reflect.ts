@@ -25,7 +25,7 @@ import type { Capsule } from "./hitbox";
 import { kineticSetX, kineticSetY } from "./kinetic";
 import { fighterParams } from "./params";
 import type { Intent, StateContext } from "./states";
-import type { FighterDef, FighterState, GameState, ProjectileDef, ProjectileState, ReflectorDef, StepEvents } from "./types";
+import type { FighterDef, FighterState, GameState, ProjectileDef, ProjectileState, ReflectorDef, StallDef, StepEvents } from "./types";
 
 /** SmashWiki "Reflect": "projectiles can only be reflected up to 7 times before disappearing." */
 export const MAX_REFLECTIONS = 7;
@@ -149,30 +149,38 @@ export function reflectorMain(f: FighterState, intent: Intent, r: ReflectorDef):
 }
 
 /**
- * The once-per-airtime stall (Fox: SmashWiki "Fox (SSBU)", "Reflector now only
- * stalls Fox's momentum out once", "he can only do it once until he lands or
- * gets hit"; "Fox (SSBU)/Down special", "Horizontal speed multiplier on startup
- * 0.5", "Period before applying gravity 4 frames", "Gravity 0.027"). Run as the
- * special status's `exec`, after the FALL kinetic type has applied ordinary
- * gravity. `CombatState.specialStall` says the airtime's stall is spent.
+ * A special's once-per-airtime stall (`MoveDef.stall`):
+ * - Fox's Reflector: SmashWiki "Fox (SSBU)", "Reflector now only stalls Fox's
+ *   momentum out once", "he can only do it once until he lands or gets hit";
+ *   "Fox (SSBU)/Down special", "Horizontal speed multiplier on startup 0.5",
+ *   "Period before applying gravity 4 frames", "Gravity 0.027".
+ * - Mario's Cape: SmashWiki "Mario (SSBU)/Side special", "Horizontal speed
+ *   divisor 2.5", "Vertical speed added 0.3", "Gravity 0.031", "Falling speed
+ *   1". UNVERIFIED that it is once per airtime (Super Mario Wiki only).
+ *
+ * Run as the special status's `exec`, after the FALL kinetic type has applied
+ * the fighter's own gravity, which it replaces with the move's.
+ * `CombatState.specialStall` says the airtime's stall is spent.
  */
-export function reflectorStallExec(f: FighterState, ctx: StateContext, r: ReflectorDef): void {
-  const stall = r.stall;
-  if (stall === undefined || f.grounded) return;
+export function specialStallExec(f: FighterState, ctx: StateContext, stall: StallDef): void {
+  if (f.grounded) return;
   const g = moveFrameOf(f.actionFrame);
   if (g === 1) {
     if (f.combat.specialStall) return;
     f.combat.specialStall = true;
     f.combat.stalling = true;
     kineticSetX(f, mul(f.vx, stall.startX));
+    // UNVERIFIED reading of "Vertical speed added": onto a fall stopped dead.
+    if (stall.boostY > 0) kineticSetY(f, Math.max(f.vy, 0) + stall.boostY);
   }
   if (!f.combat.stalling) return;
   if (g <= stall.noGravityFrames) {
     kineticSetY(f, 0);
     return;
   }
-  // Undo the fighter's own gravity for this frame and apply the move's instead.
   const p = fighterParams(ctx.def);
-  const terminal = -p.air_speed_y_stable;
-  if (f.vy > terminal) kineticSetY(f, Math.max(terminal, f.vy + p.air_accel_y - stall.gravity));
+  const terminal = -(stall.fallSpeed ?? p.air_speed_y_stable);
+  // Undo the fighter's own gravity for this frame and apply the move's instead.
+  const vy = g === 1 ? f.vy : f.vy + p.air_accel_y - stall.gravity;
+  kineticSetY(f, Math.max(terminal, vy));
 }

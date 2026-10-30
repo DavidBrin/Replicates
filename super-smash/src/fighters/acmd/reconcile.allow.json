@@ -1,5 +1,4 @@
 {
-  "mario sideB lead": "legacy 7%/70°/bkb50/kbg60 / game_specials 7%/110°/fkb80/kbg100",
   "mario upB lead": "legacy 5%/86°/fkb150/kbg100/sw / game_specialhi 5%/60°/fkb160/kbg100/sw",
   "mario pummel faf": "legacy 20 / game_catchattack 7",
   "mario fthrow hitboxes": "legacy some / game_throwf none",
