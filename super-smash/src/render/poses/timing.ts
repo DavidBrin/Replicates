@@ -453,8 +453,8 @@ export interface MoveTiming {
   readonly lastActive: number;
   /**
    * A chargeable move's hold frame, the `actionFrame` a held charge pins it on
-   * (`smashHoldFrame`, the engine's own rule, P5-R15): where its script raises
-   * START_SMASH_HOLD, else the frame before `firstActive` and never before frame
+   * (`smashHoldFrame`, the engine's own rule, P5-R15): the frame before its script
+   * raises START_SMASH_HOLD, else the frame before `firstActive` and never before frame
    * 1, so no hitbox is live while it charges. A special
    * that charges on B holds on its loop frame instead, `loopFrame − 1` (Plan 5,
    * `specialChargeMain`; P5-R1), and carries on past it once released. Absent

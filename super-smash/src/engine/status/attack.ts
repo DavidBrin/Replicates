@@ -54,8 +54,8 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   }
   // A special that loops while B is held (Plan 5, Task 9 fix round 1: Kirby's Inhale).
   if (f.action === "special" && move.holdLoop !== undefined) holdLoopMain(f, intent, move.holdLoop);
-  // Charging a smash holds the animation where its script raises START_SMASH_HOLD,
-  // else on the frame before its earliest hitbox goes live (`smashHoldFrame`,
+  // Charging a smash holds the animation on the frame before its script raises
+  // START_SMASH_HOLD, else on the frame before its earliest hitbox goes live (`smashHoldFrame`,
   // ruling P5-R15), so nothing can be hit while it charges.
   if (f.action === "attack" && move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
     const holdFrame = smashHoldFrame(ctx.def, f);

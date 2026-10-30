@@ -102,6 +102,12 @@ export interface AttackParams {
    * imported scripts' calls stay unparsed (`unknown`).
    */
   readonly forceReaction?: boolean;
+  /**
+   * REPLICA: the box is live only while its fighter is grounded (true) or
+   * airborne (false) (`Hitbox.whileGrounded`; Plan 5, Task 13 fix round 1). SSBU
+   * runs such boxes from separate statuses; only a legacy compilation sets it.
+   */
+  readonly whileGrounded?: boolean;
 }
 
 /** smash-script `CATCH(id, bone, size, x, y, z, x2, y2, z2, status, situation)`. */

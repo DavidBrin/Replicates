@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
+import { runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
 import type { AcmdScript } from "@/engine/acmd/types";
 import { toFloat } from "@/engine/fixed";
@@ -11,7 +11,7 @@ import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { FIGHTERS } from "../index";
 import { REFERENCE_SCRIPTS } from "./index";
-import { liftScript } from "./lift";
+import { gameFafOf, gameScriptOf } from "./active";
 import { withLimbScripts } from "./limb";
 
 /**
@@ -59,6 +59,12 @@ import { withLimbScripts } from "./limb";
  * `game_throwb`'s, so his six entries agree now (52 → 46). His four cargo throws
  * are not reconciled: the importer maps no slot to `game_throwff` … `game_throwflw`,
  * and `fighters/cargo.test.ts` pins their numbers.
+ *
+ * Plan 5 Task 13's fix round 1 (ruling R-T13f): a move whose imported script lacks
+ * its start segment (`MoveDef.scriptLead`, Link's Spin Attack: `game_specialhi` is
+ * the from-release timeline) is compared with its reference script led the same
+ * frames (`gameScriptOf`). The lead is the published start, not a disagreement: with
+ * it the running move hits on 7-39 and is actionable on 77, as SmashWiki publishes.
  */
 
 const ALLOW_FILE = join(process.cwd(), "src", "fighters", "acmd", "reconcile.allow.json");
@@ -105,9 +111,9 @@ function runningFacts(def: FighterDef, slot: MoveSlot, move: MoveDef): Facts | n
   return script === null ? null : scriptFacts(script, move.totalFrames + 1);
 }
 
-/** The reference script's facts, its throw commands lifted as the game's are. */
-function referenceFacts(fighter: string, key: string): Facts | null {
-  return scriptFacts(liftScript(REFERENCE_SCRIPTS[fighter].scripts[key]), HORIZON);
+/** The reference script's facts, its throw commands lifted, and its start led, as the game's are. */
+function referenceFacts(fighter: string, key: string, move: MoveDef): Facts | null {
+  return scriptFacts(gameScriptOf(move, REFERENCE_SCRIPTS[fighter].scripts[key]), HORIZON);
 }
 
 function disagreements(): Record<string, string> {
@@ -122,7 +128,7 @@ function disagreements(): Record<string, string> {
       const move = def.moves[slot];
       if (key === undefined || move === undefined) continue;
       const mine = runningFacts(def, slot, move);
-      const theirs = referenceFacts(def.id, key);
+      const theirs = referenceFacts(def.id, key, move);
       if (mine === null || theirs === null) {
         if (mine !== theirs) {
           out[`${def.id} ${slot} hitboxes`] = `legacy ${mine === null ? "none" : "some"} / ${key} ${theirs === null ? "none" : "some"}`;
@@ -135,7 +141,7 @@ function disagreements(): Record<string, string> {
       // Whenever both sides give one (ruling P5-R9), hits or none: in game frames,
       // the script's `CancelFrame` taken through its `FT_MOTION_RATE` (fix round 1).
       const cancel = ref.faf[key];
-      const faf = cancel === undefined ? undefined : gameFrameOfMotion(liftScript(ref.scripts[key]), cancel);
+      const faf = cancel === undefined ? undefined : gameFafOf(move, ref.scripts[key], cancel);
       if (faf !== undefined && move.totalFrames + 1 !== faf) out[`${def.id} ${slot} faf`] = `legacy ${move.totalFrames + 1} / ${key} ${faf}`;
     }
   }

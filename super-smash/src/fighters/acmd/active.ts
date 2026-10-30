@@ -37,6 +37,7 @@
 
 import { LEGACY_BONE_TABLE, type BoneTable } from "@/engine/acmd/bones";
 import { scriptHitboxTable } from "@/engine/acmd/hitboxes";
+import { frame as frameCmd } from "@/engine/acmd/dsl";
 import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
 import { THROW_SLOTS } from "@/engine/acmd/legacy";
 import { isUnmodelledAutolink } from "@/engine/knockback";
@@ -177,6 +178,49 @@ export function activatable(
   return end.attacks.length + end.catches.length === 0;
 }
 
+/** Every `frame(n)` in `commands` moved `lead` frames on, loops included. */
+function leadFrames(commands: readonly AcmdCommand[], lead: number): AcmdCommand[] {
+  return commands.map((c) => (c.op === "frame" ? frameCmd(c.frame + lead) : c.op === "loop" ? { ...c, body: leadFrames(c.body, lead) } : c));
+}
+
+const led = new WeakMap<AcmdScript, Map<number, AcmdScript>>();
+
+/**
+ * The imported script a move runs: lifted (`liftScript`) and, for a move whose
+ * script starts after a segment the import lacks (`MoveDef.scriptLead`; Plan 5,
+ * Task 13 fix round 1, R-T13f), with its timeline moved that many frames on: its
+ * commands open on frame `lead + 1` and every `frame(n)` is `frame(n + lead)`.
+ * At the default rate the motion runs in step, so its `CancelFrame` moves with
+ * it (`gameFafOf`). A script that sets a motion rate before its first frame()
+ * cannot be led (the rate would govern the lead): none is. Same object for the
+ * same script and lead.
+ */
+export function gameScriptOf(move: Pick<MoveDef, "scriptLead"> | undefined, script: AcmdScript): AcmdScript {
+  const lifted = liftScript(script);
+  const lead = move?.scriptLead ?? 0;
+  if (lead === 0) return lifted;
+  let byLead = led.get(lifted);
+  if (byLead === undefined) {
+    byLead = new Map();
+    led.set(lifted, byLead);
+  }
+  let out = byLead.get(lead);
+  if (out === undefined) {
+    const first = lifted.commands.findIndex((c) => c.op === "frame" || c.op === "wait");
+    if (lifted.commands.slice(0, first < 0 ? lifted.commands.length : first).some((c) => c.op === "motionRate")) {
+      throw new Error(`${script.name}: a motion rate before its first frame() cannot be led ${lead} frames`);
+    }
+    out = { ...lifted, commands: [frameCmd(lead + 1), ...leadFrames(lifted.commands, lead)] };
+    byLead.set(lead, out);
+  }
+  return out;
+}
+
+/** The game frame on which the script a move runs reaches its published `CancelFrame` (`faf`, a motion frame), its lead included. */
+export function gameFafOf(move: Pick<MoveDef, "scriptLead"> | undefined, script: AcmdScript, faf: number): number {
+  return gameFrameOfMotion(gameScriptOf(move, script), faf + (move?.scriptLead ?? 0));
+}
+
 /**
  * `def` with `slots` running their imported scripts: `scripts[slot]` is the
  * reference script, its throw and pummel commands lifted (`liftScript`), and
@@ -219,12 +263,12 @@ export function withReferenceScripts(
     const key = ref.slots[slot];
     const move = def.moves[slot];
     if (key === undefined || move === undefined) throw new Error(`${def.id} ${slot}: no reference script or legacy move`);
-    const script = liftScript(ref.scripts[key]);
+    const script = gameScriptOf(move, ref.scripts[key]);
     scripts[slot] = script;
     const faf = ref.faf[key];
     moves[slot] = {
       ...move,
-      ...(faf !== undefined ? { totalFrames: gameFrameOfMotion(script, faf) - 1 } : {}),
+      ...(faf !== undefined ? { totalFrames: gameFafOf(move, ref.scripts[key], faf) - 1 } : {}),
       ...(bones !== null ? { hitboxes: syncedTable(def, slot, script, bones) } : {}),
     };
   }

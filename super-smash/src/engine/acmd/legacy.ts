@@ -111,9 +111,11 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     z: hb.x,
     hitlag: hb.hitlagMultiplier ?? ONE,
     sdi: ONE,
-    // A transcendent box is the published no-clank setting (`cannotClank`, Plan 5 Task 13).
-    clang: hb.transcendent ? "ATTACK_SETOFF_KIND_OFF" : "ATTACK_SETOFF_KIND_ON",
-    facing: "ATTACK_LR_CHECK_F",
+    // A transcendent box is the published no-clank setting (`cannotClank`, Plan 5
+    // Task 13), a trampling one the no-rebound one (`cannotRebound`, its fix round 1).
+    clang: hb.transcendent ? "ATTACK_SETOFF_KIND_OFF" : hb.noRebound ? "ATTACK_SETOFF_KIND_THRU" : "ATTACK_SETOFF_KIND_ON",
+    // Plan 5, Task 13 fix round 1: a box that launches by position or backwards says so.
+    facing: hb.lr === "position" ? "ATTACK_LR_CHECK_POS" : hb.lr === "back" ? "ATTACK_LR_CHECK_B" : "ATTACK_LR_CHECK_F",
     setWeight: hb.setWeight === true,
     shieldDamage: 0,
     trip: 0,
@@ -133,6 +135,7 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     // move's angle as a meteor on its own (Plan 3, Task 16).
     meteor: hb.meteor === true,
     ...(hb.forceReaction === true ? { forceReaction: true } : {}),
+    ...(hb.whileGrounded !== undefined ? { whileGrounded: hb.whileGrounded } : {}),
   };
 }
 

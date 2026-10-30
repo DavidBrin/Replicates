@@ -99,10 +99,15 @@ export function moveSpawns(def: Pick<FighterDef, "moves">, f: Pick<FighterState,
 /**
  * The `actionFrame` a charging smash holds on (ruling P5-R15, one rule for every
  * reader: `attackMain` and the renderer's `MoveTiming.chargeHold`): the game
- * frame its script raises `FIGHTER_STATUS_ATTACK_FLAG_START_SMASH_HOLD`, where
- * the game holds it, else `chargeHoldFrame(move)`, one short of its earliest
- * box. Every imported smash script raises it before its first box; a compiled
- * legacy script never does. Read off the schedule, so no frame is run.
+ * frame before the one its script raises
+ * `FIGHTER_STATUS_ATTACK_FLAG_START_SMASH_HOLD` on (Task 13 fix round 1, ruling
+ * R-T13e: SmashWiki's "Charges between" is flag − 1 to flag on every page
+ * checked, e.g. "Pikachu (SSBU)/Forward smash",
+ * https://www.ssbwiki.com/Pikachu_(SSBU)/Forward_smash, revision 1659944,
+ * "Charges between 9-10", its script raising it on 10), else
+ * `chargeHoldFrame(move)`, one short of its earliest box: the same "one before"
+ * as that rule. Every imported smash script raises it before its first box; a
+ * compiled legacy script never does. Read off the schedule, so no frame is run.
  */
 export function smashHoldFrame(def: Pick<FighterDef, "moves" | "scripts">, f: Pick<FighterState, "move">): number {
   if (f.move === null) return 1;
@@ -111,7 +116,7 @@ export function smashHoldFrame(def: Pick<FighterDef, "moves" | "scripts">, f: Pi
     const { commands, fire } = scheduleOf(script);
     for (let i = 0; i < commands.length; i++) {
       const c = commands[i];
-      if (c.op === "setFlag" && c.on && c.flag === START_SMASH_HOLD) return Math.max(1, actionFrameOf(fire[i]));
+      if (c.op === "setFlag" && c.on && c.flag === START_SMASH_HOLD) return Math.max(1, actionFrameOf(fire[i]) - 1);
     }
   }
   const move = def.moves[f.move];

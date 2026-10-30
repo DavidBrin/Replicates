@@ -266,6 +266,12 @@ export interface Hitbox {
   readonly fixedKnockback?: number;
   /** Passes through opposing hitboxes rather than clanking with them. */
   readonly transcendent?: boolean;
+  /**
+   * Clanks, but its user never rebounds: a "trampling" box (Plan 5, Task 13 fix
+   * round 1, ruling R-T13g; the script's `ATTACK_SETOFF_KIND_THRU`). Where it
+   * would lose a clank it goes on, and the hit it met is blocked (`resolveClanks`).
+   */
+  readonly noRebound?: boolean;
   /** Per-move hitlag scaling. 1.0 (`ONE`) unless stated. */
   readonly hitlagMultiplier?: number;
   /** Per-move shieldstun scaling. 1.0 (`ONE`) unless stated. */
@@ -315,6 +321,13 @@ export interface Hitbox {
   readonly setWeight?: boolean;
   /** `COLLISION_SITUATION_MASK_G`/`_A`: the box hits only grounded, or only airborne, victims. */
   readonly situation?: "ground" | "air";
+  /**
+   * The box is live only while its own fighter is grounded (true) or airborne
+   * (false); absent, either (Plan 5, Task 13 fix round 1, ruling R-T13h: Kirby's
+   * Stone, whose falling hit is the air's and whose landing hit the ground's;
+   * SSBU runs them from separate statuses).
+   */
+  readonly whileGrounded?: boolean;
   /**
    * `ATTACK_LR_CHECK_POS`: launch away from the attacker whichever side the
    * victim is on; `ATTACK_LR_CHECK_B`: launch backwards. Absent: forwards.
@@ -659,11 +672,19 @@ export interface MoveDef {
   /** First and last move frame the fighter is intangible (Plan 5: SmashWiki "Intangibility a-b"). */
   readonly intangible?: readonly [number, number];
   /**
-   * A landing does not end the move: it plays on to its own end on the ground,
-   * where a special would otherwise land into `land` (Plan 5, Task 13: Kirby's
-   * Stone, which lands as a stone; `onLanded`).
+   * Frames the move runs before its imported `game_` script's frame 1: a start
+   * segment the import lacks, so the script's timeline begins this many frames
+   * in (Plan 5, Task 13 fix round 1, ruling R-T13f: Link's Spin Attack, whose
+   * `game_specialhi` is the from-release timeline). It sets nothing during them.
    */
-  readonly keepsOnLanding?: boolean;
+  readonly scriptLead?: number;
+  /**
+   * A landing does not end the move: it goes on from this move frame, on its
+   * grounded timeline, where a special would otherwise land into `land` (Plan 5,
+   * Task 13 and its fix round 1, ruling R-T13h: Kirby's Stone lands as a stone,
+   * into its landing hit, `whileGrounded` boxes on this frame; `onLanded`).
+   */
+  readonly landsAt?: number;
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
   /**

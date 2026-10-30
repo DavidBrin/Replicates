@@ -1106,6 +1106,8 @@ function gatherHitboxes(
     // A counterattack deals what its counter caught (Plan 5, Task 5; `counter.ts`).
     const countered = defs[i].moves[f.move]?.counterDamage === true;
     for (const raw of live) {
+      // A box of the ground or of the air only (`Hitbox.whileGrounded`; Plan 5, Task 13 fix round 1).
+      if (raw.whileGrounded !== undefined && raw.whileGrounded !== f.grounded) continue;
       const charged = sc === undefined ? raw : chargedHitbox(raw, sc.full?.[raw.id], chargeT, sc.partial);
       const hb = countered ? { ...charged, damage: f.combat.counterDamage } : charged;
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
@@ -1272,6 +1274,16 @@ function appendProjectileCandidates(
  * Both are suppressed for the frame whatever the outcome, so a clank is never
  * also a hit — the loser's move is cancelled outright, and on a rebound both
  * fighters are pushed back and returned to neutral.
+ *
+ * A box that cannot rebound (`noRebound`, the script's THRU; Plan 5, Task 13 fix
+ * round 1, ruling R-T13g) never loses its move: where it would rebound or lose,
+ * it goes on, and the hit it met is blocked, its swing marked as having hit that
+ * fighter, so this hit cannot land after the clank (SmashWiki "Priority",
+ * https://www.ssbwiki.com/Priority, revision 2049993, "Moves that cannot
+ * rebound": "they will continue their animations as if they did not collide at
+ * all, but the hitbox will count as blocked for other clanking character ...
+ * later hits can still connect as clanking blocks only the current hit"). The
+ * other side keeps the 9% rule (`resolveClank`). A projectile is never one.
  */
 function resolveClanks(
   s: GameState,
@@ -1303,8 +1315,8 @@ function resolveClanks(
         x: Math.trunc((ca.x + cb.x) / 2),
         y: Math.trunc((ca.y + cb.y) / 2),
       });
-      if (outcome === "rebound" || outcome === "bWins") loseClank(s, ca, destroyed);
-      if (outcome === "rebound" || outcome === "aWins") loseClank(s, cb, destroyed);
+      if (outcome === "rebound" || outcome === "bWins") loseOrTrample(s, ca, cb, destroyed);
+      if (outcome === "rebound" || outcome === "aWins") loseOrTrample(s, cb, ca, destroyed);
     }
   }
   // A move cancelled by a clank keeps no live hitboxes for the rest of the frame.
@@ -1316,6 +1328,15 @@ function resolveClanks(
     const f = s.fighters[c.attacker];
     if (!hasLiveMove(f.action)) c.suppressed = true;
   }
+}
+
+/** `c` lost a clank to `other`: it loses its move, or, if it cannot rebound, its hit on `other`'s fighter. */
+function loseOrTrample(s: GameState, c: Candidate, other: Candidate, destroyed: Set<number>): void {
+  if (c.hitbox.noRebound === true && c.projectile === null) {
+    markHit(s.fighters[c.attacker], other.attacker);
+    return;
+  }
+  loseClank(s, c, destroyed);
 }
 
 /** Losing a clank ends a swing and deletes a projectile. */

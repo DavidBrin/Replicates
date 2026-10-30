@@ -16,6 +16,16 @@
  * `frame(n)` runs on game frame n — Ultimate Frame Data's frame n, which is how
  * the community quotes ACMD (DECISIONS D17).
  *
+ * A rate set before the script's first `frame()` or `wait()` governs the motion
+ * from its first advance (Plan 5, Task 13 fix round 1, ruling R-T13d): motion
+ * frame m then arrives on game frame ⌈m × rate⌉, so Mario's `game_specialn`,
+ * `FT_MOTION_RATE(1.15)` then `frame(14)`, launches its Fireball on game frame
+ * 17, as UltimateFrameData (https://ultimateframedata.com/mario, startup 17) and
+ * SmashWiki ("Mario (SSBU)/Neutral special", revision 1699768, "Clean hit
+ * 17-21") publish. Set after one, a rate runs from the motion frame the script
+ * is on, which is what Fox's grabs and Samus's down throw match UFD by. Before
+ * its first advance a motion shows its frame 1.
+ *
  * Exactness. The motion frame is an exact rational, never Q12 and never a
  * float: a rate such as 0.9 accumulated in Q12 reaches 10.99976 after nine
  * frames instead of 11, and `frame(11)` would fire a game frame late (Review
@@ -203,6 +213,8 @@ function compile(script: AcmdScript): Schedule {
   // Where the script is holding until, as a motion frame.
   let target: Frac = { n: BIG_ONE, d: BIG_ONE };
   let last = BIG_ONE;
+  // Whether a frame() or wait() has run: until one has, a rate governs the motion from its start (R-T13d).
+  let started = false;
   /** The first game frame, not before the previous command, whose motion reaches `target`. */
   const due = (): bigint => {
     const gap = target.n * m0.d - m0.n * target.d; // (target − m0) · target.d · m0.d
@@ -211,6 +223,7 @@ function compile(script: AcmdScript): Schedule {
   };
 
   for (const c of commands) {
+    if (c.op === "frame" || c.op === "wait") started = true;
     if (c.op === "frame") {
       assertWhole("frame", c.frame, 1);
       const f = big(c.frame);
@@ -227,11 +240,22 @@ function compile(script: AcmdScript): Schedule {
       target = { n: m.n + big(c.frames) * m.d, d: m.d };
     } else if (c.op === "motionRate") {
       if (!isRate(c.rate)) throw new Error(`motionRate needs a positive rate of whole numbers up to ${MAX_RATE_TERM}, got ${String(c.rate)}`);
-      m0 = motionAt(e);
-      g0 = e;
-      rn = big(c.rate[0]);
-      rd = big(c.rate[1]);
-      segments.push(segmentAt(g0, m0, [rn, rd]));
+      if (!started) {
+        // From the motion's start: motion 0 on game frame 0, so motion frame m on ⌈m × rate⌉.
+        g0 = BIG_ZERO;
+        m0 = { n: BIG_ZERO, d: BIG_ONE };
+        target = { n: BIG_ZERO, d: BIG_ONE };
+        rn = big(c.rate[0]);
+        rd = big(c.rate[1]);
+        segments.splice(0, segments.length, segmentAt(g0, m0, [rn, rd]));
+      } else {
+        // From the motion frame the script is on, at the rate it was on.
+        m0 = motionAt(e);
+        g0 = e;
+        rn = big(c.rate[0]);
+        rd = big(c.rate[1]);
+        segments.push(segmentAt(g0, m0, [rn, rd]));
+      }
     }
   }
   return { commands, fire, segments };
@@ -256,7 +280,8 @@ function motionFrameAt(segments: readonly MotionSegment[], g: number): number {
   const s = segments[i];
   const t = (g - s.from) * s.den;
   const r = ((t % s.num) + s.num) % s.num;
-  return s.base + (t - r) / s.num + (r >= s.carry ? 1 : 0);
+  // A motion that has not yet advanced one frame shows its first (R-T13d).
+  return Math.max(1, s.base + (t - r) / s.num + (r >= s.carry ? 1 : 0));
 }
 
 /** Longer than any move: a motion frame no script reaches by here is never reached. */

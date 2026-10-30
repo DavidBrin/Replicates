@@ -10,29 +10,42 @@
  * - the imported scripts (rubendal SSBU Data Viewer 13.0.1,
  *   https://rubendal.github.io/ssbu/data/patch/13.0.1/character/<Fighter>/data.json,
  *   `src/fighters/acmd/generated/`): Pikachu's `game_specialn` generates
- *   DENGEKIDAMA on frame 19; Mario's runs `FT_MOTION_RATE(1.15)` from its first
- *   frame and generates FIREBALL on motion frame 14 (game frame 16 by the
- *   engine's motion-rate rule, `gameFrameOfMotion`; see the Task 13 report: UFD
- *   and SmashWiki publish 17 as its first live frame); Pikachu's `game_attacks4`
- *   raises START_SMASH_HOLD on frame 10;
- * - Link's Spin Attack keeps its legacy rise, `{ frame: 6, x: 0.35, y: 2.5,
- *   hold: 13 }` (`link.ts`), which no script publishes;
+ *   DENGEKIDAMA on frame 19; Mario's runs `FT_MOTION_RATE(1.15)` before its first
+ *   frame and generates FIREBALL on motion frame 14, game frame ⌈14 × 1.15⌉ = 17
+ *   (fix round 1, R-T13d: UltimateFrameData, https://ultimateframedata.com/mario,
+ *   startup 17; SmashWiki "Mario (SSBU)/Neutral special",
+ *   https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special, revision 1699768,
+ *   "Clean hit 17-21"); a smash's script raises START_SMASH_HOLD on the frame
+ *   after the one it charges on (R-T13e; the SmashWiki pages in `RELEASES`);
+ * - Link's Spin Attack: SmashWiki "Link (SSBU)/Up special"
+ *   (https://www.ssbwiki.com/Link_(SSBU)/Up_special, revision 1987976), grounded,
+ *   "Charges between 3-4", hits "7-8, 9-13 ... 14-23, 24-39 (from release 4-5,
+ *   6-10 ... 11-20, 21-36)", "Interruptible (from release) 77 (74)": the imported
+ *   `game_specialhi` is the from-release timeline (R-T13f). It keeps its legacy
+ *   rise, `{ frame: 6, x: 0.35, y: 2.5, hold: 13 }` (`link.ts`), which no script
+ *   publishes;
  * - Kirby's Stone (SmashWiki "Kirby (SSBU)/Down special",
  *   https://www.ssbwiki.com/Kirby_(SSBU)/Down_special, revision 2041256): the
- *   aerial falling hit 29-46, and "The stone transformation ... lasts a minimum
- *   of 18 frames and a maximum of 150 frames, depending on when the special move
- *   button is pressed again": a landing does not end it.
+ *   aerial falling hit 29-46; the landing hit, two boxes of 14%, 25°, BKB 86,
+ *   KBG 30, radius 6.0 at y 4.0, z ±6.0, grounded opponents only, `clang=f`
+ *   (R-T13h); grounded, "Landing hit 11"; and "The stone transformation ... lasts
+ *   a minimum of 18 frames and a maximum of 150 frames, depending on when the
+ *   special move button is pressed again": a landing does not end it.
  * - `ATTACK_SETOFF_KIND_OFF` is the no-clank setting: SmashWiki "Priority"
  *   (https://www.ssbwiki.com/Priority, revision 2049993), "Transcendent
  *   priority ... refers to hitboxes that cannot clank with other hitboxes"; its
  *   Ultimate list names Mario's "Forward smash (sweetspot only)", whose
  *   `game_attacks4` sweetspot alone is `ATTACK_SETOFF_KIND_OFF`.
+ *   `ATTACK_SETOFF_KIND_THRU` is "cannot rebound" (R-T13g): the same page's
+ *   "Moves that cannot rebound" ("they will continue their animations as if they
+ *   did not collide at all, but the hitbox will count as blocked for other
+ *   clanking character") lists Fox's Ultimate forward smash, THRU in its script.
  */
 
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
-import { ATTACK, frame } from "@/engine/acmd/dsl";
+import { ATTACK, clearAll, frame, setFlag, wait } from "@/engine/acmd/dsl";
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { flatten, runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
@@ -42,7 +55,7 @@ import { fx } from "@/engine/fixed";
 import { chargeHoldFrame } from "@/engine/hitbox";
 import { COPY_DAMAGE } from "@/engine/inhale";
 import { createInitialState, step } from "@/engine/simulate";
-import { hasSuperArmour } from "@/engine/states";
+import { hasSuperArmour, onLanded } from "@/engine/states";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { FighterDef, GameState, InputFrame, MatchRules, MoveSlot } from "@/engine/types";
@@ -50,9 +63,10 @@ import { readBakeFromDisk } from "@/game/bakeNode";
 import { moveTimingFor } from "@/render/poses/timing";
 import { STAGES } from "@/stages";
 import { FIGHTERS, donkeyKong, kirby, link, mario, marth, pikachu } from "../index";
-import { ACTIVE_SCRIPT_SLOTS, PLAN5_BEHAVIOUR, activatable } from "./active";
+import { ACTIVE_SCRIPT_SLOTS, PLAN5_BEHAVIOUR, activatable, gameScriptOf } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
 import { ARTICLE_PROJECTILES, liftScript } from "./lift";
+import { bakedContext } from "@/game/bake";
 import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
 
 const BONES = readBakeFromDisk().bones;
@@ -84,9 +98,13 @@ describe("the freed moves", () => {
     expect(spawnsAt(20)).toEqual([]);
   });
 
-  // Ruling P5-R15: one rule, START_SMASH_HOLD where the script raises it, else `chargeHoldFrame`.
-  it("hold a smash charge where the script raises START_SMASH_HOLD (Pikachu's forward smash: frame 10)", () => {
-    expect(smashHoldFrame(pikachu, { move: "fsmash" })).toBe(9);
+  // Ruling P5-R15: one rule, START_SMASH_HOLD where the script raises it, else
+  // `chargeHoldFrame`; R-T13e: the frame before the one raising it. SmashWiki
+  // "Pikachu (SSBU)/Forward smash" (https://www.ssbwiki.com/Pikachu_(SSBU)/Forward_smash,
+  // revision 1659944): "Charges between 9-10"; `game_attacks4` raises it on 10.
+  it("hold a smash charge on the frame before the script raises START_SMASH_HOLD (Pikachu's forward smash: charges between 9 and 10)", () => {
+    // actionFrame 8 is game frame 9.
+    expect(smashHoldFrame(pikachu, { move: "fsmash" })).toBe(8);
     // A smash on its compiled legacy script raises nothing: one short of its earliest box.
     const dk = donkeyKong.moves.fsmash!;
     expect(donkeyKong.scripts?.fsmash).toBeUndefined();
@@ -105,7 +123,7 @@ describe("the freed moves", () => {
       frames.push(s.fighters[0].actionFrame);
     }
     expect(s.fighters[0].move).toBe("fsmash");
-    expect(Math.max(...frames)).toBe(9);
+    expect(Math.max(...frames)).toBe(8);
     expect(s.fighters[0].charge).toBeGreaterThan(0);
   });
 
@@ -124,7 +142,7 @@ describe("the legacy move's fallbacks", () => {
   it("keep a legacy move's momentum when its imported script publishes none (Link's Spin Attack)", () => {
     const game = withLimbScripts(link, BONES);
     expect(LIMB_SCRIPT_SLOTS.link).toContain("upB");
-    expect(game.scripts?.upB).toBe(liftScript(REFERENCE_SCRIPTS.link.scripts.game_specialhi));
+    expect(game.scripts?.upB).toBe(gameScriptOf(link.moves.upB, REFERENCE_SCRIPTS.link.scripts.game_specialhi));
     const run = (g: number) => moveScriptFrame(game, at("upB", g - 1))!;
     expect(run(6).state.momentum).toBeNull();
     expect(moveMomentum(game, { move: "upB" }, run(5))).toBeNull();
@@ -191,8 +209,8 @@ describe("a freed move in a match", () => {
       prev = now;
       if (s.projectiles.length > 0) spawnedOn = i + 1;
     }
-    // game_specialn: FT_MOTION_RATE 1.15, generate_article on motion frame 14 → game frame 16.
-    expect(spawnedOn).toBe(16);
+    // game_specialn: FT_MOTION_RATE 1.15 before frame(14), generate_article on game frame 17 (R-T13d).
+    expect(spawnedOn).toBe(17);
     expect(s.projectiles[0].defId).toBe("fireball");
   });
 
@@ -208,7 +226,7 @@ describe("a freed move in a match", () => {
       prev = now;
       if (s.projectiles.length > 0) spawnedOn = i + 1;
     }
-    expect(spawnedOn).toBe(16);
+    expect(spawnedOn).toBe(17);
     expect(s.projectiles[0]).toMatchObject({ defId: "fireball", source: "mario", damageMul: COPY_DAMAGE });
   });
 });
@@ -269,9 +287,10 @@ describe("what keeps a move on its legacy frames (Plan 5 review)", () => {
 
 /*
  * Plan 5, Task 13 (the Task 5 review's carry): a script's `ATTACK_SETOFF_KIND_OFF`
- * cannot clank, as THRU already could not, for every move that runs a script.
+ * cannot clank, for every move that runs a script. Fix round 1 (R-T13g): THRU
+ * clanks, and its user never rebounds (`noRebound`).
  */
-describe("a box that cannot clank", () => {
+describe("a box that cannot clank, and one that cannot rebound", () => {
   const box = (id: number, clang: "ATTACK_SETOFF_KIND_ON" | "ATTACK_SETOFF_KIND_OFF" | "ATTACK_SETOFF_KIND_THRU") =>
     ATTACK({ id, bone: "top", damage: 5, angle: 45, kbg: 100, bkb: 40, size: 4, x: 0, y: 6, z: 6 + id, clang });
   const script: AcmdScript = {
@@ -280,13 +299,50 @@ describe("a box that cannot clank", () => {
     commands: [frame(2), box(0, "ATTACK_SETOFF_KIND_ON"), box(1, "ATTACK_SETOFF_KIND_OFF"), box(2, "ATTACK_SETOFF_KIND_THRU")],
   };
 
-  it("is transcendent for OFF and THRU, and clanks for ON", () => {
+  it("is transcendent for OFF, no-rebound for THRU, and plain for ON", () => {
     const boxes = scriptHitboxes(runScript(script, 2), "mario", "attack_11", 2, LEGACY_BONE_TABLE);
-    expect(boxes.map((hb) => [hb.id, hb.transcendent === true])).toEqual([
-      [0, false],
-      [1, true],
-      [2, true],
+    expect(boxes.map((hb) => [hb.id, hb.transcendent === true, hb.noRebound === true])).toEqual([
+      [0, false, false],
+      [1, true, false],
+      [2, false, true],
     ]);
+  });
+
+  // R-T13g. Fox's forward smash (game_attacks4, all six boxes THRU; 14% clean) meets
+  // Mario's (17.8% sweetspot, legacy): within 9%, so both would rebound. Fox's
+  // cannot: he swings on, Mario rebounds, and the hit Fox's box met is blocked.
+  it("clanks with Fox's forward smash, which swings on while Mario rebounds and is not hit by it", () => {
+    const GAME = bakedContext(ctx, readBakeFromDisk());
+    const ALONE: MatchRules = { ...RULES, oneOnOne: false };
+    expect(GAME.fighter("fox").scripts?.fsmash).toBeDefined();
+    let s = createInitialState("finalDestination", [{ defId: "fox" }, { defId: "mario" }], ALONE, 3, GAME);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(i === 0 ? -7 : 7), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    let prev: InputFrame[] = [0, 0];
+    let clankAt = -1;
+    const foxHits: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      // Mario's box comes out on 15, Fox's on 13: Fox presses two frames later.
+      const now = [i === 2 ? Btn.Right | Btn.Attack : 0, i === 0 ? Btn.Left | Btn.Attack : 0];
+      const out = step(s, now, { prevInputs: prev, ctx: GAME });
+      s = out.state;
+      prev = now;
+      if (clankAt < 0 && out.events.clanks.length > 0) {
+        clankAt = i;
+        expect([s.fighters[0].action, s.fighters[0].move]).toEqual(["attack", "fsmash"]);
+        expect([s.fighters[1].action, s.fighters[1].move]).toEqual(["stand", null]);
+      }
+      for (const h of out.events.hits) if (h.attacker === 0) foxHits.push(i);
+    }
+    expect(clankAt).toBe(14);
+    expect(foxHits).toEqual([]);
+  });
+
+  it("is what the legacy compile writes for a box that cannot rebound: THRU", () => {
+    const box = { id: 0, startFrame: 2, endFrame: 3, x: fx(6), y: fx(6), radius: fx(4), damage: fx(10), angle: fx(45), baseKnockback: fx(40), knockbackGrowth: fx(100), noRebound: true };
+    const script = gameScriptFor({ moves: { jab1: { slot: "jab1", name: "test", totalFrames: 10, hitboxes: [box] } } }, "jab1")!;
+    const clangs = flatten(script).flatMap((c) => (c.op === "attack" ? [c.params.clang] : []));
+    expect(clangs).toEqual(["ATTACK_SETOFF_KIND_THRU"]);
+    expect(scriptHitboxes(runScript(script, 2), "mario", script.motion, 2, LEGACY_BONE_TABLE)[0]).toMatchObject({ noRebound: true });
   });
 
   it("is what the legacy compile writes for a transcendent box: OFF (Marth's counterattack)", () => {
@@ -318,28 +374,191 @@ describe("a box that cannot clank", () => {
 
 /*
  * Plan 5, Task 13 (the Task 5 review's carry): Kirby's Stone, dropped from 30
- * units up, lands long before its boxes come out on frame 29. The landing does
- * not end it: it lands as a stone and its box comes out on its frame.
+ * units up, lands long before its falling box comes out on frame 29. The landing
+ * does not end it: it lands as a stone. Fix round 1 (R-T13h): it lands with the
+ * published landing hit, and the falling box never comes out on the ground.
  */
-describe("Kirby's Stone dropped from 30", () => {
-  it("lands as a stone and stays one, its box out on frame 29", () => {
-    let s = standing("kirby", "mario", 0, 4);
-    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(30), vy: 0 });
+describe("Kirby's Stone", () => {
+  /** SmashWiki's landing hit: 14% fresh-staled ×1.05, no 1v1 bonus here. */
+  const LANDING = 14 * 1.05;
+  const ALONE: MatchRules = { ...RULES, oneOnOne: false };
+  const kirbyFirst = (a: number, b: number, kirbyY: number): GameState => {
+    const s = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "mario" }], ALONE, 3, ctx);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(i === 0 ? a : b), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    if (kirbyY > 0) Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(kirbyY), vy: 0 });
+    return s;
+  };
+  const toF = (n: number) => n / 4096;
+  /** Down special on the first step, then `steps` steps; Kirby's hits, with the move frame each landed on. */
+  function stone(s0: GameState, steps: number, each?: (s: GameState, i: number) => void) {
+    let s = s0;
     let prev: InputFrame[] = [0, 0];
     let landed = -1;
-    let firstHit = -1;
-    for (let i = 0; i < 40 && firstHit < 0; i++) {
+    const hits: { frame: number; damage: number; step: number; angle: number }[] = [];
+    for (let i = 0; i < steps; i++) {
+      each?.(s, i);
       const now = [i === 0 ? Btn.Down | Btn.Special : 0, 0];
       const out = step(s, now, { prevInputs: prev, ctx });
       s = out.state;
       prev = now;
       const k = s.fighters[0];
-      if (landed < 0 && k.grounded) landed = k.actionFrame + 1;
-      if (out.events.hits.some((h) => h.attacker === 0)) firstHit = k.actionFrame + 1;
-      if (i > 0) expect([k.action, k.move], `step ${i}`).toEqual(["special", "downB"]);
+      if (landed < 0 && k.grounded) landed = i;
+      for (const h of out.events.hits) if (h.attacker === 0) hits.push({ frame: k.actionFrame + 1, damage: h.damage / 4096, step: i, angle: h.angle / 4096 });
+      if (i > 0 && i < 50) expect([k.action, k.move], `step ${i}`).toEqual(["special", "downB"]);
     }
+    return { hits, landed };
+  }
+
+  it("has the published landing hit: two boxes on frame 11, of the ground alone", () => {
+    const boxes = kirby.moves.downB!.hitboxes.filter((hb) => hb.whileGrounded === true);
+    expect(boxes.map((hb) => [toF(hb.x), toF(hb.y), toF(hb.radius)])).toEqual([
+      [6, 4, 6],
+      [-6, 4, 6],
+    ]);
+    for (const hb of boxes) {
+      expect(hb).toMatchObject({ startFrame: 11, endFrame: 11, damage: fx(14), angle: fx(25), baseKnockback: fx(86), knockbackGrowth: fx(30), transcendent: true, situation: "ground", lr: "position" });
+      expect(hb.fixedKnockback ?? 0).toBe(0);
+      expect(hb.hitlagMultiplier ?? fx(1)).toBe(fx(1));
+    }
+    expect(kirby.moves.downB!.hitboxes.filter((hb) => hb.whileGrounded === false).map((hb) => [hb.startFrame, hb.endFrame])).toEqual([[29, 47]]);
+    expect(kirby.moves.downB!.landsAt).toBe(11);
+  });
+
+  it("starts its landing again on landing: the hit record of the fall is the fall's", () => {
+    const s = kirbyFirst(0, 60, 30);
+    const k = s.fighters[0];
+    Object.assign(k, { action: "special", move: "downB", actionFrame: 20, hitThisMove: [1] });
+    onLanded(k, { def: kirby, stage: ctx.stage("finalDestination"), frame: 1, fighters: s.fighters });
+    expect([k.action, k.move, k.actionFrame, k.hitThisMove]).toEqual(["special", "downB", 10, []]);
+  });
+
+  // ATTACK_LR_CHECK_POS: 25° away from him, so 155° in the world for one behind him.
+  it("launches whoever is behind it away from it too", () => {
+    const behind = stone(kirbyFirst(0, -6, 0), 14).hits;
+    const ahead = stone(kirbyFirst(0, 6, 0), 14).hits;
+    expect([behind.map((h) => h.frame), ahead.map((h) => h.frame)]).toEqual([[11], [11]]);
+    expect(behind[0].angle).toBeCloseTo(155, 0);
+    expect(ahead[0].angle).toBeCloseTo(25, 0);
+  });
+
+  it("used on the ground, hits with its landing hit on frame 11, and with nothing else", () => {
+    const { hits } = stone(kirbyFirst(0, 6, 0), 60);
+    expect(hits.map((h) => h.frame)).toEqual([11]);
+    expect(hits[0].damage).toBeCloseTo(LANDING, 2);
+  });
+
+  it("dropped from 30, lands as a stone with its landing hit on the frame it lands", () => {
+    const { hits, landed } = stone(kirbyFirst(0, 4, 30), 60);
     expect(landed).toBeGreaterThan(0);
-    expect(landed).toBeLessThan(29);
-    expect(firstHit).toBe(29);
+    // It lands long before the falling box's frame 29.
+    expect(landed).toBeLessThan(20);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].step).toBe(landed);
+    expect(hits[0].damage).toBeCloseTo(LANDING, 2);
+  });
+
+  it("keeps no falling box live once it has landed: Mario walking up to it on frame 30 is not hit", () => {
+    // Mario far off for the landing; then beside the stone, standing, through frames 29-47.
+    const { hits } = stone(kirbyFirst(0, 60, 30), 60, (s, i) => {
+      if (i === 26) Object.assign(s.fighters[1], { x: fx(2), action: "stand", actionFrame: 0, vx: 0 });
+    });
+    expect(hits).toEqual([]);
+  });
+});
+
+/*
+ * Fix round 1 (R-T13f): Link's Spin Attack runs its published timeline: the
+ * imported `game_specialhi` is the from-release part, after a 3-frame start the
+ * import lacks (`MoveDef.scriptLead`).
+ */
+describe("Link's Spin Attack in the game", () => {
+  it("leads a script by moving its timeline on: commands before its first frame() too", () => {
+    const raw: AcmdScript = {
+      name: "game_test",
+      motion: "test",
+      commands: [setFlag("FIRST"), frame(2), ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 100, bkb: 40, size: 4, x: 0, y: 6, z: 6 }), wait(2), clearAll()],
+    };
+    const led = gameScriptOf({ scriptLead: 3 }, raw);
+    expect(gameScriptOf({ scriptLead: 3 }, raw)).toBe(led);
+    expect(gameScriptOf(undefined, raw)).toBe(liftScript(raw));
+    const flagOn = [1, 2, 3, 4].map((g) => runScript(led, g).flags.includes("FIRST"));
+    expect(flagOn).toEqual([false, false, false, true]);
+    expect([4, 5, 6, 7, 8].map((g) => runScript(led, g).attacks.length)).toEqual([0, 1, 1, 0, 0]);
+  });
+
+  it("hits on 7-39 and is interruptible on 77, its rise from frame 6", () => {
+    const game = withLimbScripts(link, BONES);
+    const move = game.moves.upB!;
+    expect(move.totalFrames).toBe(76);
+    const live: number[] = [];
+    for (let g = 1; g <= move.totalFrames; g++) if (runScript(gameScriptFor(game, "upB")!, g).attacks.length > 0) live.push(g);
+    expect([live[0], live[live.length - 1], live.length]).toEqual([7, 39, 33]);
+    expect(Math.min(...move.hitboxes.map((hb) => hb.startFrame))).toBe(7);
+    expect(Math.max(...move.hitboxes.map((hb) => hb.endFrame))).toBe(39);
+    const rise = (g: number) => moveMomentum(game, { move: "upB" }, moveScriptFrame(game, at("upB", g - 1))!);
+    expect([rise(5), rise(6), rise(19), rise(20)].map((m) => m !== null)).toEqual([false, true, true, false]);
+  });
+});
+
+/*
+ * Fix round 1 (the review's M3, required): from the release of a held smash to its
+ * first box, every smash the game runs from its imported script. It holds on the
+ * frame SmashWiki's "Charges between" starts, and after the release its first box
+ * comes on the frame SmashWiki publishes: the charge freezes the timeline, it
+ * neither skips nor repeats a frame of it.
+ */
+const RELEASES: readonly (readonly [string, MoveSlot, number, number, string])[] = [
+  ["mario", "dsmash", 2, 5, "Mario_(SSBU)/Down_smash, revision 1693143"],
+  ["pikachu", "fsmash", 9, 15, "Pikachu_(SSBU)/Forward_smash, revision 1659944"],
+  ["pikachu", "dsmash", 2, 8, "Pikachu_(SSBU)/Down_smash, revision 1686473"],
+  ["link", "dsmash", 4, 12, "Link_(SSBU)/Down_smash, revision 1686097"],
+  ["samus", "fsmash", 3, 10, "Samus_(SSBU)/Forward_smash, revision 1655099"],
+  ["samus", "dsmash", 3, 9, "Samus_(SSBU)/Down_smash, revision 1696110"],
+  ["fox", "fsmash", 4, 13, "Fox_(SSBU)/Forward_smash, revision 1686307"],
+  ["fox", "usmash", 2, 8, "Fox_(SSBU)/Up_smash, revision 1659473"],
+  ["marth", "fsmash", 2, 10, "Marth_(SSBU)/Forward_smash, revision 1700429"],
+  ["marth", "usmash", 4, 13, "Marth_(SSBU)/Up_smash, revision 1700443"],
+  ["marth", "dsmash", 3, 6, "Marth_(SSBU)/Down_smash, revision 1700449"],
+];
+
+describe("a held smash, from its release to its first box (https://www.ssbwiki.com/<page>)", () => {
+  const GAME = bakedContext(ctx, readBakeFromDisk());
+  const DIR: Partial<Record<MoveSlot, Btn>> = { fsmash: Btn.Right, usmash: Btn.Up, dsmash: Btn.Down };
+
+  it("covers every smash the game runs from its imported script", () => {
+    const freed = FIGHTERS.flatMap((d) => {
+      const game = GAME.fighter(d.id);
+      return (["fsmash", "usmash", "dsmash"] as const).filter((slot) => game.scripts?.[slot] !== undefined).map((slot) => `${d.id} ${slot}`);
+    });
+    expect(freed.sort()).toEqual(RELEASES.map(([id, slot]) => `${id} ${slot}`).sort());
+  });
+
+  it.each(RELEASES)("%s %s charges between %i and the next frame, and its first box comes on %i (%s)", (id, slot, chargeOn, firstBox) => {
+    const def = GAME.fighter(id);
+    const script = gameScriptFor(def, slot)!;
+    let s = createInitialState("finalDestination", [{ defId: id }, { defId: "mario" }], RULES, 3, GAME);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(i === 0 ? -60 : 60), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    const HELD = 20;
+    let prev: InputFrame[] = [0, 0];
+    const charged: number[] = [];
+    let released = -1;
+    let firstLive = -1;
+    for (let i = 0; i < HELD + 40 && firstLive < 0; i++) {
+      const now = [i === 0 ? DIR[slot]! | Btn.Attack : i < HELD ? Btn.Attack : 0, 0];
+      const before = s.fighters[0].charge;
+      s = step(s, now, { prevInputs: prev, ctx: GAME }).state;
+      prev = now;
+      const f = s.fighters[0];
+      expect(f.move, `step ${i}`).toBe(slot);
+      const g = f.actionFrame + 1;
+      if (f.charge > before) charged.push(g);
+      else if (charged.length > 0 && released < 0) released = i;
+      if (released >= 0 && runScript(script, g).attacks.length > 0) firstLive = i;
+    }
+    expect(charged.length).toBeGreaterThan(5);
+    expect(new Set(charged)).toEqual(new Set([chargeOn]));
+    // Released, the move goes on from the frame after the hold, one a step, to the published first box.
+    expect(firstLive - released).toBe(firstBox - chargeOn - 1);
+    expect(s.fighters[0].actionFrame + 1).toBe(firstBox);
   });
 });

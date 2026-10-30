@@ -15,7 +15,7 @@ import { readBakeFromDisk } from "@/game/bakeNode";
 import { boneRole, placeableBone } from "@/render3d/retarget/placeable";
 import { SKELETONS } from "@/render3d/skeletons";
 import { FIGHTERS } from "../index";
-import { ACTIVE_SCRIPT_SLOTS, activatable, withReferenceScripts } from "./active";
+import { ACTIVE_SCRIPT_SLOTS, activatable, gameScriptOf, withReferenceScripts } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
 import { liftScript } from "./lift";
 import { LIMB_HOLD, LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
@@ -105,7 +105,8 @@ describe("running the limb-bone scripts (Plan 4)", () => {
     for (const def of FIGHTERS) {
       const game = withLimbScripts(def, bake.bones);
       const ref = REFERENCE_SCRIPTS[def.id];
-      for (const slot of LIMB_SCRIPT_SLOTS[def.id] ?? []) expect(game.scripts?.[slot]).toBe(liftScript(ref.scripts[ref.slots[slot]!]));
+      // Lifted, and led where the import lacks its start (`gameScriptOf`; Link's Spin Attack, R-T13f).
+      for (const slot of LIMB_SCRIPT_SLOTS[def.id] ?? []) expect(game.scripts?.[slot]).toBe(gameScriptOf(def.moves[slot], ref.scripts[ref.slots[slot]!]));
       for (const slot of ACTIVE_SCRIPT_SLOTS[def.id] ?? []) expect(game.scripts?.[slot]).toBe(def.scripts?.[slot]);
       expect(withLimbScripts(def, bake.bones)).toBe(game);
     }

@@ -945,12 +945,14 @@ const legacy: FighterDef = {
       // (https://www.ssbwiki.com/Kirby_(SSBU)/Down_special, revision 2041256): "The
       // stone transformation (and subsequent protection) lasts a minimum of 18
       // frames and a maximum of 150 frames, depending on when the special move
-      // button is pressed again", and its hitbox table has a "Landing" hit. So the
-      // stone lands as a stone and plays its frames out on the ground. UNVERIFIED:
-      // that the falling box (frames 29-47 here) is what comes out on the ground;
-      // the page's landing hit (14% at 25°, beside him) is not modelled, nor the
-      // 150-frame hold or its cancel.
-      keepsOnLanding: true,
+      // button is pressed again". Its fix round 1 (ruling R-T13h) gives it the
+      // page's landing hit: used on the ground, "Landing hit 11"; landed from the
+      // air, it lands into that same frame (`landsAt`), and goes on as the grounded
+      // stone does to its end. The falling box is the air's alone (`whileGrounded:
+      // false`), so it never comes out on the ground. Not modelled: the 150-frame
+      // hold and its cancel, and the aerial version's own timings (its 25% armour
+      // on 19-28, interruptible 78).
+      landsAt: 11,
       hitboxes: [
         {
           id: 0,
@@ -963,7 +965,29 @@ const legacy: FighterDef = {
           angle: fx(70),
           baseKnockback: fx(69),
           knockbackGrowth: fx(76),
+          whileGrounded: false,
         },
+        // The landing hit, one frame, a box each side (the page's "Landing" table:
+        // 14.0%, 25°, BK 86, KS 30, FKV 0, radius 6.0 on `top` at y 4.0, z ±6.0, hitlag
+        // ×1.0, grounded opponents only (`a=f`), `clang=f`, `rebound=f`); launched
+        // away from him whichever side (`game_speciallw`'s ATTACK_LR_CHECK_POS,
+        // rubendal SSBU Data Viewer 13.0.1).
+        ...[1, -1].map((side, i) => ({
+          id: i + 1,
+          startFrame: 11,
+          endFrame: 11,
+          x: fx(6.0 * side),
+          y: fx(4.0),
+          radius: fx(6.0),
+          damage: fx(14.0),
+          angle: fx(25),
+          baseKnockback: fx(86),
+          knockbackGrowth: fx(30),
+          transcendent: true,
+          situation: "ground" as const,
+          lr: "position" as const,
+          whileGrounded: true,
+        })),
       ],
     },
 

@@ -29,7 +29,7 @@ import {
   wait,
   wholeHit,
 } from "./dsl";
-import { flatten, runScript } from "./interpreter";
+import { flatten, gameFrameOfMotion, runScript } from "./interpreter";
 import type { AcmdCommand, Rate } from "./types";
 
 const hit = (id: number, damage = 1) =>
@@ -79,7 +79,24 @@ describe("FT_MOTION_RATE", () => {
   });
 
   it("slows it down above 1", () => {
-    expect(liveFrames([motionRate(2), frame(3), hit(0), wait(1), clearAll()], 0)).toEqual([5, 6]);
+    // Set before the first frame(), the rate governs the motion's first advance
+    // (Task 13 fix round 1, R-T13d): motion frame m arrives on game frame ⌈2m⌉.
+    expect(liveFrames([motionRate(2), frame(3), hit(0), wait(1), clearAll()], 0)).toEqual([6, 7]);
+  });
+
+  // Task 13 fix round 1, ruling R-T13d: a rate a script sets before its first frame()
+  // applies from frame 1. Mario's game_specialn opens with FT_MOTION_RATE(FSM=1.15) and
+  // generates its Fireball on frame(14): game frame ⌈14 × 1.15⌉ = 17, as UltimateFrameData
+  // (https://ultimateframedata.com/mario, Neutral B: startup 17, total 49) and SmashWiki
+  // ("Mario (SSBU)/Neutral special", https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special,
+  // revision 1699768: "Clean hit 17-21", "Interruptible 50") publish; its CancelFrame 43
+  // comes on 50. Set after a frame(), a rate runs from the motion frame it is on, as before.
+  it("applies a rate set before the first frame() from frame 1 (Mario's Fireball: frame(14) at 1.15 on 17)", () => {
+    const s = script("game_specialn", "special_n", [motionRate(1.15), frame(14), hit(0)]);
+    expect(liveFrames([motionRate(1.15), frame(14), hit(0)], 0)[0]).toBe(17);
+    expect(gameFrameOfMotion(s, 43)).toBe(50);
+    // After frame(1) the old rule stands: motion 1 on game frame 1, then 1.15 a frame.
+    expect(liveFrames([frame(1), motionRate(1.15), frame(14), hit(0)], 0)[0]).toBe(16);
   });
 
   it("reaches frame(11) on game frame 10 at FSM 0.9, exactly (Review Focus #3)", () => {
@@ -96,9 +113,13 @@ describe("FT_MOTION_RATE", () => {
     expect(liveFrames([frame(3), motionRate(0.5), frame(7), hit(0)], 0)[0]).toBe(5);
   });
 
-  it("reports the floored motion frame for the bone table", () => {
+  it("reports the floored motion frame for the bone table, from frame 1", () => {
+    // Half a motion frame a game frame from the first (R-T13d): 0.5, 1, 1.5, 2, 2.5, the
+    // first quoted as frame 1, a motion's first.
     const s = script("game_test", "test", [motionRate(2)]);
-    expect([1, 2, 3, 4, 5].map((g) => runScript(s, g).motionFrame)).toEqual([1, 1, 2, 2, 3]);
+    expect([1, 2, 3, 4, 5].map((g) => runScript(s, g).motionFrame)).toEqual([1, 1, 1, 2, 2]);
+    const t = script("game_test", "test", [frame(1), motionRate(2)]);
+    expect([1, 2, 3, 4, 5].map((g) => runScript(t, g).motionFrame)).toEqual([1, 1, 2, 2, 3]);
   });
 
   it("spells decimals as exact fractions and refuses a rate that is not one", () => {

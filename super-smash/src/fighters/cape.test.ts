@@ -311,8 +311,12 @@ describe("the Cape's turn lands with the hit, whatever the hit does", () => {
   });
 
   it("turns an armoured one (Kirby's Stone), UNVERIFIED", () => {
-    const { states, events } = run(duel(10, "kirby"), 20, cape, (i) => (i === 0 ? Btn.Down | Btn.Special : 0));
-    const at = events.findIndex((e) => e.hits.length > 0);
+    // Kirby's Stone two frames after the Cape: it is in its armour (frame 10) when the
+    // Cape hits on 12, a frame before its own landing hit comes out on its frame 11
+    // (Plan 5, Task 13 fix round 1, which gave it one).
+    const { states, events } = run(duel(10, "kirby"), 20, cape, (i) => (i === 2 ? Btn.Down | Btn.Special : 0));
+    const at = events.findIndex((e) => e.hits.some((h) => h.attacker === 0));
+    expect(states[at].fighters[1].actionFrame + 1).toBe(10);
     const kirby = states[at].fighters[1];
     expect([kirby.action, kirby.move]).toEqual(["special", "downB"]);
     expect(toFloat(kirby.damage)).toBeCloseTo(CAPE_DAMAGE, 2);

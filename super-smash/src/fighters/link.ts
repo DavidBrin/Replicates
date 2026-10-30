@@ -679,6 +679,16 @@ const legacy: FighterDef = {
       name: "Spin Attack",
       totalFrames: 76,
       momentum: [{ frame: 6, x: fx(0.35), y: fx(2.5), hold: 13 }],
+      // The imported `game_specialhi` is the from-release timeline (Plan 5, Task 13
+      // fix round 1, ruling R-T13f): SmashWiki "Link (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Link_(SSBU)/Up_special, revision 1987976), grounded,
+      // "Charges between 3-4", hits "7-8, 9-13 (4-5, 6-10)", "14-23, 24-39 (11-20,
+      // 21-36)", "Interruptible (from release) 77 (74)". So the script starts 3
+      // frames in, and its boxes come out on 7-39, its end on 76. UNVERIFIED: what
+      // those 3 frames hold; no start script is imported, and here they set nothing.
+      // The grounded charge is not modelled. The rise above keeps its own frames,
+      // as authored against these boxes.
+      scriptLead: 3,
       // Ends helpless when used in the air (Plan 5, Task 4b): SmashWiki "Link
       // (SSBU)/Up special" (https://www.ssbwiki.com/Link_(SSBU)/Up_special): "Air
       // speed multiplier ... 0.909 (helpless)", "Landing lag 30 frames" (the

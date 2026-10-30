@@ -658,6 +658,20 @@ describe("engine golden trace", () => {
   // Hits 38, shield hits 5, KOs 1 there (were 32, 0 and 1). So now: hits
   // 38/20/26/21, 6, 0, 1, 4 and 1; shield hits 5/0/0/1, 3, 0, 0, 0 and 0; KOs
   // 1/2/1/0, 1, 2, 0, 0 and 0.
+  // Plan 5 Task 13's fix round 1 (rulings R-T13d to R-T13h: a motion rate set before
+  // a script's first frame() runs from frame 1, so Mario's Fireball launches on 17;
+  // a smash holds the frame before its START_SMASH_HOLD; Link's Spin Attack runs its
+  // published 7-39 and 77; THRU tramples; Kirby's Stone has its landing hit) moved
+  // four. Three return to their traces from before Task 13, byte for byte: the
+  // script from the 1501-1600 sample and the Inhale lab from 201-300 (the Fireball
+  // and the copied ones on 1577, 287 and 341 again), and link-samus from 201-300
+  // (the Spin Attack on 163 on its published frames, as its legacy table had them).
+  // kirby-marth moves from 1801-1900: Marth's forward smash on 1868 holds a frame
+  // earlier. Hits 18 and 19, shield hits 0 and 1, KOs 1 and 1 there (Samus by a hit
+  // at 104% on 2967, as before Task 13; Marth by a hit, tumbling at 110.3% on 2729).
+  // mario-fox, donkeyKong-pikachu and the three other labs are byte-identical. No pin
+  // trips and no step is re-tuned. So now: hits 38/20/18/19, 6, 0, 1, 4 and 1; shield
+  // hits 5/0/0/1, 3, 0, 0, 0 and 0; KOs 1/2/1/1, 1, 2, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

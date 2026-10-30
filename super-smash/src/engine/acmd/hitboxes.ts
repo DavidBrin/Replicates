@@ -134,17 +134,23 @@ function resolve(
  * Dolphin Slash for Ultimate, and those are exactly the boxes their scripts set
  * OFF (`game_attacks4`'s fire sweetspot alone); SmashWiki's hitbox tables mark an
  * OFF box `clang=f` (Kirby's Stone, https://www.ssbwiki.com/Kirby_(SSBU)/Down_special).
- *
- * UNVERIFIED stand-in: `ATTACK_SETOFF_KIND_THRU` stays transcendent, as it has
- * been since Plan 2. The published reading is "cannot rebound" instead: Fox's
- * forward smash, THRU in `game_attacks4`, is in "Priority"'s Ultimate list of
- * "Moves that cannot rebound", and its hitbox table marks it `rebound=f` but not
- * `clang=f` (https://www.ssbwiki.com/Fox_(SSBU)/Forward_smash, revision 1686307).
- * The engine models no trample (a box that clanks and goes on), so THRU keeps the
- * nearer of the two models it has.
  */
 export function cannotClank(clang: AttackSetoff): boolean {
-  return clang === "ATTACK_SETOFF_KIND_OFF" || clang === "ATTACK_SETOFF_KIND_THRU";
+  return clang === "ATTACK_SETOFF_KIND_OFF";
+}
+
+/**
+ * Whether a box with this `Clang_Rebound` setting clanks but never rebounds its
+ * user: `ATTACK_SETOFF_KIND_THRU` (Plan 5, Task 13 fix round 1, ruling R-T13g).
+ * SmashWiki "Priority" (revision 2049993), "Moves that cannot rebound": "they will
+ * continue their animations as if they did not collide at all, but the hitbox
+ * will count as blocked for other clanking character, as long as the trampling
+ * move was not more than 9% stronger"; its Ultimate list has Fox's forward smash,
+ * THRU in `game_attacks4`, whose hitbox table marks it `rebound=f` but not
+ * `clang=f` (https://www.ssbwiki.com/Fox_(SSBU)/Forward_smash, revision 1686307).
+ */
+export function cannotRebound(clang: AttackSetoff): boolean {
+  return clang === "ATTACK_SETOFF_KIND_THRU";
 }
 
 function attackHitbox(
@@ -168,6 +174,7 @@ function attackHitbox(
     ...(effect !== undefined && effect !== "normal" ? { effect } : {}),
     ...(a.fkb > 0 ? { fixedKnockback: a.fkb } : {}),
     ...(cannotClank(a.clang) ? { transcendent: true } : {}),
+    ...(cannotRebound(a.clang) ? { noRebound: true } : {}),
     ...(a.hitlag !== ONE ? { hitlagMultiplier: a.hitlag } : {}),
     ...(setoff !== undefined ? { shieldstunMultiplier: setoff } : {}),
     ...((a.meteor ?? isSpikeAngle(a.angle)) ? { meteor: true } : {}),
@@ -177,6 +184,7 @@ function attackHitbox(
     ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
     ...(a.collisionAttr === "collision_attr_turn" ? { reverse: true } : {}),
     ...(a.forceReaction === true ? { forceReaction: true } : {}),
+    ...(a.whileGrounded !== undefined ? { whileGrounded: a.whileGrounded } : {}),
     // Plan 5, Task 6: `Flinchless=true` is a windbox. SmashWiki "Hitbox"
     // (https://www.ssbwiki.com/Hitbox): it "prevents the hitbox from inflicting
     // hitstun or hitlag; any knockback coded for the hitbox instead pushes or

@@ -1250,8 +1250,15 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // landing does to an aerial swallow or spit.
   if (f.action === "cargoCarry" || f.action === "throw" || f.action === "inhaleHold") return;
   if (f.action === "special" && f.grabbing >= 0 && f.move !== null && ctx.def.moves[f.move]?.release !== undefined) return;
-  // A move that lands as itself plays on (Plan 5, Task 13: Kirby's Stone; `MoveDef.keepsOnLanding`).
-  if (f.action === "special" && f.move !== null && ctx.def.moves[f.move]?.keepsOnLanding === true) return;
+  // A move that lands as itself goes on, from its landing frame (Plan 5, Task 13 and
+  // its fix round 1: Kirby's Stone, into its landing hit; `MoveDef.landsAt`). SSBU
+  // lands it into another status, so the hit record starts again.
+  const landsAt = f.action === "special" && f.move !== null ? ctx.def.moves[f.move]?.landsAt : undefined;
+  if (landsAt !== undefined) {
+    f.actionFrame = actionFrameOf(landsAt);
+    clearHitRecord(f);
+    return;
+  }
   // A tumble that reaches the floor lies down: in hitstun, one too slow to
   // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
   // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").

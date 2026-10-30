@@ -459,10 +459,13 @@ export function actionFrameOf(moveFrame: number): number {
  * Earliest, not first listed: Pikachu's forward smash lists a later hitbox
  * first, and the hold must come before every one of them.
  *
- * One rule for the two readers that must agree on it: `attackMain`, which holds
- * the move there while the attack is held, and the renderer, which parks the
- * pose there and plays the swing once the frame moves past it (the engine keeps
- * `charge` after the release, so `charge` alone cannot say which).
+ * It is the fallback of the one rule both readers use, `smashHoldFrame`
+ * (`acmd/run.ts`; ruling P5-R15): a smash whose script raises START_SMASH_HOLD
+ * holds the frame before that one instead (Task 13 fix round 1, R-T13e). Both
+ * `attackMain`, which holds the move there while the attack is held, and the
+ * renderer (`MoveTiming.chargeHold`), which parks the pose there and plays the
+ * swing once the frame moves past it (the engine keeps `charge` after the
+ * release, so `charge` alone cannot say which), read `smashHoldFrame`.
  */
 export function chargeHoldFrame(move: Pick<MoveDef, "hitboxes">): number {
   let first = 1;

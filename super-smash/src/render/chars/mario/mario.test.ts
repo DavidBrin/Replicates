@@ -190,7 +190,7 @@ describe("the moves with no hitbox are timed off their own event", () => {
    * linearly across the move. Which means `strike` is not a hint here, it is a
    * literal fraction, and Fireball's has to be the frame the ball appears: the
    * game frame the script the sim runs launches it on (Plan 5, Task 13:
-   * `moveSpawns`, game frame 16), which is actionFrame 15.
+   * `moveSpawns`, game frame 17 since its fix round 1), which is actionFrame 16.
    */
   it("releases the fireball on the frame it spawns", () => {
     const move = mario.moves.neutralB!;
@@ -199,7 +199,7 @@ describe("the moves with no hitbox are timed off their own event", () => {
     for (let g = 1; g <= move.totalFrames && spawn < 0; g++) {
       if (moveSpawns(mario, { move: "neutralB" }, moveScriptFrame(mario, { move: "neutralB", actionFrame: actionFrameOf(g) })!).length > 0) spawn = g;
     }
-    expect(spawn).toBe(16);
+    expect(spawn).toBe(17);
     expect(poses.neutralB!.strike).toBeCloseTo(actionFrameOf(spawn) / move.totalFrames, 2);
   });
 
