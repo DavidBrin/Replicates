@@ -751,8 +751,10 @@ export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs
     if (f.action !== "attack" && f.action !== "special") continue;
     if (f.charge <= 0) continue;
     // A held loop counts its times round in `charge` (Plan 5, Task 9 fix round 1:
-    // Kirby's Inhale, `MoveDef.holdLoop`): no charge, no glow.
-    if (f.move !== null && defs?.[f.port]?.moves[f.move]?.holdLoop !== undefined) continue;
+    // Kirby's Inhale, `MoveDef.holdLoop`): no charge, no glow. Not for a Kirby with
+    // a Copy Ability: `defs` are the fighters' own, and his neutral special is then
+    // the copied one, which may charge (fix round 2).
+    if (f.move !== null && f.combat.copy === "" && defs?.[f.port]?.moves[f.move]?.holdLoop !== undefined) continue;
     const hold = moveTimingFor(defs?.[f.port], f.move)?.chargeHold;
     if (hold !== undefined && f.actionFrame > hold) continue;
     if (v.frame % 2 !== 0) continue;

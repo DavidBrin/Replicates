@@ -593,10 +593,11 @@ export function step(
   const events = emptyEvents();
   const stage = ctx.stage(s.stageId);
   // A Kirby with a Copy Ability runs the copied neutral special (Plan 5, Task 9).
-  const defs = s.fighters.map((f) => {
+  const defOf = (f: FighterState): FighterDef => {
     const def = ctx.fighter(f.defId);
     return f.combat.copy === "" ? def : withCopyAbility(def, ctx.fighter(f.combat.copy));
-  });
+  };
+  const defs = s.fighters.map(defOf);
   const bones = ctx.bones ?? LEGACY_BONE_TABLE;
   const bake = ctx.bake ?? LEGACY_BAKE;
   // A fighter's ECB this frame: from its bones (Plan 4), or Plan 2's box without a bake.
@@ -729,10 +730,16 @@ export function step(
     if (!f.grounded && f.ledge === null) f.airTime += 1;
 
     const before = f.action;
+    const copyBefore = f.combat.copy;
     advanceFighter(f, intent, stateCtx(i));
     if (before === "jumpSquat" && f.action === "jump") {
       events.jumps.push({ port: f.port, x: f.x, y: f.y });
     }
+    // A copy whose loss waited for its special landed as that special ended
+    // (`landPendingCopyLoss`): the rest of this step runs Kirby's own definition,
+    // so a special begun on the hand-off is his own from its first frame (Plan 5,
+    // Task 9 fix round 2).
+    if (f.combat.copy !== copyBefore) defs[i] = defOf(f);
   }
 
   // A fighter whose status is not a holding one has let go, whatever its link
@@ -861,7 +868,7 @@ export function step(
   spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev);
   // A swallow or a spit lets its mouthful out, onto this frame's star for a spit,
   // and a star nobody rides is gone (Plan 5, Task 9).
-  resolveInhaleReleases(s, defs, (id) => ctx.fighter(id), frozen, beforeActionFrame, events);
+  resolveInhaleReleases(s, defs, (id) => ctx.fighter(id), frozen, beforeActionFrame, events, stage);
   carryOutStarRiders(s, (id) => ctx.fighter(id), stage);
   dropRiderlessStars(s, (p) => projectileDefOf(ctx, p)?.ridden === true);
 
@@ -1599,13 +1606,17 @@ function isInvincible(f: FighterState, def: FighterDef): boolean {
 }
 
 /**
- * A fighter's own windbox leaves no mark on its swing's hit record (Plan 5, Task 9
- * fix round 1): it pushes on each frame it is out, and its move times its rehits
- * with boxes one frame long (Kirby's Inhale pull, `Rehit=10`: frames 11, 21, 31,
- * 41). Marked, a pull would spend the swing on its victim, and the Inhale's catch,
- * the same swing in the replica's one record, could never take them; SSBU keeps
- * catches (`CatchModule`) and attacks (`AttackModule`) apart. UNVERIFIED: the rehit
- * timed from the box's frames, where SSBU times it from each victim's last hit. A
+ * The replica's convention, not a published rule: a fighter's own windbox leaves
+ * no mark on its swing's hit record (Plan 5, Task 9 fix round 1). SSBU's windbox
+ * is a flinchless hitbox (SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox) and
+ * keeps its record, striking again only after its rehit rate. The one melee
+ * windbox here, Kirby's Inhale pull (`Rehit=10`), times its rehits with boxes one
+ * frame long (frames 11, 21, 31, 41), so leaving no mark cannot let it push twice
+ * from one box; marked, a pull would spend the swing on its victim, and the
+ * Inhale's catch, the same swing in the replica's one record, could never take
+ * them (SSBU keeps catches, `CatchModule`, and attacks, `AttackModule`, apart).
+ * `schema.test.ts` holds every melee windbox to one frame. UNVERIFIED: the rehit
+ * timed from the boxes' frames, where SSBU times it from each victim's last hit. A
  * projectile's windbox (F.L.U.D.D.'s water) marks its own record, as before.
  */
 function unrecorded(c: Candidate): boolean {

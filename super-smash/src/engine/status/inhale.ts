@@ -194,8 +194,9 @@ export const STATUS_SPAT_STAR: FighterStatus = {
     f.intangible = Math.max(f.intangible, 1);
     // `grabTimer` holds what is left of the flight; mashing shortens a spit star's
     // (`ride` its instance id). The swallow's star (`ride` negative,
-    // `carryOutStarRiders`) flies its 10 frames: no mash is published for it
-    // (UNVERIFIED).
+    // `carryOutStarRiders`) flies its 10 frames whatever the rider does: SmashWiki
+    // "Inhale (Kirby)" (https://www.ssbwiki.com/Inhale_(Kirby)), "this only lasts
+    // for 10 frames, which cannot be influenced by mashing or damage percent".
     const outStar = f.combat.ride < 0;
     const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
     const mashed = outStar ? 0 : mashFrames(f.combat, buttonPresses(intent), sticks, STAR_MASH_BUTTON, STAR_MASH_STICK);

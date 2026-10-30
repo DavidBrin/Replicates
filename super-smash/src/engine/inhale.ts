@@ -34,8 +34,11 @@
  * - The swallow flies its fighter out on a star of its own (fix round 1: "Star Y
  *   offset 7u", "Star duration 10 frames", "Star initial speed 3.4", "Star travel
  *   angle 62°", "Star friction 0.17"; `carryOutStarRiders`), with no box: the
- *   page's "Star hitbox 8-17" has no published damage. Forward is UNVERIFIED, and
- *   so is the rider leaving it from rest.
+ *   page's "Star hitbox 8-17" has no published damage. Its 10 frames take no
+ *   mashing (published: SmashWiki "Inhale (Kirby)", "this only lasts for 10 frames,
+ *   which cannot be influenced by mashing or damage percent"). Forward is
+ *   UNVERIFIED, and so are the rider leaving it from rest and a star that would
+ *   start inside the stage's solid body not being flown.
  * - The swallow's and the spit's damage take no staleness.
  * - The star's damage is its rider's weight's row; a weight between published
  *   rows takes the row below (the table skips 69 - 74, 114 - 115 and 119 - 126).
@@ -183,6 +186,7 @@ export function resolveInhaleReleases(
   frozen: readonly boolean[],
   beforeActionFrame: readonly number[],
   events: StepEvents,
+  stage: StageDef,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
     const kirby = s.fighters[i];
@@ -217,8 +221,12 @@ export function resolveInhaleReleases(
         if (ability === victim.combat.copy) loseCopy(victim);
         takeCopy(kirby, ability);
       }
-      if (release.star === undefined) startAction(victim, victim.grounded ? "stand" : "fall");
-      else rideOutStar(victim, kirby, release.star);
+      // A star that would start inside the stage's solid body (Kirby pressed to an
+      // underside) is not flown: the fighter comes out at Kirby, as with no star
+      // (fix round 2; UNVERIFIED, nothing is published).
+      const star = release.star;
+      if (star === undefined || insideSolid(stage, s.frame, kirby.x, kirby.y + star.offsetY)) startAction(victim, victim.grounded ? "stand" : "fall");
+      else rideOutStar(victim, kirby, star);
       continue;
     }
 

@@ -184,8 +184,10 @@
  *
  * Its fix round 2 (the 1v1 bonus never reaches a shield, ruling R-7b-d; SmashWiki
  * "1v1 multiplier": "Shields and stage elements are unaffected by the multiplier")
- * re-tuned one step. Mario's three jabs take 12.5 off Fox's shield, not 15.0, and
- * stun it 10 frames, not 12, so it breaks on 659, not 649. Fox stands 0.3 units
+ * re-tuned one step. Mario's three jabs take about 7.4 off Fox's shield in all, not
+ * 8.9 (2.75, 2.42 and 2.23, not 3.30, 2.90 and 2.67), and stun it 3, 3 and 3
+ * frames, not 4, 3 and 3, so it breaks on 659, not 649 (replayed on Plan 5 Task 9's
+ * fix round 2, against `d9b9d96` for the before). Fox stands 0.3 units
  * further on, the forward smash's near box reaches him (18.5%, not 22.4%; 82.05
  * units, still a tumble), and he lands 1.3 units nearer (x 2.3, techs on 781) and
  * techs again on 1026 after the forward tilt. His step in ahead of the fireball is

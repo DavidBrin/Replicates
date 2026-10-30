@@ -112,9 +112,14 @@ export const STATUS_ATTACK: FighterStatus = {
  * "Kirby will not stop inhaling until the button is released"; SmashWiki "Kirby
  * (SSBU)/Neutral special", https://www.ssbwiki.com/Kirby_(SSBU)/Neutral_special:
  * "Loop 11-44", "Minimum inhale duration 34 frames", "Interruptible (from release)
- * 64 (20)"): the loop's 34 frames always play, and Kirby acts 20 frames after B
- * comes up past them. UNVERIFIED: that a held loop repeats frames 35-44 (the
- * page's "loop points 34-35"); no maximum hold is published.
+ * 64 (20)", "After one full loop, the move can be ended by releasing the special
+ * move button at any point"): the loop's 34 frames always play, and Kirby acts 20
+ * frames after B comes up past them. UNVERIFIED: that a held loop repeats frames
+ * 35-44. Nothing publishes the frames a held loop repeats (the page's "loop
+ * points 34-35" reads as the 34-frame loop, 11-44, wrapping); 35-44 keeps the
+ * published live boxes, the catch throughout and a pull every 10 frames (its
+ * "rehit rate: 10"), where repeating 11-44 would pull at 10, 10, 10 and 4. No
+ * maximum hold is published.
  */
 function holdLoopMain(f: FighterState, intent: Intent, loop: NonNullable<MoveDef["holdLoop"]>): void {
   const frame = moveFrameOf(f.actionFrame);

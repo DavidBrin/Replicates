@@ -422,6 +422,17 @@ describe("continuous effects", () => {
     expect(v.particles.filter((p) => p.kind === "chargeMote")).toHaveLength(0);
   });
 
+  it("glows for a Kirby charging a copied special, though his own neutral special loops (Task 9 fix round 2)", () => {
+    // `defs` are the fighters' own: a copying Kirby's neutral special there is the
+    // Inhale, while the one he charges is the copy's (Charge Shot, Giant Punch).
+    const defs = [makeDef({ moves: { neutralB: { slot: "neutralB", name: "Inhale", totalFrames: 63, hitboxes: [], holdLoop: { from: 35, to: 44 } } } })];
+    const v = createVfx();
+    const copying = makeFighter({ action: "special", move: "neutralB", actionFrame: 13, charge: 30 });
+    copying.combat.copy = "samus";
+    for (let i = 0; i < 8; i++) stepVfx(v, null, makeState({ fighters: [copying] }), defs);
+    expect(v.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
+  });
+
   it("ramps the motes' colour over the move's own full charge, not a smash's 60 frames", () => {
     // Half of Hammer Flip's 120 frames is the hue half of a smash's 60 is.
     const hammer = { mode: "hold", frames: 120, loopFrame: 15, atFull: "hold" } as const;

@@ -56,6 +56,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ONE, fx, mul, randomInt, toFloat } from "@/engine/fixed";
+import { kineticSet } from "@/engine/kinetic";
 import { hashState } from "@/engine/hash";
 import { COPY_DAMAGE, COPY_GRACE_FRAMES, COPY_LOSS_PENDING } from "@/engine/inhale";
 import { computeHitlag, computeKnockback, framesAfterHit } from "@/engine/knockback";
@@ -72,8 +73,9 @@ import {
   STAR_ESCAPE_Y,
 } from "@/engine/status/inhale";
 import { Btn } from "@/engine/types";
-import type { FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
+import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
 import { bakedContext } from "@/game/bake";
+import { stateInvariantBreaks } from "@/game/stateInvariants";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { STAGES } from "@/stages";
 import { BATTLEFIELD_LOWER_PLATFORM_Y } from "@/stages/battlefield";
@@ -1037,10 +1039,24 @@ describe("Inhale's own published shape (Task 9 fix round 1, ruling R-T9f)", () =
     expect(off.vy).toBeGreaterThan(-fx(0.2));
   });
 
-  it("lets no mash shorten the swallow's star: no mash is published for it (UNVERIFIED)", () => {
+  it("lets no mash shorten the swallow's star: it \"cannot be influenced by mashing\" (SmashWiki \"Inhale (Kirby)\")", () => {
     const { states } = run(holdingMario(), 20, (i) => [i === 0 ? Btn.Special : 0, i >= 8 && i % 2 === 0 ? Btn.Attack : 0]);
     expect(states[16].fighters[1].action).toBe("spatStar");
     expect(states[17].fighters[1].action).toBe("fall");
+  });
+
+  it("flies no swallow's star that would start inside the stage: Kirby pressed to its underside lets Mario out at him (fix round 2)", () => {
+    // Swallowing under Final Destination, pressed up against its underside on the release.
+    const { states } = run(holdingMario(), 7, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const s = cloneState(states[6]);
+    Object.assign(s.fighters[0], { x: 0, y: fx(-66.5), grounded: false, platform: -1 });
+    kineticSet(s.fighters[0], 0, fx(2));
+    const after = run(s, 20, () => [0, 0]).states;
+    expect(after[0].fighters[0].combat.copy).toBe("mario");
+    expect(toFloat(after[0].fighters[0].y + fx(7))).toBeGreaterThan(-60);
+    expect(after[0].fighters[1].action).toBe("fall");
+    expect(after[0].fighters[1].x).toBe(after[0].fighters[0].x);
+    after.forEach((st, k) => expect(stateInvariantBreaks(st, FD, k), `step ${k}`).toEqual([]));
   });
 
   it("stops the swallow's star short of the stage's solid body, and lets its rider go there", () => {
@@ -1084,6 +1100,40 @@ describe("a Copy Ability's end (Task 9 fix round 1)", () => {
     }
     expect(lost[end].fighters[0].combat).toMatchObject({ copy: "", copyFrames: 0, storedCharge: 0 });
     expect(lost.every((st) => st.fighters[1].action !== "swallowed")).toBe(true);
+  });
+
+  it("runs no frame of a lost copy's next special: B on the hand-off starts Kirby's own Inhale (fix round 2)", () => {
+    // A forged copy whose neutral special has a box on its frame 1, reaching Mario.
+    const mario = BY_ID.get("mario")!;
+    const copycat = {
+      ...mario,
+      id: "copycat",
+      moves: {
+        ...mario.moves,
+        neutralB: {
+          slot: "neutralB",
+          name: "Copycat",
+          totalFrames: 20,
+          hitboxes: [{ id: 0, startFrame: 1, endFrame: 1, x: fx(6), y: fx(5), radius: fx(6), damage: fx(5), angle: fx(361), baseKnockback: fx(20), knockbackGrowth: fx(50) }],
+        },
+      },
+    } as FighterDef;
+    const ctx: SimContext = { fighter: (id) => (id === "copycat" ? copycat : BY_ID.get(id)!), stage: (id) => STAGES.find((st) => st.id === id)! };
+    /** Kirby on the copied special's frame 19 of 20, `copyFrames` as given; B on the hand-off (step 1). */
+    const handOff = (copyFrames: number) => {
+      const s = lineUp(["mario"], 8);
+      Object.assign(s.fighters[0], { action: "special", move: "neutralB", actionFrame: 18 });
+      Object.assign(s.fighters[0].combat, { copy: "copycat", copyFrames });
+      return run(s, 3, (i) => [i === 1 ? Btn.Special : 0, 0], ctx);
+    };
+    // Kept, the copy's frame-1 box hits Mario on the hand-off.
+    const kept = handOff(COPY_GRACE_FRAMES);
+    expect(kept.events[1].hits.some((h) => h.attacker === 0 && h.victim === 1)).toBe(true);
+    // Lost (pending), the loss lands on the hand-off and the new special is Kirby's own.
+    const lost = handOff(COPY_LOSS_PENDING);
+    expect(lost.states[1].fighters[0]).toMatchObject({ action: "special", move: "neutralB", actionFrame: 0 });
+    expect(lost.states[1].fighters[0].combat.copy).toBe("");
+    expect(lost.events.flatMap((e) => e.hits).filter((h) => h.attacker === 0)).toEqual([]);
   });
 
   it("takes no stored charge across: a full Charge Shot stored under a Samus copy is no full Giant Punch under a Donkey Kong copy (ruling R-T9e)", () => {

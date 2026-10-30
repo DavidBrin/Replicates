@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest";
 import { fx, toFloat } from "@/engine/fixed";
 import { advanceProjectile, spawnProjectile } from "@/engine/projectile";
 import type { FighterDef, FighterState, Hitbox, MoveDef, MoveSlot, StageDef } from "@/engine/types";
+import { flatten } from "@/engine/acmd/interpreter";
 import { ACTIVE_SCRIPT_SLOTS } from "./acmd/active";
+import { REFERENCE_SCRIPTS } from "./acmd/index";
 import { AERIAL_SLOTS, FIGHTERS, REQUIRED_SLOTS, getFighter } from "./index";
 
 /** Look a fighter up, failing loudly rather than returning undefined. */
@@ -388,6 +390,22 @@ describe("hitbox values", () => {
     // (SSBU)/Down special"). A damaging one would lose its damage silently.
     const boxes = [...everyHitbox(fighter).map((h) => h.hitbox), ...everyProjectile(fighter).map((p) => p.projectile.hitbox)];
     for (const hb of boxes.filter((b) => b.windbox === true)) expect(hb.damage, `${fighter.name} hitbox ${hb.id}`).toBe(0);
+  });
+
+  it.each(each)("%s holds every windbox on a move to one frame, and imports none (Plan 5, Task 9 fix round 2)", (_name, fighter) => {
+    // A fighter's own windbox leaves no mark on its swing's hit record
+    // (`simulate.ts` `unrecorded`), which is right only for a box one frame long:
+    // Kirby's Inhale pull times its `Rehit=10` with one-frame boxes. A longer one
+    // would push on every frame it is out; it must fail here until its record is
+    // decided.
+    for (const { slot, hitbox } of everyHitbox(fighter).filter((h) => h.hitbox.windbox === true)) {
+      expect(hitbox.endFrame, `${fighter.name} ${slot} windbox ${hitbox.id}`).toBe(hitbox.startFrame);
+    }
+    // And no imported script has a flinchless ATTACK (a windbox) of any length.
+    const ref = REFERENCE_SCRIPTS[fighter.id];
+    for (const [name, script] of Object.entries(ref?.scripts ?? {})) {
+      for (const c of flatten(script)) if (c.op === "attack") expect(c.params.flinchless, `${fighter.name} ${name} ATTACK ${c.params.id}`).toBe(false);
+    }
   });
 
   it.each(each)("%s gives every hitbox a non-negative damage", (_name, fighter) => {

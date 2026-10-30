@@ -694,7 +694,8 @@ const legacy: FighterDef = {
       // Held, the loop goes on (`holdLoop`, Task 9 fix round 1): "Kirby will not stop
       // inhaling until the button is released" (SmashWiki "Inhale (Kirby)"); its 34
       // frames ("Minimum inhale duration 34 frames") always play. UNVERIFIED: that a
-      // held loop repeats 35-44 (the page's "loop points 34-35").
+      // held loop repeats 35-44, which nothing publishes; it keeps the published
+      // live boxes, the catch throughout and a pull every 10 frames (`holdLoopMain`).
       holdLoop: { from: 35, to: 44 },
       // Not a damaging move: a catch, and a pull. Boxes from rubendal SSBU Data
       // Viewer 13.0.1 (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Kirby/data.json),
