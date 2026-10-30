@@ -280,6 +280,10 @@ const legacy: FighterDef = {
       name: "Up Smash",
       totalFrames: 56,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 6-7" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Samus (SSBU)/Up smash",
+      // https://www.ssbwiki.com/Samus_(SSBU)/Up_smash, revision 1705188).
+      smashHold: 6,
       hitboxes: [
         // Five hits of Screw Attack over the head — four weak ones that hold,
         // then a 6% launcher with growth 162.

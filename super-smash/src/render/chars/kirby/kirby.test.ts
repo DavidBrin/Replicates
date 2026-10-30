@@ -549,7 +549,7 @@ interface Painted {
   readonly overSpans: readonly (readonly [number, number])[];
 }
 
-function painted(slot: MoveSlot, frame: number, charge = 0, costume = 0): Painted {
+function painted(slot: MoveSlot, frame: number, charge = 0, costume = 0, fighter: Record<string, unknown> = {}): Painted {
   const ctx = createMockContext();
   const fn = fx[slot];
   if (!fn) throw new Error(`no effect for ${slot}`);
@@ -557,7 +557,7 @@ function painted(slot: MoveSlot, frame: number, charge = 0, costume = 0): Painte
   const overSpans: [number, number][] = [];
   fn({
     ctx: ctx as unknown as CanvasRenderingContext2D,
-    f: { facing: 1, charge, costume } as never,
+    f: { facing: 1, charge, costume, ...fighter } as never,
     def: def as never,
     cam: { zoom: 12 } as never,
     height: 7.6,
@@ -689,15 +689,20 @@ describe("the effects paint on the frames they claim and not otherwise", () => {
     expect(drew("neutralB", 60), "mouth still open after the move ended").toBe(0);
   });
 
-  it("replaces Kirby with the rock for exactly the armour window", () => {
-    const armour = def.moves.downB?.superArmourFrames;
-    expect(armour, "Stone has no armour window to key off").toBeDefined();
-    const [from, to] = armour!;
-    expect(paint("downB", from - 1).calls.length, "rock before the transformation").toBe(0);
+  // Plan 5, Task 13 fix round 2: the stone's window for where he is (`StoneDef`).
+  it.each([
+    ["in the air", false],
+    ["on the ground", true],
+  ] as const)("replaces Kirby with the rock for exactly the stone's window, %s", (_where, grounded) => {
+    const stone = def.moves.downB?.stone;
+    expect(stone, "Stone has no stone window to key off").toBeDefined();
+    const [from, to] = grounded ? stone!.ground : stone!.air;
+    const paintAt = (f: number) => painted("downB", f, 0, 0, { grounded }).ctx;
+    expect(paintAt(from - 1).calls.length, "rock before the transformation").toBe(0);
     for (const f of [from, Math.round((from + to) / 2), to]) {
       const out = fx.downB!({
-        ctx: paint("downB", f) as unknown as CanvasRenderingContext2D,
-        f: { facing: 1, charge: 0, costume: 0 } as never,
+        ctx: paintAt(f) as unknown as CanvasRenderingContext2D,
+        f: { facing: 1, charge: 0, costume: 0, grounded } as never,
         def: def as never,
         cam: { zoom: 12 } as never,
         height: 7.6,
@@ -712,7 +717,7 @@ describe("the effects paint on the frames they claim and not otherwise", () => {
       });
       expect(out && "hideFigure" in out ? out.hideFigure : false, `Kirby is drawn as well as the rock on frame ${f}`).toBe(true);
     }
-    expect(paint("downB", to + 1).calls.length, "still a rock after the armour ended").toBe(0);
+    expect(paintAt(to + 1).calls.length, "still a rock after the stone ended").toBe(0);
   });
 
   it("burns for the dash attack's own hitbox frames and no longer", () => {
@@ -908,7 +913,7 @@ describe("the Stone is a rock", () => {
    * air. The rock body is drawn inside the effect's only `translate`, so
    * folding that in is what turns a shape into a position.
    */
-  function profile(frame = 20): { x: number; y: number }[] {
+  function profile(frame = 35): { x: number; y: number }[] {
     const p = painted("downB", frame);
     const move = p.ctx.calls.find((c) => c.method === "translate");
     expect(move, "Stone never placed itself on the stage").toBeDefined();
@@ -975,9 +980,17 @@ describe("the Stone is a rock", () => {
    * eighteen-percent hitbox that otherwise arrives in silence.
    */
   it("puffs in front of the rock on the change and on the landing", () => {
-    const armour = def.moves.downB!.superArmourFrames!;
-    expect(overCalls(painted("downB", armour[0] + 1)), "the transformation happens silently").toBeGreaterThan(4);
-    expect(overCalls(painted("downB", armour[0] + 22)), "the landing happens silently").toBeGreaterThan(4);
+    const stone = def.moves.downB!.stone!;
+    expect(overCalls(painted("downB", stone.air[0] + 1)), "the transformation happens silently").toBeGreaterThan(4);
+    expect(overCalls(painted("downB", stone.ground[0] + 6, 0, 0, { grounded: true })), "the landing happens silently").toBeGreaterThan(4);
+  });
+
+  it("puffs again on the stone's last frame, when it wears off, and not on the frames it holds", () => {
+    const stone = def.moves.downB!.stone!;
+    const [, last] = stone.air;
+    const held = overCalls(painted("downB", last, 0, 0, { combat: { stoneFrames: 60 } }));
+    const ends = overCalls(painted("downB", last, 0, 0, { combat: { stoneFrames: stone.maxFrames } }));
+    expect(ends - held, "the stone wears off silently").toBeGreaterThan(4);
   });
 });
 

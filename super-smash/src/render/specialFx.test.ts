@@ -63,7 +63,8 @@ describe("the effect table", () => {
 });
 
 describe("Kirby's Stone replaces Kirby", () => {
-  const armour = byId.get("kirby")?.moves.downB?.superArmourFrames as [number, number];
+  // On the ground (`makeFighter`'s): the stone's ground window (Plan 5, Task 13 fix round 2).
+  const armour = byId.get("kirby")?.moves.downB?.stone?.ground as readonly [number, number];
 
   it("hides the fighter for exactly the frames he is a rock", () => {
     // `moveFrameOf` is +1, so the action frame that lands on move frame `n` is
@@ -262,13 +263,12 @@ describe("painting over the figure", () => {
     const result = drawMoveFx(
       ctx,
       kirby,
-      // Frame 30, not 20. Both hide the fighter and both carry a queue, but at
-      // 20 the deferred callback matches neither its flash nor its impact
-      // window and only calls `save()`/`restore()` — which move `calls.length`
-      // without painting a pixel, so an assertion on the call count passed
-      // against a queue that drew nothing. Measured: 20 yields 0 fills, 30
-      // yields 10.
-      makeFighter({ defId: "kirby", action: "special", move: "downB", actionFrame: 30 }),
+      // Frame 13 on the ground (the stone's 11-28; Plan 5, Task 13 fix round 2), in
+      // its landing dust. A frame past the dust and the flash would carry a queue
+      // that only calls `save()`/`restore()`, which move `calls.length` without
+      // painting a pixel, so an assertion on the call count would pass against a
+      // queue that drew nothing.
+      makeFighter({ defId: "kirby", action: "special", move: "downB", actionFrame: 12 }),
       cam,
       13,
       960,

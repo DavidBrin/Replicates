@@ -202,6 +202,8 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.footstools);
   x = mixInt(x, c.footstoolFrame);
   x = mixBool(x, c.landingCliffStop);
+  x = mixInt(x, c.stoneFrames);
+  x = mixInt(x, c.stoneTaken);
   return x;
 }
 

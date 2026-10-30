@@ -254,6 +254,10 @@ const legacy: FighterDef = {
       name: "Forward Smash",
       totalFrames: 50,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 9-10" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Link (SSBU)/Forward smash/Hit 1",
+      // https://www.ssbwiki.com/Link_(SSBU)/Forward_smash/Hit_1, revision 1706143).
+      smashHold: 9,
       // Two-input move: pressing attack again on frames 23-36 fires a second
       // outward slash (13% far / 12% close, angle 48, BKB 85, KBG 89) that is a
       // semi-spike and his most reliable KO near the ledge. The first hit's low
@@ -294,6 +298,10 @@ const legacy: FighterDef = {
       name: "Up Smash",
       totalFrames: 77,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 5-6" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Link (SSBU)/Up smash",
+      // https://www.ssbwiki.com/Link_(SSBU)/Up_smash, revision 1657166).
+      smashHold: 5,
       hitboxes: [
         {
           // Three slashes over seventy-seven frames. The first two are set

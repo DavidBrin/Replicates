@@ -55,7 +55,7 @@ import { dodgeIntangible, groundDodgeOf, rollCharge, rollOf } from "./groundDodg
 import { GROUND_EXIT } from "./groundExit";
 import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
 import { moveMomentum, moveScriptFrame, moveSuperArmour } from "./acmd/run";
-import { actionFrameOf, clearHitRecord } from "./hitbox";
+import { actionFrameOf, clearHitRecord, moveFrameOf } from "./hitbox";
 import {
   carrierOf,
   kineticAdopt,
@@ -1103,6 +1103,33 @@ export function heavyArmourOf(f: Pick<FighterState, "action" | "move">, def: Fig
 }
 
 /**
+ * The damage-based armour a fighter's move gives it this frame (`MoveDef.damageArmour`),
+ * as its threshold (Q12 damage), or null (Plan 5, Task 13 fix round 2, ruling
+ * R-T13j: Kirby's aerial Stone, 25% on 19-28). Read off the move the fighter is
+ * in, as super armour is.
+ */
+export function damageArmourOf(f: Pick<FighterState, "action" | "move" | "actionFrame" | "grounded">, def: FighterDef): number | null {
+  if (f.move === null || (f.action !== "attack" && f.action !== "special")) return null;
+  const a = def.moves[f.move]?.damageArmour;
+  if (a === undefined || (a.whileGrounded !== undefined && a.whileGrounded !== f.grounded)) return null;
+  const frame = moveFrameOf(f.actionFrame);
+  return frame >= a.from && frame <= a.to ? a.threshold : null;
+}
+
+/**
+ * Whether damage-based armour of `threshold` takes a hit of `taken` (Q12, before
+ * the 1v1 multiplier): one of no more than the threshold. SmashWiki "Armor"
+ * (https://www.ssbwiki.com/Armor, revision 2065996): fighters "not flinch or take
+ * knockback unless the attack deals enough percentage to go over a defined
+ * threshold", "will handle up to 30% ... but dealing above 30% will interrupt it"
+ * (Byleth's Aymr); "the extra damage taken [the 1v1 multiplier] is applied after
+ * all other calculations, including deciding whether the armor breaks".
+ */
+export function damageArmourHolds(threshold: number, taken: number): boolean {
+  return taken <= threshold;
+}
+
+/**
  * A move's own scripted movement, if it has one on this frame.
  *
  * This is what makes a Fox Illusion cross the stage, a Dolphin Slash rise, and
@@ -1252,13 +1279,23 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // landing does to an aerial swallow or spit.
   if (f.action === "cargoCarry" || f.action === "throw" || f.action === "inhaleHold") return;
   if (f.action === "special" && f.grabbing >= 0 && f.move !== null && ctx.def.moves[f.move]?.release !== undefined) return;
-  // A move that lands as itself goes on, from its landing frame (Plan 5, Task 13 and
-  // its fix round 1: Kirby's Stone, into its landing hit; `MoveDef.landsAt`). SSBU
-  // lands it into another status, so the hit record starts again.
-  const landsAt = f.action === "special" && f.move !== null ? ctx.def.moves[f.move]?.landsAt : undefined;
-  if (landsAt !== undefined) {
-    f.actionFrame = actionFrameOf(landsAt);
-    clearHitRecord(f);
+  // A move that lands as itself goes on (Plan 5, Task 13; `MoveDef.landing`). Kirby's
+  // Stone lands into its landing hit (fix round 1, R-T13h). SSBU lands it into another
+  // status, so the hit record starts again. Fix round 2 (R-T13k): one that lands
+  // before its landing frame plays on to it, as a Stone used on the ground does, so
+  // its landing hit is never earlier than the ground's 11 (UNVERIFIED: no source
+  // times an early landing); and one that lands after its stone has ended plays on
+  // as it is, never forming the stone again (UNVERIFIED too). A stone that has
+  // formed carries into the ground's window, and one that forms on the landing
+  // counts the landing frame as its first, as the ground's frame 11 is.
+  const move = f.action === "special" && f.move !== null ? ctx.def.moves[f.move] : undefined;
+  if (move?.landing !== undefined) {
+    if (moveFrameOf(f.actionFrame) <= move.landing.through) {
+      f.actionFrame = Math.min(f.actionFrame, actionFrameOf(move.landing.at));
+      clearHitRecord(f);
+      const stone = move.stone;
+      if (stone !== undefined && f.combat.stoneFrames === 0 && moveFrameOf(f.actionFrame) === stone.ground[0]) f.combat.stoneFrames = 1;
+    }
     return;
   }
   // A tumble that reaches the floor lies down: in hitstun, one too slow to

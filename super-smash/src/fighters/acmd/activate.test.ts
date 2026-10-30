@@ -105,10 +105,13 @@ describe("the freed moves", () => {
   it("hold a smash charge on the frame before the script raises START_SMASH_HOLD (Pikachu's forward smash: charges between 9 and 10)", () => {
     // actionFrame 8 is game frame 9.
     expect(smashHoldFrame(pikachu, { move: "fsmash" })).toBe(8);
-    // A smash on its compiled legacy script raises nothing: one short of its earliest box.
+    // A smash on its compiled legacy script raises nothing: its published hold (R-T13i,
+    // Donkey Kong's "Charges between 14-15"), and with none, one short of its earliest box.
     const dk = donkeyKong.moves.fsmash!;
     expect(donkeyKong.scripts?.fsmash).toBeUndefined();
-    expect(smashHoldFrame(donkeyKong, { move: "fsmash" })).toBe(chargeHoldFrame(dk));
+    expect(smashHoldFrame(donkeyKong, { move: "fsmash" })).toBe(13);
+    const unpublished = { ...donkeyKong, moves: { ...donkeyKong.moves, fsmash: { ...dk, smashHold: undefined } } };
+    expect(smashHoldFrame(unpublished, { move: "fsmash" })).toBe(chargeHoldFrame(dk));
   });
 
   it("hold there in a match while the attack is held", () => {
@@ -152,9 +155,9 @@ describe("the legacy move's fallbacks", () => {
   });
 
   it("keep a legacy move's super armour when the script says nothing of armour", () => {
-    // Kirby's Stone carries `superArmourFrames` [10, 48]; give it a script that sets none.
+    // A down special with `superArmourFrames` [10, 48] (the Stone's before Task 13 fix round 2), on a script that sets none.
     const bare: AcmdScript = { name: "game_speciallw", motion: "special_lw", commands: [frame(1)] };
-    const def: FighterDef = { ...kirby, scripts: { ...kirby.scripts, downB: bare } };
+    const def: FighterDef = { ...kirby, scripts: { ...kirby.scripts, downB: bare }, moves: { ...kirby.moves, downB: { ...kirby.moves.downB!, superArmourFrames: [10, 48] } } };
     const armoured = (g: number) => moveSuperArmour(def, { move: "downB" }, moveScriptFrame(def, at("downB", g - 1))!);
     expect([9, 10, 48, 49].map(armoured)).toEqual([false, true, true, false]);
     // …and the sim's own question reads the same answer.
@@ -190,11 +193,13 @@ describe("the legacy move's fallbacks", () => {
     expect(spawnedOn).toBe(mario.moves.neutralB!.projectiles![0].spawnFrame);
   });
 
-  it("take a script's own commands over the legacy move's (the compiled Stone)", () => {
-    expect(kirby.scripts?.downB).toBeUndefined();
-    const run = moveScriptFrame(kirby, at("downB", 11))!;
-    expect(moveMomentum(kirby, { move: "downB" }, run)).toEqual(run.state.momentum);
-    expect(moveSuperArmour(kirby, { move: "downB" }, run)).toBe(true);
+  it("take a script's own commands over the legacy move's (a compiled Stone with super armour)", () => {
+    const armoured: FighterDef = { ...kirby, moves: { ...kirby.moves, downB: { ...kirby.moves.downB!, superArmourFrames: [10, 48] } } };
+    expect(armoured.scripts?.downB).toBeUndefined();
+    const run = moveScriptFrame(armoured, at("downB", 29))!;
+    expect(run.state.momentum).not.toBeNull();
+    expect(moveMomentum(armoured, { move: "downB" }, run)).toEqual(run.state.momentum);
+    expect(moveSuperArmour(armoured, { move: "downB" }, run)).toBe(true);
   });
 });
 
@@ -338,6 +343,44 @@ describe("a box that cannot clank, and one that cannot rebound", () => {
     expect(foxHits).toEqual([]);
   });
 
+  // Fix round 2: SmashWiki "Pikachu (SSBU)/Forward smash"
+  // (https://www.ssbwiki.com/Pikachu_(SSBU)/Forward_smash, revision 1659944) marks the
+  // early and clean hits `clang=f rebound=f` and the late ones `rebound=f` alone, as
+  // `game_attacks4` sets them OFF and THRU.
+  it("tramples on Pikachu's forward-smash late hits (20-29), and passes through on its earlier ones (15-19)", () => {
+    const script = gameScriptFor(pikachu, "fsmash")!;
+    const kinds = new Map<number, string>();
+    for (let g = 15; g <= 29; g++) {
+      for (const hb of scriptHitboxes(runScript(script, g), "pikachu", script.motion, g, LEGACY_BONE_TABLE)) {
+        kinds.set(g, hb.transcendent === true ? "OFF" : hb.noRebound === true ? "THRU" : "ON");
+      }
+    }
+    expect([...kinds.entries()].filter(([g]) => g < 20).every(([, k]) => k === "OFF")).toBe(true);
+    expect([...kinds.entries()].filter(([g]) => g >= 20).map(([, k]) => k)).toEqual(Array<string>(10).fill("THRU"));
+  });
+
+  // Fix round 2: a trampling box that meets a projectile blocks nothing, as no
+  // fighter met it (the guard in `loseOrTrample`). Pikachu's forward smash, late hit
+  // (12%, THRU), meets Mario's Fireball (5%, ON) within 9% as the ball is thrown; the
+  // ball is gone, and the smash goes on to hit Mario on its next frame.
+  it("blocks nothing when it meets a projectile: Pikachu's smash goes through Mario's Fireball and hits Mario", () => {
+    let s = standing("pikachu", "mario", 0, 30);
+    s = { ...s, rules: { ...s.rules, oneOnOne: false } };
+    let prev: InputFrame[] = [0, 0];
+    let clankAt = -1;
+    let hitAt = -1;
+    for (let i = 0; i < 30; i++) {
+      const now = [i === 0 ? Btn.Right | Btn.Attack : 0, i === 3 ? Btn.Special : 0];
+      const out = step(s, now, { prevInputs: prev, ctx });
+      s = out.state;
+      prev = now;
+      if (clankAt < 0 && out.events.clanks.length > 0) clankAt = i;
+      if (hitAt < 0 && out.events.hits.some((h) => h.attacker === 0 && h.victim === 1)) hitAt = i;
+    }
+    expect(clankAt).toBe(19);
+    expect(hitAt).toBe(20);
+  });
+
   it("is what the legacy compile writes for a box that cannot rebound: THRU", () => {
     const box = { id: 0, startFrame: 2, endFrame: 3, x: fx(6), y: fx(6), radius: fx(4), damage: fx(10), angle: fx(45), baseKnockback: fx(40), knockbackGrowth: fx(100), noRebound: true };
     const script = gameScriptFor({ moves: { jab1: { slot: "jab1", name: "test", totalFrames: 10, hitboxes: [box] } } }, "jab1")!;
@@ -391,14 +434,15 @@ describe("Kirby's Stone", () => {
   };
   const toF = (n: number) => n / 4096;
   /** Down special on the first step, then `steps` steps; Kirby's hits, with the move frame each landed on. */
-  function stone(s0: GameState, steps: number, each?: (s: GameState, i: number) => void) {
+  function stone(s0: GameState, steps: number, each?: (s: GameState, i: number) => void, cancelAt = -1) {
     let s = s0;
     let prev: InputFrame[] = [0, 0];
     let landed = -1;
     const hits: { frame: number; damage: number; step: number; angle: number }[] = [];
     for (let i = 0; i < steps; i++) {
       each?.(s, i);
-      const now = [i === 0 ? Btn.Down | Btn.Special : 0, 0];
+      // Down special on the first step; the special button again on `cancelAt`, ending the stone.
+      const now = [i === 0 ? Btn.Down | Btn.Special : i === cancelAt ? Btn.Special : 0, 0];
       const out = step(s, now, { prevInputs: prev, ctx });
       s = out.state;
       prev = now;
@@ -421,8 +465,8 @@ describe("Kirby's Stone", () => {
       expect(hb.fixedKnockback ?? 0).toBe(0);
       expect(hb.hitlagMultiplier ?? fx(1)).toBe(fx(1));
     }
-    expect(kirby.moves.downB!.hitboxes.filter((hb) => hb.whileGrounded === false).map((hb) => [hb.startFrame, hb.endFrame])).toEqual([[29, 47]]);
-    expect(kirby.moves.downB!.landsAt).toBe(11);
+    expect(kirby.moves.downB!.hitboxes.filter((hb) => hb.whileGrounded === false).map((hb) => [hb.startFrame, hb.endFrame])).toEqual([[29, 46]]);
+    expect(kirby.moves.downB!.landing).toEqual({ at: 11, through: 46 });
   });
 
   it("starts its landing again on landing: the hit record of the fall is the fall's", () => {
@@ -449,20 +493,26 @@ describe("Kirby's Stone", () => {
   });
 
   it("dropped from 30, lands as a stone with its landing hit on the frame it lands", () => {
-    const { hits, landed } = stone(kirbyFirst(0, 4, 30), 60);
-    expect(landed).toBeGreaterThan(0);
-    // It lands long before the falling box's frame 29.
-    expect(landed).toBeLessThan(20);
+    // Mario beside him, past the falling box (radius 6.5), inside the landing hit's (6 out, radius 6).
+    const { hits, landed } = stone(kirbyFirst(0, 11, 30), 60);
+    // It falls as he would until its stone forms on 29 (fix round 2), and lands in it.
+    expect(landed).toBeGreaterThan(27);
     expect(hits).toHaveLength(1);
     expect(hits[0].step).toBe(landed);
     expect(hits[0].damage).toBeCloseTo(LANDING, 2);
   });
 
-  it("keeps no falling box live once it has landed: Mario walking up to it on frame 30 is not hit", () => {
-    // Mario far off for the landing; then beside the stone, standing, through frames 29-47.
-    const { hits } = stone(kirbyFirst(0, 60, 30), 60, (s, i) => {
-      if (i === 26) Object.assign(s.fighters[1], { x: fx(2), action: "stand", actionFrame: 0, vx: 0 });
-    });
+  it("keeps no falling box live once it has landed: Mario walking up to it is not hit, the stone held or ended", () => {
+    // Mario far off for the landing (step 29); then beside the stone, standing, as it
+    // holds and, ended by the button on step 52, as it plays its frames 29-59 out.
+    const { hits } = stone(
+      kirbyFirst(0, 60, 30),
+      100,
+      (s, i) => {
+        if (i === 34) Object.assign(s.fighters[1], { x: fx(2), action: "stand", actionFrame: 0, vx: 0 });
+      },
+      52,
+    );
     expect(hits).toEqual([]);
   });
 });
@@ -506,9 +556,26 @@ describe("Link's Spin Attack in the game", () => {
  * first box, every smash the game runs from its imported script. It holds on the
  * frame SmashWiki's "Charges between" starts, and after the release its first box
  * comes on the frame SmashWiki publishes: the charge freezes the timeline, it
- * neither skips nor repeats a frame of it.
+ * neither skips nor repeats a frame of it. Fix round 2 (ruling R-T13i): every
+ * legacy smash too, held on its published frame (`MoveDef.smashHold`), Mario's and
+ * Kirby's forward smashes and Pikachu's up smash (held by P5-R16) among them.
  */
 const RELEASES: readonly (readonly [string, MoveSlot, number, number, string])[] = [
+  // Legacy, `smashHold` (R-T13i).
+  ["mario", "fsmash", 5, 15, "Mario_(SSBU)/Forward_smash, revision 1956447"],
+  ["mario", "usmash", 6, 9, "Mario_(SSBU)/Up_smash, revision 2046199"],
+  ["donkeyKong", "fsmash", 14, 22, "Donkey_Kong_(SSBU)/Forward_smash, revision 1789698"],
+  ["donkeyKong", "usmash", 6, 14, "Donkey_Kong_(SSBU)/Up_smash, revision 1789530"],
+  ["donkeyKong", "dsmash", 2, 11, "Donkey_Kong_(SSBU)/Down_smash, revision 1789987"],
+  ["link", "fsmash", 9, 17, "Link_(SSBU)/Forward_smash/Hit_1, revision 1706143"],
+  ["link", "usmash", 5, 10, "Link_(SSBU)/Up_smash, revision 1657166"],
+  ["samus", "usmash", 6, 11, "Samus_(SSBU)/Up_smash, revision 1705188"],
+  ["kirby", "fsmash", 4, 13, "Kirby_(SSBU)/Forward_smash, revision 1978772"],
+  ["kirby", "usmash", 8, 12, "Kirby_(SSBU)/Up_smash, revision 1978773"],
+  ["kirby", "dsmash", 2, 7, "Kirby_(SSBU)/Down_smash, revision 1884636"],
+  ["fox", "dsmash", 2, 6, "Fox_(SSBU)/Down_smash, revision 1686405"],
+  ["pikachu", "usmash", 2, 10, "Pikachu_(SSBU)/Up_smash, revision 1686470"],
+  // Script-run, START_SMASH_HOLD − 1 (R-T13e).
   ["mario", "dsmash", 2, 5, "Mario_(SSBU)/Down_smash, revision 1693143"],
   ["pikachu", "fsmash", 9, 15, "Pikachu_(SSBU)/Forward_smash, revision 1659944"],
   ["pikachu", "dsmash", 2, 8, "Pikachu_(SSBU)/Down_smash, revision 1686473"],
@@ -526,12 +593,15 @@ describe("a held smash, from its release to its first box (https://www.ssbwiki.c
   const GAME = bakedContext(ctx, readBakeFromDisk());
   const DIR: Partial<Record<MoveSlot, Btn>> = { fsmash: Btn.Right, usmash: Btn.Up, dsmash: Btn.Down };
 
-  it("covers every smash the game runs from its imported script", () => {
-    const freed = FIGHTERS.flatMap((d) => {
-      const game = GAME.fighter(d.id);
-      return (["fsmash", "usmash", "dsmash"] as const).filter((slot) => game.scripts?.[slot] !== undefined).map((slot) => `${d.id} ${slot}`);
-    });
-    expect(freed.sort()).toEqual(RELEASES.map(([id, slot]) => `${id} ${slot}`).sort());
+  it("covers every smash the game runs, from its imported script or its legacy move", () => {
+    const all = FIGHTERS.flatMap((d) => (["fsmash", "usmash", "dsmash"] as const).filter((slot) => d.moves[slot]?.chargeable === true).map((slot) => `${d.id} ${slot}`));
+    expect(all).toHaveLength(24);
+    expect(all.sort()).toEqual(RELEASES.map(([id, slot]) => `${id} ${slot}`).sort());
+    // A legacy smash holds on its published frame; one that runs its script by its flag.
+    for (const [id, slot] of RELEASES) {
+      const game = GAME.fighter(id);
+      expect(game.moves[slot]!.smashHold !== undefined, `${id} ${slot}`).toBe(game.scripts?.[slot] === undefined);
+    }
   });
 
   it.each(RELEASES)("%s %s charges between %i and the next frame, and its first box comes on %i (%s)", (id, slot, chargeOn, firstBox) => {

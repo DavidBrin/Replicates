@@ -363,6 +363,10 @@ const legacy: FighterDef = {
       name: "Forward Smash",
       totalFrames: 47,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 5-6" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Mario (SSBU)/Forward smash",
+      // https://www.ssbwiki.com/Mario_(SSBU)/Forward_smash, revision 1956447).
+      smashHold: 5,
       hitboxes: [
         {
           // Lower id wins, and the *close* hit is the weak one — get too near
@@ -403,6 +407,10 @@ const legacy: FighterDef = {
       name: "Up Smash",
       totalFrames: 39,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 6-7" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Mario (SSBU)/Up smash",
+      // https://www.ssbwiki.com/Mario_(SSBU)/Up_smash, revision 2046199).
+      smashHold: 6,
       hitboxes: [
         {
           id: 0,

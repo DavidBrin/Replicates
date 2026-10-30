@@ -18,6 +18,7 @@ import { smashHoldFrame } from "../acmd/run";
 import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
 import { specialChargeMain } from "../specialCharge";
+import { stoneMain } from "../stone";
 import { reflectorMain, specialStallExec } from "../reflect";
 import { liftCargo } from "./cargo";
 import { releaseHeld, struggleInGrab } from "./grab";
@@ -54,6 +55,8 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   }
   // A special that loops while B is held (Plan 5, Task 9 fix round 1: Kirby's Inhale).
   if (f.action === "special" && move.holdLoop !== undefined) holdLoopMain(f, intent, move.holdLoop);
+  // A special that holds a stone (Plan 5, Task 13 fix round 2, R-T13j: Kirby's Stone).
+  if (f.action === "special" && move.stone !== undefined) stoneMain(f, intent, move.stone);
   // Charging a smash holds the animation on the frame before its script raises
   // START_SMASH_HOLD, else on the frame before its earliest hitbox goes live (`smashHoldFrame`,
   // ruling P5-R15), so nothing can be hit while it charges.
@@ -148,6 +151,8 @@ function clearSpecialMove(f: FighterState): void {
   f.combat.stalling = false;
   f.combat.reflectHold = 0;
   f.combat.counterDamage = 0;
+  f.combat.stoneFrames = 0;
+  f.combat.stoneTaken = 0;
 }
 
 export const STATUS_SPECIAL: FighterStatus = {

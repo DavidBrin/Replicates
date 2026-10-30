@@ -74,7 +74,8 @@ describe("the overlay over the 3D world (Plan 4, MAJOR 5)", () => {
       ...stateWith([null, null], [
         makeFighter({ port: 0, defId: "donkeyKong", x: fx(-10) }),
         // Kirby's Stone, mid-fall: the stone is drawn instead of him.
-        makeFighter({ port: 1, defId: "kirby", x: fx(10), grounded: false, action: "special", move: "downB", actionFrame: 20 }),
+        // Frame 35: the air's stone is 29-46 (Plan 5, Task 13 fix round 2).
+        makeFighter({ port: 1, defId: "kirby", x: fx(10), grounded: false, action: "special", move: "downB", actionFrame: 34 }),
       ]),
       fighters: [dk, kirby],
     };

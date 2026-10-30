@@ -98,6 +98,7 @@ import {
   spawnProjectile,
 } from "./projectile";
 import { chargedHitbox } from "./specialCharge";
+import { stoneOf } from "./stone";
 import { reflectProjectiles } from "./reflect";
 import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import { pinHeldFighters, ridesCaptor } from "./held";
@@ -139,6 +140,8 @@ import {
   chargeMultiplier,
   grabHoldFrames,
   grabLedge,
+  damageArmourHolds,
+  damageArmourOf,
   hasSuperArmour,
   heavyArmourOf,
   interpretInput,
@@ -1376,7 +1379,11 @@ function clankDamage(s: GameState, c: Candidate): number {
  *   special moves"). Not modelled: the freeze frames it takes first;
  * - a fighter's box that cannot rebound goes on, its hit on `other`'s fighter
  *   blocked; one that met a projectile blocks nothing, as no fighter met it
- *   (UNVERIFIED);
+ *   (UNVERIFIED). Two that cannot rebound, within 9% of each other, each go on and
+ *   each block the other's hit. UNVERIFIED (Task 13 fix round 2): "Priority" says
+ *   only that "two moves that cannot rebound that are used against each other are
+ *   more prone to damaging both characters instead of cancelling out their
+ *   hitboxes", which names no blocking either way;
  * - any other fighter's box loses its move: the rebound (`loseClank`).
  */
 function loseOrTrample(
@@ -2614,6 +2621,40 @@ function applyHit(
     return;
   }
 
+  /* ---- the stone path ---- */
+  // A fighter that is a stone (`MoveDef.stone`; Plan 5, Task 13 fix round 2, ruling
+  // R-T13j: Kirby's Stone, `stone.ts`) takes no damage and no knockback, the hit's
+  // damage before the 1v1 bonus counted against its HP, and both fighters freeze
+  // for its hitlag × `blockedHitlag` (SmashWiki "Kirby (SSBU)/Down special",
+  // https://www.ssbwiki.com/Kirby_(SSBU)/Down_special, revision 2041256: "Stone HP
+  // 25", "Hitlag multiplier for blocked attacks 1.2"; SmashWiki "Stone",
+  // https://www.ssbwiki.com/Stone, revision 1971356: "taking no damage while
+  // transformed"). The hit that takes it to its HP breaks it: "Kirby is knocked
+  // out of it and takes 0.5× damage from the attack that caused it to break",
+  // "with the deciding move dealing half damage, but still full knockback" (so
+  // the knockback below reads the hit's whole damage). UNVERIFIED: that the HP
+  // counts the damage before the 1v1 bonus, as damage-based armour does, and that
+  // exactly 25 breaks it ("fully depleted"; the overview's "up to 25% damage in
+  // total" would let exactly 25 through). A box that forces its reaction goes
+  // through it, as through armour: SmashWiki "Armor" (https://www.ssbwiki.com/Armor,
+  // revision 2065996) calls the Stone's HP "Cumulative damage-based armor", and
+  // Marth's counterattack ignores "most kinds of armor" (UNVERIFIED for the Stone).
+  const stone = hb.forceReaction === true ? null : stoneOf(victim, victimDef);
+  if (stone !== null) {
+    victim.combat.stoneTaken += takenBefore1v1;
+    if (victim.combat.stoneTaken < stone.hp) {
+      const lag = computeHitlag(lagDamage, {
+        electric: hb.effect === "electric",
+        moveMultiplier: mul(hb.hitlagMultiplier ?? ONE, stone.blockedHitlag),
+      });
+      freezeVictim(victim, lag);
+      if (!fromProjectile) freezeFighter(attacker, lag);
+      events.hits.push({ attacker: attacker.port, victim: victim.port, damage: 0, x: c.x, y: c.y, contactX: contact.x, contactY: contact.y, knockback: 0, angle: 0, hitboxId: hb.id });
+      return;
+    }
+    damage = mul(damage, stone.breakDamage);
+  }
+
   /* ---- the damage path ---- */
   // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback): p is "counted after
   // the attack's damage is added", the damage before the 1v1 bonus (R-7b-b).
@@ -2670,6 +2711,17 @@ function applyHit(
     });
   };
   if (hasSuperArmour(victim, victimDef) && hb.forceReaction !== true) {
+    armoured();
+    return;
+  }
+  // Damage-based armour (`MoveDef.damageArmour`; Plan 5, Task 13 fix round 2, ruling
+  // R-T13j: Kirby's aerial Stone): a hit of no more damage than its threshold, before
+  // the 1v1 bonus, is taken as super armour takes one; each hit alone. SmashWiki
+  // "Armor" (https://www.ssbwiki.com/Armor, revision 2065996), "Damage-based armor".
+  // UNVERIFIED: that a box forcing its reaction goes through it, as through super
+  // armour.
+  const threshold = damageArmourOf(victim, victimDef);
+  if (threshold !== null && damageArmourHolds(threshold, takenBefore1v1) && hb.forceReaction !== true) {
     armoured();
     return;
   }

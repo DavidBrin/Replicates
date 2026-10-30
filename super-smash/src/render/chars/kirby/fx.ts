@@ -42,9 +42,9 @@
  * front of him rather than straight up.
  */
 
+import { stoneWindow } from "@/engine/stone";
 import {
   NOTHING,
-  armourWindow,
   circle,
   crescent,
   glow,
@@ -771,10 +771,18 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * dust *behind* a boulder is a cloud in the distance and dust in front of it
    * is an impact — and the impact is an eighteen-percent hitbox that otherwise
    * arrives in silence.
+   *
+   * He is a rock on the frames of the stone's window for where he is (the air's
+   * 29-46, the ground's 11-28; Plan 5, Task 13 fix round 2, `StoneDef`), the move
+   * holding on its last frame for as long as the stone lasts. The change puffs
+   * on the window's first frames and on the stone's last (`stoneFrames` at its
+   * `maxFrames`); the landing dust is the ground's, from its landing hit.
    */
-  downB: ({ ctx, def, x, y, u, frame, over }) => {
-    const armour = armourWindow(def, "downB");
-    if (!armour || frame < armour[0] || frame > armour[1]) return NOTHING;
+  downB: ({ ctx, f, def, x, y, u, frame, over }) => {
+    const stone = def.moves.downB?.stone;
+    if (!stone) return NOTHING;
+    const [from, to] = stoneWindow({ grounded: f.grounded === true }, stone);
+    if (frame < from || frame > to) return NOTHING;
 
     // Eleven units across against his 6.9-unit ball, standing 7.2 against his
     // 6.6 — half again his width and barely taller, which is the proportion
@@ -786,12 +794,12 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     // Three frames each way, not seven. A burst that outlasts the change hides
     // the thing it is announcing: at seven frames the rock washed to near-white
     // on both ends of the move and a critic could not see what he turned into.
-    const born = 1 - ramp(frame, armour[0], armour[0] + 3);
-    const dies = ramp(frame, armour[1] - 3, armour[1]);
+    const born = 1 - ramp(frame, from, from + 3);
+    const dies = (f.combat?.stoneFrames ?? 0) >= stone.maxFrames ? 1 : 0;
     const flash = Math.max(born, dies);
     // It arrives at size — a rock that grows is a balloon — but the first two
     // frames are squat and wide, which is the change landing.
-    const pop = 1 - ramp(frame, armour[0], armour[0] + 3);
+    const pop = 1 - ramp(frame, from, from + 3);
 
     /** The outline, anticlockwise from the bottom-left. `y` runs up from the floor. */
     const PROFILE: readonly (readonly [number, number])[] = [
@@ -891,10 +899,10 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
         }
         glow(ctx, x, y - h * 0.5, w * 1.5 * (0.6 + flash * 0.5), withAlpha("#FFFFFF", 0.42 * flash));
       }
-      // The impact, once the drop has had time to land: dust rolling outward
+      // The impact, the ground's stone from its landing hit: dust rolling outward
       // along the floor and four chips thrown clear of it.
-      if (frame > armour[0] + 16 && frame < armour[0] + 30) {
-        const k = ramp(frame, armour[0] + 16, armour[0] + 30);
+      if (f.grounded === true && frame < from + 14) {
+        const k = ramp(frame, from, from + 14);
         // The flash of contact, on the two frames either side of it.
         if (k < 0.2) {
           glow(ctx, x, y, w * 2.4 * (0.5 + k * 3), withAlpha("#FFFFFF", 0.7 * (1 - k * 5)));

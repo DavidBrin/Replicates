@@ -529,6 +529,28 @@ export interface InhaleDef {
  * `fallSpeed`, `airFriction`) run with the stop, and on every aerial use when
  * `everyUse` is set.
  */
+/**
+ * A transformation a move holds (Plan 5, Task 13 fix round 2, ruling R-T13j:
+ * Kirby's Stone). On the move frames of its window for where the fighter is (the
+ * air's or the ground's), the fighter is the transformation: a hit deals it no
+ * damage and no knockback, and freezes both fighters `blockedHitlag` times as
+ * long, its damage (before the 1v1 multiplier) counted against `hp`; the hit that
+ * takes it to `hp` breaks it, dealing `breakDamage` times its damage with its full
+ * knockback. Grabs go through. Past its window's last frame the move holds there,
+ * until the special button is pressed again after `minFrames` frames of it, or
+ * after `maxFrames`. State: `CombatState.stoneFrames` and `stoneTaken`. All Q12
+ * but the frames.
+ */
+export interface StoneDef {
+  readonly air: readonly [number, number];
+  readonly ground: readonly [number, number];
+  readonly minFrames: number;
+  readonly maxFrames: number;
+  readonly hp: number;
+  readonly breakDamage: number;
+  readonly blockedHitlag: number;
+}
+
 export interface StallDef {
   /** The stop: horizontal speed multiplier on its first frame (Cape: 1 / 2.5). */
   readonly startX: number;
@@ -685,6 +707,12 @@ export interface MoveDef {
   readonly autoCancelAfter?: number;
   /** Smash attacks may be held to charge. */
   readonly chargeable?: boolean;
+  /**
+   * The game frame a held smash charges on: the first of SmashWiki's "Charges
+   * between" (Plan 5, Task 13 fix round 2, ruling R-T13i). `smashHoldFrame` reads it
+   * before any other rule. Set on every smash that runs its legacy move.
+   */
+  readonly smashHold?: number;
   /** A special that charges (Plan 5): on B, held or stored. See `SpecialCharge`. */
   readonly specialCharge?: SpecialCharge;
   /** A reflector this move raises (Plan 5). */
@@ -720,12 +748,24 @@ export interface MoveDef {
    */
   readonly scriptLead?: number;
   /**
-   * A landing does not end the move: it goes on from this move frame, on its
-   * grounded timeline, where a special would otherwise land into `land` (Plan 5,
-   * Task 13 and its fix round 1, ruling R-T13h: Kirby's Stone lands as a stone,
-   * into its landing hit, `whileGrounded` boxes on this frame; `onLanded`).
+   * A landing does not end the move (Plan 5, Task 13; `onLanded`): a special
+   * would otherwise land into `land`. Landing on or before move frame `through`, it
+   * goes on from frame `at` of its grounded timeline, or from where it is if that
+   * is earlier; landing later, it plays on from where it is. Kirby's Stone lands
+   * into its landing hit (fix rounds 1 and 2, rulings R-T13h and R-T13k), and
+   * after its stone has ended it lands as it is.
    */
-  readonly landsAt?: number;
+  readonly landing?: { readonly at: number; readonly through: number };
+  /** A transformation the move holds (Plan 5, Task 13 fix round 2, ruling R-T13j: Kirby's Stone). See `StoneDef`. */
+  readonly stone?: StoneDef;
+  /**
+   * Damage-based armour on a window of the move (Plan 5, Task 13 fix round 2,
+   * ruling R-T13j): a hit dealing no more than `threshold` (Q12, the damage before
+   * the 1v1 multiplier) lands its damage and its hitlag and launches nothing; a
+   * harder one launches as usual. Each hit alone (non-cumulative). Move frames
+   * `from`..`to`; `whileGrounded` false for the air alone, true for the ground.
+   */
+  readonly damageArmour?: { readonly from: number; readonly to: number; readonly threshold: number; readonly whileGrounded?: boolean };
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
   /**

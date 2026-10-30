@@ -239,6 +239,10 @@ const legacy: FighterDef = {
       name: "Forward Smash",
       totalFrames: 54,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 14-15" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Donkey Kong (SSBU)/Forward smash",
+      // https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Forward_smash, revision 1789698).
+      smashHold: 14,
       // Arm and head are intangible on frames 20-26 — the swing beats what it
       // collides with. No field on `Hitbox` carries that; it is engine work
       // keyed off this slot.
@@ -282,6 +286,10 @@ const legacy: FighterDef = {
       name: "Up Smash",
       totalFrames: 49,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 6-7" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Donkey Kong (SSBU)/Up smash",
+      // https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_smash, revision 1789530).
+      smashHold: 6,
       hitboxes: [
         {
           // Intangible frames 12-15, so it beats an aerial approach outright.
@@ -306,6 +314,10 @@ const legacy: FighterDef = {
       name: "Down Smash",
       totalFrames: 55,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 2-3" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Donkey Kong (SSBU)/Down smash",
+      // https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Down_smash, revision 1789987).
+      smashHold: 2,
       hitboxes: [
         {
           id: 0,

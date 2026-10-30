@@ -742,6 +742,14 @@ describe("engine golden trace", () => {
   // arrow clank, and a Charge Shot flies out its life (`PROJECTILE_PATHS`), with no
   // hit, shield hit or KO. So now: hits 34/22/18/20, 6, 0, 1, 4, 1 and 0; shield hits
   // 2/1/0/0, 3, 0, 0, 0, 0 and 0; KOs 1/2/1/1, 1, 2, 0, 0, 0 and 0.
+  // Plan 5 Task 13's fix round 2 (ruling R-T13i: every legacy smash holds on its
+  // published "Charges between"; R-T13j: Kirby's Stone on its published timeline,
+  // its stone, its armour and its hold; R-T13k: a Stone landing early plays on to 11)
+  // moved only kirby-marth, from the 2401-2500 sample: Kirby's up smash on 2421 holds
+  // on 8, not 11. Hits 18, shield hits 0 and KOs 0 there (were 20, 0 and 1: Marth's
+  // KO by a hit on 2729 no longer comes). No golden match uses the Stone. The other
+  // nine are byte-identical. So now: hits 34/22/18/18, 6, 0, 1, 4, 1 and 0; shield
+  // hits 2/1/0/0, 3, 0, 0, 0, 0 and 0; KOs 1/2/1/0, 1, 2, 0, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

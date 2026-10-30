@@ -320,6 +320,10 @@ const legacy: FighterDef = {
       name: "Forward Smash",
       totalFrames: 47,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 4-5" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Kirby (SSBU)/Forward smash",
+      // https://www.ssbwiki.com/Kirby_(SSBU)/Forward_smash, revision 1978772).
+      smashHold: 4,
       hitboxes: [
         {
           id: 0,
@@ -355,6 +359,10 @@ const legacy: FighterDef = {
       name: "Up Smash",
       totalFrames: 45,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 8-9" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Kirby (SSBU)/Up smash",
+      // https://www.ssbwiki.com/Kirby_(SSBU)/Up_smash, revision 1978773).
+      smashHold: 8,
       hitboxes: [
         {
           id: 0,
@@ -400,6 +408,13 @@ const legacy: FighterDef = {
       name: "Down Smash",
       totalFrames: 50,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 2-3" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Kirby (SSBU)/Down smash",
+      // https://www.ssbwiki.com/Kirby_(SSBU)/Down_smash, revision 1884636).
+      // Its `game_attacklw4` raises START_SMASH_HOLD on game frame 2 (motion rate 0.25
+      // before its first frame(), R-T13d), so the script rule would hold on 1: the
+      // published 2 is the one held.
+      smashHold: 2,
       hitboxes: [
         {
           // Angle 29 both sides — a semi-spike split that covers both ledges.
@@ -940,44 +955,53 @@ const legacy: FighterDef = {
     downB: {
       slot: "downB",
       name: "Stone",
-      totalFrames: 60,
-      superArmourFrames: [10, 48],
-      momentum: [{ frame: 12, x: fx(0), y: fx(-5.4), hold: 34 }],
-      // He turns into a rock and drops. The armour is the point: he is
-      // invulnerable for the whole transformation, which is why it works as a
-      // recovery mixup and a get-off-me button rather than as an attack.
-      //
-      // A landing does not end it (Plan 5, Task 13, the Task 5 review's carry: one
-      // dropped from 30 landed into `land` on frame 18, before its box came out on
-      // 29). SmashWiki "Kirby (SSBU)/Down special"
-      // (https://www.ssbwiki.com/Kirby_(SSBU)/Down_special, revision 2041256): "The
-      // stone transformation (and subsequent protection) lasts a minimum of 18
-      // frames and a maximum of 150 frames, depending on when the special move
-      // button is pressed again". Its fix round 1 (ruling R-T13h) gives it the
-      // page's landing hit: used on the ground, "Landing hit 11"; landed from the
-      // air, it lands into that same frame (`landsAt`), and goes on as the grounded
-      // stone does to its end. The falling box is the air's alone (`whileGrounded:
-      // false`), so it never comes out on the ground. Not modelled: the 150-frame
-      // hold and its cancel, and the aerial version's own timings (its 25% armour
-      // on 19-28, interruptible 78).
-      landsAt: 11,
+      // He turns into a rock and drops (Plan 5, Task 13 fix round 2, ruling R-T13j:
+      // its published timeline). SmashWiki "Kirby (SSBU)/Down special"
+      // (https://www.ssbwiki.com/Kirby_(SSBU)/Down_special, revision 2041256), for
+      // the minimum stone duration:
+      // - in the air: vulnerable 1-18, "Damage-based armor 19-28" ("The move's
+      //   damage-based armor has a threshold of 25%"), "Falling hit 29-46", "Stone
+      //   protection 29-46", "Interruptible (from cancel) 78 (32)";
+      // - on the ground: "Landing hit 11", "Stone protection 11-28", "Interruptible
+      //   (from cancel) 60 (32)";
+      // - "Maximum stone duration 150 frames", "Period before the move can be
+      //   canceled 18 frames", "Stone HP 25", "Hitlag multiplier for blocked attacks
+      //   1.2", "Fall speed 4.5"; "If the move's HP is fully depleted, Kirby is
+      //   knocked out of it and takes 0.5× damage from the attack that caused it to
+      //   break"; "he can still be grabbed".
+      // So: interruptible on 60 on the ground and 78 in the air, the stone held on
+      // its window's last frame from 18 to 150 frames (`stone`, `stone.ts`). A
+      // landing does not end it (the Task 5 review's carry): landing before its
+      // stone has ended, it lands into the landing hit, 11 (`landing`, fix rounds 1
+      // and 2, R-T13h and R-T13k); after, it lands as it is (UNVERIFIED).
+      // UNVERIFIED: that the stone falls from the frame it forms, 29 (before it he
+      // falls as he would), straight down; nothing publishes how he moves before.
+      // Not modelled: sliding down a slope (the stages have none).
+      totalFrames: 59,
+      aerialTotalFrames: 77,
+      momentum: [{ frame: 29, x: fx(0), y: fx(-4.5), hold: 18 }],
+      stone: { air: [29, 46], ground: [11, 28], minFrames: 18, maxFrames: 150, hp: fx(25), breakDamage: fx(0.5), blockedHitlag: fx(1.2) },
+      damageArmour: { from: 19, to: 28, threshold: fx(25), whileGrounded: false },
+      landing: { at: 11, through: 46 },
       hitboxes: [
         {
+          // The falling hit (the page's "Falling" table: 18.0%, 70°, BK 69, KS 76,
+          // FKV 0, radius 6.5 on `top` at y 2.0, hitlag ×0.7, `clang=f rebound=f`),
+          // the air's alone (`whileGrounded: false`), on 29-46. rubendal 13.0.1
+          // `game_specialairlw` (not imported) id 0: `ATTACK_SETOFF_KIND_OFF`, as
+          // `game_speciallw`'s landing boxes are (Plan 5, Task 13c).
           id: 0,
           startFrame: 29,
-          endFrame: 47,
+          endFrame: 46,
           x: fx(0),
           y: fx(2.0),
-          radius: fx(4.0),
+          radius: fx(6.5),
           damage: fx(18.0),
           angle: fx(70),
           baseKnockback: fx(69),
           knockbackGrowth: fx(76),
+          hitlagMultiplier: fx(0.7),
           whileGrounded: false,
-          // The falling hit, rubendal 13.0.1 `game_specialairlw` (not imported) id 0:
-          // `ATTACK_SETOFF_KIND_OFF`, as
-          // `game_speciallw`'s landing boxes are (SmashWiki "Kirby (SSBU)/Down special":
-          // `clang=f`; Plan 5, Task 13c).
           transcendent: true,
         },
         // The landing hit, one frame, a box each side (the page's "Landing" table:

@@ -301,6 +301,10 @@ const legacy: FighterDef = {
       name: "Up Smash",
       totalFrames: 44,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 2-3" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Pikachu (SSBU)/Up smash",
+      // https://www.ssbwiki.com/Pikachu_(SSBU)/Up_smash, revision 1686470).
+      smashHold: 2,
       hitboxes: [
         {
           id: 0,

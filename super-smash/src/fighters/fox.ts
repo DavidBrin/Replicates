@@ -356,6 +356,10 @@ const legacy: FighterDef = {
       name: "Down Smash",
       totalFrames: 52,
       chargeable: true,
+      // Held on the published first frame of its "Charges between 2-3" (Plan 5,
+      // Task 13 fix round 2, ruling R-T13i; SmashWiki "Fox (SSBU)/Down smash",
+      // https://www.ssbwiki.com/Fox_(SSBU)/Down_smash, revision 1686405).
+      smashHold: 2,
       hitboxes: [
         {
           // 25 degrees — a semi-spike that sends them offstage rather than up.

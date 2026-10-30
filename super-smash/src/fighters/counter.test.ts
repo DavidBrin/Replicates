@@ -280,9 +280,10 @@ describe("the counterattack's damage: ×1.2, at least 8%, at most 50%", () => {
   });
 
   it("returns a charged smash with its charge: the caught damage is the box's with the smash's multiplier", () => {
-    // Mario holds his forward smash 17 frames (Attack held to step 30) and lets it
-    // go into the counter; the fist alone reaches the bubble at 16 apart.
-    const { states, events } = run(duel("mario", 16), 40, (i) => [
+    // Mario holds his forward smash (Attack held to step 30) from its published hold
+    // on frame 5 (Plan 5, Task 13 fix round 2) and lets it go into the counter, its
+    // box out 10 frames later; the fist alone reaches the bubble at 16 apart.
+    const { states, events } = run(duel("mario", 16), 60, (i) => [
       i === 0 ? Btn.Right : i === 1 ? Btn.Right | Btn.Attack : i <= 30 ? Btn.Attack : 0,
       i === 21 ? COUNTER : 0,
     ]);
@@ -780,13 +781,18 @@ describe("fix round 1: the aerial Counter (SmashWiki Marth (SSBU)/Down special, 
 });
 
 describe("fix round 1: the riposte goes through armour (SmashWiki: it ignores \"most kinds of armor\")", () => {
-  /** Kirby in his Stone (super armour 10-48) beside Marth's riposte, one frame from its cut. */
+  /**
+   * Kirby in his Stone beside Marth's riposte, one frame from its cut: on the ground
+   * on frame 21, inside its stone (11-28), formed (Plan 5, Task 13 fix round 2: the
+   * Stone's HP is cumulative damage-based armour, SmashWiki "Armor").
+   */
   function stone(marthDef: FighterDef = marth) {
     const s = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "marth" }], RULES, 5);
     s.fighters.forEach((f, i) =>
       Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? -5 : 5), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }),
     );
     Object.assign(s.fighters[0], { action: "special", move: "downB", actionFrame: 20 });
+    s.fighters[0].combat.stoneFrames = 10;
     Object.assign(s.fighters[1], { action: "special", move: "counterAttack", actionFrame: 3 });
     s.fighters[1].combat.counterDamage = fx(12);
     const ctx: SimContext = { ...registryContext, fighter: (id) => (id === "marth" ? marthDef : registryContext.fighter(id)) };
@@ -806,6 +812,39 @@ describe("fix round 1: the riposte goes through armour (SmashWiki: it ignores \"
     const { states, events } = stone(plain);
     expect(events[0].hits.find((h) => h.attacker === 1)!.knockback).toBe(0);
     expect(states[0].fighters[0]).toMatchObject({ action: "special", move: "downB" });
+  });
+
+  /**
+   * Kirby in the air on frame 22 of his Stone, inside its damage-based armour
+   * (19-28, a threshold of 25%; Plan 5, Task 13 fix round 2), beside the riposte
+   * one frame from its cut: 12% countered is under the threshold.
+   */
+  function aerialArmour(marthDef: FighterDef = marth) {
+    const s = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "marth" }], RULES, 5);
+    s.fighters.forEach((f, i) =>
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? -5 : 5), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }),
+    );
+    Object.assign(s.fighters[0], { action: "special", move: "downB", actionFrame: 21, grounded: false, platform: -1, y: fx(4), vx: 0, vy: 0 });
+    Object.assign(s.fighters[1], { action: "special", move: "counterAttack", actionFrame: 3 });
+    s.fighters[1].combat.counterDamage = fx(12);
+    const ctx: SimContext = { ...registryContext, fighter: (id) => (id === "marth" ? marthDef : registryContext.fighter(id)) };
+    return run(s, 2, () => [0, 0], ctx);
+  }
+
+  it("launches a Stone in its aerial damage-based armour", () => {
+    const { states, events } = aerialArmour();
+    expect(events[0].hits.find((h) => h.attacker === 1)!.knockback).toBeGreaterThan(0);
+    expect(states[0].fighters[0].action).not.toBe("special");
+  });
+
+  it("where the same boxes without it are taken by that armour (the scene's control)", () => {
+    const ca = marth.moves.counterAttack!;
+    const plain: FighterDef = { ...marth, moves: { ...marth.moves, counterAttack: { ...ca, hitboxes: ca.hitboxes.map((h) => ({ ...h, forceReaction: false })) } } };
+    const { states, events } = aerialArmour(plain);
+    const hit = events[0].hits.find((h) => h.attacker === 1)!;
+    expect(hit.knockback).toBe(0);
+    expect(states[0].fighters[0]).toMatchObject({ action: "special", move: "downB", grounded: false });
+    expect(states[0].fighters[0].damage).toBeGreaterThan(0);
   });
 });
 

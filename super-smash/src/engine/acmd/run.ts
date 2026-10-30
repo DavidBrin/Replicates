@@ -98,8 +98,10 @@ export function moveSpawns(def: Pick<FighterDef, "moves">, f: Pick<FighterState,
 
 /**
  * The `actionFrame` a charging smash holds on (ruling P5-R15, one rule for every
- * reader: `attackMain` and the renderer's `MoveTiming.chargeHold`): the game
- * frame before the one its script raises
+ * reader: `attackMain` and the renderer's `MoveTiming.chargeHold`): its published
+ * hold frame where the move gives one (`MoveDef.smashHold`, Task 13 fix round 2,
+ * ruling R-T13i: every smash that runs its legacy move), else the game frame
+ * before the one its script raises
  * `FIGHTER_STATUS_ATTACK_FLAG_START_SMASH_HOLD` on (Task 13 fix round 1, ruling
  * R-T13e: SmashWiki's "Charges between" is flag − 1 to flag on every page
  * checked, e.g. "Pikachu (SSBU)/Forward smash",
@@ -111,6 +113,8 @@ export function moveSpawns(def: Pick<FighterDef, "moves">, f: Pick<FighterState,
  */
 export function smashHoldFrame(def: Pick<FighterDef, "moves" | "scripts">, f: Pick<FighterState, "move">): number {
   if (f.move === null) return 1;
+  const published = def.moves[f.move]?.smashHold;
+  if (published !== undefined) return Math.max(1, actionFrameOf(published));
   const script = gameScriptFor(def, f.move);
   if (script !== null) {
     const { commands, fire } = scheduleOf(script);

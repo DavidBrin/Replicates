@@ -112,11 +112,17 @@ describe("Kirby's Stone is a stone", () => {
   it("falls markedly faster than Kirby otherwise does", () => {
     // Against his own fast fall, not against a constant: the claim is that the
     // rock is heavy, and "heavy" only means anything relative to the puffball.
-    // Twenty frames, which is short enough that neither run has reached the
-    // ground — a comparison that ends with both of them stopped on the floor
-    // measures the floor, not the fall.
-    const fastFalling = run(airborne("kirby"), Btn.Down, 20);
-    const stone = run(airborne("kirby"), Btn.Down | Btn.Special, 20);
+    // 45 frames from 120 up, which is short enough that neither run has reached
+    // the ground — a comparison that ends with both of them stopped on the floor
+    // measures the floor, not the fall. The stone forms, and falls, from its frame
+    // 29 (Plan 5, Task 13 fix round 2: SmashWiki's "Fall speed 4.5").
+    const high = () => {
+      const s = airborne("kirby");
+      s.fighters[0].y = fx(120);
+      return s;
+    };
+    const fastFalling = run(high(), Btn.Down, 45);
+    const stone = run(high(), Btn.Down | Btn.Special, 45);
 
     // Terminal speed, not distance travelled: distance mixes in however long
     // the transformation takes, so it understates the difference and would
@@ -124,7 +130,7 @@ describe("Kirby's Stone is a stone", () => {
     const fastest = (frames: FighterState[]) => Math.min(...frames.map((f) => toFloat(f.vy)));
     expect(fastest(stone)).toBeLessThan(fastest(fastFalling) * 1.8);
 
-    const dropOf = (frames: FighterState[]) => 70 - Math.min(...frames.map((f) => toFloat(f.y)));
+    const dropOf = (frames: FighterState[]) => 120 - Math.min(...frames.map((f) => toFloat(f.y)));
     expect(dropOf(stone)).toBeGreaterThan(dropOf(fastFalling));
   });
 
@@ -145,16 +151,19 @@ describe("Kirby's Stone is a stone", () => {
   });
 
   it("shrugs off a hit instead of being launched by it", () => {
-    // The armour is the move. Kirby drops through the middle of a fight and the
-    // point is that nothing stops him — he takes the damage and keeps going.
+    // The stone is the move. Kirby drops through the middle of a fight and the
+    // point is that nothing stops him: it takes the hit (no damage, SmashWiki
+    // "Stone": "taking no damage while transformed") and keeps going (Plan 5, Task
+    // 13 fix round 2).
     const state = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "mario" }], RULES, 7);
     const kirby = state.fighters[0];
     const mario = state.fighters[1];
 
     kirby.action = "special";
     kirby.move = "downB";
-    // Inside the armour window declared on the move.
+    // Inside the stone's window on the ground (11-28), the stone formed.
     kirby.actionFrame = 20;
+    kirby.combat.stoneFrames = 10;
     kirby.grounded = true;
     kirby.x = fx(0);
     kirby.y = 0;
@@ -177,7 +186,8 @@ describe("Kirby's Stone is a stone", () => {
     const hitKirby = after.state.fighters[0];
 
     expect(after.events.hits.length, "the hit should still land").toBeGreaterThan(0);
-    expect(toFloat(hitKirby.damage), "and still hurt").toBeGreaterThan(0);
+    expect(toFloat(hitKirby.damage), "and not hurt").toBe(0);
+    expect(hitKirby.combat.stoneTaken, "but count against the stone").toBeGreaterThan(0);
     // But not move him: no launch, no hitstun, still doing his move.
     expect(hitKirby.hitstun).toBe(0);
     expect(hitKirby.action).toBe("special");

@@ -220,6 +220,15 @@ export interface CombatState {
    * its own end, a hit, a grab, a ledge or a KO.
    */
   landingCliffStop: boolean;
+  /**
+   * Plan 5, Task 13 fix round 2 (ruling R-T13j): frames the current move's stone
+   * (`MoveDef.stone`) has been held, its `maxFrames` once it has ended; 0 before
+   * it forms. Per move, as `reflectHold`: cleared when the special starts and when
+   * it ends, however it ends (its own end, a hit, a grab, a ledge or a KO).
+   */
+  stoneFrames: number;
+  /** Plan 5, Task 13 fix round 2: the damage (Q12) the current move's stone has blocked, against its `hp`. Per move, as `stoneFrames`. */
+  stoneTaken: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -264,6 +273,8 @@ export function emptyCombat(): CombatState {
     footstools: 0,
     footstoolFrame: 0,
     landingCliffStop: false,
+    stoneFrames: 0,
+    stoneTaken: 0,
   };
 }
 
@@ -306,5 +317,7 @@ export function cloneCombat(c: CombatState): CombatState {
     footstools: c.footstools,
     footstoolFrame: c.footstoolFrame,
     landingCliffStop: c.landingCliffStop,
+    stoneFrames: c.stoneFrames,
+    stoneTaken: c.stoneTaken,
   };
 }

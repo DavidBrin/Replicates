@@ -1241,12 +1241,16 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   },
 
   /**
-   * Stone. `fx.ts` replaces the figure with the rock for the armour window
-   * (frames 10–48), so this clip only has to sell the ten frames before the
-   * transformation and the eleven after it: a compression down into the change,
-   * and a shake-it-off on the way out.
-   * total 60, firstActive 28 — but the figure is hidden across that, so the
-   * `strike` key is only ever seen if the armour window ever moves.
+   * Stone. `fx.ts` replaces the figure with the rock for the stone's window
+   * (Plan 5, Task 13 fix round 2: the ground's 11-28, the air's 29-46, held on its
+   * last frame while the stone lasts), so this clip only has to sell the frames
+   * before the transformation and those after it: a compression down into the
+   * change, and a shake-it-off on the way out.
+   * Total 59 (77 in the air, played on the clip's last pose past 59), firstActive
+   * 11, the ground's landing hit: the `strike` key lands on the ground's change,
+   * hidden under the rock. In the air the clip has run past its strike into the
+   * shake-off by the time the rock covers him on 29: one clip for two timelines
+   * (an air variant is carried, with the other aerial-length motions).
    */
   downB: {
     loop: false,

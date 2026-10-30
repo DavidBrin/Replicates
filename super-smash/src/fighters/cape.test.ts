@@ -310,14 +310,18 @@ describe("the Cape's turn lands with the hit, whatever the hit does", () => {
     expect(fox_.facing).toBe(1);
   });
 
-  it("turns an armoured one (Kirby's Stone), UNVERIFIED", () => {
-    // Kirby's Stone two frames after the Cape: it is in its armour (frame 10) when the
-    // Cape hits on 12, a frame before its own landing hit comes out on its frame 11
-    // (Plan 5, Task 13 fix round 1, which gave it one).
-    const { states, events } = run(duel(10, "kirby"), 20, cape, (i) => (i === 2 ? Btn.Down | Btn.Special : 0));
+  it("turns an armoured one (Kirby's aerial Stone), UNVERIFIED", () => {
+    // Kirby's Stone, used 20 above the floor: on its frames 19-28 in the air it has
+    // 25% damage-based armour (Plan 5, Task 13 fix round 2), which the Cape's 7%
+    // does not break. Mario's Cape, pressed on step 9, hits him there.
+    const s = duel(10, "kirby");
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(20), vy: 0 });
+    const { states, events } = run(s, 24, (i) => (i === 9 ? Btn.Right | Btn.Special : 0), (i) => (i === 0 ? Btn.Down | Btn.Special : 0));
     const at = events.findIndex((e) => e.hits.some((h) => h.attacker === 0));
-    expect(states[at].fighters[1].actionFrame + 1).toBe(10);
     const kirby = states[at].fighters[1];
+    expect(kirby.grounded).toBe(false);
+    expect(kirby.actionFrame + 1).toBeGreaterThanOrEqual(19);
+    expect(kirby.actionFrame + 1).toBeLessThanOrEqual(28);
     expect([kirby.action, kirby.move]).toEqual(["special", "downB"]);
     expect(toFloat(kirby.damage)).toBeCloseTo(CAPE_DAMAGE, 2);
     expect(kirby.facing).toBe(1);
