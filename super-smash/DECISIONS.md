@@ -2855,7 +2855,8 @@ the page reports a stand-in for every fighter.
 capsule sizes and SHA-256s; the guard test refuses any tracked file whose name, or whose size and
 hash, is a manifest file's, and the pre-push scan hashes every blob a push would send against the
 manifest. Since the plan-final wave the guard test and the deploy guard also refuse a pipeline
-format by its name and a model's or texture's magic number under any name. No render or
+format by its name, a model's or texture's magic number under any name, and any gzip but the
+bake (compression would hide those bytes). No render or
 screenshot of a real model is committed either: the repo is public, and a picture of a model is
 a derivative of the ripped files. Captures go to the git-ignored `test-results/anim/`. The
 deployed site serves the glbs built on the deploying machine; a checkout without `pnpm models`
@@ -3035,7 +3036,7 @@ against the model manifest.
   that fails outright, or a body that breaks off, is said in the same style ("Couldn't reach the
   fighters' animation data…", "…stopped downloading partway…"), with the browser's own error kept
   as the cause. A bake an edge has already decoded (no gzip header) is checked against the same
-  digest as it is (codex, plan-final).
+  digest as it is (final review M3).
 - *The plan's "layering list stays unchanged"* (its lines 43 and 9464) is stale: Task 2's fix
   round added `render3d` to `layering.test.ts`'s banned layers and Task 15 added `three` to its
   banned packages, and the plan-final wave bans three.js's add-ons (`three-*`) and React Three

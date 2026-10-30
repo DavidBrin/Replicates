@@ -10,8 +10,8 @@ The menus, the HUD and the physics are reproduced from measured values rather th
 approximated by feel: the knockback equation is Ultimate's, the stage geometry is Kurogane
 Hammer's, and the frame data comes out of the game's own decompiled scripts. The animation
 is the project's own — every move a hand-authored clip timed to its hitboxes — and in a match
-those clips pose each fighter's SSBU model, which `pnpm models` builds from a pinned download
-and which is never committed to this repository; the deployed site serves them, and a checkout
+those clips pose the fighters' SSBU models, which `pnpm models` builds from a pinned download
+and which are never committed to this repository; the deployed site serves them, and a checkout
 that has not built them draws every fighter as a capsule stand-in
 ([D57](DECISIONS.md#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked)).
 
@@ -92,7 +92,7 @@ one and Join room in the other.
 | `pnpm run deploy` | `models:check`, build and `wrangler deploy` (David's Cloudflare login) |
 | `pnpm models:fetch` | Fetch the fighter models at a pinned commit into the git-ignored `.model-cache/`, SHA-256-checked |
 | `pnpm models` | Export, join and optimise one glb per fighter into the git-ignored `public/models/` (needs Blender, portable, in `.model-cache/tools/`) |
-| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones, or with a model, texture or fetched file anywhere else in `public/` |
+| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones, or with a model, texture, fetched file or gzip (bar the bake) anywhere else in `public/`, or any file there the repo does not commit, a git-ignored `.DS_Store` included |
 
 Without `pnpm models` the game runs as it is, with every fighter a capsule stand-in; the
 simulation and every test need neither the models nor Blender (a fresh clone's `pnpm test` is
@@ -256,8 +256,8 @@ SSBU models, their shields, hit sparks and KO blasts), and a transparent 2D over
 magnifying glass). All three are framed by the same camera value, and three.js loads in its own
 chunk after `/play` mounts. The models are posed by the replica's own 2D clips, retargeted onto
 each SSBU skeleton in the side plane; the simulation reads those same bones from integer tables
-baked at build time (`public/bake/roster.bin.gz`), so a hitbox rides the limb the player sees and
-the sim never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
+baked at build time (`public/bake/roster.bin.gz`), so in the 50 moves whose hitboxes hang off limb
+bones a hitbox rides the limb the player sees, and the sim never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
 (`UPDATE_BAKE=1`) and re-run `reach.test.ts`. The models themselves are built locally by
 `pnpm models` and never committed; without them every fighter is a capsule stand-in of its own
 hurtboxes, and one that fails to load is a stand-in for that match only
@@ -357,15 +357,17 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
    The checksum line must print `OK`; if it does not, delete the file and install nothing.
 3. `pnpm models`, then `pnpm run deploy` from a clean tree (nothing uncommitted in
    `super-smash/`, so the build id is the commit's). The deploy runs `models:check` first,
-   which refuses any model missing, changed or built otherwise, and any model, texture or
-   fetched file anywhere else in `public/` (`next build` copies all of it); then `next build`
-   and `wrangler deploy`.
-4. After the deploy, check what the site serves:
-   `curl -sI https://david-smash.leaders-game.workers.dev/bake/roster.bin.gz` shows
-   `content-type: application/gzip` and no `content-encoding` header, and
-   `/models/index.json` and one glb it names both load. (A bake an edge decoded is still
-   accepted, since the page checks decoded bytes against the same digest, but the header should
-   be fixed.)
+   which refuses any model missing, changed or built otherwise, and anywhere else in `public/`
+   (`next build` copies all of it) any model, texture, fetched file or gzip but the bake, and
+   any file the repo does not commit. A git-ignored stray, such as a Finder `.DS_Store`, never
+   shows in `git status`; its message says to delete it. Then `next build` and
+   `wrangler deploy`.
+4. After the deploy, check what a browser is sent, asking as a browser does:
+   `curl -sI -H 'Accept-Encoding: gzip, deflate, br, zstd' https://david-smash.leaders-game.workers.dev/bake/roster.bin.gz`
+   shows `content-type: application/gzip`. No `content-encoding` header is what we want; if one
+   appears the game still works, because the browser undoes it and `bake.ts` checks the bytes it
+   is handed, still gzipped or already decoded, against the same digest, but the header should
+   be fixed. Then `/models/index.json` and one glb it names both load.
 
 `pnpm run deploy` needs `wrangler login` on David's account, and the TURN secrets are set once
 with `wrangler secret put` (see `.env.example`). A
@@ -419,7 +421,7 @@ A study, not a product, and not affiliated with Nintendo in any way.
 **David-Smash** is a rebuild of Super Smash Bros. Ultimate's versus mode as an exercise in
 agentic software development. Every sound and image in this repository is generated from
 code: no Nintendo sprites, models, textures, music or logos are reproduced or distributed
-anywhere in it. The fighter models a match draws are never committed to this repository:
+in this repository. The fighter models a match draws are never committed to this repository:
 `pnpm models` builds them from a pinned download on the deploying machine, and the deployed
 site serves them; a checkout that has not run it draws the project's own capsule stand-ins.
 Super Smash Bros. and all related characters and trademarks are the property of Nintendo.

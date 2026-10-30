@@ -77,7 +77,10 @@ into it.
    └──────────────────────────────────────────────────────┘
 ```
 
-`render3d/` and three.js load in their own chunk, after `/play` (or the animation lab) mounts.
+three.js, and the `render3d/` modules that use it (the presenter, the stage, the models), load in
+their own chunk, after `/play` (or the animation lab) mounts. `render3d/`'s three-free helpers
+load with the page that imports them: the WebGL check (`webgl.ts`) with the online lobby, the
+overlay's anchors (`anchors.ts`) with `/play`.
 `scripts/models/` is the build-time model pipeline (fetch, Blender export, optimise, and the
 deploy guard), outside the app.
 
@@ -325,7 +328,8 @@ Load-bearing details, all from the reference screenshots:
   and shakes when hit.
 - **Fighters are SSBU's models, posed by the project's own clips.** Each model is posed by
   the replica's hand-authored clips, retargeted onto its SSBU skeleton in the side plane, and
-  the sim reads the same bones from the bake, so a hitbox rides the limb the player sees.
+  the sim reads the same bones from the bake, so in the 50 moves whose hitboxes hang off limb
+  bones a hitbox rides the limb the player sees.
   Without the models each fighter is a stand-in: its own hurtbox capsules, in its port's
   colour. The 2D rigs still draw the HUD's portraits and stock icons. See DECISIONS D57.
 - **The match is 3D, and WebGL is required.** The stage, fighters, shields and hit sparks are
@@ -348,7 +352,8 @@ Load-bearing details, all from the reference screenshots:
 - **Layering** — `engine/` imports nothing forbidden, checked by walking the import graph.
 - **The bake and its ratchets** — the bake regenerates byte for byte and its digest is
   pinned; the limb ratchet (which script slots run on limb bones, `limb.json`), the reach
-  ratchet (every frame, in each direction, against the legacy boxes, `reach.test.ts`), the
+  ratchet (every frame, along each move's own direction, against the legacy boxes,
+  `reach.test.ts`), the
   strike test (each attack strikes with the limb its hitboxes ride) and the hurt ratchet
   (each fighter's bone-derived hurtboxes against its old box, `hurt.allow.json`).
 - **3D E2E** — stand-ins when the models are not served, a lost and restored WebGL context,

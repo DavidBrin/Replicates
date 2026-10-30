@@ -4,10 +4,11 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { gzipSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
-import { MAGIC_BYTES, PIPELINE_ONLY, modelMagic } from "../../../scripts/models/rippedFormats.mjs";
+import { BAKE_PATH, MAGIC_BYTES, PIPELINE_ONLY, isGzip, modelMagic } from "../../../scripts/models/rippedFormats.mjs";
 import { parseManifest, type ModelManifest } from "./manifest";
 
 /**
@@ -22,7 +23,8 @@ import { parseManifest, type ModelManifest } from "./manifest";
  * the manifest lists (a renamed copy), or if it is a format only the pipeline
  * makes (.blend, .glb, .gltf, .webp, .ktx2, .dds), or if it starts with one of
  * those formats' magic numbers (a glb renamed `.bin`, a texture pulled out of
- * a glb). A name pattern missed 17 of the 114 real files (`eye_donkey_001.png`,
+ * a glb), or if it is gzip and not the bake (compression hides what a file
+ * holds). A name pattern missed 17 of the 114 real files (`eye_donkey_001.png`,
  * `pikachu_facial_01_col.png`, …). The names and the magic numbers are
  * `scripts/models/rippedFormats.mjs`, the list the deploy guard refuses too.
  *
@@ -55,6 +57,8 @@ const IGNORED_OUTPUT = /(^|\/)(\.model-cache|public\/models|test-results)\//i;
  */
 const CAPTURE_PNG = /(^|\/)(anim|fight)-[^/]*\.png$/i;
 const GITLINK = "160000";
+/** The bake, the one gzip the repo may hold, from the repo root (this package's prefix, then `BAKE_PATH`). */
+const BAKE_IN_REPO = execFileSync("git", ["rev-parse", "--show-prefix"], { cwd: ROOT, encoding: "utf8" }).trim() + BAKE_PATH;
 const MAX_BUFFER = 1 << 30;
 
 /** A path in the index and the blob git would commit for it. */
@@ -86,10 +90,12 @@ export function rippedAssets(
     else if (names.has(basename(path).toLowerCase())) out.push(`${path} (manifest file name)`);
     else {
       // A model's magic number under a harmless name (outside public/models/: inside it, the folder rule above fired).
-      const magic = modelMagic(head(id));
+      const first = head(id);
+      const magic = modelMagic(first);
       // Only a blob of exactly a manifest size can have a manifest hash.
       const shas = bySize.get(size(id));
       if (magic !== null) out.push(`${path} (model bytes: ${magic})`);
+      else if (isGzip(first) && path !== BAKE_IN_REPO) out.push(`${path} (gzip bytes: a compressed file hides what it holds; only the bake may be gzip)`);
       else if (shas?.has(hash(id))) out.push(`${path} (manifest file bytes)`);
     }
   }
@@ -159,6 +165,10 @@ describe("the ripped-asset rule", () => {
     "e.jpg": Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WEBPVP8 ")]),
     "sounds/hit.wav": Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WAVEfmt ")]),
     "docs/short.txt": Buffer.from("glT"),
+    "art/fox.glb.gz": gzipSync("glTF a glb, compressed"),
+    "super-smash/public/bake/roster.bin.gz": gzipSync("the bake"),
+    "Risk/public/bake/roster.bin.gz": gzipSync("another package's file of the same name"),
+    "docs/not-gzip.bin": Buffer.from([0x1f, 0x00, 0x8b, 0x08]),
   };
   // A blob id stands for its path here; the real wiring is exercised against git below.
   const run = (paths: string[]) =>
@@ -210,6 +220,14 @@ describe("the ripped-asset rule", () => {
     ]);
     // Only starting like one is not enough: a WAV is RIFF too, and three bytes are not glTF.
     expect(run(["sounds/hit.wav", "docs/short.txt"])).toEqual([]);
+  });
+
+  it("catches a gzip file anywhere but the bake: compression hides a model's own first bytes (fw2 re-review)", () => {
+    // gzip is both bytes, 1f 8b: one alone is not.
+    expect(run(["art/fox.glb.gz", "super-smash/public/bake/roster.bin.gz", "Risk/public/bake/roster.bin.gz", "docs/not-gzip.bin"])).toEqual([
+      "art/fox.glb.gz (gzip bytes: a compressed file hides what it holds; only the bake may be gzip)",
+      "Risk/public/bake/roster.bin.gz (gzip bytes: a compressed file hides what it holds; only the bake may be gzip)",
+    ]);
   });
 
   it("passes ordinary files, even one the size of a texture", () => {
@@ -321,6 +339,22 @@ describe("no Nintendo-ripped asset is tracked", () => {
       expect(flagged.every((f) => f.includes(" (model bytes: "))).toBe(true);
       expect(flagged.map((f) => f.slice(0, f.indexOf(" (model bytes: "))).sort()).toEqual(planted.map(([path]) => path).sort());
       for (const [path] of planted) expect(existsSync(join(ROOT, "..", path))).toBe(false);
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  it("sees a gzip staged anywhere in the repo but the bake: a glb compressed hides its own magic (fw2 re-review)", () => {
+    const s = scratch();
+    try {
+      expect(scan(s.env)).toEqual([]);
+      const planted = ["super-smash/public/fox.glb.gz", "super-smash/docs/screenshots/match.png", "Risk/assets.tar.gz"];
+      for (const path of planted) s.plant(path, s.blob(gzipSync(Buffer.concat([Buffer.from("glTF"), Buffer.from("a glb")]))));
+      // A new bake staged over the committed one is the one gzip allowed.
+      s.plant("super-smash/public/bake/roster.bin.gz", s.blob(gzipSync("a new bake")));
+      const flagged = scan(s.env);
+      expect(flagged.every((f) => f.includes(" (gzip bytes: "))).toBe(true);
+      expect(flagged.map((f) => f.slice(0, f.indexOf(" (gzip bytes: "))).sort()).toEqual([...planted].sort());
     } finally {
       s.cleanup();
     }

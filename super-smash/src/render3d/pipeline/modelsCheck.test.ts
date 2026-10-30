@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -293,21 +294,46 @@ describe("models:check, the rest of public/: next build deploys all of it (codex
     expect(r.out).not.toContain("same-size.png");
   });
 
-  it("deploys outside public/models/ only the bake and committed files: an untracked file or a .DS_Store is refused", () => {
-    put("public/bake/roster.bin.gz", Buffer.from([0x1f, 0x8b, 8, 0, 0, 0, 0, 0])); // the bake, by path, committed or not
+  it("deploys outside public/models/ only the bake and committed files: an untracked file is refused, to be committed or deleted", () => {
+    put("public/bake/roster.bin.gz", gzipSync("the bake")); // the bake, by path, committed or not
     put("public/icons/logo.svg", "<svg/>");
     commit("public/icons/logo.svg");
     expect(check().status).toBe(0);
 
     put("public/robots.txt", "User-agent: *");
-    put("public/icons/.DS_Store", Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31])); // "Bud1", a Finder file
     const r = check();
     expect(r.status).toBe(1);
-    for (const path of ["public/robots.txt", "public/icons/.DS_Store"]) {
-      expect(r.out, path).toContain(`${path} is neither a built model, the bake nor a committed file — next build would deploy it; commit it or delete it`);
-    }
+    expect(r.out).toContain("public/robots.txt is neither a built model, the bake nor a committed file — next build would deploy it; commit it or delete it");
     commit("public/robots.txt");
     expect(check().out).not.toContain("public/robots.txt");
+  });
+
+  it("tells a git-ignored file only to go: it cannot be committed, and `git status` never shows it (fw2 re-review)", () => {
+    // The package's own .gitignore ignores both: a Finder file and a TypeScript build cache.
+    put("public/icons/.DS_Store", Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31])); // "Bud1"
+    put("public/notes.tsbuildinfo", "{}");
+    const r = check();
+    expect(r.status).toBe(1);
+    for (const path of ["public/icons/.DS_Store", "public/notes.tsbuildinfo"]) {
+      expect(r.out, path).toContain(`${path} is git-ignored, so it cannot be committed, and is neither a built model nor the bake — next build would deploy it; delete it`);
+      expect(r.out, path).not.toContain(`${path} is neither a built model, the bake nor a committed file`);
+    }
+  });
+
+  it("refuses a gzip file anywhere in public/ but the bake: compression hides a model's own first bytes (fw2 re-review)", () => {
+    put("public/bake/roster.bin.gz", gzipSync("the bake"));
+    // A glb gzipped, committed so its compression is the only fault; a second gzip beside the bake; one in the models folder.
+    put("public/data/fox.glb.gz", gzipSync(MAGIC.glb));
+    put("public/bake/old.bin.gz", gzipSync("an old bake"));
+    commit("public/data/fox.glb.gz", "public/bake/old.bin.gz");
+    put("public/models/extra.gz", gzipSync("anything"));
+    const r = check();
+    expect(r.status).toBe(1);
+    for (const path of ["public/data/fox.glb.gz", "public/bake/old.bin.gz", "public/models/extra.gz"]) {
+      expect(r.out, path).toContain(`${path} is gzip-compressed, which hides what it holds, and only the bake may be — next build would deploy it; delete it`);
+    }
+    expect(r.out).not.toContain("public/bake/roster.bin.gz");
+    expect(r.out).not.toContain("starts with");
   });
 
   it("refuses a symbolic link anywhere in public/: next build would deploy what it points at", () => {

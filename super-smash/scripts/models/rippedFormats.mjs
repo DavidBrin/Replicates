@@ -6,7 +6,9 @@
  * (`src/render3d/pipeline/noRippedAssets.test.ts`) refuses either in any
  * staged file, so the two lists cannot drift apart; the controller's pre-push
  * scan checks the same ones. A name is easy to change and the bytes are not:
- * a glb renamed `.bin`, or a texture pulled out of one, keeps its magic.
+ * a glb renamed `.bin`, or a texture pulled out of one, keeps its magic. A
+ * compressed one does not, so both guards also refuse any gzip but the bake
+ * (`isGzip`, `BAKE_PATH`; final wave part 2 re-review).
  *
  * No imports, so `check.mjs` can run it from any copy.
  */
@@ -23,6 +25,20 @@ const SIGNATURES = [
 ];
 const RIFF = [0x52, 0x49, 0x46, 0x46];
 const WEBP = [0x57, 0x45, 0x42, 0x50];
+
+/** The one gzip file the repo commits and a deploy carries, from the package root: the bone bake. */
+export const BAKE_PATH = "public/bake/roster.bin.gz";
+
+/**
+ * Whether `head` starts with gzip's magic number (RFC 1952 §2.3.1). Compression
+ * hides the first bytes of whatever is inside, a glb's glTF among them, so any
+ * gzip but the bake is refused rather than opened.
+ *
+ * @param {Uint8Array} head
+ */
+export function isGzip(head) {
+  return head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b;
+}
 
 /** How many leading bytes `modelMagic` reads: RIFF's form type sits at bytes 8 to 11. */
 export const MAGIC_BYTES = 12;

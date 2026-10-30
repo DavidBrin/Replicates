@@ -16,7 +16,10 @@
  * bake and files the repo commits may deploy, and none may have a pipeline
  * format's name or a model's first bytes (`rippedFormats.mjs`); anywhere, no
  * file may have the bytes of a file the manifest pins (its size, then its
- * SHA-256), and no symbolic link may stand in for a file.
+ * SHA-256), no file but the bake may be gzip (which would hide a model's own
+ * first bytes), and no symbolic link may stand in for a file. A stray file is
+ * told to be committed or deleted, or, when git ignores it (a Finder
+ * `.DS_Store`), only to be deleted.
  *
  *   node scripts/models/check.mjs     # run by `pnpm run deploy` before `next build`
  */
@@ -26,14 +29,12 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { MAGIC_BYTES, PIPELINE_ONLY, modelMagic } from "./rippedFormats.mjs";
+import { BAKE_PATH, MAGIC_BYTES, PIPELINE_ONLY, isGzip, modelMagic } from "./rippedFormats.mjs";
 import { BLENDER_VERSION, PIPELINE_INPUTS, blenderRelease, pipelineStamp } from "./stamp.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const FIGHTERS = ["mario", "donkeyKong", "link", "samus", "kirby", "fox", "pikachu", "marth"];
 const MAX = 25 * 1024 * 1024;
-/** The one file outside `public/models/` that deploys by name: the bone bake the sim reads (committed). */
-const BAKE = "public/bake/roster.bin.gz";
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 const problems = [];
 
@@ -54,6 +55,8 @@ const tracked = addable === null ? null : gitList(["--cached"], "public/models")
 if (tracked?.length) problems.push(`public/models/ has ${tracked.length} tracked or staged file(s) (${tracked.slice(0, 4).join(", ")}) — \`git rm --cached\` them; a ripped model must never be committed`);
 /** The repo's own `public/` files (tracked or staged): what may deploy beside the models and the bake. */
 const committed = new Set(addable === null ? [] : (gitList(["--cached"], "public") ?? []));
+/** Files under `public/` that `git add` would take: any other file neither committed nor the bake is git-ignored. */
+const untracked = new Set(addable === null ? [] : (gitList(["--others", "--exclude-standard"], "public") ?? []));
 
 /** Every file and symbolic link under `dir`, by its path from the package root (`public/…`). */
 function walk(dir, rel, out = []) {
@@ -133,9 +136,15 @@ for (const { path, abs, link } of PUBLIC) {
   const outside = !path.startsWith("public/models/");
   const ship = "next build would deploy it; delete it";
   if (outside && PIPELINE_ONLY.test(path)) problems.push(`${path} is a model or texture format outside public/models/ — ${ship}`);
-  const magic = outside ? modelMagic(headOf(abs)) : null;
+  const head = headOf(abs);
+  const magic = outside ? modelMagic(head) : null;
   if (magic !== null) problems.push(`${path} starts with ${magic} outside public/models/ — ${ship}`);
-  if (outside && path !== BAKE && !committed.has(path)) problems.push(`${path} is neither a built model, the bake nor a committed file — next build would deploy it; commit it or delete it`);
+  if (path !== BAKE_PATH && isGzip(head)) problems.push(`${path} is gzip-compressed, which hides what it holds, and only the bake may be — ${ship}`);
+  if (outside && path !== BAKE_PATH && !committed.has(path)) {
+    // A git-ignored file (a Finder `.DS_Store`) cannot be committed, and `git status` never shows it.
+    if (untracked.has(path)) problems.push(`${path} is neither a built model, the bake nor a committed file — next build would deploy it; commit it or delete it`);
+    else problems.push(`${path} is git-ignored, so it cannot be committed, and is neither a built model nor the bake — ${ship}`);
+  }
   // Only a file of exactly a manifest size can have a manifest hash, so only those are read whole.
   const shas = fetched.get(statSync(abs).size);
   if (shas === undefined) continue;
