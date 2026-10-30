@@ -495,6 +495,13 @@ describe("Fox's Reflector in the air", () => {
       expect(states[i].fighters[1].y).toBeLessThan(states[i - 1].fighters[1].y);
     }
   });
+
+  it("held long enough, settles at Fox's own falling speed, 2.1 (the stall at its terminal; Task 4 fix round 1)", () => {
+    const s = falling();
+    s.fighters[1].y = fx(160);
+    const states = run(s, 100, () => [0, Btn.Down | Btn.Special]).states;
+    expect(states.slice(90).map((x) => [x.fighters[1].action, x.fighters[1].vy])).toEqual(states.slice(90).map(() => ["special", -fx(2.1)]));
+  });
 });
 
 describe("what the Reflector reflects", () => {

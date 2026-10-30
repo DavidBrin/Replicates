@@ -171,7 +171,10 @@ const MATCHES: readonly Match[] = [
  * grabs, spot-dodges, techs, ledge-rolls, breaks a shield or trumps a ledge.
  * Plan 5 Task 4 (Mario's Cape, which moves mario-fox): 33 — mario-fox crouches and
  * trumps a ledge now, and no CPU ledge-attacks; none grabs, spot-dodges, techs,
- * ledge-rolls or breaks a shield.
+ * ledge-rolls or breaks a shield. Its fix round 1 (the Cape's aerial motion, a
+ * backward side-B turning): 34 — donkeyKong-pikachu tech-rolls and ledge-rolls, and
+ * none trumps a ledge any more; none grabs, spot-dodges, ledge-attacks or breaks a
+ * shield.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -458,8 +461,14 @@ describe("engine golden trace", () => {
   // FKB 80 boxes) moved only mario-fox, from the 201-300 sample: the CPU's up-B
   // press, buffered through a fair offstage, comes out as a Cape on frame 300, which
   // now stalls, so Mario's first stock goes on frame 370, not 338, and the match
-  // differs from there: hits 11, shield hits 0, KOs 4 (were 19, 0 and 1). So now:
-  // hits 11/36/18/13, 6 and 0; shield hits 0/3/0/1, 3 and 0; KOs 4/1/4/2, 1 and 2.
+  // differs from there: hits 11, shield hits 0, KOs 4 (were 19, 0 and 1), all four
+  // self-destructs. Its fix round 1 moved three: mario-fox from the 201-300 sample
+  // (that Cape now restricts Mario's drift for its 58 frames), and donkeyKong-pikachu
+  // from 1401-1500 and link-samus from 2501-2600 (a side-B pressed backward now turns
+  // the fighter round first): hits 14, 34 and 18; shield hits 0, 1 and 0; KOs 2, 1
+  // and 4. So now: hits 14/34/18/13, 6 and 0; shield hits 0/1/0/1, 3 and 0; KOs
+  // 2/1/4/2, 1 and 2. Every KO in the six matches is a self-destruct: on the frame
+  // before it the fighter was in no hitstun and had no launch left.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

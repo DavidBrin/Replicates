@@ -569,9 +569,18 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
   return false;
 }
 
-export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot): boolean {
+/**
+ * Start the special in `slot`. A side special pressed away from where the
+ * fighter faces (`stickX`, the stick's −1/0/1) turns it round first, on the
+ * ground or in the air (Plan 5, Task 4 fix round 1). SmashWiki "Side special
+ * move" (https://www.ssbwiki.com/Side_special_move): "any character can
+ * quickly turn around on the spot and immediately perform their side special
+ * move". Not modelled: reversing one "in the first few frames" (same page).
+ */
+export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot, stickX = 0): boolean {
   const move = ctx.def.moves[slot];
   if (move === undefined) return false;
+  if (slot === "sideB" && stickX !== 0) f.facing = stickX;
   startMove(f, "special", slot);
   // A stored charge comes back out (Plan 5): a full one is released as its move
   // says (`StoredFullCharge.start`: Giant Punch from its loop frame, Charge Shot
@@ -794,7 +803,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
       startMove(f, "grab", hasMove(ctx, slot) ? slot : "grab");
       return true;
     }
-    if (p.special && beginSpecial(f, ctx, specialSlot(intent))) return true;
+    if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x)) return true;
     if (p.attack && beginAttack(f, ctx, groundAttackSlot(f, intent))) return true;
     if (p.jump) {
       startAction(f, "jumpSquat");
@@ -816,7 +825,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   // shield/grab can turn into a directional air dodge buffer, which can be a
   // misinput"; Plan 3, Task 20c).
   if ((p.shield || intent.shieldHeld) && startAirDodge(f, intent)) return true;
-  if (p.special && beginSpecial(f, ctx, specialSlot(intent))) return true;
+  if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x)) return true;
   if (p.attack) {
     const slot = aerialSlot(f, intent);
     if (hasMove(ctx, slot)) {
@@ -1079,10 +1088,15 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     return;
   }
   if (dodge !== null) kineticAirDodgeHandOff(f, dodge.x, dodge.y);
+  // A special whose stall restricts air mobility (Plan 5: Mario's Cape) takes
+  // the stick's drift away while its physics run (`StallDef`, `specialStallExec`).
+  const stall = f.action === "special" && f.move !== null ? ctx.def.moves[f.move]?.stall : undefined;
+  const restricted = stall?.airFriction !== undefined && (stall.everyUse === true || f.combat.stalling);
   kineticExec(f, type, {
     stickX: intent.x,
     stickMag: intent.soft ? ONE >> 1 : ONE,
     params,
+    ...(restricted ? { airFriction: stall.airFriction } : {}),
   });
   status.exec?.(f, intent, ctx);
 }
@@ -1240,7 +1254,8 @@ export function grabLedge(
   f.jumpsUsed = 1;
   f.airDodged = false;
   // Plan 5. UNVERIFIED: SmashWiki "Fox (SSBU)" names landing and a hit, not a
-  // ledge; a ledge grab gives back the air dodge (SmashWiki "Air dodge").
+  // ledge; a ledge grab gives back the air dodge (SmashWiki "Air dodge"). For
+  // Mario's Cape, Super Mario Wiki "Cape" names landing only.
   f.combat.specialStall = false;
   f.fastFalling = false;
   f.shortHop = false;

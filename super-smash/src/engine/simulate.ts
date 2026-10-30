@@ -1280,7 +1280,18 @@ function resolveHits(
       // consequences that do not land. See `FighterState.invincible`.
       if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
       else if (c.slot === "pummel" && c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
-      else applyHit(s, attacker, victim, defs[v], c, contact, intents[v], events);
+      else {
+        applyHit(s, attacker, victim, defs[v], c, contact, intents[v], events);
+        // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
+        // on contact, whatever else the hit does: a launch, a launch it cannot
+        // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
+        // (https://www.ssbwiki.com/Reverse_(effect)): "A fighter hit by a reverse
+        // attack is forcibly turned around to face the opposite direction"; SmashWiki
+        // "Cape" (https://www.ssbwiki.com/Cape): "Cape can even flip shielding
+        // opponents". UNVERIFIED: through armour and a perfect shield (no source
+        // says either way), and not through invincibility, whose hit has no effect.
+        if (c.hitbox.reverse === true) victim.facing = -victim.facing;
+      }
       if (c.destroyOnHit && c.projectile !== null) destroyed.add(c.projectile.instanceId);
     }
   }
@@ -2113,6 +2124,8 @@ function applyHit(
   // So is the airtime's special stall (Plan 5): Fox's Reflector stalls "once
   // until he lands or gets hit" (SmashWiki "Fox (SSBU)",
   // https://www.ssbwiki.com/Fox_(SSBU)). The same reading of "get hit".
+  // UNVERIFIED for Mario's Cape: borrowed from Fox's; Super Mario Wiki "Cape"
+  // names only landing ("between leaving the ground and returning to it").
   victim.combat.specialStall = false;
 
   const crouchCancel = isCrouching(victim);
@@ -2286,10 +2299,6 @@ function applyHit(
   // victim in `grabbed` — whose only exit is `grabbedBy < 0` — for good.
   releaseGrab(victim, s.fighters);
   startAction(victim, tumbles ? "tumble" : "hitstun");
-  // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round.
-  // SmashWiki "Reverse" (https://www.ssbwiki.com/Reverse_(effect)): "A fighter
-  // hit by a reverse attack is forcibly turned around to face the opposite direction".
-  if (hb.reverse === true) victim.facing = -victim.facing;
 
   events.hits.push({
     attacker: attacker.port,

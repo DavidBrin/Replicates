@@ -353,20 +353,53 @@ export interface ReflectorDef {
   readonly loop?: readonly [number, number];
   /** From this frame, holding back turns the fighter round. */
   readonly turnFrom?: number;
+  /** A projectile detector that brings the reflector up early (Mario's Cape). */
+  readonly detector?: ReflectDetector;
 }
 
-/** A special's once-per-airtime stall (Plan 5): Fox's Reflector, Mario's Cape. Q12. */
+/**
+ * A reflector's projectile detector (Plan 5: Mario's Cape, its script's
+ * `SEARCH`): on `frames` of the move, a reflectable projectile inside it skips
+ * the move on to frame `to` from the next frame, so the reflector and every
+ * later frame come that much sooner. The capsule runs from `x1` to `x2` in
+ * front of the fighter at height `y`, `radius` wide.
+ */
+export interface ReflectDetector {
+  readonly frames: readonly [number, number];
+  readonly to: number;
+  readonly x1: number;
+  readonly x2: number;
+  readonly y: number;
+  readonly radius: number;
+}
+
+/**
+ * A special's stall in the air (Plan 5): Fox's Reflector, Mario's Cape. Q12.
+ *
+ * Its **stop** (`startX`, `boostY`, `noGravityFrames`) is the airtime's first
+ * aerial use's only (`CombatState.specialStall`). Its **physics** (`gravity`,
+ * `fallSpeed`, `airFriction`) run with the stop, and on every aerial use when
+ * `everyUse` is set.
+ */
 export interface StallDef {
-  /** Horizontal speed multiplier on the first frame (Cape: 1 / 2.5). */
+  /** The stop: horizontal speed multiplier on its first frame (Cape: 1 / 2.5). */
   readonly startX: number;
-  /** Vertical speed added on the first frame (Cape: 0.3). */
+  /** The stop: vertical speed added on its first frame, onto a fall stopped dead (Cape: 0.3). */
   readonly boostY: number;
-  /** Frames with no gravity at all (Reflector: 4). */
+  /** The stop: frames with no gravity at all, from a fall stopped dead (Reflector: 4). */
   readonly noGravityFrames: number;
-  /** The move's own gravity after that. */
+  /** The move's own gravity. */
   readonly gravity: number;
   /** The move's own falling speed, if it has one (Cape: 1). */
   readonly fallSpeed?: number;
+  /**
+   * The move's own air friction, if it restricts air mobility (Cape: 0.0025):
+   * while its physics run the stick does not drift the fighter, and horizontal
+   * speed bleeds toward 0 by this each frame.
+   */
+  readonly airFriction?: number;
+  /** The physics run on every aerial use of the move, not only the stop's (Cape). */
+  readonly everyUse?: boolean;
 }
 
 /** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */
@@ -482,8 +515,15 @@ export interface MoveDef {
   readonly specialCharge?: SpecialCharge;
   /** A reflector this move raises (Plan 5). */
   readonly reflector?: ReflectorDef;
-  /** The move stalls a fall, once per airtime (Plan 5). */
+  /** The move stalls a fall in the air (Plan 5). See `StallDef`. */
   readonly stall?: StallDef;
+  /**
+   * In the air, the move's animation runs to this frame (Plan 5: Mario's Cape,
+   * SmashWiki's "Animation length"). It is interruptible from `totalFrames` + 1
+   * as on the ground, but only by an action (an air dodge, a special, an aerial
+   * or a jump); with none it plays out to here under the move's own physics.
+   */
+  readonly airTotalFrames?: number;
   /** First and last move frame the fighter is intangible (Plan 5: SmashWiki "Intangibility a-b"). */
   readonly intangible?: readonly [number, number];
   /** Frames the fighter may not be interrupted, for specials with armour. */

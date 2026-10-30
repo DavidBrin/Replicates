@@ -667,30 +667,61 @@ const legacy: FighterDef = {
       // reflects projectiles at 1.5x (Plan 5). SmashWiki "Mario (SSBU)/Side
       // special" (https://www.ssbwiki.com/Mario_(SSBU)/Side_special): reflects
       // frames 9-20; "Damage multiplier 1.5", "Speed multiplier 1", "Lifetime
-      // multiplier 0.75", "Size 6.5u", "Damage threshold 50%"; the stall:
-      // "Horizontal speed divisor 2.5", "Vertical speed added 0.3", "Gravity
-      // 0.031", "Falling speed 1". UNVERIFIED: that the stall is once per
-      // airtime (Super Mario Wiki only) and the reflector's centre (put on the
-      // hitbox's, `top` Y 6.7, Z 5).
+      // multiplier 0.75", "Size 6.5u", "Offsets [0, 6.5, 8]" (8 in front, 6.5
+      // up; SmashWiki "Mario (SSBU)": "moved forward (Z offset: 2 → 8)"),
+      // "Damage threshold 50%"; a projectile detector on frames 6-8;
+      // "Interruptible 36"; animation length 58.
       //
       // The hitboxes are `game_specials` (rubendal Data Viewer 13.0.1): 7%,
       // angle 110, KBG 100, FKB 80 with BKB 0, `collision_attr_turn`, frames
-      // 12-14 — the legacy 70°/BKB 50/KBG 60 box was not the game's.
+      // 12-14 — the legacy 70°/BKB 50/KBG 60 box was not the game's. The script
+      // also raises `FIGHTER_MARIO_STATUS_SPECIAL_S_FLAG_SPECIAL_FALL` on frames
+      // 12-20 (`generated/mario.ts`); no source says what it does, so it is
+      // recorded here and not modelled.
       reflector: {
         active: [9, 20],
         radius: fx(6.5),
-        x: fx(5.0),
-        y: fx(6.7),
+        x: fx(8),
+        y: fx(6.5),
         damage: fx(1.5),
         speed: fx(1),
         lifetime: fx(0.75),
         maxDamage: fx(50),
         holdAfterReflect: 0,
+        // The early reflect: SmashWiki "Mario (SSBU)", it can "start two frames
+        // earlier (frame 7) if a projectile is very close"; `game_specials`'
+        // `SEARCH` from frame 6 (`top`, size 8, Y 6.5, Z 2.5 to 8) and
+        // `REFLECT_MOTION_FRAME` 9.
+        detector: { frames: [6, 8], to: 9, x1: fx(2.5), x2: fx(8), y: fx(6.5), radius: fx(8) },
       },
-      // The stall, from the same page's aerial parameters: speed ÷ 2.5 (×0.4),
-      // +0.3 up, gravity 0.031, falling speed 1. UNVERIFIED-simplified: its
-      // "Air friction 0.0025" is not modelled (Mario keeps his own).
-      stall: { startX: fx(0.4), boostY: fx(0.3), noGravityFrames: 0, gravity: fx(0.031), fallSpeed: fx(1) },
+      // In the air (the same page's aerial parameters): speed ÷ 2.5 (×0.4) and
+      // +0.3 up once, then gravity 0.031, falling speed 1 and air friction
+      // 0.0025 with no drift, for as long as the Cape lasts: 58 frames unless
+      // Mario acts from frame 36 (SmashWiki "Mario (SSBU)": "The move's
+      // animation length is much longer (41 frames → 58). In the air, this
+      // means Mario's air mobility is restricted for much longer, forcing the
+      // player to have to interrupt the move with an aerial or special").
+      // UltimateFrameData's total of 35 frames is the part before frame 36,
+      // "Interruptible 36" (`totalFrames`), not the animation's length.
+      //
+      // The stop is the airtime's first midair use's only (Super Mario Wiki
+      // "Cape": the first midair use "briefly stops Mario's falling"); every
+      // aerial use keeps the move's physics, its published numbers being the
+      // move's own. UNVERIFIED: that a hit or a ledge gives the stop back, as
+      // they do Fox's Reflector's (Super Mario Wiki names landing only:
+      // "between leaving the ground and returning to it"); the boost's reading
+      // ("Vertical speed added", onto a fall stopped dead); the hold's visuals
+      // (the bake's Cape is 35 frames, held on its last for the rest).
+      stall: {
+        startX: fx(0.4),
+        boostY: fx(0.3),
+        noGravityFrames: 0,
+        gravity: fx(0.031),
+        fallSpeed: fx(1),
+        airFriction: fx(0.0025),
+        everyUse: true,
+      },
+      airTotalFrames: 58,
       hitboxes: [
         {
           id: 0,

@@ -28,6 +28,7 @@ import {
   bufferPress,
   buttonPresses,
   handOff,
+  handleActionable,
   hasMove,
   moveEndFrame,
   presses,
@@ -86,6 +87,15 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   // fighter acts on frame T + 1, this one (`handOff`). A stored full charge
   // ends on its own published frame (`moveEndFrame`, Plan 5).
   if (f.actionFrame >= moveEndFrame(f, move)) {
+    // In the air a move with a longer aerial animation plays on to its end
+    // unless the fighter acts (`MoveDef.airTotalFrames`, Plan 5: Mario's Cape,
+    // SmashWiki "Mario (SSBU)": "forcing the player to have to interrupt the
+    // move with an aerial or special"). UNVERIFIED: that an air dodge or a jump
+    // interrupts it too, as at any other interruptible frame (`handleActionable`).
+    if (!f.grounded && move.airTotalFrames !== undefined && f.actionFrame < move.airTotalFrames) {
+      handleActionable(f, intent, ctx);
+      return;
+    }
     handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
     return;
   }

@@ -24,6 +24,7 @@ import { actionFrameOf, circle, moveFrameOf, sweptCapsulePenetration } from "./h
 import type { Capsule } from "./hitbox";
 import { kineticSetX, kineticSetY } from "./kinetic";
 import { fighterParams } from "./params";
+import type { FighterParams } from "./params";
 import { startAction, startRoll } from "./states";
 import type { Intent, StateContext } from "./states";
 import type { FighterDef, FighterState, GameState, ProjectileDef, ProjectileState, ReflectorDef, StallDef, StepEvents } from "./types";
@@ -127,6 +128,7 @@ export function reflectProjectiles(
       break;
     }
   }
+  detectProjectiles(s, defs, projectileDef, candidates, destroyed);
 }
 
 /**
@@ -204,21 +206,27 @@ function reflectEscape(f: FighterState, intent: Intent, ctx: StateContext): bool
 }
 
 /**
- * A special's once-per-airtime stall (`MoveDef.stall`):
+ * A special's stall in the air (`MoveDef.stall`, `StallDef`): a **stop** on the
+ * airtime's first aerial use, and the move's own **physics** with it (and on
+ * every aerial use, for `everyUse`).
  * - Fox's Reflector: SmashWiki "Reflector (Fox)"
  *   (https://www.ssbwiki.com/Reflector_(Fox)), "However, it now only stalls Fox
  *   once in midair"; "Fox (SSBU)" (https://www.ssbwiki.com/Fox_(SSBU)), "he
  *   can only do it once until he lands or gets hit"; "Fox (SSBU)/Down special"
  *   (https://www.ssbwiki.com/Fox_(SSBU)/Down_special), "Horizontal speed
  *   multiplier on startup 0.5", "Period before applying gravity 4 frames",
- *   "Gravity 0.027".
- * - Mario's Cape: SmashWiki "Mario (SSBU)/Side special", "Horizontal speed
- *   divisor 2.5", "Vertical speed added 0.3", "Gravity 0.031", "Falling speed
- *   1". UNVERIFIED that it is once per airtime (Super Mario Wiki only).
+ *   "Gravity 0.027". A later use falls as Fox does.
+ * - Mario's Cape: SmashWiki "Mario (SSBU)/Side special"
+ *   (https://www.ssbwiki.com/Mario_(SSBU)/Side_special), "Horizontal speed
+ *   divisor 2.5", "Air friction 0.0025", "Vertical speed added 0.3", "Gravity
+ *   0.031", "Falling speed 1". The stop is the first midair use's only (Super
+ *   Mario Wiki "Cape": the first midair use "briefly stops Mario's falling");
+ *   the physics are every aerial use's, the page's numbers being the move's.
  *
  * Run as the special status's `exec`, after the FALL kinetic type has applied
- * the fighter's own gravity, which it replaces with the move's.
- * `CombatState.specialStall` says the airtime's stall is spent.
+ * the fighter's own gravity, which it replaces with the move's (the air
+ * friction is the kinetic type's, `applyMovement`). `CombatState.specialStall`
+ * says the airtime's stop is spent; `stalling`, that this special made it.
  *
  * The no-gravity frames are the first pass's only (`FighterState.charge`, the
  * passes `reflectorMain` counts, still 0). A held Reflector loops back to its
@@ -229,24 +237,76 @@ function reflectEscape(f: FighterState, intent: Intent, ctx: StateContext): bool
 export function specialStallExec(f: FighterState, ctx: StateContext, stall: StallDef): void {
   if (f.grounded) return;
   const g = moveFrameOf(f.actionFrame);
-  if (g === 1) {
-    if (f.combat.specialStall) return;
+  if (g === 1 && !f.combat.specialStall) {
+    // The stop: the airtime's first aerial use only.
     f.combat.specialStall = true;
     f.combat.stalling = true;
-    // UNVERIFIED: the startup's horizontal multiplier goes with the stall, so a
-    // second airborne use in one airtime keeps its full drift.
+    // UNVERIFIED: the startup's horizontal multiplier goes with the stop, so a
+    // later aerial use in one airtime keeps its speed.
     kineticSetX(f, mul(f.vx, stall.startX));
-    // UNVERIFIED reading of "Vertical speed added": onto a fall stopped dead.
-    if (stall.boostY > 0) kineticSetY(f, Math.max(f.vy, 0) + stall.boostY);
-  }
-  if (!f.combat.stalling) return;
-  if (g <= stall.noGravityFrames && f.charge === 0) {
-    kineticSetY(f, 0);
+    // The fall stopped dead. UNVERIFIED reading of "Vertical speed added": the
+    // boost goes on top of that, and on top of a rise.
+    kineticSetY(f, stall.boostY > 0 ? Math.max(f.vy, 0) + stall.boostY : 0);
     return;
   }
+  if (!f.combat.stalling && stall.everyUse !== true) return;
   const p = fighterParams(ctx.def);
+  const before = beforeOwnGravity(f, p);
+  if (f.combat.stalling && g <= stall.noGravityFrames && f.charge === 0) {
+    // No gravity at all: the speed the stop left holds, a boost included.
+    kineticSetY(f, before);
+    return;
+  }
   const terminal = -(stall.fallSpeed ?? p.air_speed_y_stable);
-  // Undo the fighter's own gravity for this frame and apply the move's instead.
-  const vy = g === 1 ? f.vy : f.vy + p.air_accel_y - stall.gravity;
-  kineticSetY(f, Math.max(terminal, vy));
+  kineticSetY(f, Math.max(terminal, before - stall.gravity));
+}
+
+/**
+ * `f.vy` before this frame's FALL step took the fighter's own gravity off it,
+ * so the move's can replace it. At the fighter's own terminal speed the step
+ * may have been cut short, so nothing is undone there, and a stall falling that
+ * fast settles at its own terminal (the Task 4 review's Minor 3: undoing the
+ * whole gravity there settled Fox at −1.897, not −2.1).
+ */
+function beforeOwnGravity(f: FighterState, p: FighterParams): number {
+  const own = -(f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
+  return f.vy > own ? f.vy + p.air_accel_y : f.vy;
+}
+
+/**
+ * The early reflect (Mario's Cape, `ReflectorDef.detector`): a reflectable
+ * projectile inside a fighter's detector on one of its frames skips the move
+ * on, so the next frame is the detector's `to`. SmashWiki "Mario (SSBU)"
+ * (https://www.ssbwiki.com/Mario_(SSBU)): the reflector can "start two frames
+ * earlier (frame 7) if a projectile is very close to Mario at the time", and
+ * then "the entire move loses two frames of startup, allowing the offensive
+ * hitbox to come out earlier (on frame 10)"; `game_specials`: a `SEARCH` from
+ * frame 6 to 8 and `REFLECT_MOTION_FRAME` 9. UNVERIFIED: which projectiles it
+ * reacts to (here, as for the reflector, anyone else's reflectable ones), and
+ * that the skip shows on the detecting frame (the frame is drawn as `to` − 1).
+ */
+function detectProjectiles(
+  s: GameState,
+  defs: readonly FighterDef[],
+  projectileDef: (p: ProjectileState) => ProjectileDef | undefined,
+  candidates: readonly ReflectCandidate[],
+  destroyed: ReadonlySet<number>,
+): void {
+  for (let i = 0; i < s.fighters.length; i++) {
+    const f = s.fighters[i];
+    if (f.action !== "special" || f.move === null) continue;
+    const d = defs[i].moves[f.move]?.reflector?.detector;
+    if (d === undefined) continue;
+    const g = moveFrameOf(f.actionFrame);
+    if (g < d.frames[0] || g > d.frames[1]) continue;
+    const side = f.facing >= 0 ? 1 : -1;
+    const zone: Capsule = { x1: f.x + side * d.x1, y1: f.y + d.y, x2: f.x + side * d.x2, y2: f.y + d.y, r: d.radius };
+    const near = candidates.some((c) => {
+      const p = c.projectile;
+      if (p === null || p.owner === i || c.suppressed || destroyed.has(p.instanceId)) return false;
+      if (projectileDef(p)?.reflectable !== true) return false;
+      return sweptCapsulePenetration(c.prevX, c.prevY, c.x, c.y, 0, 0, c.hitbox.radius, zone) >= 0;
+    });
+    if (near) f.actionFrame = actionFrameOf(d.to - 1);
+  }
 }

@@ -387,6 +387,12 @@ export interface KineticInput {
    */
   readonly stickMag?: number;
   readonly params: FighterParams;
+  /**
+   * A move that restricts air mobility (Plan 5: Mario's Cape, `StallDef.airFriction`):
+   * in the air the stick does not drift the fighter, and CONTROL bleeds toward
+   * 0 by this instead. Absent: ordinary air control (`airControlX`).
+   */
+  readonly airFriction?: number;
 }
 
 /** One frame of gravity toward `terminal`, which is a positive speed. */
@@ -456,7 +462,11 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
       break;
     case "FALL":
     case "AIR_ESCAPE":
-      k.controlX = f.grounded ? approach(k.controlX, 0, p.ground_brake) : airControlX(k.controlX, input.stickX, p);
+      k.controlX = f.grounded
+        ? approach(k.controlX, 0, p.ground_brake)
+        : input.airFriction !== undefined
+          ? approach(k.controlX, 0, input.airFriction)
+          : airControlX(k.controlX, input.stickX, p);
       break;
     case "GROUND_STOP":
       k.stopX = approach(k.stopX, 0, f.grounded ? p.ground_brake : p.air_brake_x);
