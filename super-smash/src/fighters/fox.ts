@@ -793,9 +793,14 @@ const legacy: FighterDef = {
       // "Damage threshold 50%", "Intangibility 2-3", "Reflection 4-23",
       // "Minimum reflection period 20 frames", "From frame 5 onward, Fox can
       // also turn around", "Horizontal speed multiplier on startup 0.5", "Period
-      // before applying gravity 4 frames", "Gravity 0.027"; interruptible 37 is
-      // 14 frames after the loop's last frame. UNVERIFIED: the bubble's centre,
-      // put where the move's 2% hitbox is (script `top` Y 6.5).
+      // before applying gravity 4 frames", "Gravity 0.027", "Loop points 3-4
+      // and 23-24"; interruptible 37 is 14 frames after the loop's last frame;
+      // a reflection's 20 frames can be "canceled by a roll, spot dodge, or
+      // jump" (`reflectorMain`). UltimateFrameData (https://ultimateframedata.com/fox):
+      // "Total 36", "Invulnerable on frame 2-3 Reflects as early as frame 4".
+      // SmashWiki "Reflector (Fox)" (https://www.ssbwiki.com/Reflector_(Fox)):
+      // "However, it now only stalls Fox once in midair." UNVERIFIED: the
+      // bubble's centre, put where the move's 2% hitbox is (script `top` Y 6.5).
       intangible: [2, 3],
       reflector: {
         active: [4, 23],

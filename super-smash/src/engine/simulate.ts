@@ -906,10 +906,12 @@ function captorOf(s: GameState, f: FighterState): FighterState | null {
  *
  * Standing where the captor stands counts as touching the ground, if there is
  * ground there: a victim over the captor's platform is grounded on it, and a
- * fighter caught in the air gets its ground jump and its air dodge back, as a
- * landing gives them (UNVERIFIED for the air dodge: SmashWiki "Air dodge" lists
- * "land"). A victim held past the edge (the captor at the lip, facing out) is
- * held in the air: not grounded, so no restore, and a release leaves it to fall.
+ * fighter caught in the air gets its ground jump, its air dodge and its special
+ * stall back, as a landing gives them (UNVERIFIED for the air dodge: SmashWiki
+ * "Air dodge" lists "land"; and for the stall: SmashWiki "Fox (SSBU)" says
+ * "until he lands or gets hit"). A victim held past the edge (the captor at the
+ * lip, facing out) is held in the air: not grounded, so no restore, and a
+ * release leaves it to fall.
  * It is placed, so gravity never moves it, and it is not "in the air" for the
  * ledge's airtime bonus either (`airTime` stays 0 while held). UNVERIFIED: that
  * last part; SmashWiki "Ledge" counts the time in the air before a grab, and no
@@ -938,6 +940,7 @@ function holdAtCaptor(
   if (over) {
     f.jumpsUsed = 0;
     f.airDodged = false;
+    f.combat.specialStall = false;
   }
 }
 
@@ -1128,11 +1131,16 @@ function resolveClanks(
   events: StepEvents,
   destroyed: Set<number>,
 ): void {
+  // A projectile already suppressed when this pass starts was reflected this
+  // frame (`reflectProjectiles`, phase 6a): it neither clanks nor hits until the
+  // next (Plan 5). Nothing else suppresses a candidate before the clanks.
+  const reflected = new Set(candidates.filter((c) => c.projectile !== null && c.suppressed));
   for (let a = 0; a < candidates.length; a++) {
     for (let b = a + 1; b < candidates.length; b++) {
       const ca = candidates[a];
       const cb = candidates[b];
       if (ca.attacker === cb.attacker) continue;
+      if (reflected.has(ca) || reflected.has(cb)) continue;
       // A pummel or a throw on a held fighter is not a hitbox in the world (SSBU's
       // `ATTACK_ABS`, `set_catch_only_all`): nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;

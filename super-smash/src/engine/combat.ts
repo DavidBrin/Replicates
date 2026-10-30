@@ -114,8 +114,10 @@ export interface CombatState {
   reflectHold: number;
   /**
    * Plan 5: this airtime's one special stall is spent (Reflector, Cape). Reset on
-   * landing, a ledge, a hit and a KO; not by a grab, as the air dodge is not
-   * (`applyHit`). SmashWiki "Fox (SSBU)": "he can only do it once until he lands
+   * landing, a ledge, a hit and a KO, and by being held over the ground, which
+   * counts as a landing (`holdAtCaptor`); not by the catch itself, as the air
+   * dodge is not (`applyHit`). SmashWiki "Fox (SSBU)"
+   * (https://www.ssbwiki.com/Fox_(SSBU)): "he can only do it once until he lands
    * or gets hit".
    */
   specialStall: boolean;

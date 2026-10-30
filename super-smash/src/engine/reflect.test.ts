@@ -1,3 +1,11 @@
+/**
+ * Reflectors in isolation (Plan 5, Task 3), on a stand-in reflector with Fox's
+ * numbers: SmashWiki "Fox (SSBU)/Down special"
+ * (https://www.ssbwiki.com/Fox_(SSBU)/Down_special) and "Reflection"
+ * (https://www.ssbwiki.com/Reflection). Fox's own data is pinned through
+ * `step()` in `src/fighters/reflect.test.ts`.
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { ONE, fx, mul } from "./fixed";
@@ -85,6 +93,13 @@ describe("activeReflector", () => {
     f.actionFrame = 23; // game frame 24
     expect(activeReflector(f, DEF)).toBeNull();
   });
+
+  it("is raised by a special only, the one status that counts its hold down and clears it", () => {
+    const s = createInitialState("s", [{ defId: "t" }], RULES, 1, CTX);
+    const f = s.fighters[0];
+    Object.assign(f, { action: "attack", move: "downB", actionFrame: 5 });
+    expect(activeReflector(f, DEF)).toBeNull();
+  });
 });
 
 describe("reflectProjectile", () => {
@@ -109,6 +124,22 @@ describe("reflectProjectile", () => {
     expect(p.source).toBe("mario");
   });
 
+  it("starts a returning boomerang's flight over, so it turns again later (UNVERIFIED: no source covers it)", () => {
+    const p = shotAt(fx(15), { returning: true });
+    const s = createInitialState("s", [{ defId: "t" }, { defId: "t" }], RULES, 1, CTX);
+    reflectProjectile(p, SHOT, s.fighters[1], REFLECTOR);
+    expect(p.returning).toBe(false);
+  });
+
+  it("leaves the vertical speed as it was (UNVERIFIED: the speed multiplier is read as horizontal only)", () => {
+    const p = shotAt(fx(15), { vy: fx(1) });
+    const s = createInitialState("s", [{ defId: "t" }, { defId: "t" }], RULES, 1, CTX);
+    reflectProjectile(p, SHOT, s.fighters[1], REFLECTOR);
+    expect(p.vy).toBe(fx(1));
+  });
+
+  // The Cape's "Lifetime multiplier 0.75": SmashWiki "Mario (SSBU)/Side special"
+  // (https://www.ssbwiki.com/Mario_(SSBU)/Side_special), and "Reflection"'s table.
   it("renews a lifetime multiplier below one as that share of the whole (Cape: 0.75)", () => {
     const p = shotAt(fx(15));
     const s = createInitialState("s", [{ defId: "t" }, { defId: "t" }], RULES, 1, CTX);
@@ -126,10 +157,17 @@ describe("reflectProjectiles", () => {
     expect(s.fighters[1].combat.reflectHold).toBe(20);
   });
 
+  // SmashWiki "Fox (SSBU)/Down special": "Damage threshold 50%"; "Reflection":
+  // past it, "the projectile simply ignores the reflector and hits the user".
   it("lets a projectile past the damage threshold through (SmashWiki: 50%)", () => {
     const { c, s } = scene(shotAt(fx(15)), fx(51));
     expect(c.suppressed).toBe(false);
     expect(s.projectiles[0].owner).toBe(0);
+  });
+
+  it("reflects one of exactly the threshold", () => {
+    expect(scene(shotAt(fx(15)), fx(50)).c.suppressed).toBe(true);
+    expect(scene(shotAt(fx(15)), fx(50) + 1).c.suppressed).toBe(false);
   });
 
   it("deletes a projectile that has already been reflected seven times", () => {

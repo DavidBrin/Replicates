@@ -63,7 +63,7 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     return;
   }
   // A reflector loops and turns (Plan 5, `reflect.ts`).
-  if (f.action === "special" && move.reflector !== undefined && reflectorMain(f, intent, move.reflector)) return;
+  if (f.action === "special" && move.reflector !== undefined && reflectorMain(f, intent, ctx, move.reflector)) return;
   // A charging special reads B, never the attack button (Plan 5).
   if (f.action === "special" && move.specialCharge !== undefined && specialChargeMain(f, intent, ctx, move.specialCharge)) {
     return;

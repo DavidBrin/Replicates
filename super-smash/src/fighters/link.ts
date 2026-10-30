@@ -750,6 +750,14 @@ const legacy: FighterDef = {
           destroyOnHit: false,
           bounces: 3,
           visual: "bomb",
+          // SmashWiki "Reflection" (https://www.ssbwiki.com/Reflection): Link's
+          // "Remote Bomb (SSBU only)"; "Link (SSBU)/Down special"
+          // (https://www.ssbwiki.com/Link_(SSBU)/Down_special): `reflectable=t`
+          // on both its Thrown and Explosion boxes. The one box here is the 7%
+          // detonation, live for the bomb's whole life (a simplification of
+          // this replica's), so a reflected bomb comes back as that box ×1.4:
+          // UNVERIFIED against Ultimate's 1% thrown box.
+          reflectable: true,
           hitbox: {
             id: 0,
             startFrame: 0,
