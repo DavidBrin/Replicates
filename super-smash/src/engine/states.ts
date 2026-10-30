@@ -52,6 +52,7 @@ import {
   TECH_INTANGIBLE,
 } from "./constants";
 import { dodgeIntangible, groundDodgeOf, rollCharge, rollOf } from "./groundDodge";
+import { GROUND_EXIT } from "./groundExit";
 import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
 import { moveMomentum, moveScriptFrame, moveSuperArmour } from "./acmd/run";
 import { actionFrameOf, clearHitRecord } from "./hitbox";
@@ -666,35 +667,6 @@ export function fullChargeArmour(f: FighterState, def: FighterDef): readonly [nu
 
 /* -------------------------------------------------- actionable behaviour -- */
 
-/**
- * Can a fighter in this state start something new right now? Its one caller,
- * `onLeftGround`, reads it as "a fighter leaving the ground in this state falls",
- * and `crouchStart` is listed for that reading alone (below).
- */
-export function isActionable(f: FighterState): boolean {
-  switch (f.action) {
-    case "stand":
-    case "walk":
-    case "dashStart":
-    case "run":
-    case "runBrake":
-    case "crouch":
-    // A crawl off an edge or a soft platform falls, as a walk does (Plan 5, Task 12).
-    case "crawl":
-    // Not free to act (it buffers), but a crouch begun at an edge with speed left
-    // slides off it in `crouchStart`, and falls rather than handing off to a crouch
-    // or a crawl in the air (Plan 5, Task 12 fix round 1, ruling R-T12c). UNVERIFIED:
-    // no source says; it falls as a walk, a run or a crouch does.
-    case "crouchStart":
-    case "fall":
-    case "tumbleFall":
-    case "jump":
-      return true;
-    default:
-      return false;
-  }
-}
-
 export interface Presses {
   jump: boolean;
   attack: boolean;
@@ -1290,6 +1262,10 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
     return;
   }
   if (f.hitstun > 0) return; // still reeling; the landing does not interrupt it
+  // A landing's lag slid off the ground plays on where it lands, as it played on in
+  // the air (Plan 5, Task 12 fix round 2, ruling R-T12d; `GROUND_EXIT`'s `lag`):
+  // landing again does not start a fresh one.
+  if (GROUND_EXIT[f.action] === "lag") return;
   if (f.action === "specialFall") {
     landFromSpecialFall(f, ctx.def);
     return;
@@ -1369,7 +1345,12 @@ export function onLeftGround(f: FighterState): void {
     startSpecialFall(f, f.combat.helplessMove);
     return;
   }
-  if (isActionable(f)) startAction(f, "fall");
+  // Every other status by its edge rule (Plan 5, Task 12 fix round 2, ruling
+  // R-T12d; `groundExit.ts`): a status that is grounded by nature becomes its fall
+  // on this frame. A landing's lag plays on in the air, and so do the moves, the
+  // reels and the rest; the cliff-stop statuses never get here.
+  const exit = GROUND_EXIT[f.action];
+  if (exit === "fall" || exit === "tumbleFall") startAction(f, exit);
 }
 
 /**

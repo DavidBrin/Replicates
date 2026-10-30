@@ -102,6 +102,7 @@ import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import { pinHeldFighters, ridesCaptor } from "./held";
 import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
+import { GROUND_EXIT } from "./groundExit";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -140,7 +141,6 @@ import {
   hasSuperArmour,
   heavyArmourOf,
   interpretInput,
-  isCatchStatus,
   isHolding,
   isParrying,
   onLanded,
@@ -802,8 +802,9 @@ export function step(
       stage,
       defs[i].attributes,
       s.frame,
-      // The catch statuses stop at the edge instead of walking off it.
-      { cliffStop: isCatchStatus(f.action), ecb },
+      // The catch statuses and the shield stop at the edge instead of sliding off it
+      // (`GROUND_EXIT`, Plan 5, Task 12 fix round 2).
+      { cliffStop: GROUND_EXIT[f.action] === "cliffStop", ecb },
     );
     // A wall that stopped the body is remembered for a wall jump, or a wall tech
     // jump (Plan 5, Task 10), before the tech below reads it.

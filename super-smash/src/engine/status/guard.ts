@@ -145,8 +145,9 @@ export const STATUS_FURAFURA: FighterStatus = {
       f.combat.mash = 0;
       return;
     }
-    // The shield comes back as the status ends (`end`).
-    startAction(f, "stand");
+    // The shield comes back as the status ends (`end`). A stun slid off the ground
+    // plays out in the air and falls (ruling R-T12d).
+    startAction(f, f.grounded ? "stand" : "fall");
   },
 };
 

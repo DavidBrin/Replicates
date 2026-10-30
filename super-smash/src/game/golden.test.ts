@@ -649,6 +649,15 @@ describe("engine golden trace", () => {
   // The script and the Inhale lab keep their 6 and 4 hits and their KOs. So now: hits
   // 32/20/26/21, 6, 0, 1, 4 and 1; shield hits 0/0/0/1, 3, 0, 0, 0 and 0; KOs
   // 1/2/1/0, 1, 2, 0, 0 and 0.
+  // Plan 5 Task 12's fix round 2 (ruling R-T12d: no ground status survives leaving
+  // the ground; `GROUND_EXIT`) moved only mario-fox, from the 1601-1700 sample: Mario
+  // dashes into a shield on 1665 and slides, and the shield now stops at the stage's
+  // edge (79.99, on 1685; SmashWiki "Shield": Ultimate's shields are not edge-slipped)
+  // where it slid off before. With the shield rows alone set back, all nine traces
+  // replay, so the rest of the class (the falls and the lags) moves no golden match.
+  // Hits 38, shield hits 5, KOs 1 there (were 32, 0 and 1). So now: hits
+  // 38/20/26/21, 6, 0, 1, 4 and 1; shield hits 5/0/0/1, 3, 0, 0, 0 and 0; KOs
+  // 1/2/1/0, 1, 2, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

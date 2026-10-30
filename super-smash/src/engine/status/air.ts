@@ -113,8 +113,9 @@ export const STATUS_LANDING: FighterStatus = {
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
     // `charge` holds the light or heavy landing's length (see `onLanded`); a
-    // landing that did not come through there plays the legacy four frames.
-    if (f.actionFrame >= (f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES)) endStatus(f, "stand", intent, ctx);
+    // landing that did not come through there plays the legacy four frames. One
+    // slid off the ground plays out in the air and falls (ruling R-T12d).
+    if (f.actionFrame >= (f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES)) endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -124,10 +125,11 @@ export const STATUS_LANDING_ATTACK_AIR: FighterStatus = {
   action: "landingLag",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    // `charge` carries the remaining lag; see `onLanded`.
+    // `charge` carries the remaining lag; see `onLanded`. Slid off the ground, it
+    // plays out in the air and falls (ruling R-T12d).
     if (f.actionFrame >= f.charge) {
       f.charge = 0;
-      endStatus(f, "stand", intent, ctx);
+      endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -176,9 +178,11 @@ export const STATUS_LANDING_FALL_SPECIAL: FighterStatus = {
   action: "specialLanding",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
+    // Slid off the ground with no helpless move to keep, it plays out in the air
+    // and falls (ruling R-T12d).
     if (f.actionFrame >= f.charge) {
       f.charge = 0;
-      endStatus(f, "stand", intent, ctx);
+      endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
   },
   end: forgetHelplessMove,

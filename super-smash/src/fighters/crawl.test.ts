@@ -153,9 +153,9 @@ describe("crawling", () => {
 });
 
 /**
- * Ruling R-T12b: a crawl off the ground is what `isActionable` makes of it, as
- * for a walk: the fighter falls (`onLeftGround`), and is never left crawling in
- * the air. UNVERIFIED: no source says whether a crawl stops at an edge (SmashWiki
+ * Ruling R-T12b: a crawl off the ground is what its edge rule makes of it
+ * (`GROUND_EXIT`, fix round 2), as for a walk: the fighter falls (`onLeftGround`),
+ * and is never left crawling in the air. UNVERIFIED: no source says whether a crawl stops at an edge (SmashWiki
  * "Teeter" names a slow walk only).
  */
 describe("crawling off the ground", () => {
@@ -232,7 +232,7 @@ describe("crawling is not a crouch cancel", () => {
 /**
  * Ruling R-T12c (fix round 1): a crouch begun at a platform's edge with speed
  * left slides off it in `crouchStart`. Leaving the ground there is a fall
- * (`isActionable`, through `onLeftGround`), so nobody crouches or crawls in the
+ * (`GROUND_EXIT`, through `onLeftGround`), so nobody crouches or crawls in the
  * air. Before it, the review's probe had Pikachu hand off from an airborne
  * `crouchStart` to `crawl`, its air drift overwritten by the crawl's speed, and
  * Mario to an airborne `crouch`.

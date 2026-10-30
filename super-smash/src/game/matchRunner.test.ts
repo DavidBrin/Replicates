@@ -439,10 +439,13 @@ describe("an online match ends once, on both machines", () => {
 
   const TIMED_SWEEP = { latencies: [33, 50, 80, 120], seeds: [1, 2, 3, 4], periods: [1, 2, 4, 8] };
   // [seed, period] pairs whose scripts lose a last stock within a few hundred
-  // frames on one machine; most scripts do, these are the quick ones.
+  // frames on one machine; most scripts do, these are the quick ones. Plan 5,
+  // Task 12 fix round 2: [8, 5] lost its stock on frame 1043, not 643, once a
+  // shield stops at the stage's edge (ruling R-T12d), too late for the 120 ms
+  // link inside its budget, so [9, 5] (on 405 before and after) takes its place.
   const STOCK_SWEEP = {
     latencies: [33, 80, 120],
-    scripts: [[1, 4], [1, 5], [2, 8], [4, 4], [4, 5], [4, 8], [7, 5], [7, 8], [8, 5], [8, 8]] as const,
+    scripts: [[1, 4], [1, 5], [2, 8], [4, 4], [4, 5], [4, 8], [7, 5], [7, 8], [9, 5], [8, 8]] as const,
   };
 
   /** One machine, no network, the same inputs on the same frames. */

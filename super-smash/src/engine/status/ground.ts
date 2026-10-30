@@ -155,7 +155,7 @@ export const STATUS_SQUAT_WAIT: FighterStatus = {
     if (handleActionable(f, intent, ctx)) return;
     if (intent.y >= 0) startAction(f, "crouchEnd");
     // Down and to the side crawls, for the fighters who can (Plan 5, Task 12), on
-    // the ground only (fix round 1, ruling R-T12c; `isActionable` already sends a
+    // the ground only (fix round 1, ruling R-T12c; `GROUND_EXIT` already sends a
     // crouch that leaves the ground to `fall`).
     else if (intent.x !== 0 && f.grounded && ctx.def.attributes.canCrawl === true) startAction(f, "crawl");
   },
@@ -191,7 +191,7 @@ export const STATUS_SQUAT_F: FighterStatus = {
   kineticType: "WALK",
   main(f, intent, ctx) {
     // In the air it falls, as `groundMain` does (fix round 1, ruling R-T12c: a
-    // guard; `isActionable` already sends a crawl that leaves the ground to `fall`).
+    // guard; `GROUND_EXIT` already sends a crawl that leaves the ground to `fall`).
     if (!f.grounded) {
       startAction(f, "fall");
       return;
