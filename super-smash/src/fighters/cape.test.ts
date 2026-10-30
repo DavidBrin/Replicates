@@ -180,6 +180,29 @@ describe("the Cape's reflector comes up early for a projectile very close", () =
     expect(states[11].fighters[0].damage).toBe(0);
   });
 
+  it("in front of a left-facing Mario too: the detector is mirrored", () => {
+    const s = duel(100);
+    // The same scene, mirrored: Mario at +50 facing left, Fox's laser flying right at him from +1.
+    Object.assign(s.fighters[0], { x: fx(50), facing: -1 });
+    Object.assign(s.fighters[1], { x: fx(-50), facing: 1 });
+    const p = spawnProjectile(findProjectileDef(fox, "blaster")!, s.fighters[1], 1);
+    p.x = fx(1);
+    s.projectiles.push(p);
+    s.nextProjectileId = 2;
+    const { states, events } = run(s, 12, (i) => (i === 0 ? Btn.Left | Btn.Special : 0));
+    expect(moveFrameOf(states[5].fighters[0].actionFrame)).toBe(8);
+    expect(events.findIndex((e) => e.reflects.length > 0)).toBe(6);
+  });
+
+  it("but not for Mario's own projectile on the same path", () => {
+    // The first test's laser, Mario's now (as a reflected one is): the detector ignores it.
+    const s = laserAt(-1);
+    s.projectiles[0].owner = 0;
+    const { states, events } = run(s, 12, cape);
+    expect(moveFrameOf(states[6].fighters[0].actionFrame)).toBe(7);
+    expect(events.some((e) => e.reflects.length > 0)).toBe(false);
+  });
+
   it("but on frame 9 with nothing near", () => {
     const { states } = run(duel(100), 12, cape);
     expect(moveFrameOf(states[6].fighters[0].actionFrame)).toBe(7);

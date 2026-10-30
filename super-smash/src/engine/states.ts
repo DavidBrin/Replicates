@@ -572,16 +572,22 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
 
 /**
  * Start the special in `slot`. A side special pressed away from where the
- * fighter faces (`stickX`, the stick's −1/0/1) turns it round first, on the
- * ground or in the air (Plan 5, Task 4 fix round 1). SmashWiki "Side special
- * move" (https://www.ssbwiki.com/Side_special_move): "any character can
- * quickly turn around on the spot and immediately perform their side special
- * move". Not modelled: reversing one "in the first few frames" (same page).
+ * fighter faces (`stickX`, the stick's −1/0/1) turns it round first (Plan 5,
+ * Task 4 fix rounds 1 and 2). SmashWiki "Side special move"
+ * (https://www.ssbwiki.com/Side_special_move): "any character can quickly turn
+ * around on the spot and immediately perform their side special move", except
+ * that "when running, the player cannot use their side special backward
+ * without having to stop or turn around first": out of `run` it is the forward
+ * side special, on the run's momentum.
+ *
+ * UNVERIFIED: the turn in the air and out of `dashStart`; the page names
+ * neither. Not modelled: reversing one "in the first few frames" (same page).
+ * Only a side special turns: the up, down and neutral specials keep the facing.
  */
 export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot, stickX = 0): boolean {
   const move = ctx.def.moves[slot];
   if (move === undefined) return false;
-  if (slot === "sideB" && stickX !== 0) f.facing = stickX;
+  if (slot === "sideB" && stickX !== 0 && f.action !== "run") f.facing = stickX;
   startMove(f, "special", slot);
   // A stored charge comes back out (Plan 5): a full one is released as its move
   // says (`StoredFullCharge.start`: Giant Punch from its loop frame, Charge Shot
