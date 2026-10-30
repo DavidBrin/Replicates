@@ -593,6 +593,41 @@ describe("projectiles and rollback", () => {
   });
 });
 
+describe("where a projectile comes from (Plan 5)", () => {
+  it("names the fighter whose moveset defines it, so a new owner can still find it", () => {
+    const p = spawnProjectile(ARROW, fighter({ defId: "zoner" }), 1);
+    expect(p.source).toBe("zoner");
+    expect(p.reflected).toBe(0);
+    expect(p.charge).toBe(0);
+  });
+
+  it("can be told a different source, for a move borrowed from another fighter", () => {
+    expect(spawnProjectile(ARROW, fighter({ defId: "zoner" }), 1, "mario").source).toBe("mario");
+  });
+
+  it("records the fraction of a full charge it was launched with", () => {
+    expect(spawnProjectile(CHARGE_SHOT, fighter({ charge: SMASH_CHARGE_MAX }), 1).charge).toBe(ONE);
+    expect(spawnProjectile(CHARGE_SHOT, fighter({ charge: SMASH_CHARGE_MAX / 2 }), 1).charge).toBe(ONE / 2);
+  });
+
+  it("copies every field of a projectile, and hashes every one of them", () => {
+    const p = spawnProjectile(ARROW, fighter(), 1);
+    const c = cloneProjectile(p);
+    expect(Object.keys(c).sort()).toEqual(Object.keys(p).sort());
+    const s = fire(standing(fx(200)), [Btn.Special, 0], 6);
+    for (const [name, mutate] of [
+      ["source", (q: GameState) => (q.projectiles[0].source = "other")],
+      ["charge", (q: GameState) => (q.projectiles[0].charge += 1)],
+      ["reflected", (q: GameState) => (q.projectiles[0].reflected += 1)],
+    ] as const) {
+      const q = cloneState(s);
+      mutate(q);
+      expect(hashState(q), `hash ignored projectile.${name}`).not.toBe(hashState(s));
+      expect(cloneState(q).projectiles[0], `clone dropped projectile.${name}`).toEqual(q.projectiles[0]);
+    }
+  });
+});
+
 describe("def lookup", () => {
   it("finds a projectile by id across the whole moveset", () => {
     expect(findProjectileDef(DEF, "arrow")).toBe(ARROW);

@@ -77,6 +77,7 @@ function gameState(fighters: FighterState[], over: Partial<GameState> = {}): Gam
     timeRemaining: 0,
     outcome: null,
     freezeFrames: 0,
+    cinematic: -1,
     ...over,
   };
 }

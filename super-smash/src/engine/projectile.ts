@@ -88,6 +88,7 @@ export function spawnProjectile(
   def: ProjectileDef,
   owner: FighterState,
   instanceId: number,
+  source: string = owner.defId,
 ): ProjectileState {
   const facing = owner.facing >= 0 ? 1 : -1;
   const chargeScale = projectileChargeScale(def, owner.charge);
@@ -105,7 +106,16 @@ export function spawnProjectile(
     chargeScale,
     hitPorts: [],
     returning: false,
+    source,
+    charge: chargeFraction(owner.charge, SMASH_CHARGE_MAX),
+    reflected: 0,
   };
+}
+
+/** `charge` of `frames` as a Q12 fraction of a full charge, clamped to [0, ONE]. */
+export function chargeFraction(charge: number, frames: number): number {
+  if (charge <= 0 || frames <= 0) return 0;
+  return Math.trunc((Math.min(charge, frames) * ONE) / frames);
 }
 
 /** The projectiles a move launches on this frame of its animation. */
@@ -240,5 +250,8 @@ export function cloneProjectile(p: ProjectileState): ProjectileState {
     // rollback that silently remembers hits that were rewound.
     hitPorts: p.hitPorts.slice(),
     returning: p.returning,
+    source: p.source,
+    charge: p.charge,
+    reflected: p.reflected,
   };
 }

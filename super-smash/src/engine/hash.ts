@@ -230,6 +230,9 @@ export function mixProjectile(h: number, p: ProjectileState): number {
   x = mixInt(x, p.hitPorts.length);
   for (const port of p.hitPorts) x = mixInt(x, port);
   x = mixBool(x, p.returning);
+  x = mixString(x, p.source);
+  x = mixInt(x, p.charge);
+  x = mixInt(x, p.reflected);
   return x;
 }
 
@@ -250,6 +253,7 @@ export function hashState(state: GameState): number {
   h = mixSmashBall(h, state.smashBall);
   h = mixInt(h, state.timeRemaining);
   h = mixInt(h, state.freezeFrames);
+  h = mixInt(h, state.cinematic);
   if (state.outcome === null) {
     h = mixInt(h, 0);
   } else {

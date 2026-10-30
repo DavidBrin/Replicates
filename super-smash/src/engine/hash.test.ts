@@ -73,6 +73,9 @@ function projectile(over: Partial<ProjectileState> = {}): ProjectileState {
     chargeScale: fx(1),
     hitPorts: [],
     returning: false,
+    source: "link",
+    charge: 0,
+    reflected: 0,
     ...over,
   };
 }
@@ -90,6 +93,7 @@ function state(over: Partial<GameState> = {}): GameState {
     timeRemaining: 0,
     outcome: null,
     freezeFrames: 0,
+    cinematic: -1,
     ...over,
   };
 }
@@ -149,6 +153,7 @@ describe("hashState", () => {
       ["stageId", (s) => (s.stageId = "final-destination")],
       ["timeRemaining", (s) => (s.timeRemaining += 1)],
       ["freezeFrames", (s) => (s.freezeFrames += 1)],
+      ["cinematic", (s) => (s.cinematic = 1)],
       ["nextProjectileId", (s) => (s.nextProjectileId += 1)],
       ["rules.mode", (s) => (s.rules = { ...s.rules, mode: "time" })],
       ["rules.stocks", (s) => (s.rules = { ...s.rules, stocks: 2 })],
@@ -287,6 +292,9 @@ describe("hashState", () => {
     expect(withProjectile({ chargeScale: fx(2) })).not.toBe(base);
     expect(withProjectile({ hitPorts: [1] })).not.toBe(base);
     expect(withProjectile({ returning: true })).not.toBe(base);
+    expect(withProjectile({ source: "samus" })).not.toBe(base);
+    expect(withProjectile({ charge: fx(0.5) })).not.toBe(base);
+    expect(withProjectile({ reflected: 1 })).not.toBe(base);
   });
 
   it("distinguishes two fighters swapped between ports", () => {

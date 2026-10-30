@@ -736,6 +736,16 @@ export interface ProjectileState {
   hitPorts: number[];
   /** Flipped once a returning projectile turns around. */
   returning: boolean;
+  /**
+   * The fighter whose moveset defines `defId` (Plan 5). Not `owner`: a reflector
+   * makes a projectile its own, and Kirby's copied neutral special launches
+   * another fighter's projectile, so the definition is looked up here.
+   */
+  source: string;
+  /** The fraction of a full charge it was launched with, Q12 (`ONE` = full). Plan 5. */
+  charge: number;
+  /** How many times it has been reflected. SmashWiki "Reflect": seven at most. Plan 5. */
+  reflected: number;
 }
 
 export interface SmashBallState {
@@ -793,6 +803,13 @@ export interface GameState {
   outcome: MatchOutcome | null;
   /** Frames of global hitstop, for the dramatic freeze on a heavy hit. */
   freezeFrames: number;
+  /**
+   * The port whose Final Smash cinematic is playing, or -1 (Plan 5). While one
+   * plays, only that fighter and the fighters it trapped advance — everybody
+   * else, every projectile and the Smash Ball wait — exactly as SSBU pauses the
+   * match for the cutscene. It is state, so a rollback replays it.
+   */
+  cinematic: number;
 }
 
 export interface MatchOutcome {

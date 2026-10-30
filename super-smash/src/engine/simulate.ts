@@ -162,6 +162,7 @@ import type {
   InputFrame,
   MatchRules,
   MoveSlot,
+  ProjectileDef,
   ProjectileState,
   StageDef,
   StepEvents,
@@ -333,6 +334,7 @@ export function cloneState(state: GameState): GameState {
         ? null
         : { kind: state.outcome.kind, placings: state.outcome.placings.slice() },
     freezeFrames: state.freezeFrames,
+    cinematic: state.cinematic,
   };
 }
 
@@ -427,6 +429,7 @@ export function createInitialState(
     timeRemaining: rules.mode === "time" ? rules.timeLimit : 0,
     outcome: null,
     freezeFrames: 0,
+    cinematic: -1,
   };
 }
 
@@ -779,12 +782,12 @@ export function step(
 
   // Projectiles fly, then this frame's launches join them, then everything —
   // fists and arrows alike — goes through one clank pass and one hit pass.
-  const projectilePrev = advanceProjectiles(s, defs, stage);
+  const projectilePrev = advanceProjectiles(s, ctx, stage);
   spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev);
 
   const destroyed = new Set<number>();
   const candidates = gatherHitboxes(s, defs, prevPos, frozen, bones);
-  appendProjectileCandidates(s, defs, candidates, projectilePrev);
+  appendProjectileCandidates(s, ctx, candidates, projectilePrev);
   resolveClanks(s, candidates, events, destroyed);
   resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed);
   if (destroyed.size > 0) {
@@ -990,20 +993,23 @@ function gatherHitboxes(
 type PrevPositions = Map<number, { x: number; y: number }>;
 
 /**
+ * A projectile's definition, from the fighter whose moveset holds it (`source`)
+ * rather than from whoever owns it now (Plan 5: reflectors, Kirby's copy).
+ */
+function projectileDefOf(ctx: SimContext, p: ProjectileState): ProjectileDef | undefined {
+  return findProjectileDef(ctx.fighter(p.source), p.defId);
+}
+
+/**
  * Fly every projectile one frame and drop the ones that ran out of life, stage
  * or bounces. Returns where each was before it moved, for the swept hit test.
  */
-function advanceProjectiles(
-  s: GameState,
-  defs: readonly FighterDef[],
-  stage: StageDef,
-): PrevPositions {
+function advanceProjectiles(s: GameState, ctx: SimContext, stage: StageDef): PrevPositions {
   const prev: PrevPositions = new Map();
   if (s.projectiles.length === 0) return prev;
   const survivors: ProjectileState[] = [];
   for (const p of s.projectiles) {
-    const ownerDef = defs[p.owner];
-    const def = ownerDef === undefined ? undefined : findProjectileDef(ownerDef, p.defId);
+    const def = projectileDefOf(ctx, p);
     if (def === undefined) continue;
     const owner = s.fighters[p.owner] ?? null;
     const moved = advanceProjectile(p, def, stage, owner, s.frame);
@@ -1062,13 +1068,12 @@ function spawnDueProjectiles(
 /** Add every live projectile hitbox to the same candidate list as the fists. */
 function appendProjectileCandidates(
   s: GameState,
-  defs: readonly FighterDef[],
+  ctx: SimContext,
   candidates: Candidate[],
   prev: PrevPositions,
 ): void {
   for (const p of s.projectiles) {
-    const ownerDef = defs[p.owner];
-    const def = ownerDef === undefined ? undefined : findProjectileDef(ownerDef, p.defId);
+    const def = projectileDefOf(ctx, p);
     if (def === undefined || !projectileHitboxActive(p, def)) continue;
     const was = prev.get(p.instanceId) ?? { x: p.x, y: p.y };
     const offsetX = p.facing >= 0 ? def.hitbox.x : -def.hitbox.x;

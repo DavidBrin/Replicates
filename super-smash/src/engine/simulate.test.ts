@@ -219,6 +219,10 @@ describe("createInitialState", () => {
     expect(s.fighters[1].facing).toBe(-1);
   });
 
+  it("starts with no Final Smash cinematic playing (Plan 5)", () => {
+    expect(newState().cinematic).toBe(-1);
+  });
+
   it("starts a timed match with its clock full", () => {
     const s = newState({ ...RULES, mode: "time", timeLimit: 60 * 60 });
     expect(s.timeRemaining).toBe(60 * 60);
@@ -279,6 +283,7 @@ describe("cloneState", () => {
       {
         instanceId: 1, defId: "pellet", owner: 0, x: 0, y: 0, vx: 0, vy: 0, facing: 1,
         age: 0, bouncesLeft: 0, chargeScale: ONE, hitPorts: [1], returning: false,
+        source: "<any>", charge: 0, reflected: 0,
       },
     ];
     s.outcome = { kind: "stockOut", placings: [1, 0] };
@@ -313,6 +318,12 @@ describe("cloneState", () => {
       check(s, cloneState(s), `state (pass ${pass})`);
     }
     expect(booleans, "every fighter's flags and the state's own").toBeGreaterThan(10);
+  });
+
+  it("copies the cinematic port (Plan 5)", () => {
+    const s = standing();
+    s.cinematic = 1;
+    expect(cloneState(s).cinematic).toBe(1);
   });
 
   it("copies the rules and the Smash Ball rather than aliasing them", () => {

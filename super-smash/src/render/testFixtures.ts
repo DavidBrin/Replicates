@@ -98,6 +98,7 @@ export function makeState(over: Partial<GameState> = {}): GameState {
     timeRemaining: 60 * 60 * 3,
     outcome: null,
     freezeFrames: 0,
+    cinematic: -1,
     ...over,
   };
 }
@@ -117,6 +118,9 @@ export function makeProjectile(over: Partial<ProjectileState> = {}): ProjectileS
     chargeScale: ONE,
     hitPorts: [],
     returning: false,
+    source: "link",
+    charge: 0,
+    reflected: 0,
     ...over,
   };
 }
