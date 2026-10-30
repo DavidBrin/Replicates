@@ -27,6 +27,7 @@ import { gameScriptFor } from "@/engine/acmd/legacy";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
+import { insideSolidBody } from "@/engine/physics";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { FIGHTERS } from "./index";
 import { STAGES } from "@/stages";
@@ -554,3 +555,52 @@ describe("Donkey Kong's Headbutt", () => {
 // Kirby's Inhale held its victim for the whole move here, a stand-in (Plan 3 final
 // wave, part 2, item 7) until Plan 5 Task 9 built its own statuses: the mouthful,
 // the swallow and the spit are `inhale.test.ts`'s.
+
+/**
+ * No projectile is launched inside the stage's solid body (Plan 5, Task 9 fix
+ * round 3; `spawnDueProjectiles`): fired from just outside Final Destination's
+ * left wall, facing it, below its floor. Before, each of these started inside
+ * the body and flew on through it for 22 to 45 frames. UNVERIFIED: that such a
+ * projectile is not launched at all; no source says.
+ */
+describe("a projectile fired into a wall from beside it", () => {
+  const FD = STAGES.find((st) => st.id === "finalDestination")!;
+  it.each([
+    ["mario", "Fireball", Btn.Special],
+    ["fox", "Blaster", Btn.Special],
+    ["samus", "Homing Missile", Btn.Special | Btn.Right],
+    ["link", "Hero's Bow", Btn.Special],
+    ["link", "Boomerang", Btn.Special | Btn.Right],
+  ] as const)("%s's %s never starts, or flies, inside it", (id, _name, key) => {
+    let s = createInitialState("finalDestination", [{ defId: id }, { defId: "kirby" }], RULES, 9);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(-84), y: fx(-30), facing: 1, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[1], { action: "stand", x: fx(40), y: 0, grounded: true, platform: 0 });
+    let prev: InputFrame[] = [0, 0];
+    let launches = 0;
+    for (let i = 0; i < 60; i++) {
+      const now: InputFrame[] = [i === 0 ? key : 0, 0];
+      const before = s.nextProjectileId;
+      s = step(s, now, { prevInputs: prev }).state;
+      prev = now;
+      launches += s.nextProjectileId - before;
+      for (const p of s.projectiles) expect(insideSolidBody(FD, s.frame, p.x, p.y), `${p.defId} at age ${p.age}`).toBe(false);
+    }
+    // Its spawn point was inside the wall, so nothing was launched.
+    expect(launches).toBe(0);
+  });
+
+  it("still launches one whose spawn point is in the open (the Fireball, facing away)", () => {
+    let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "kirby" }], RULES, 9);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(-84), y: fx(-30), facing: -1, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[1], { action: "stand", x: fx(40), y: 0, grounded: true, platform: 0 });
+    let prev: InputFrame[] = [0, 0];
+    let seen = false;
+    for (let i = 0; i < 30; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
+      s = step(s, now, { prevInputs: prev }).state;
+      prev = now;
+      if (s.projectiles.length > 0) seen = true;
+    }
+    expect(seen).toBe(true);
+  });
+});

@@ -17,6 +17,7 @@ import {
   fastFallVelocity,
   findLedgeGrab,
   hitstunGravityOptions,
+  insideSolidBody,
   integrate,
   ledgeIntangibilityFrames,
   ledgePosition,
@@ -116,6 +117,22 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     ...over,
   };
 }
+
+describe("a point inside a solid body (Plan 5, Task 9 fix rounds 2 and 3)", () => {
+  // The golden's own test for a fighter's origin (`stageInvariantBreaks`), strict
+  // at every edge: on the surface, at the underside or level with a wall is out.
+  it("is within the span, below the surface and above the underside, and only a hard platform's", () => {
+    expect(insideSolidBody(STAGE, 0, 0, fx(-30))).toBe(true);
+    expect(insideSolidBody(STAGE, 0, fx(79.9), fx(-0.1))).toBe(true);
+    expect(insideSolidBody(STAGE, 0, fx(80), fx(-30))).toBe(false);
+    expect(insideSolidBody(STAGE, 0, fx(-80), fx(-30))).toBe(false);
+    expect(insideSolidBody(STAGE, 0, 0, 0)).toBe(false);
+    expect(insideSolidBody(STAGE, 0, 0, -HARD_PLATFORM_DEPTH)).toBe(false);
+    expect(insideSolidBody(STAGE, 0, 0, fx(1))).toBe(false);
+    // The soft platform has no body.
+    expect(insideSolidBody(STAGE, 0, 0, fx(29))).toBe(false);
+  });
+});
 
 describe("legacy gravity (a test oracle; the engine uses gravityStep)", () => {
   it("accelerates downward one gravity per frame", () => {

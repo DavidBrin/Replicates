@@ -53,7 +53,7 @@ import { ONE_ON_ONE_MULTIPLIER } from "./constants";
 import { gameScriptFor } from "./acmd/legacy";
 import { moveFrameOf } from "./hitbox";
 import { kineticSet } from "./kinetic";
-import { HARD_PLATFORM_DEPTH, platformCentreX } from "./physics";
+import { insideSolidBody } from "./physics";
 import { inhaleHoldFrames, leaveStar, starFrames } from "./status/inhale";
 import { releaseGrab, startAction } from "./states";
 import type { FighterDef, FighterState, GameState, MoveDef, ProjectileState, StageDef, StepEvents } from "./types";
@@ -225,7 +225,7 @@ export function resolveInhaleReleases(
       // underside) is not flown: the fighter comes out at Kirby, as with no star
       // (fix round 2; UNVERIFIED, nothing is published).
       const star = release.star;
-      if (star === undefined || insideSolid(stage, s.frame, kirby.x, kirby.y + star.offsetY)) startAction(victim, victim.grounded ? "stand" : "fall");
+      if (star === undefined || insideSolidBody(stage, s.frame, kirby.x, kirby.y + star.offsetY)) startAction(victim, victim.grounded ? "stand" : "fall");
       else rideOutStar(victim, kirby, star);
       continue;
     }
@@ -316,20 +316,13 @@ export function carryOutStarRiders(s: GameState, fighterOf: (id: string) => Figh
     const speed = Math.max(0, star.speed - star.friction * f.actionFrame);
     const x = f.x + f.facing * mul(speed, cosDeg(star.angle));
     const y = f.y + mul(speed, sinDeg(star.angle));
-    if (insideSolid(stage, s.frame, x, y)) {
+    if (insideSolidBody(stage, s.frame, x, y)) {
       leaveStar(f);
       continue;
     }
     f.x = x;
     f.y = y;
   }
-}
-
-/** Is (x, y) strictly inside a solid platform's body (`stateInvariants`' own test)? */
-function insideSolid(stage: StageDef, frame: number, x: number, y: number): boolean {
-  return stage.platforms.some(
-    (p) => !p.soft && Math.abs(x - platformCentreX(p, frame)) < p.halfWidth && y < p.y && y > p.y - HARD_PLATFORM_DEPTH,
-  );
 }
 
 /** The fighter riding `p`, if one is. */
@@ -342,7 +335,8 @@ export function riderOf(s: GameState, p: ProjectileState): FighterState | undefi
  * gone lets its rider go where it last was, unless it went past a blast line,
  * which takes the rider with it (phase 9): a wall, its time or its speed ends
  * a ride, a blast line ends a stock. UNVERIFIED: no source says where a rider is
- * let go of; a star flies through no wall, so the last place it was is in the open.
+ * let go of; a star starts in no solid body (`spawnDueProjectiles`, fix round 3)
+ * and dies at the wall it meets, so the last place it was is in the open.
  */
 export function carryStarRider(s: GameState, p: ProjectileState, alive: boolean, stage: StageDef): void {
   const rider = riderOf(s, p);

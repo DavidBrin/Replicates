@@ -578,6 +578,19 @@ export function ledgeIntangibilityFrames(
   return Math.trunc((raw * scaling) / ONE);
 }
 
+/**
+ * Is (x, y) strictly inside a solid platform's body: within its span, below its
+ * surface and above its underside (`HARD_PLATFORM_DEPTH`)? The same test the golden's
+ * `stageInvariantBreaks` holds every fighter's origin to. Strict at every edge: a
+ * point on the surface, at the underside or level with a wall is out (Plan 5, Task
+ * 9 fix rounds 2 and 3: the swallow's star, and every projectile's spawn).
+ */
+export function insideSolidBody(stage: StageDef, frame: number, x: number, y: number): boolean {
+  return stage.platforms.some(
+    (p) => !p.soft && Math.abs(x - platformCentreX(p, frame)) < p.halfWidth && y < p.y && y > p.y - HARD_PLATFORM_DEPTH,
+  );
+}
+
 /* ------------------------------------------------------------ blast zone -- */
 
 export type KOKind = "blast" | "star" | "screen";

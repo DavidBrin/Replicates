@@ -1059,6 +1059,23 @@ describe("Inhale's own published shape (Task 9 fix round 1, ruling R-T9f)", () =
     after.forEach((st, k) => expect(stateInvariantBreaks(st, FD, k), `step ${k}`).toEqual([]));
   });
 
+  it.each([
+    [-83, 1],
+    [83, -1],
+  ])("launches no spit star inside the stage: spitting at its wall from x %i, Mario comes out at Kirby (fix round 3)", (x, facing) => {
+    // Beside Final Destination's side, below its floor, facing it: the star's spawn
+    // point (7 ahead, 7 up) is inside the body, so it is never launched
+    // (`spawnDueProjectiles`).
+    const s = holdingMario();
+    Object.assign(s.fighters[0], { x: fx(x), y: fx(-30), grounded: false, platform: -1, facing });
+    const { states, events } = run(s, 30, (i) => [i === 0 ? Btn.Attack : 0, 0]);
+    expect(events[7].hits).toEqual([expect.objectContaining({ attacker: 0, victim: 1 })]);
+    expect(states[7].projectiles).toEqual([]);
+    expect(states[7].fighters[1]).toMatchObject({ action: "fall", grabbedBy: -1, x: states[7].fighters[0].x });
+    expect(states.every((st) => st.fighters[1].action !== "spatStar")).toBe(true);
+    states.forEach((st, k) => expect(stateInvariantBreaks(st, FD, k), `step ${k}`).toEqual([]));
+  });
+
   it("stops the swallow's star short of the stage's solid body, and lets its rider go there", () => {
     // Off Final Destination's right side, below its floor, facing it: the star climbs into the side.
     const s = holdingMario();

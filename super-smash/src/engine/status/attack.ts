@@ -115,8 +115,9 @@ export const STATUS_ATTACK: FighterStatus = {
  * 64 (20)", "After one full loop, the move can be ended by releasing the special
  * move button at any point"): the loop's 34 frames always play, and Kirby acts 20
  * frames after B comes up past them. UNVERIFIED: that a held loop repeats frames
- * 35-44. Nothing publishes the frames a held loop repeats (the page's "loop
- * points 34-35" reads as the 34-frame loop, 11-44, wrapping); 35-44 keeps the
+ * 35-44. Nothing publishes the frames a held loop repeats (the page's "Loop
+ * points 10-11, 34-35" reads as the start handing to the loop, and the 34-frame
+ * loop, 11-44, wrapping); 35-44 keeps the
  * published live boxes, the catch throughout and a pull every 10 frames (its
  * "rehit rate: 10"), where repeating 11-44 would pull at 10, 10, 10 and 4. No
  * maximum hold is published.

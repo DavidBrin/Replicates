@@ -121,6 +121,7 @@ import {
 import {
   blastZoneKO,
   clampShiftToStage,
+  insideSolidBody,
   ecbOf,
   findLedgeGrab,
   integrate,
@@ -883,7 +884,7 @@ export function step(
   // Projectiles fly, then this frame's launches join them, then everything —
   // fists and arrows alike — goes through one clank pass and one hit pass.
   const projectilePrev = advanceProjectiles(s, ctx, stage);
-  spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev);
+  spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev, stage);
   // A swallow or a spit lets its mouthful out, onto this frame's star for a spit,
   // and a star nobody rides is gone (Plan 5, Task 9).
   resolveInhaleReleases(s, defs, (id) => ctx.fighter(id), frozen, beforeActionFrame, events, stage);
@@ -1187,6 +1188,7 @@ function spawnDueProjectiles(
   beforeActionFrame: readonly number[],
   frozen: readonly boolean[],
   prev: PrevPositions,
+  stage: StageDef,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -1211,6 +1213,16 @@ function spawnDueProjectiles(
       // (Plan 5, Task 9, ruling R-T9a): its definition is looked up by `source`.
       const source = f.combat.copy !== "" && f.move === "neutralB" ? f.combat.copy : defs[i].id;
       const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move));
+      // One that would start inside the stage's solid body (its owner beside a wall
+      // or under the stage, facing it) is never launched: it is in the wall from
+      // its first frame, where one flying into it would die or turn (`bounce`), and
+      // nothing it does from there is in the open. Every roster projectile can, and
+      // the Fireball, Blaster, Homing Missile, arrow and boomerang did, flying on
+      // through the body (Plan 5, Task 9 fix round 3; `insideSolidBody`). UNVERIFIED:
+      // that SSBU removes such an article rather than turning or placing it; no
+      // source says. Kirby's spit then has no star, and its fighter comes out at him
+      // (`resolveInhaleReleases`).
+      if (insideSolidBody(stage, s.frame, p.x, p.y)) continue;
       s.nextProjectileId += 1;
       s.projectiles.push(p);
       prev.set(p.instanceId, { x: p.x, y: p.y });
