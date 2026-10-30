@@ -7,6 +7,7 @@ import { basename, join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { MAGIC_BYTES, PIPELINE_ONLY, modelMagic } from "../../../scripts/models/rippedFormats.mjs";
 import { parseManifest, type ModelManifest } from "./manifest";
 
 /**
@@ -19,8 +20,11 @@ import { parseManifest, type ModelManifest } from "./manifest";
  * "One of them" is decided by the manifest, not by guessing at names: a file
  * is ripped if its name is one the manifest lists, or if its bytes hash to one
  * the manifest lists (a renamed copy), or if it is a format only the pipeline
- * makes (.blend, .glb, .gltf, .webp, .ktx2). A name pattern missed 17 of the
- * 114 real files (`eye_donkey_001.png`, `pikachu_facial_01_col.png`, …).
+ * makes (.blend, .glb, .gltf, .webp, .ktx2, .dds), or if it starts with one of
+ * those formats' magic numbers (a glb renamed `.bin`, a texture pulled out of
+ * a glb). A name pattern missed 17 of the 114 real files (`eye_donkey_001.png`,
+ * `pikachu_facial_01_col.png`, …). The names and the magic numbers are
+ * `scripts/models/rippedFormats.mjs`, the list the deploy guard refuses too.
  *
  * The scan is the whole repo (`:/`), not just `super-smash/`: a file in `Risk/`
  * takes the same repo down. Paths are NUL-separated (`-z`) because git quotes a
@@ -39,7 +43,6 @@ if (!existsSync(join(ROOT, "scripts", "models", "manifest.json"))) {
   throw new Error(`noRippedAssets.test.ts: run from super-smash/ (${ROOT} has no scripts/models/manifest.json)`);
 }
 
-const PIPELINE_ONLY = /\.(blend\d*|glb|gltf|webp|ktx2)$/i;
 /**
  * The git-ignored output folders, at any depth and in any letter case: the two the model pipeline writes, and
  * `test-results/`, where the capture scripts and Playwright write the pictures they take of the models.
@@ -61,12 +64,16 @@ interface IndexEntry {
   readonly id: string;
 }
 
-/** Index entries that are ripped assets, with why. `size` and `hash` take a blob id and are injected so the rule is testable without real blobs. */
+/**
+ * Index entries that are ripped assets, with why. `size`, `hash` and `head` (the blob's first `MAGIC_BYTES` bytes)
+ * take a blob id and are injected so the rule is testable without real blobs.
+ */
 export function rippedAssets(
   entries: readonly Pick<IndexEntry, "path" | "id">[],
   manifest: ModelManifest,
   size: (id: string) => number,
   hash: (id: string) => string,
+  head: (id: string) => Uint8Array,
 ): string[] {
   const names = new Set(manifest.files.map((f) => basename(f.path).toLowerCase()));
   const bySize = new Map<number, Set<string>>();
@@ -78,9 +85,12 @@ export function rippedAssets(
     else if (CAPTURE_PNG.test(path)) out.push(`${path} (animation-tool capture)`);
     else if (names.has(basename(path).toLowerCase())) out.push(`${path} (manifest file name)`);
     else {
+      // A model's magic number under a harmless name (outside public/models/: inside it, the folder rule above fired).
+      const magic = modelMagic(head(id));
       // Only a blob of exactly a manifest size can have a manifest hash.
       const shas = bySize.get(size(id));
-      if (shas?.has(hash(id))) out.push(`${path} (manifest file bytes)`);
+      if (magic !== null) out.push(`${path} (model bytes: ${magic})`);
+      else if (shas?.has(hash(id))) out.push(`${path} (manifest file bytes)`);
     }
   }
   return out;
@@ -104,32 +114,35 @@ function indexEntries(env: NodeJS.ProcessEnv): IndexEntry[] {
     });
 }
 
-/** The size of each blob, from one `cat-file --batch-check`. A blob git cannot find is left out. */
-function blobSizes(ids: readonly string[], env: NodeJS.ProcessEnv): Map<string, number> {
+/**
+ * The size and first `MAGIC_BYTES` bytes of each blob, from one `cat-file --batch` (every staged blob in the repo,
+ * about 180 MB in 3,300 blobs today, read in well under a second). A blob git cannot find is left out.
+ */
+function blobs(ids: readonly string[], env: NodeJS.ProcessEnv): Map<string, { size: number; head: Uint8Array }> {
   const unique = [...new Set(ids)];
-  const sizes = new Map<string, number>();
-  if (unique.length === 0) return sizes;
-  const out = execFileSync("git", ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"], {
-    cwd: ROOT,
-    encoding: "utf8",
-    env,
-    input: unique.join("\n") + "\n",
-    maxBuffer: MAX_BUFFER,
-  });
-  for (const line of out.split("\n")) {
-    const [id, type, size] = line.split(" ");
-    if (type === "blob") sizes.set(id, Number(size));
+  const found = new Map<string, { size: number; head: Uint8Array }>();
+  if (unique.length === 0) return found;
+  const out = execFileSync("git", ["cat-file", "--batch"], { cwd: ROOT, env, input: unique.join("\n") + "\n", maxBuffer: MAX_BUFFER });
+  // Each object is "<id> <type> <size>\n", its bytes, then "\n"; one git cannot find is "<id> missing\n" alone.
+  for (let at = 0; at < out.length; ) {
+    const eol = out.indexOf(0x0a, at);
+    const [id, type, size] = out.subarray(at, eol).toString("latin1").split(" ");
+    at = eol + 1;
+    if (size === undefined) continue;
+    const bytes = Number(size);
+    if (type === "blob") found.set(id, { size: bytes, head: out.subarray(at, at + Math.min(bytes, MAGIC_BYTES)) });
+    at += bytes + 1;
   }
-  return sizes;
+  return found;
 }
 
 /** Scan the index `env` points at (the real one unless a scratch `GIT_INDEX_FILE` is given). */
 function scan(env: NodeJS.ProcessEnv = process.env, against: ModelManifest = manifest): string[] {
   const entries = indexEntries(env);
   // A gitlink (a submodule) names a commit in another repository, not a blob here.
-  const sizes = blobSizes(entries.filter((e) => e.mode !== GITLINK).map((e) => e.id), env);
+  const found = blobs(entries.filter((e) => e.mode !== GITLINK).map((e) => e.id), env);
   const sha = (id: string) => createHash("sha256").update(execFileSync("git", ["cat-file", "blob", id], { cwd: ROOT, env, maxBuffer: MAX_BUFFER })).digest("hex");
-  return rippedAssets(entries, against, (id) => sizes.get(id) ?? -1, sha);
+  return rippedAssets(entries, against, (id) => found.get(id)?.size ?? -1, sha, (id) => found.get(id)?.head ?? new Uint8Array());
 }
 
 const manifest = parseManifest(JSON.parse(readFileSync(join(ROOT, "scripts", "models", "manifest.json"), "utf8")));
@@ -137,8 +150,25 @@ const manifest = parseManifest(JSON.parse(readFileSync(join(ROOT, "scripts", "mo
 describe("the ripped-asset rule", () => {
   const sizes: Record<string, number> = { "docs/a.png": 1168, "docs/b.png": 1168, "src/x.ts": 10 };
   const shas: Record<string, string> = { "docs/a.png": manifest.files.find((f) => f.bytes === 1168)?.sha256 ?? "", "docs/b.png": "0".repeat(64), "src/x.ts": "1".repeat(64) };
+  /** First bytes by path: each model format's magic number with filler, and two that only start like one. */
+  const heads: Record<string, Uint8Array> = {
+    "docs/a.bin": Buffer.concat([Buffer.from("glTF"), Buffer.from([2, 0, 0, 0]), Buffer.from("filler")]),
+    "Risk/b.dat": Buffer.from("BLENDER-v300REND"),
+    "art/c.png": Buffer.concat([Buffer.from([0xab]), Buffer.from("KTX 20"), Buffer.from([0xbb, 0x0d, 0x0a, 0x1a, 0x0a])]),
+    "art/d.txt": Buffer.from("DDS |\0\0\0"),
+    "e.jpg": Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WEBPVP8 ")]),
+    "sounds/hit.wav": Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WAVEfmt ")]),
+    "docs/short.txt": Buffer.from("glT"),
+  };
   // A blob id stands for its path here; the real wiring is exercised against git below.
-  const run = (paths: string[]) => rippedAssets(paths.map((path) => ({ path, id: path })), manifest, (id) => sizes[id] ?? 0, (id) => shas[id] ?? "");
+  const run = (paths: string[]) =>
+    rippedAssets(
+      paths.map((path) => ({ path, id: path })),
+      manifest,
+      (id) => sizes[id] ?? 0,
+      (id) => shas[id] ?? "",
+      (id) => heads[id] ?? new Uint8Array(),
+    );
 
   it("catches names the old pattern missed, renamed copies, and pipeline formats", () => {
     expect(run(["public/eye_donkey_001.png", "art/pikachu_facial_01_col.png"])).toHaveLength(2);
@@ -158,6 +188,28 @@ describe("the ripped-asset rule", () => {
     ]);
     // Not a capture: other pictures, and names that only start like one.
     expect(run(["docs/screenshots/title.png", "super-smash/docs/screenshots/match.png", "docs/animation.png", "docs/anim-notes.md", "docs/animal-fight.png", "src/test-results.ts"])).toEqual([]);
+  });
+
+  it("catches every name the deploy guard and the pre-push scan refuse, .dds included (final review M5)", () => {
+    expect(run(["t/a.dds", "t/B.DDS", "t/c.webp", "t/d.ktx2", "t/e.gltf"])).toEqual([
+      "t/a.dds (pipeline-only format)",
+      "t/B.DDS (pipeline-only format)",
+      "t/c.webp (pipeline-only format)",
+      "t/d.ktx2 (pipeline-only format)",
+      "t/e.gltf (pipeline-only format)",
+    ]);
+  });
+
+  it("catches a model's first bytes under any name: a glb renamed .bin, a .blend, KTX, DDS and WebP textures (final review M5)", () => {
+    expect(run(["docs/a.bin", "Risk/b.dat", "art/c.png", "art/d.txt", "e.jpg"])).toEqual([
+      "docs/a.bin (model bytes: glTF bytes (a glb))",
+      "Risk/b.dat (model bytes: BLENDER bytes (a .blend))",
+      "art/c.png (model bytes: KTX bytes (a texture))",
+      "art/d.txt (model bytes: DDS bytes (a texture))",
+      "e.jpg (model bytes: RIFF/WEBP bytes (a WebP texture))",
+    ]);
+    // Only starting like one is not enough: a WAV is RIFF too, and three bytes are not glTF.
+    expect(run(["sounds/hit.wav", "docs/short.txt"])).toEqual([]);
   });
 
   it("passes ordinary files, even one the size of a texture", () => {
@@ -182,13 +234,13 @@ function scratch() {
   mkdirSync(objects);
   const realObjects = resolve(ROOT, execFileSync("git", ["rev-parse", "--git-path", "objects"], { cwd: ROOT, encoding: "utf8" }).trim());
   const env = { ...process.env, GIT_INDEX_FILE: join(dir, "index"), GIT_OBJECT_DIRECTORY: objects, GIT_ALTERNATE_OBJECT_DIRECTORIES: realObjects };
-  const git = (args: string[], input?: string) => execFileSync("git", args, { cwd: ROOT, env, input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+  const git = (args: string[], input?: string | Buffer) => execFileSync("git", args, { cwd: ROOT, env, input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
   git(["read-tree", "HEAD"]);
   const EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
   return {
     env,
-    /** Write `text` as a blob into the scratch object directory only. */
-    blob: (text: string) => git(["hash-object", "-w", "--stdin"], text).trim(),
+    /** Write `bytes` as a blob into the scratch object directory only. */
+    blob: (bytes: string | Buffer) => git(["hash-object", "-w", "--stdin"], bytes).trim(),
     /** Stage `id` at `path` (replacing a tracked entry there, if any) without any working-tree file. */
     plant: (path: string, id = EMPTY_BLOB, mode = "100644") => void git(["update-index", "--add", "--info-only", "--cacheinfo", `${mode},${id},${path}`]),
     head: () => git(["rev-parse", "HEAD"]).trim(),
@@ -247,6 +299,28 @@ describe("no Nintendo-ripped asset is tracked", () => {
       for (const p of planted) s.plant(p);
       s.plant("super-smash/docs/screenshots/title.png"); // an ordinary picture is not one
       expect(scan(s.env).map((f) => f.replace(/ \(.*\)$/, "")).sort()).toEqual([...planted].sort());
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  it("sees model bytes staged under a harmless name anywhere in the repo, never the working tree (final review M5)", () => {
+    const s = scratch();
+    try {
+      expect(scan(s.env)).toEqual([]);
+      const planted: [string, Buffer][] = [
+        ["super-smash/public/audit.bin", Buffer.concat([Buffer.from("glTF"), Buffer.from([2, 0, 0, 0]), Buffer.from("a glb renamed")])],
+        ["super-smash/docs/screenshots/eye.png", Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WEBPVP8 a texture pulled out")])],
+        ["Risk/notes.txt", Buffer.from("BLENDER-v300 a renamed .blend")],
+        ["x-root.dat", Buffer.concat([Buffer.from([0xab]), Buffer.from("KTX 20"), Buffer.from([0xbb])])],
+        ["super-smash/src/a.json", Buffer.from("DDS |\0\0\0 a texture")],
+      ];
+      for (const [path, bytes] of planted) s.plant(path, s.blob(bytes));
+      s.plant("super-smash/public/sounds/hit.wav", s.blob(Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WAVEfmt ")])));
+      const flagged = scan(s.env);
+      expect(flagged.every((f) => f.includes(" (model bytes: "))).toBe(true);
+      expect(flagged.map((f) => f.slice(0, f.indexOf(" (model bytes: "))).sort()).toEqual(planted.map(([path]) => path).sort());
+      for (const [path] of planted) expect(existsSync(join(ROOT, "..", path))).toBe(false);
     } finally {
       s.cleanup();
     }
