@@ -229,6 +229,12 @@ export interface CombatState {
   stoneFrames: number;
   /** Plan 5, Task 13 fix round 2: the damage (Q12) the current move's stone has blocked, against its `hp`. Per move, as `stoneFrames`. */
   stoneTaken: number;
+  /**
+   * The length, in frames after its freeze, of the rebound a lost clank sends the
+   * fighter into (Plan 5, Task 13c fix round 1, ruling R-T13c-a: `reboundFrames`); 0
+   * outside it. Cleared when the rebound ends, however it ends (`STATUS_REBOUND`).
+   */
+  rebound: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -275,6 +281,7 @@ export function emptyCombat(): CombatState {
     landingCliffStop: false,
     stoneFrames: 0,
     stoneTaken: 0,
+    rebound: 0,
   };
 }
 
@@ -319,5 +326,6 @@ export function cloneCombat(c: CombatState): CombatState {
     landingCliffStop: c.landingCliffStop,
     stoneFrames: c.stoneFrames,
     stoneTaken: c.stoneTaken,
+    rebound: c.rebound,
   };
 }

@@ -125,6 +125,8 @@ export type ActionState =
   | "airDodge"
   // reeling
   | "hitstun"
+  // a clank lost: frozen, then knocked back out of the move (Plan 5, Task 13c fix round 1)
+  | "rebound"
   | "tumble"
   | "tumbleFall"
   | "grabbed"
@@ -392,6 +394,22 @@ export interface ProjectileDef {
   readonly settle?: { readonly restitution: number; readonly minSpeed: number };
   /** The fastest it falls ("Falling speed"); absent, gravity has no limit. */
   readonly maxFall?: number;
+  /**
+   * A floor it lands on bounces it up at its horizontal speed ×`speed`, its rise
+   * held between `minVy` and `maxVy`; each landing spends one of `bounces` (Plan 5,
+   * Task 13c fix round 1: Mario's Fireball, "Speed multiplier after bounce 0.97",
+   * "Minimum vertical speed after bounce 1.4", "Maximum vertical speed after bounce
+   * 1.6"). A wall or an underside it bounces off by `bounces`' own rule.
+   */
+  readonly hop?: { readonly speed: number; readonly minVy: number; readonly maxVy: number };
+  /**
+   * A floor it meets shallower than `throughAngle` (Q12 degrees below the flat) it
+   * comes off at its own angle, at least `minAngle`, its speed kept; a soft platform
+   * met more steeply it goes through (Plan 5, Task 13c fix round 1: Link's boomerang,
+   * "Minimum bounce angle off ground 16°", "Angle difference to go through floor
+   * instead of bouncing off 30°"). It never ends against a floor.
+   */
+  readonly skim?: { readonly minAngle: number; readonly throughAngle: number };
   /**
    * It flies out slowing by `deceleration` a frame, turns once it would be
    * slower than `minSpeed`, and comes back gaining speed up to `maxSpeed`,

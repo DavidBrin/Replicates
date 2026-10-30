@@ -112,6 +112,10 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   airDodge: "keep",
   // The reels carry on (a grounded flinch ends in a fall in the air, `endStatus`).
   hitstun: "keep",
+  // UNVERIFIED (Plan 5, Task 13c fix round 1): a rebound pushed off the edge plays its
+  // remaining frames out in the air and then falls, as a landing's lag does; no page
+  // names a rebound at an edge.
+  rebound: "lag",
   tumble: "keep",
   tumbleFall: "keep",
   // Held: the captor places them.

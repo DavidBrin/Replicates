@@ -195,6 +195,8 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   // SmashWiki's Ultimate footstool combos (above; ruling R-T11c); WuBor
   // `damage/damage.rs`, `damage_fly.rs`, `damage_fall.rs` (ENABLE) agree.
   hitstun: "ENABLE",
+  // UNVERIFIED (Plan 5, Task 13c fix round 1): a rebound reels as a flinch does.
+  rebound: "ENABLE",
   tumble: "ENABLE",
   tumbleFall: "ENABLE",
   // Held: the pair moves as one (Plan 5 review).

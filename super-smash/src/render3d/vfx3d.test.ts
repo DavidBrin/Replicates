@@ -148,9 +148,9 @@ describe("the shield bubble is the sim's own", () => {
 
   const SHIELDING: readonly ActionState[] = ["shieldStart", "shield", "shieldStun", "shieldRelease"];
 
-  it("is absent unless the fighter is shielding: not in any other of the 57 actions, a broken shield included", () => {
+  it("is absent unless the fighter is shielding: not in any other of the 58 actions, a broken shield included", () => {
     const actions = Object.keys(STATUS_KIND_OF_ACTION) as ActionState[];
-    expect(actions).toHaveLength(57);
+    expect(actions).toHaveLength(58);
     for (const action of actions) {
       const look = shieldLook(makeFighter({ action }), mario, 0);
       if (SHIELDING.includes(action)) expect(look, action).not.toBeNull();

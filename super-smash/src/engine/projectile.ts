@@ -16,7 +16,7 @@
  * whether it still exists.
  */
 
-import { ONE, fx, abs, mul } from "./fixed";
+import { ONE, fx, abs, cosDeg, isqrt, mul, sinDeg } from "./fixed";
 import { SMASH_CHARGE_MAX } from "./constants";
 import { HARD_PLATFORM_DEPTH, platformCentreX } from "./physics";
 import { chargedHitbox } from "./specialCharge";
@@ -316,16 +316,11 @@ function steerReturning(p: ProjectileState, r: NonNullable<ProjectileDef["return
 
 /**
  * The length of a Q12 vector, exactly: the floor of √(dx² + dy²) on the raw
- * integers, seeded by `Math.sqrt` and corrected to the exact floor as
- * `fixed.ts`'s `sqrt` is. Not `magnitude`, which squares in Q12 and is a few
- * units out for a slow, slanted vector (a boomerang turning at 0.3).
+ * integers (`isqrt`). Not `magnitude`, which squares in Q12 and is a few units out
+ * for a slow, slanted vector (a boomerang turning at 0.3).
  */
 function length(dx: number, dy: number): number {
-  const n = dx * dx + dy * dy;
-  let r = Math.floor(Math.sqrt(n));
-  while (r > 0 && r * r > n) r--;
-  while ((r + 1) * (r + 1) <= n) r++;
-  return r;
+  return isqrt(dx * dx + dy * dy);
 }
 
 /**
@@ -361,8 +356,11 @@ function turnToward(vx: number, vy: number, tx: number, ty: number, sin: number,
   return [mul(vx, cos) - mul(vy, s), mul(vx, s) + mul(vy, cos)];
 }
 
+/** The parts of a `ProjectileDef` that say how it meets the stage. */
+type SurfaceRule = Pick<ProjectileDef, "lodge" | "settle" | "hop" | "skim">;
+
 /** What a surface does to a knocked projectile: nothing in `ProjectileDef` but its end. */
-const VANISH: Pick<ProjectileDef, "lodge" | "settle"> = {};
+const VANISH: SurfaceRule = {};
 
 /**
  * Surfaces: a floor (a top it comes down onto, soft or solid), and a solid
@@ -376,7 +374,7 @@ const VANISH: Pick<ProjectileDef, "lodge" | "settle"> = {};
  */
 function surfaces(
   p: ProjectileState,
-  rule: Pick<ProjectileDef, "lodge" | "settle">,
+  rule: SurfaceRule,
   stage: StageDef,
   frame: number,
   prevX: number,
@@ -388,7 +386,7 @@ function surfaces(
 
     // Landing on the top surface: a downward crossing inside the platform's span.
     if (p.vy <= 0 && prevY >= plat.y && p.y <= plat.y && abs(p.x - cx) <= plat.halfWidth) {
-      return meetFloor(p, rule, i, plat.y);
+      return meetFloor(p, rule, i, plat.y, plat.soft);
     }
 
     if (plat.soft) continue;
@@ -418,14 +416,18 @@ function lodgeAt(p: ProjectileState, frames: number, i: number, x: number, y: nu
   p.y = y;
 }
 
-function meetFloor(p: ProjectileState, rule: Pick<ProjectileDef, "lodge" | "settle">, i: number, y: number): boolean {
+function meetFloor(p: ProjectileState, rule: SurfaceRule, i: number, y: number, soft: boolean): boolean {
   if (rule.lodge !== undefined) {
     lodgeAt(p, rule.lodge, i, p.x, y);
     return true;
   }
+  if (rule.skim !== undefined) return skimFloor(p, rule.skim, y, soft);
   if (rule.settle !== undefined) {
     p.y = y;
     const speed = -p.vy;
+    // UNVERIFIED (fix round 1): "Minimum speed to bounce off ground" read as the
+    // speed it lands at. Read as the speed after the bounce's multiplier instead,
+    // Samus's bomb would rest from age 75, not 83.
     if (speed >= rule.settle.minSpeed) {
       // UNVERIFIED: that the bounce's "Speed multiplier" takes both components.
       p.vx = mul(p.vx, rule.settle.restitution);
@@ -440,11 +442,42 @@ function meetFloor(p: ProjectileState, rule: Pick<ProjectileDef, "lodge" | "sett
   if (p.bouncesLeft <= 0) return false;
   p.bouncesLeft -= 1;
   p.y = y;
+  if (rule.hop !== undefined) {
+    // UNVERIFIED: that "Speed multiplier after bounce" scales the speed along the
+    // floor, and the rise is then held between the page's least and most.
+    p.vx = mul(p.vx, rule.hop.speed);
+    p.vy = Math.min(Math.max(mul(-p.vy, rule.hop.speed), rule.hop.minVy), rule.hop.maxVy);
+    return true;
+  }
   p.vy = -p.vy;
   return true;
 }
 
-function meetSide(p: ProjectileState, rule: Pick<ProjectileDef, "lodge" | "settle">, i: number, x: number): boolean {
+/**
+ * A floor met by a skimming projectile (`ProjectileDef.skim`; Plan 5, Task 13c fix
+ * round 1, ruling R-T13c-c: Link's boomerang, SmashWiki "Link (SSBU)/Side special",
+ * https://www.ssbwiki.com/Link_(SSBU)/Side_special). Met shallower than its through
+ * angle, it comes off at its own angle, at least its minimum ("Minimum bounce angle
+ * off ground 16°"), at its speed; a soft platform met more steeply it goes through
+ * ("Angle difference to go through floor instead of bouncing off 30°"). UNVERIFIED:
+ * that reading of the angle pair; and that a solid floor met steeply bounces it as a
+ * shallow one does, since going through it would put it inside the stage, which
+ * "Wall" rules out for walls. Not modelled: "Downward ground collision range −0.5u".
+ */
+function skimFloor(p: ProjectileState, skim: NonNullable<ProjectileDef["skim"]>, y: number, soft: boolean): boolean {
+  const steep = mul(abs(p.vy), cosDeg(skim.throughAngle)) > mul(abs(p.vx), sinDeg(skim.throughAngle));
+  if (steep && soft) return true;
+  p.y = y;
+  p.vy = -p.vy;
+  if (mul(p.vy, cosDeg(skim.minAngle)) < mul(abs(p.vx), sinDeg(skim.minAngle))) {
+    const speed = length(p.vx, p.vy);
+    p.vx = (p.vx >= 0 ? 1 : -1) * mul(speed, cosDeg(skim.minAngle));
+    p.vy = mul(speed, sinDeg(skim.minAngle));
+  }
+  return true;
+}
+
+function meetSide(p: ProjectileState, rule: SurfaceRule, i: number, x: number): boolean {
   if (rule.lodge !== undefined) {
     lodgeAt(p, rule.lodge, i, x, p.y);
     return true;
@@ -470,7 +503,7 @@ function meetSide(p: ProjectileState, rule: Pick<ProjectileDef, "lodge" | "settl
  * walls, and the arrow's page "a surface". A settling bomb only stops rising, as
  * at a wall.
  */
-function meetUnderside(p: ProjectileState, rule: Pick<ProjectileDef, "lodge" | "settle">, i: number, y: number): boolean {
+function meetUnderside(p: ProjectileState, rule: SurfaceRule, i: number, y: number): boolean {
   if (rule.lodge !== undefined) {
     lodgeAt(p, rule.lodge, i, p.x, y);
     return true;

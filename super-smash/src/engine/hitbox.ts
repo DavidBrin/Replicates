@@ -540,6 +540,24 @@ export function resolveClank(a: Hitbox, b: Hitbox, damageA: number = a.damage, d
   return diff > 0 ? "aWins" : "bWins";
 }
 
+/** SmashWiki "Priority": "the maximum rebound is 58 frames" (Ultimate). */
+export const REBOUND_MAX_FRAMES = 58;
+
+/**
+ * How long a rebound lasts after its freeze, for a clank whose stronger hitbox
+ * weighs `damage` (Q12, as the 9% rule weighs it): SmashWiki "Priority"
+ * (https://www.ssbwiki.com/Priority, revision 2049993), "In Ultimate, the length of
+ * the rebound animation for both characters is based on the damage dealt by the
+ * stronger hitbox ... the same formula as Smash 4 [`R=Floor((d+4)*15/8)`], although
+ * the maximum rebound is 58 frames", "d always means damage dealt, rounded down"
+ * (Plan 5, Task 13c fix round 1, ruling R-T13c-a). UNVERIFIED: that the damage is
+ * the one the 9% rule weighs, before the 1v1 bonus.
+ */
+export function reboundFrames(damage: number): number {
+  const d = Math.trunc(damage / ONE);
+  return Math.min(Math.trunc(((d + 4) * 15) / 8), REBOUND_MAX_FRAMES);
+}
+
 /* ------------------------------------------------- one swing, one victim -- */
 
 /**

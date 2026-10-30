@@ -594,9 +594,8 @@ const legacy: FighterDef = {
       hitboxes: [],
       projectiles: [
         {
-          // Loosed on frame 16, flying flat and fast for 46 frames before
-          // arcing down and sticking in the ground for three seconds, where it
-          // becomes an item anyone can pick up. Charge runs frames 16 to 52 and
+          // Loosed on frame 16, 2.5° up and dropping under its gravity, for 46
+          // frames, or until it sticks in the stage (`lodge`). Charge runs frames 16 to 52 and
           // scales damage as `4 + 8 * (chargeFrames / 60)` — 4% uncharged to
           // 12% full (`charged` below). Firing with a stuck arrow
           // already in hand looses *two* at once, each scaled 0.8x for 6% → 18%
@@ -606,21 +605,22 @@ const legacy: FighterDef = {
           spawnFrame: 16,
           offsetX: fx(9.0),
           offsetY: fx(7.0),
-          vx: fx(2.6),
-          vy: fx(0),
-          // Flat for most of its life; the late droop is the small gravity.
-          gravity: fx(0.014),
+          // Fix round 1, ruling R-T13c-d: "Firing angle 2.5°" at "Uncharged speed 2.6"
+          // (2.6 cos 2.5°, 2.6 sin 2.5°), under "Gravity 0.054".
+          vx: fx(2.5975),
+          vy: fx(0.1134),
+          gravity: fx(0.054),
           lifetime: 46,
           destroyOnHit: true,
           // It sticks in the floor, wall or underside it meets, harmless, for
           // "Lifetime stuck on a surface (single) 180 frames" (Plan 5, Task 13c;
           // the same page). Published, not modelled: its "Minimum stick angle 9°",
-          // its "Gravity 0.054" (the replica's droop above is its own), and the
-          // stuck arrow being an item anyone can pick up and throw.
+          // and the stuck arrow being an item anyone can pick up and throw.
           lodge: 180,
           // Damage "4 + 8 * (charge frames / 60), rounded down". UNVERIFIED:
           // that the speed is linear between 2.6 and 10 (the page gives the ends).
-          charged: { vx: fx(10.0), hitbox: { damage: fx(12.0) }, partial: { kind: "add", total: fx(8), floor: true } },
+          // "Fully charged speed 10" at the same 2.5°: 10 cos 2.5°, 10 sin 2.5°.
+          charged: { vx: fx(9.9905), vy: fx(0.4362), hitbox: { damage: fx(12.0) }, partial: { kind: "add", total: fx(8), floor: true } },
           visual: "arrow",
           // link_bowarrow `Fly`: `Reflectable=true`.
           reflectable: true,
@@ -670,8 +670,8 @@ const legacy: FighterDef = {
           // 0.75°" (its sine and cosine below). Not modelled: "Distance spent
           // turning back 16", the smash throw's 3.1 and 167 frames, the clean hit's
           // 8% giving way to the late 6% on frame 10 (the box below is the clean
-          // one, at the replica's radius), and the floor bounce ("Minimum bounce
-          // angle off ground 16°").
+          // one, at the replica's radius), and the floor's "Downward ground collision
+          // range −0.5u".
           id: "boomerang",
           spawnFrame: 27,
           offsetX: fx(9.0),
@@ -694,6 +694,10 @@ const legacy: FighterDef = {
           // an attack": "Lifetime 60 frames", "Horizontal speed -0.15", "Vertical
           // speed 1.25", "Gravity 0.09", "Falling speed 1.4".
           clash: { lifetime: 60, vx: fx(-0.15), vy: fx(1.25), gravity: fx(0.09), maxFall: fx(1.4) },
+          // A floor its way home steers it into it comes off (fix round 1, ruling
+          // R-T13c-c): "Minimum bounce angle off ground 16°", "Angle difference to go
+          // through floor instead of bouncing off 30°" (`skimFloor`).
+          skim: { minAngle: fx(16), throughAngle: fx(30) },
           visual: "boomerang",
           // link_boomerang `Fly`: `Reflectable=true`.
           reflectable: true,

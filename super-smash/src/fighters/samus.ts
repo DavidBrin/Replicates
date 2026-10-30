@@ -827,7 +827,9 @@ const legacy: FighterDef = {
       // bouncing off ground 0.6", "Minimum speed to bounce off ground 0.2", and it
       // leaves "Bomb Y offset 2" above her. Laid on the floor it bounces on frames
       // 37, 61 and 75 of its life, goes off at 72 in a hop under a unit high, and
-      // rests from 83 (`projectiles.test.ts`). UNVERIFIED: the 1 forward. Published, not modelled: the early,
+      // rests from 83 (`projectiles.test.ts`). UNVERIFIED: the 1 forward; and the
+      // minimum bounce speed read as the speed it lands at (read as the speed after
+      // the ×0.6, it would rest from 75; fix round 1). Published, not modelled: the early,
       // mid and late explosions' own numbers (one box here; the early one's radius
       // is 7.38), the "Detection hitbox 33-82" that sets it off early, and its
       // "Rotation speed". The blast also pops Samus herself upward, which is a

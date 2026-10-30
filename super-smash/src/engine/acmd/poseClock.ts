@@ -117,10 +117,12 @@ function airDodgeSuffix(charge: number): string {
  * footstooled plays the grab's (`poseNameFor`'s clip; its own motion would bake
  * the grab's frames byte for byte). Task 12: Pikachu's crawl plays the crouch's
  * (`poseNameFor`'s clip, a loop on the same clock; its own motion would bake the
- * crouch's frames byte for byte).
+ * crouch's frames byte for byte). Task 13c fix round 1: a rebound plays the stand's
+ * (UNVERIFIED stand-in: no rebound clip is authored; the presentation's to add).
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   crawl: "crouch",
+  rebound: "stand",
   specialFall: "fall",
   specialLanding: "landingLag",
   cargoCarry: "walk",

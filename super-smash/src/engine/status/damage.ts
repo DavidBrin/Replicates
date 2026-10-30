@@ -184,7 +184,31 @@ export const STATUS_TREAD_DAMAGE: FighterStatus = {
   },
 };
 
+/**
+ * A clank lost (Plan 5, Task 13c fix round 1, ruling R-T13c-a; SmashWiki "Priority",
+ * https://www.ssbwiki.com/Priority, revision 2049993): "a rebounding character will
+ * suffer freeze frames equal to the hitlag of the stronger attack", the freeze
+ * `resolveClanks` stores, in which nothing advances; "After the freeze frames are
+ * over, characters go through a unique rebound animation", `CombatState.rebound`
+ * frames long (`reboundFrames`). Entered on contact, so it ends as a reel does
+ * (`endStatus`): on its last frame, keeping a press made there for the next.
+ */
+export const STATUS_REBOUND: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_REBOUND",
+  action: "rebound",
+  kineticType: "GROUND_STOP",
+  main(f, intent, ctx) {
+    if (f.actionFrame >= f.combat.rebound) endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
+  },
+  // Nothing of the rebound outlives it, however it ends: its frames, a hit, a KO.
+  end(f) {
+    f.combat.rebound = 0;
+  },
+};
+
 export const DAMAGE_STATUSES: readonly FighterStatus[] = [
+  STATUS_REBOUND,
   STATUS_TREAD_DAMAGE,
   STATUS_DAMAGE,
   STATUS_DAMAGE_FLY,

@@ -93,6 +93,7 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   roll: "MOTION",
   airDodge: "AIR_ESCAPE",
   hitstun: "GROUND_STOP",
+  rebound: "GROUND_STOP",
   tumble: "GROUND_STOP",
   grabbed: "GROUND_STOP",
   thrown: "GROUND_STOP",
@@ -137,6 +138,8 @@ const MIGRATED = [
   "dead",
   "respawnPlatform",
   "hitstun",
+  // Plan 5, Task 13c fix round 1
+  "rebound",
   "tumble",
   "downed",
   "getUp",

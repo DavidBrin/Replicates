@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ONE, fx } from "./fixed";
+import { ONE, fx, mul } from "./fixed";
 import { SMASH_CHARGE_MAX } from "./constants";
 import { hashState } from "./hash";
 import { cloneState, createInitialState, step } from "./simulate";
@@ -145,6 +145,24 @@ const PEBBLE: ProjectileDef = {
   lifetime: 300,
   settle: { restitution: fx(0.5), minSpeed: fx(0.3) },
   visual: "bomb",
+};
+
+/**
+ * A skimmer: a floor met at under 30° bounces it off, at least 16° up, its speed
+ * kept; a soft one met more steeply it goes through (Task 13c fix round 1).
+ */
+const SKIMMER: ProjectileDef = { ...ARROW, id: "skimmer", lifetime: 300, skim: { minAngle: fx(16), throughAngle: fx(30) }, visual: "boomerang" };
+
+/** A hopper: a floor bounces it up at its speed ×0.9, at 1 to 1.2 up, three times (Task 13c fix round 1). */
+const HOPPER: ProjectileDef = {
+  ...ARROW,
+  id: "hopper",
+  vx: fx(0.5),
+  gravity: fx(0.1),
+  lifetime: 500,
+  bounces: 3,
+  hop: { speed: fx(0.9), minVy: fx(1), maxVy: fx(1.2) },
+  visual: "fire",
 };
 
 /** A charge shot: scales with how long the button was held. */
@@ -479,6 +497,20 @@ describe("returning (Plan 5, Task 13c)", () => {
     expect(p.vy).toBeGreaterThan(0);
   });
 
+  it("turns by its homing angle, not at once, from flying straight away from its owner", () => {
+    // Returning, but its owner right behind it: it turns 1° this frame, it does not
+    // snap round 180° (the guard that it is ahead before it aims straight at him).
+    const owner = fighter({ x: 0, y: fx(4) });
+    const p = spawnProjectile(BOOMERANG, fighter(), 1);
+    Object.assign(p, { x: fx(20), y: fx(10), vx: fx(2), vy: 0, returning: true });
+    advanceProjectile(p, BOOMERANG, STAGE, owner, 1);
+    expect(p.vx).toBeGreaterThan(0);
+    // sin 0.9° = 0.015707, sin 1.1° = 0.019197: its new heading's sine lies between.
+    const sine = Math.abs(p.vy) / Math.hypot(p.vx, p.vy);
+    expect(sine).toBeGreaterThan(0.015707);
+    expect(sine).toBeLessThan(0.019197);
+  });
+
   it("hits with its way-back box once it has turned", () => {
     const p = spawnProjectile(BOOMERANG, fighter(), 1);
     expect(projectileHitbox(p, BOOMERANG)).toBe(BOOMERANG.hitbox);
@@ -566,6 +598,69 @@ describe("surfaces (Plan 5, Task 13c)", () => {
   });
 });
 
+describe("a floor's own rule (Task 13c fix round 1)", () => {
+  /** `def` at (x, y) moving (vx, vy) over the stage plus a soft platform at 40, advanced one frame. */
+  function meet(def: ProjectileDef, x: number, y: number, vx: number, vy: number) {
+    const stage: StageDef = { ...STAGE, platforms: [...STAGE.platforms, { x: fx(100), y: fx(40), halfWidth: fx(20), soft: true, ledges: false }] };
+    const p = spawnProjectile(def, fighter(), 1);
+    Object.assign(p, { x, y, vx, vy });
+    const alive = advanceProjectile(p, def, stage, null, 1).alive;
+    return { p, alive };
+  }
+
+  it("skims a floor met shallower than its through angle: up off it at its own angle, at least the minimum, at the same speed", () => {
+    // 20° below the flat (3, −1.0919: tan 20° = 0.364), onto the floor: it leaves at 20°, up.
+    const steep = meet(SKIMMER, fx(10), fx(0.5), fx(3), -fx(1.0919));
+    expect(steep.alive).toBe(true);
+    expect(steep.p.y).toBe(STAGE.platforms[0].y);
+    expect([steep.p.vx, steep.p.vy]).toEqual([fx(3), fx(1.0919)]);
+    // 5° below the flat: it leaves at 16°, the page's minimum, its speed kept.
+    const flat = meet(SKIMMER, fx(10), fx(0.2), fx(3), -fx(0.26247));
+    const speed = Math.hypot(fx(3), fx(0.26247));
+    expect(flat.alive).toBe(true);
+    // sin 15.9° = 0.273959, sin 16.1° = 0.277315: it leaves up at 16° ± 0.1°.
+    expect(flat.p.vx).toBeGreaterThan(0);
+    expect(flat.p.vy / Math.hypot(flat.p.vx, flat.p.vy)).toBeGreaterThan(0.273959);
+    expect(flat.p.vy / Math.hypot(flat.p.vx, flat.p.vy)).toBeLessThan(0.277315);
+    expect(Math.abs(Math.hypot(flat.p.vx, flat.p.vy) - speed)).toBeLessThan(3);
+  });
+
+  it("goes through a soft platform met steeper than its through angle, and bounces off a solid floor met so (UNVERIFIED)", () => {
+    // 45° down onto the soft platform at 40: through it, untouched.
+    const through = meet(SKIMMER, fx(100), fx(41), fx(2), -fx(2));
+    expect([through.alive, through.p.vx, through.p.vy, through.p.y]).toEqual([true, fx(2), -fx(2), fx(39)]);
+    // 20° down onto the same soft platform, shallower than 30°: off it, not through.
+    const shallow = meet(SKIMMER, fx(100), fx(40.5), fx(3), -fx(1.0919));
+    expect([shallow.alive, shallow.p.vx, shallow.p.vy, shallow.p.y]).toEqual([true, fx(3), fx(1.0919), fx(40)]);
+    // 45° onto the solid floor: off it, up at 45°.
+    const off = meet(SKIMMER, fx(10), fx(1), fx(2), -fx(2));
+    expect([off.alive, off.p.vx, off.p.vy, off.p.y]).toEqual([true, fx(2), fx(2), STAGE.platforms[0].y]);
+  });
+
+  it("hops off a floor at its speed multiplier, its rise held between its least and most, and is gone when its bounces are", () => {
+    const p = spawnProjectile(HOPPER, fighter({ y: fx(20) }), 1);
+    const hops: [number, number][] = [];
+    let alive = true;
+    for (let age = 1; alive && age < 500; age++) {
+      const vx = p.vx;
+      alive = advanceProjectile(p, HOPPER, STAGE, null, age).alive;
+      if (alive && p.y === STAGE.platforms[0].y && p.vy > 0) hops.push([vx, p.vy]);
+    }
+    expect(hops).toHaveLength(3);
+    for (const [vx, vy] of hops) {
+      expect(vy).toBeGreaterThanOrEqual(fx(1));
+      expect(vy).toBeLessThanOrEqual(fx(1.2));
+      expect(vx).toBeGreaterThan(0);
+    }
+    // The first lands from 26 up (gravity 0.1), faster than 1.2 ÷ 0.9: held at 1.2.
+    expect(hops[0][1]).toBe(fx(1.2));
+    // Its horizontal speed ×0.9 at each.
+    expect(p.vx).toBe(mul(mul(mul(fx(0.5), fx(0.9)), fx(0.9)), fx(0.9)));
+    // Its fourth landing ends it.
+    expect(alive).toBe(false);
+  });
+});
+
 describe("a clank it loses (Plan 5, Task 13c)", () => {
   it("knocks a projectile with a clash rule away: no hitbox, the clash's flight, gone after its lifetime", () => {
     const p = spawnProjectile(BOOMERANG, fighter({ y: fx(40) }), 1);
@@ -576,6 +671,22 @@ describe("a clank it loses (Plan 5, Task 13c)", () => {
     expect(p.vy).toBe(fx(1) - fx(0.1));
     // Its 20 frames count the clank's: the 19 after it, gone on the 20th.
     for (let i = 2; i <= 20; i++) expect(advanceProjectile(p, BOOMERANG, STAGE, null, i).alive, `knocked frame ${i}`).toBe(i < 20);
+  });
+
+  it("flies off backwards for its facing and falls no faster than its falling speed (fix round 1)", () => {
+    // Facing left, the clash's −0.5 is +0.5: away from where it was going.
+    const LONG: ProjectileDef = { ...BOOMERANG, clash: { ...BOOMERANG.clash!, lifetime: 60 } };
+    const p = spawnProjectile(LONG, fighter({ y: fx(100), facing: -1 }), 1);
+    knockProjectile(p, LONG);
+    expect([p.facing, p.vx]).toEqual([-1, fx(0.5)]);
+    const vys: number[] = [];
+    for (let i = 1; i < 40; i++) {
+      advanceProjectile(p, LONG, STAGE, null, i);
+      vys.push(p.vy);
+    }
+    // 1 − 0.1 a frame, down to the clash's 1.5 and held there.
+    expect(Math.min(...vys)).toBe(-fx(1.5));
+    expect(vys.filter((v) => v === -fx(1.5)).length).toBeGreaterThan(1);
   });
 
   it("is gone on the stage it meets while knocked away", () => {

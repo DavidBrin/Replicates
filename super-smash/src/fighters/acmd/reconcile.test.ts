@@ -131,33 +131,34 @@ const SETOFF: Readonly<Record<AttackSetoff, string>> = {
 };
 
 /**
- * Each box a legacy move runs against its script's box of the same id, by clang
- * (`attackFromHitbox` writes `transcendent` as OFF and `noRebound` as THRU; Plan 5,
- * Task 13c). On a frame where both are live they must agree. Where the script's box
- * of that id is never live with it (the legacy table keeps its own timing), the
- * legacy box must take one of the settings the script gives that id anywhere. A
- * legacy box whose id the script never uses has nothing to agree with, and a throw's
- * launch, an `ATTACK_ABS`, never clanks.
+ * Each box a legacy move runs against its script's box, by clang (`attackFromHitbox`
+ * writes `transcendent` as OFF and `noRebound` as THRU; Plan 5, Task 13c). A legacy
+ * box is paired with the script's box live on the same frame with the same damage,
+ * if there is one alone; else with the script's box of its id there (fix round 1:
+ * a legacy table may number its boxes otherwise, as Marth's unbaked up smash does).
+ * Where no script box is live with it, the boxes of the same damage anywhere in the
+ * script, else those of its id, give the settings it must take one of. A legacy box
+ * matching neither has nothing to agree with, and a throw's launch, an
+ * `ATTACK_ABS`, never clanks.
  */
 function clangDisagreements(def: FighterDef, slot: MoveSlot, move: MoveDef, key: string): Record<string, string> {
   const mine = gameScriptFor(def, slot);
   if (mine === null) return {};
   const theirs = gameScriptOf(move, REFERENCE_SCRIPTS[def.id].scripts[key]);
-  const settings = new Map<number, Set<AttackSetoff>>();
-  for (const c of theirs.commands) {
-    if (c.op !== "attack") continue;
-    const seen = settings.get(c.params.id) ?? new Set<AttackSetoff>();
-    seen.add(c.params.clang);
-    settings.set(c.params.id, seen);
-  }
+  const all = theirs.commands.flatMap((c) => (c.op === "attack" ? [c.params] : []));
   const out: Record<string, string> = {};
+  const pct = (n: number): string => `${fmt(n)}%`;
   for (let g = 1; g <= move.totalFrames + 1; g++) {
     const live = runScript(theirs, g).attacks;
     for (const a of runScript(mine, g).attacks) {
-      const same = live.find((b) => b.id === a.id);
-      const allowed = same !== undefined ? [same.clang] : [...(settings.get(a.id) ?? [])];
+      const byDamage = live.filter((b) => b.damage === a.damage);
+      const now = byDamage.length === 1 ? byDamage : live.filter((b) => b.id === a.id);
+      const anywhere = all.some((b) => b.damage === a.damage) ? all.filter((b) => b.damage === a.damage) : all.filter((b) => b.id === a.id);
+      const match = now.length > 0 ? now : anywhere;
+      const allowed = [...new Set(match.map((b) => b.clang))];
       if (allowed.length > 0 && !allowed.includes(a.clang)) {
-        out[`${def.id} ${slot} clang id${a.id}`] = `legacy ${SETOFF[a.clang]} / ${key} ${allowed.map((c) => SETOFF[c]).join("+")}`;
+        const damages = [...new Set(match.map((b) => pct(b.damage)))].join("/");
+        out[`${def.id} ${slot} clang id${a.id}`] = `legacy ${pct(a.damage)} ${SETOFF[a.clang]} / ${key} ${damages} ${allowed.map((c) => SETOFF[c]).join("+")}`;
       }
     }
   }
@@ -197,6 +198,20 @@ function disagreements(): Record<string, string> {
   }
   return out;
 }
+
+describe("the clang check pairs each legacy box with its script box (Task 13c fix round 1)", () => {
+  // Marth's unbaked up smash numbers its boxes against `game_attackhi4`'s the other
+  // way round: its 17% tip is id 0 and its 3% id 2, where the script's are id 2 and 0.
+  // The check pairs boxes of the same damage, live on the same frame, before ids.
+  it("pairs Marth's base up smash's 17% box with the script's 17% one, and its 3% with the 3%", () => {
+    const marth = FIGHTERS.find((f) => f.id === "marth")!;
+    expect(marth.scripts?.usmash).toBeUndefined();
+    expect(clangDisagreements(marth, "usmash", marth.moves.usmash!, "game_attackhi4")).toEqual({
+      "marth usmash clang id0": "legacy 17% ON / game_attackhi4 17% OFF",
+      "marth usmash clang id2": "legacy 3% ON / game_attackhi4 3% OFF",
+    });
+  });
+});
 
 describe("legacy moves against their imported scripts (D17)", () => {
   const now = disagreements();

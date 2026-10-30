@@ -89,9 +89,10 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
     // Plan 5, Task 9: Kirby's mouthful plays the walk's, and the swallowed and the
     // spat the tumble's (`poseNameFor`'s own clips, which baked them byte for byte).
     // Task 11: the footstooled plays the grab's, likewise; Task 12: Pikachu's crawl
-    // the crouch's.
+    // the crouch's; Task 13c fix round 1: the rebound the stand's (a stand-in).
     expect(MOTION_OF_ACTION).toEqual({
       crawl: "crouch",
+      rebound: "stand",
       specialFall: "fall",
       specialLanding: "landingLag",
       cargoCarry: "walk",
@@ -105,6 +106,7 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
     expect(statusMotion({ action: "cargoHeld", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_grabbed");
     expect(statusMotion({ action: "footstooled", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_grabbed");
     expect(statusMotion({ action: "crawl", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_crouch");
+    expect(statusMotion({ action: "rebound", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_stand");
     expect(statusMotion({ action: "inhaleHold", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_walk");
     expect(statusMotion({ action: "swallowed", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_tumble");
     expect(statusMotion({ action: "spatStar", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_tumble");
@@ -244,10 +246,10 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
     // landing lag's; Plan 5 Task 8's carry and carried, the walk's and the
     // grab's; Task 9's mouthful, swallowed and spat, the walk's and the
     // tumble's; Task 11's footstooled, the grab's; Task 12's crawl, the
-    // crouch's), the second jump, two fast falls, five directional air dodges
+    // crouch's; Task 13c's rebound, the stand's), the second jump, two fast falls, five directional air dodges
     // and the back roll.
     expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
-    expect(ACTIONS.length).toBe(57);
+    expect(ACTIONS.length).toBe(58);
   });
 
   it.each(FIGHTERS.map((d) => [d.id, d] as const))("%s: spot dodge, rolls, air dodges and techs last the engine's own lengths", (_id, def) => {

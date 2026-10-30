@@ -709,21 +709,34 @@ const legacy: FighterDef = {
         {
           // Thrown underarm on frame 17 and pulled down by gravity, so it
           // bounces along the ground rather than flying flat — which is the
-          // whole character of the move. It hops four times before expiring,
-          // and dies on contact. Reflectable and absorbable. It lives 70 frames,
-          // 17-86 (SmashWiki "Mario (SSBU)/Neutral special",
-          // https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special: "Lifetime 70
-          // frames", "Latest hit 47-86").
+          // whole character of the move. It dies on contact. Reflectable and
+          // absorbable. It lives 70 frames, 17-86 (SmashWiki "Mario
+          // (SSBU)/Neutral special", https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special:
+          // "Lifetime 70 frames", "Latest hit 47-86").
+          //
+          // Its flight is the same page's "Fireball parameters" (Task 13c fix round
+          // 1, ruling R-T13c-e): "Initial speed 1.4" at "Initial angle −10°" (1.4 cos
+          // 10°, −1.4 sin 10°), "Gravity 0.1"; a floor bounces it ×0.97 along it,
+          // "Minimum vertical speed after bounce 1.4", "Maximum vertical speed after
+          // bounce 1.6" (`hop`), and "Number of bounces before disappearing 7". Its
+          // "Maximum wall angle to bounce off 60°" is read as the steepest surface it
+          // bounces up off as a floor; a steeper one, a wall, sends it back the way
+          // it came (SmashWiki "Fireball", https://www.ssbwiki.com/Fireball: "When
+          // firing at a wall or upward slope, the balls will bounce backward"), as
+          // does an underside, each spending a bounce (UNVERIFIED for the underside,
+          // and that a wall's bounce counts among the 7). Every surface here is flat
+          // or upright. UNVERIFIED: the spawn point, 5.2 ahead and 6.4 up.
           id: "fireball",
           spawnFrame: 17,
           offsetX: fx(5.2),
           offsetY: fx(6.4),
-          vx: fx(1.9),
-          vy: fx(0.35),
-          gravity: fx(0.06),
+          vx: fx(1.3787),
+          vy: fx(-0.2431),
+          gravity: fx(0.1),
           lifetime: 70,
           destroyOnHit: true,
-          bounces: 4,
+          bounces: 7,
+          hop: { speed: fx(0.97), minVy: fx(1.4), maxVy: fx(1.6) },
           visual: "fire",
           // mario_fireball `Regular`: `Reflectable=true`.
           reflectable: true,

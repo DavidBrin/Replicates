@@ -335,7 +335,8 @@ describe("a box that cannot clank, and one that cannot rebound", () => {
       if (clankAt < 0 && out.events.clanks.length > 0) {
         clankAt = i;
         expect([s.fighters[0].action, s.fighters[0].move]).toEqual(["attack", "fsmash"]);
-        expect([s.fighters[1].action, s.fighters[1].move]).toEqual(["stand", null]);
+        // Mario rebounds (Task 13c fix round 1: freeze, then the rebound status).
+        expect([s.fighters[1].action, s.fighters[1].move]).toEqual(["rebound", null]);
       }
       for (const h of out.events.hits) if (h.attacker === 0) foxHits.push(i);
     }
@@ -369,16 +370,24 @@ describe("a box that cannot clank, and one that cannot rebound", () => {
     let prev: InputFrame[] = [0, 0];
     let clankAt = -1;
     let hitAt = -1;
-    for (let i = 0; i < 30; i++) {
+    let freeze = -1;
+    for (let i = 0; i < 70; i++) {
       const now = [i === 0 ? Btn.Right | Btn.Attack : 0, i === 3 ? Btn.Special : 0];
       const out = step(s, now, { prevInputs: prev, ctx });
       s = out.state;
       prev = now;
-      if (clankAt < 0 && out.events.clanks.length > 0) clankAt = i;
+      if (clankAt < 0 && out.events.clanks.length > 0) {
+        clankAt = i;
+        freeze = s.fighters[0].hitlag;
+      }
       if (hitAt < 0 && out.events.hits.some((h) => h.attacker === 0 && h.victim === 1)) hitAt = i;
     }
     expect(clankAt).toBe(19);
-    expect(hitAt).toBe(20);
+    // Within 9% of the Fireball, Pikachu's smash freezes and goes on (Task 13c fix
+    // round 1, R-T13c-a: a side that cannot rebound freezes but never rebounds), and
+    // hits Mario on its first frame after the freeze.
+    expect(freeze).toBeGreaterThan(0);
+    expect(hitAt).toBe(clankAt + freeze + 1);
   });
 
   it("is what the legacy compile writes for a box that cannot rebound: THRU", () => {

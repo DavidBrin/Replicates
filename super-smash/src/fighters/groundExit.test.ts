@@ -44,7 +44,7 @@ const PINNED: Readonly<Record<ActionState, GroundExit>> = {
   jumpSquat: K, jump: K, fall: K, land: L, landingLag: L, specialFall: K, specialLanding: L,
   attack: S, special: K, grab: C, grabHold: C, pummel: C, throw: C,
   shieldStart: C, shield: C, shieldRelease: C, shieldStun: C, shieldBroken: L, spotDodge: C, roll: C, airDodge: K,
-  hitstun: K, tumble: K, tumbleFall: K, grabbed: K, thrown: K, downed: T, getUp: F,
+  hitstun: K, rebound: L, tumble: K, tumbleFall: K, grabbed: K, thrown: K, downed: T, getUp: F,
   tech: F, techRoll: C, techWall: K, techCeiling: K,
   ledgeHang: K, ledgeGetUp: K, ledgeAttack: K, ledgeRoll: K, ledgeJump: K, ledgeTrumped: K,
   cargoCarry: K, cargoHeld: K, inhaleHold: K, swallowed: K, spatStar: K, footstooled: L,
@@ -86,6 +86,8 @@ interface Row {
   readonly move?: MoveSlot;
   readonly charge?: number;
   readonly hitstun?: number;
+  /** A rebound's length (`CombatState.rebound`). */
+  readonly rebound?: number;
   /** A captive in front of it, held (`grabbing`/`grabbedBy`). */
   readonly holding?: boolean;
 }
@@ -122,6 +124,7 @@ const ROWS: readonly Row[] = [
   { action: "roll", charge: ROLL_FORWARD },
   { action: "roll", charge: 1 },
   { action: "hitstun", hitstun: 15 },
+  { action: "rebound", rebound: 15 },
   { action: "downed" },
   { action: "getUp" },
   { action: "tech" },
@@ -139,6 +142,7 @@ function slide(row: Row, frames = 150, speed = 1.2): GameState[] {
     action: row.action, actionFrame: 0, move: row.move ?? null, charge: row.charge ?? 0, hitstun: row.hitstun ?? 0,
     grounded: true, platform: 3, x: fx(EDGE - 0.12), y: plat.y, vx: fx(speed), facing: row.facing ?? 1, intangible: 0, invincible: 0,
   });
+  f.combat.rebound = row.rebound ?? 0;
   if (row.holding === true) {
     const v = s.fighters[1];
     Object.assign(v, { action: "grabbed", actionFrame: 0, grounded: true, platform: 3, x: fx(EDGE - 4), y: plat.y, facing: 1, grabbedBy: 0, grabTimer: 90, intangible: 0, invincible: 0 });

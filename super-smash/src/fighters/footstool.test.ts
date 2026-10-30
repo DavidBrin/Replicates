@@ -659,7 +659,7 @@ describe("who cannot be stood on (Plan 5 review)", () => {
       jumpSquat: E, jump: E, fall: E, land: E, landingLag: E, specialFall: E, specialLanding: E,
       attack: N, special: N, grab: E, grabHold: D, pummel: D, throw: N,
       shieldStart: N, shield: N, shieldRelease: N, shieldStun: N, shieldBroken: E, spotDodge: D, roll: D, airDodge: E,
-      hitstun: E, tumble: E, tumbleFall: E, grabbed: D, thrown: D, downed: E, getUp: E,
+      hitstun: E, rebound: E, tumble: E, tumbleFall: E, grabbed: D, thrown: D, downed: E, getUp: E,
       tech: E, techRoll: E, techWall: E, techCeiling: E,
       ledgeHang: N, ledgeGetUp: N, ledgeAttack: N, ledgeRoll: N, ledgeJump: N, ledgeTrumped: E,
       cargoCarry: D, cargoHeld: D, footstooled: E, inhaleHold: D, swallowed: D, spatStar: D,

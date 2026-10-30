@@ -208,7 +208,7 @@ describe("Kirby's Inhale", () => {
     const { at, states } = starClank("fox", Btn.Attack);
     expect(states[at].projectiles.map((p) => p.defId)).toEqual(["star"]);
     expect(states[at].fighters[1].action).toBe("spatStar");
-    expect([states[at].fighters[2].action, states[at].fighters[2].move]).toEqual(["stand", null]);
+    expect([states[at].fighters[2].action, states[at].fighters[2].move]).toEqual(["rebound", null]);
   });
 
   it("lets the star's rider go when the star loses a clank: Marth's 18% forward smash, within 9% of it (Task 13c)", () => {
@@ -228,7 +228,7 @@ describe("Kirby's Inhale", () => {
     for (let k = 0; k <= 20 && found === null; k++) {
       const s = cloneState(held);
       Object.assign(s.fighters[2], { x: s.fighters[0].x + fx(16), facing: -1 });
-      const out = run(s, 40, (i) => [i === 20 ? Btn.Attack : 0, 0, i === k ? Btn.Left | Btn.Attack : 0]);
+      const out = run(s, 80, (i) => [i === 20 ? Btn.Attack : 0, 0, i === k ? Btn.Left | Btn.Attack : 0]);
       const at = out.events.findIndex((e) => e.clanks.length > 0);
       if (at >= 0) found = { at, ...out };
     }

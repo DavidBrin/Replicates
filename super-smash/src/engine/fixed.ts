@@ -157,17 +157,27 @@ export function cosDeg(degreesFx: number): number {
 }
 
 /**
- * Integer square root of a fixed-point value, returned in fixed-point.
+ * Integer square root of a fixed-point value, returned in fixed-point:
+ * sqrt(a/ONE) * ONE == isqrt(a * ONE).
+ */
+export function sqrt(aFx: number): number {
+  if (aFx <= 0) return 0;
+  return isqrt(aFx * ONE);
+}
+
+/**
+ * The exact floor of the square root of a non-negative integer `n` (0 for 0 and
+ * below), below 2^53. The engine's one square root (Plan 5, Task 13c fix round 1):
+ * `sqrt` and a projectile's speed (`projectile.ts`) both take it.
  *
  * `Math.sqrt` is correctly rounded per IEEE-754 and would in fact be safe, but
  * routing it through the same integer discipline as everything else means the
  * simulation has exactly one rule — no `Math` in the step function — instead of
- * a rule with an exception someone has to remember.
+ * a rule with an exception someone has to remember: here it only seeds the
+ * integer search.
  */
-export function sqrt(aFx: number): number {
-  if (aFx <= 0) return 0;
-  // sqrt(a/ONE) * ONE  ==  sqrt(a * ONE)
-  const n = aFx * ONE;
+export function isqrt(n: number): number {
+  if (n <= 0) return 0;
   let x = Math.floor(Math.sqrt(n)); // seed; refined to the exact integer below
   // Newton refinement, then a correction pass so the result is the exact floor
   // regardless of how the seed rounded.

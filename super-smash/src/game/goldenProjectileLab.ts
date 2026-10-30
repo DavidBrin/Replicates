@@ -15,7 +15,12 @@
  * - the clank: Samus's uncharged Charge Shot and Link's uncharged arrow meet
  *   half way, and both are gone (5% and 4%, within 9%);
  * - the end of a life: Samus fires again, Link jumps it, and the shot flies on to
- *   its 60th frame and is gone.
+ *   its 60th frame and is gone;
+ * - the rebound (Task 13c fix round 1, ruling R-T13c-f: appended after frame 200,
+ *   the steps before it untouched): Samus fires once more and Link jabs into the
+ *   shot. They clank (5% against 3%, within 9%): the shot is gone, and Link, on the
+ *   ground and beaten by no more than 9%, freezes for the shot's hitlag and then
+ *   rebounds (`rebound`, which no other golden match reaches).
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added; the pins in
@@ -32,6 +37,7 @@ import { scriptedInputs } from "./goldenScript";
 import type { ScriptStep } from "./goldenScript";
 
 const B = Btn.Special;
+const A = Btn.Attack;
 const D = Btn.Down;
 const J = Btn.Jump;
 
@@ -53,6 +59,16 @@ const STEPS: readonly ScriptStep[] = [
   [24, 0, 0],
   [1, 0, J], //                    150: Link jumps it; the shot flies on, past him, and
   [50, 0, 0], //                        is gone after 194, its 60th frame
+  // The rebound (Task 13c fix round 1).
+  [1, B, 0], //                    201: Samus again
+  [4, 0, 0],
+  [1, B, 0], //                    206: fires, out on 216
+  [27, 0, 0],
+  [1, 0, A], //                    234: Link jabs; his jab and the shot clank on 240 (any
+  [66, 0, 0], //                        press from 229 to 240 does): the shot is gone, Link
+  //                                    freezes 8 (the shot's 5%) and rebounds 16 frames,
+  //                                    248 to 263, standing on 264; to 300, the trace's
+  //                                    next sample
 ];
 
 export const PROJECTILE_LAB: LabMatch = {
@@ -61,7 +77,7 @@ export const PROJECTILE_LAB: LabMatch = {
   fighters: ["samus", "link"],
   seed: 1013,
   rules: { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true },
-  frames: 200,
+  frames: 300,
   setup(state: GameState) {
     const [samus, link] = state.fighters;
     Object.assign(samus, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-30), y: 0, facing: 1, intangible: 0, invincible: 0 });

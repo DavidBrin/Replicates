@@ -80,6 +80,7 @@ import {
   hurtboxCapsule,
   markHit,
   moveFrameOf,
+  reboundFrames,
   resolveClank,
   sweptCapsuleOverlaps,
 } from "./hitbox";
@@ -1285,26 +1286,25 @@ function appendProjectileCandidates(
  * Opposing hitboxes that met this frame.
  *
  * Both are suppressed for the frame whatever the outcome, so a clank is never
- * also a hit — the loser's move is cancelled outright, and on a rebound both
- * fighters are pushed back and returned to neutral.
+ * also a hit.
  *
  * The 9% rule weighs each side's damage after its multipliers and before the
  * one-on-one bonus (`clankDamage`; SmashWiki "Priority",
  * https://www.ssbwiki.com/Priority: "This comparison happens after most damage
  * multipliers but before the 1v1 multiplier in Ultimate"; Plan 5, Task 13c).
  *
- * A box that cannot rebound (`noRebound`, the script's THRU; Plan 5, Task 13 fix
- * round 1, ruling R-T13g) never loses its move: where it would rebound or lose,
- * it goes on, and the hit it met is blocked, its swing marked as having hit that
- * fighter, so this hit cannot land after the clank (SmashWiki "Priority",
- * revision 2049993, "Moves that cannot rebound": "they will continue their
- * animations as if they did not collide at all, but the hitbox will count as
- * blocked for other clanking character ... later hits can still connect as
- * clanking blocks only the current hit"). The other side keeps the 9% rule
- * (`resolveClank`).
+ * A fighter's box in the air clanks with no other fighter's box (Plan 5, Task 13c
+ * fix round 1, ruling R-T13c-b; the same page: "When a normal aerial attack hitbox
+ * overlaps that of a normal ground attack or another normal aerial, the attacks do
+ * not clank. If an overlap between the hitboxes of two such attacks occurs, both
+ * will persist, irrespective of each other, and will damage their foes"; "airborne
+ * attacks cannot be cancelled out, including airborne special moves"). It still
+ * clanks with a projectile ("the hitboxes of aerial attacks can clank with
+ * projectiles").
  *
- * Projectiles clank by their own script's setting since Plan 5, Task 13c, by the
- * same rule (`loseOrTrample`); `projectileDef` finds each one's definition.
+ * What each side does then is `clankSide`'s: the freeze and the rebound (ruling
+ * R-T13c-a), a box that cannot rebound (`noRebound`, the script's THRU; Plan 5,
+ * Task 13 fix round 1, ruling R-T13g), and a projectile's end or knock (Task 13c).
  */
 function resolveClanks(
   s: GameState,
@@ -1327,8 +1327,11 @@ function resolveClanks(
       // fighter held) is not a hitbox in the world: nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
       if (ca.suppressed && cb.suppressed) continue;
+      if (ca.projectile === null && cb.projectile === null && (!s.fighters[ca.attacker].grounded || !s.fighters[cb.attacker].grounded)) continue;
       if (!capsulesOverlap(capsuleOf(ca), capsuleOf(cb))) continue;
-      const outcome = resolveClank(ca.hitbox, cb.hitbox, clankDamage(s, ca), clankDamage(s, cb));
+      const da = clankDamage(s, ca);
+      const db = clankDamage(s, cb);
+      const outcome = resolveClank(ca.hitbox, cb.hitbox, da, db);
       if (outcome === "none") continue;
 
       ca.suppressed = true;
@@ -1337,8 +1340,9 @@ function resolveClanks(
         x: Math.trunc((ca.x + cb.x) / 2),
         y: Math.trunc((ca.y + cb.y) / 2),
       });
-      if (outcome === "rebound" || outcome === "bWins") loseOrTrample(s, ca, cb, projectileDef, destroyed);
-      if (outcome === "rebound" || outcome === "aWins") loseOrTrample(s, cb, ca, projectileDef, destroyed);
+      const stronger = strongerOf(ca, da, cb, db);
+      clankSide(s, ca, cb, outcome === "rebound" || outcome === "bWins", stronger, projectileDef, destroyed);
+      clankSide(s, cb, ca, outcome === "rebound" || outcome === "aWins", stronger, projectileDef, destroyed);
     }
   }
   // A move cancelled by a clank keeps no live hitboxes for the rest of the frame.
@@ -1364,36 +1368,68 @@ function clankDamage(s: GameState, c: Candidate): number {
   return mul(swingDamage(s.fighters[c.attacker], c), c.damageMul);
 }
 
+/** A clank's stronger side: its box and its weighed damage. */
+interface Stronger {
+  readonly hitbox: Hitbox;
+  readonly damage: number;
+}
+
 /**
- * `c` lost a clank to `other` (SmashWiki "Priority",
- * https://www.ssbwiki.com/Priority; Plan 5, Task 13c for every projectile line):
- * - a projectile that cannot rebound (THRU: the Thunder Jolt) goes on, its hit
- *   blocked on the fighter whose box it met ("there are some projectiles that
- *   don't get destroyed by clanking. However, their hitboxes are generally
- *   disabled for the character or object that clanked with them");
- * - any other projectile is knocked away if its definition says how (Link's
- *   boomerang, `knockProjectile`), else it is gone ("the projectile is destroyed");
- * - a fighter's box in the air that met a projectile goes on ("the hitboxes of
- *   aerial attacks can clank with projectiles ... but then the aerial will
- *   continue"; "airborne attacks cannot be cancelled out, including airborne
- *   special moves"). Not modelled: the freeze frames it takes first;
- * - a fighter's box that cannot rebound goes on, its hit on `other`'s fighter
- *   blocked; one that met a projectile blocks nothing, as no fighter met it
- *   (UNVERIFIED). Two that cannot rebound, within 9% of each other, each go on and
- *   each block the other's hit. UNVERIFIED (Task 13 fix round 2): "Priority" says
- *   only that "two moves that cannot rebound that are used against each other are
- *   more prone to damaging both characters instead of cancelling out their
- *   hitboxes", which names no blocking either way;
- * - any other fighter's box loses its move: the rebound (`loseClank`).
+ * The stronger of a clank's two sides, by the damage the 9% rule weighs. On a tie,
+ * the one whose box freezes longer (UNVERIFIED: no source breaks a tie; both
+ * rebound then, and only the hitlag multiplier can differ), then `a`.
  */
-function loseOrTrample(
+function strongerOf(a: Candidate, da: number, b: Candidate, db: number): Stronger {
+  if (da !== db) return da > db ? { hitbox: a.hitbox, damage: da } : { hitbox: b.hitbox, damage: db };
+  return (b.hitbox.hitlagMultiplier ?? ONE) > (a.hitbox.hitlagMultiplier ?? ONE) ? { hitbox: b.hitbox, damage: db } : { hitbox: a.hitbox, damage: da };
+}
+
+/**
+ * What a clank does to side `c`, which `lost` it (a rebound, or the other side
+ * stronger) or not (SmashWiki "Priority", https://www.ssbwiki.com/Priority,
+ * revision 2049993; Plan 5, Task 13c and its fix round 1, ruling R-T13c-a):
+ * - a projectile that lost and cannot rebound (THRU: the Thunder Jolt) goes on,
+ *   its hit blocked on the fighter whose box it met ("there are some projectiles
+ *   that don't get destroyed by clanking. However, their hitboxes are generally
+ *   disabled for the character or object that clanked with them"); any other
+ *   that lost is knocked away if its definition says how (Link's boomerang,
+ *   `knockProjectile`), else it is gone ("the projectile is destroyed"). One that
+ *   won flies on. A projectile takes no freeze (UNVERIFIED: no page gives it one);
+ * - a fighter on the ground that beat a projectile goes on unfrozen: "the
+ *   projectile is destroyed and the ground move continues uninterrupted";
+ * - any other fighter freezes, and its boxes with it (no frozen fighter's boxes
+ *   are gathered, `gatherHitboxes`): "a rebounding character will suffer freeze
+ *   frames equal to the hitlag of the stronger attack (by %) ... This takes into
+ *   account all hitlag modifiers, with one exception: the electric modifier is
+ *   applied based on whether the character's hitbox has the electric effect";
+ *   the clank freezes "both in place". Through `freezeFighter`, so a freeze it is
+ *   already in that holds longer stands. A fighter in the air that met a
+ *   projectile then goes on ("The aerial will suffer freeze frames based on the
+ *   stronger move as described above, but then the aerial will continue"), as
+ *   does a fighter that won;
+ * - a fighter that lost and cannot rebound goes on, its hit on `other`'s fighter
+ *   blocked ("they will continue their animations as if they did not collide at
+ *   all, but the hitbox will count as blocked for other clanking character ...
+ *   later hits can still connect as clanking blocks only the current hit"); one
+ *   that met a projectile blocks nothing, as no fighter met it (UNVERIFIED). Two
+ *   that cannot rebound, within 9% of each other, each go on and each block the
+ *   other's hit. UNVERIFIED (Task 13 fix round 2): "Priority" says only that "two
+ *   moves that cannot rebound that are used against each other are more prone to
+ *   damaging both characters instead of cancelling out their hitboxes", which
+ *   names no blocking either way;
+ * - any other fighter that lost rebounds (`startRebound`).
+ */
+function clankSide(
   s: GameState,
   c: Candidate,
   other: Candidate,
+  lost: boolean,
+  stronger: Stronger,
   projectileDef: (p: ProjectileState) => ProjectileDef | undefined,
   destroyed: Set<number>,
 ): void {
   if (c.projectile !== null) {
+    if (!lost) return;
     if (c.hitbox.noRebound === true) {
       if (other.projectile === null) markProjectileHit(c.projectile, other.attacker);
       return;
@@ -1403,21 +1439,30 @@ function loseOrTrample(
     return;
   }
   const f = s.fighters[c.attacker];
-  if (other.projectile !== null && !f.grounded) return;
+  const vsProjectile = other.projectile !== null;
+  if (vsProjectile && f.grounded && !lost) return;
+  freezeFighter(
+    f,
+    computeHitlag(stronger.damage, { moveMultiplier: stronger.hitbox.hitlagMultiplier, electric: c.hitbox.effect === "electric" }),
+  );
+  if (!lost || !f.grounded) return;
   if (c.hitbox.noRebound === true) {
-    if (other.projectile === null) markHit(f, other.attacker);
+    if (!vsProjectile) markHit(f, other.attacker);
     return;
   }
-  loseClank(s, c);
+  startRebound(f, reboundFrames(stronger.damage));
 }
 
-/** Losing a clank ends a swing: the rebound. */
-function loseClank(s: GameState, c: Candidate): void {
-  // The rebound: the attack ends and the fighter is pushed back a little.
-  const f = s.fighters[c.attacker];
+/**
+ * The rebound: the attack ends, the fighter is pushed back a little (UNVERIFIED,
+ * 0.5: no page gives the push), and it rebounds for `frames` after its freeze
+ * (`STATUS_REBOUND`).
+ */
+function startRebound(f: FighterState, frames: number): void {
   kineticSetX(f, -f.facing * fx(0.5));
   clearHitRecord(f);
-  startAction(f, f.grounded ? "stand" : "fall");
+  startAction(f, "rebound");
+  f.combat.rebound = frames;
 }
 
 function isSmashSlot(slot: MoveSlot): boolean {

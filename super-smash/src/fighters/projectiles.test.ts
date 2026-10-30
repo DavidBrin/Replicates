@@ -7,10 +7,13 @@
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { fx, toFloat } from "@/engine/fixed";
+import { fx, mul, toFloat } from "@/engine/fixed";
+import { SHORT_HOP_DAMAGE } from "@/engine/constants";
+import { STALE_FRESH_BONUS, computeHitlag, framesAfterHit } from "@/engine/knockback";
 import { hashState } from "@/engine/hash";
 import { insideSolidBody, platformCentreX } from "@/engine/physics";
-import { findProjectileDef, projectileHitbox, projectileHitboxActive, spawnProjectile } from "@/engine/projectile";
+import { COPY_DAMAGE, COPY_GRACE_FRAMES } from "@/engine/inhale";
+import { advanceProjectile, findProjectileDef, projectileHitbox, projectileHitboxActive, spawnProjectile } from "@/engine/projectile";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, ProjectileDef, ProjectileState, StepEvents } from "@/engine/types";
@@ -249,6 +252,38 @@ describe("Link's boomerang turns where its page says, and steers home (SmashWiki
   it("rolls back across its turn, hash for hash", () => {
     expectRollbackSafe(duel("link", "mario", -60, 70), 120, (i) => [i === 0 ? SIDE_B : 0, 0], [60, 70, 71, 72, 73, 90]);
   });
+
+  // Fix round 1, ruling R-T13c-c: "Minimum bounce angle off ground 16°", "Angle
+  // difference to go through floor instead of bouncing off 30°".
+  it("carries the page's floor numbers", () => {
+    expect(BOOMERANG().skim).toEqual({ minAngle: fx(16), throughAngle: fx(30) });
+  });
+
+  /** Link throws from Battlefield's top platform and drops through it on 50 (the review's scene). */
+  function dropped() {
+    const bf = STAGES.find((st) => st.id === "battlefield")!;
+    const top = bf.platforms.reduce((best, p, i) => (p.y > bf.platforms[best].y ? i : best), 0);
+    const s = duel("link", "mario", 0, -60, "battlefield");
+    Object.assign(s.fighters[0], { platform: top, x: bf.platforms[top].x, y: bf.platforms[top].y, facing: 1 });
+    return { bf, ...run(s, 170, (i) => [i === 0 ? SIDE_B : i === 50 ? Btn.Down : 0, 0]) };
+  }
+
+  it("bounces off the floor its way home steers it into, and is caught or lives out its life: never ended by the floor", () => {
+    const { bf, states } = dropped();
+    const life = states.map((st) => one(st, "boomerang"));
+    const floor = bf.platforms[0].y;
+    // Homing down after Link, it meets the main floor at 44°, and comes off it.
+    expect(life.some((p) => p !== undefined && p.y === floor && p.vy > 0)).toBe(true);
+    // It ends by Link's catch or its life's end, never against the stage.
+    const born = life.findIndex((p) => p !== undefined);
+    const gone = life.findIndex((p, i) => i > born && p === undefined);
+    expect(gone).toBeGreaterThan(born);
+    const last = life[gone - 1]!;
+    const link = states[gone - 1].fighters[0];
+    const caught = Math.abs(last.x - link.x) <= fx(8) + fx(4) && Math.abs(last.y - (link.y + fx(6))) <= fx(8) + fx(4);
+    expect(caught || last.age === 124, `gone at age ${last.age}, at (${toFloat(last.x)}, ${toFloat(last.y)})`).toBe(true);
+    expect(states.every((st) => st.projectiles.every((p) => !insideSolidBody(bf, st.frame, p.x, p.y)))).toBe(true);
+  });
 });
 
 describe("an underside stops a projectile the way a wall does (SmashWiki \"Wall\": \"All walls will stop projectile attacks\")", () => {
@@ -342,6 +377,18 @@ describe("Link's arrow lodges in the surface it meets (SmashWiki \"Link (SSBU)/N
     expect(events.flatMap((e) => e.hits)).toEqual([]);
   });
 
+  // Fix round 1, ruling R-T13c-d: "Gravity 0.054", "Firing angle 2.5°", "Uncharged
+  // speed 2.6", "Fully charged speed 10".
+  it("flies at the page's 2.5° and gravity 0.054", () => {
+    const def = projectileDef("link", "arrow");
+    expect([def.vx, def.vy, def.gravity]).toEqual([fx(2.5975), fx(0.1134), fx(0.054)]);
+    expect([def.charged?.vx, def.charged?.vy]).toEqual([fx(9.9905), fx(0.4362)]);
+    const { states } = run(duel("link", "mario", -60, 70), 40, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const life = states.map((st) => one(st, "arrow")).filter((p) => p !== undefined && p.mode === "fly");
+    expect(life[0]!.vy).toBe(fx(0.1134));
+    for (let k = 1; k < life.length; k++) expect(life[k]!.vy - life[k - 1]!.vy).toBe(-fx(0.054));
+  });
+
   it("lodges in a wall: fired at Final Destination's side from beside it", () => {
     const s = duel("link", "mario", -60, 70);
     Object.assign(s.fighters[0], { grounded: false, platform: -1, action: "fall", x: fx(-100), y: fx(-20), facing: 1 });
@@ -349,6 +396,71 @@ describe("Link's arrow lodges in the surface it meets (SmashWiki \"Link (SSBU)/N
     const lodged = states.map((st) => one(st, "arrow")).find((p) => p?.mode === "lodged");
     expect(lodged).toMatchObject({ x: fx(-80), ground: 0 });
     expect(states.every((st) => st.projectiles.every((p) => !insideSolidBody(FD, st.frame, p.x, p.y)))).toBe(true);
+  });
+});
+
+/**
+ * The legacy boxes set from scripts `reconcile.test` cannot see, because the slot's
+ * imported script is another (fix round 1; the review's R7): rubendal SSBU Data
+ * Viewer 13.0.1 (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Kirby/data.json,
+ * …/Fox/data.json): `game_attack100end` ids 0-2 `ATTACK_SETOFF_KIND_OFF` for both
+ * rapid-jab finishers; Kirby's `game_specialairlw` id 0 (the falling Stone)
+ * `ATTACK_SETOFF_KIND_OFF`.
+ */
+describe("legacy boxes set from scripts that are not imported", () => {
+  it.each([
+    ["kirby", "rapidJab", 1, "game_attack100end"],
+    ["fox", "rapidJab", 1, "game_attack100end"],
+    ["kirby", "downB", 0, "game_specialairlw"],
+  ] as const)("%s's %s box %i is OFF, as %s", (fighter, slot, id, script) => {
+    const box = fighterDef(fighter).moves[slot]!.hitboxes.find((hb) => hb.id === id)!;
+    expect([box.transcendent, box.noRebound], `${fighter} ${script} id ${id}`).toEqual([true, undefined]);
+  });
+});
+
+describe("Mario's Fireball flies as its page publishes (fix round 1, R-T13c-e)", () => {
+  // https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special, "Fireball parameters":
+  // "Initial speed 1.4", "Initial angle -10°", "Gravity 0.1", "Speed multiplier after
+  // bounce 0.97", "Minimum vertical speed after bounce 1.4", "Maximum vertical speed
+  // after bounce 1.6", "Number of bounces before disappearing 7".
+  const FIREBALL = () => projectileDef("mario", "fireball");
+
+  it("carries the page's numbers", () => {
+    expect([FIREBALL().vx, FIREBALL().vy, FIREBALL().gravity, FIREBALL().bounces]).toEqual([fx(1.3787), -fx(0.2431), fx(0.1), 7]);
+    expect(FIREBALL().hop).toEqual({ speed: fx(0.97), minVy: fx(1.4), maxVy: fx(1.6) });
+  });
+
+  it("thrown on Final Destination, it bounces off the floor at 1.4 to 1.6 up, ×0.97 along it at each", () => {
+    const { states } = run(duel("mario", "fox", -60, 70), 90, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const life = states.map((st) => one(st, "fireball"));
+    const floor = FD.platforms[0].y;
+    const hops = life.flatMap((p, i) => (p !== undefined && p.y === floor && p.vy > 0 ? [i] : []));
+    expect(hops.length).toBeGreaterThanOrEqual(2);
+    for (const i of hops) {
+      expect(life[i]!.vy).toBeGreaterThanOrEqual(fx(1.4));
+      expect(life[i]!.vy).toBeLessThanOrEqual(fx(1.6));
+      expect(life[i]!.vx).toBe(mul(life[i - 1]!.vx, fx(0.97)));
+    }
+  });
+
+  it("is gone on the floor after its 7 bounces, and bounces backward off a wall (\"Fireball\": \"When firing at a wall ... the balls will bounce backward\")", () => {
+    // Out of its own life's way (a long one), on a floor long enough for 7 hops: then gone.
+    const long: ProjectileDef = { ...FIREBALL(), lifetime: 2000 };
+    const wide = { ...FD, platforms: [{ ...FD.platforms[0], halfWidth: fx(2000) }], blastZone: { ...FD.blastZone, left: -fx(3000), right: fx(3000) } };
+    const s = duel("mario", "fox", -60, 70);
+    const p = spawnProjectile(long, s.fighters[0], 1);
+    let alive = true;
+    let hops = 0;
+    for (let age = 1; alive && age < 2000; age++) {
+      alive = advanceProjectile(p, long, wide, null, age).alive;
+      if (alive && p.y === FD.platforms[0].y && p.vy > 0) hops += 1;
+    }
+    expect([hops, alive]).toEqual([7, false]);
+    // Into Final Destination's side from beside it: back the way it came, one bounce spent.
+    const q = spawnProjectile(long, s.fighters[0], 2);
+    Object.assign(q, { x: fx(-81), y: fx(-20), vx: fx(1.4), vy: 0 });
+    advanceProjectile(q, long, FD, null, 1);
+    expect([q.x, q.vx, q.bouncesLeft]).toEqual([fx(-80), -fx(1.4), 6]);
   });
 });
 
@@ -388,8 +500,8 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
   });
 
   /** Put a projectile of `fighter`'s `id`, owned by port `owner`, at (x, y) moving (vx, vy). */
-  function launch(s: GameState, owner: number, fighter: string, id: string, x: number, y: number, vx: number, vy = 0, charge = 0): ProjectileState {
-    const p = spawnProjectile(projectileDef(fighter, id), { ...s.fighters[owner], charge } as FighterState, s.nextProjectileId, fighter, id === "chargeShot" ? 112 : undefined);
+  function launch(s: GameState, owner: number, fighter: string, id: string, x: number, y: number, vx: number, vy = 0, charge = 0, damageMul = fx(1)): ProjectileState {
+    const p = spawnProjectile(projectileDef(fighter, id), { ...s.fighters[owner], charge } as FighterState, s.nextProjectileId, fighter, id === "chargeShot" ? 112 : undefined, damageMul);
     Object.assign(p, { x: fx(x), y: FD.platforms[0].y + fx(y), vx: fx(vx), vy: fx(vy), facing: vx < 0 ? -1 : 1 });
     s.projectiles.push(p);
     s.nextProjectileId += 1;
@@ -400,8 +512,8 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
    * The first timing of `fighter`'s press (step 0 to 30) whose attack clanks with the
    * projectile `place` puts in the state: that run, from the press on.
    */
-  function clankWith(setup: () => GameState, press: InputFrame, frames = 40) {
-    for (let k = 0; k <= 30; k++) {
+  function clankWith(setup: () => GameState, press: InputFrame, frames = 40, from = 0) {
+    for (let k = from; k <= 30; k++) {
       const { states, events } = run(setup(), frames, (i) => [0, i === k ? press : 0]);
       const at = events.findIndex((e) => e.clanks.length > 0);
       if (at >= 0) return { k, at, states, events };
@@ -419,7 +531,11 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
       return s;
     }, Btn.Attack);
     expect(states[at].projectiles).toEqual([]);
-    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["stand", null]);
+    // Fox freezes for the Fireball's hitlag, the stronger (5% against 1.89%), and
+    // then rebounds floor((5+4)·15/8) = 16 frames (fix round 1, R-T13c-a).
+    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["rebound", null]);
+    expect(states[at].fighters[1].hitlag).toBe(framesAfterHit(computeHitlag(fx(5))));
+    expect(states[at].fighters[1].combat.rebound).toBe(16);
   });
 
   it("more than 9% stronger: Marth's forward smash (18%) beats a Fireball: the Fireball is gone, Marth swings on", () => {
@@ -430,6 +546,8 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
     }, Btn.Left | Btn.Attack);
     expect(states[at].projectiles).toEqual([]);
     expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["attack", "fsmash"]);
+    // "the projectile is destroyed and the ground move continues uninterrupted": no freeze.
+    expect(states[at].fighters[1].hitlag).toBe(0);
   });
 
   it("a projectile more than 9% stronger: a full Charge Shot (28%) beats Fox's jab: Fox rebounds, the shot flies on and hits him", () => {
@@ -439,7 +557,11 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
       return s;
     }, Btn.Attack);
     expect(states[at].projectiles.map((p) => p.defId)).toEqual(["chargeShot"]);
-    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["stand", null]);
+    // The shot's 28% is the stronger: Fox's freeze is its hitlag (electric is his own
+    // box's, which is not), and his rebound is floor((28+4)·15/8) = 60, capped at 58.
+    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["rebound", null]);
+    expect(states[at].fighters[1].hitlag).toBe(framesAfterHit(computeHitlag(fx(28))));
+    expect(states[at].fighters[1].combat.rebound).toBe(58);
     const hit = events.findIndex((e) => e.hits.some((h) => h.attacker === 0 && h.victim === 1));
     expect(hit).toBeGreaterThan(at);
   });
@@ -460,21 +582,26 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
     expect(b.states[2].projectiles.map((p) => p.defId)).toEqual(["chargeShot"]);
   });
 
-  it("an aerial goes on through a projectile it clanks with: Fox's neutral air takes a Fireball out, and is not cancelled", () => {
-    // Fox jumps, and neutral-airs at the Fireball coming at him: the first timing that clanks.
+  it("an aerial goes on through a projectile it clanks with: Fox's neutral air takes an uncharged Charge Shot out, and is not cancelled", () => {
+    // Fox jumps, and neutral-airs at the shot coming at him: the first timing that clanks.
     let found: { at: number; states: GameState[] } | null = null;
     for (let k = 4; k <= 30 && found === null; k++) {
       const s = field("fox");
-      launch(s, 0, "mario", "fireball", -30, 20, 1.9);
+      launch(s, 0, "samus", "chargeShot", -30, 20, 1.6);
       const { states, events } = run(s, 40, (i) => [0, i === 0 ? Btn.Jump : i === k ? Btn.Attack : 0]);
       const at = events.findIndex((e) => e.clanks.length > 0);
-      if (at >= 0) found = { at, states };
+      // Its clean 9% box (frames 4-6), not the late 6%: a freeze the shot alone could not give.
+      if (at >= 0 && states[at].fighters[1].actionFrame <= 5) found = { at, states };
     }
     expect(found).not.toBeNull();
     const { at, states } = found!;
     expect(states[at].fighters[1].grounded).toBe(false);
     expect(states[at].projectiles).toEqual([]);
     expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["attack", "nair"]);
+    // "The aerial will suffer freeze frames based on the stronger move ... but then the
+    // aerial will continue": the stronger is its own 9%, short-hopped (×0.85) and fresh
+    // (×1.05), 8.03 against the shot's 5.
+    expect(states[at].fighters[1].hitlag).toBe(framesAfterHit(computeHitlag(mul(mul(fx(9), SHORT_HOP_DAMAGE), STALE_FRESH_BONUS))));
   });
 
   it("the Thunder Jolt (THRU) clanks and goes on: Fox's jab rebounds, and the Jolt never hits him after", () => {
@@ -484,7 +611,7 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
       return s;
     }, Btn.Attack);
     expect(states[at].projectiles.map((p) => [p.defId, p.hitPorts])).toEqual([["thunderJolt", [1]]]);
-    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["stand", null]);
+    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["rebound", null]);
     expect(events.slice(at).flatMap((e) => e.hits).filter((h) => h.attacker === 0)).toEqual([]);
   });
 
@@ -501,6 +628,46 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
     expect(gone - at).toBeLessThanOrEqual(60);
     expect(one(states[at + 1], "boomerang")!.vy).toBe(fx(1.25) - fx(0.09));
     expect(events.slice(at).flatMap((e) => e.hits).filter((h) => h.attacker === 0)).toEqual([]);
+  });
+
+  it("a THRU projectile against a projectile: the Thunder Jolt (6%) puts out a Fireball (5%) and flies on, blocked on nobody", () => {
+    const s = duel("pikachu", "mario", -70, 70);
+    launch(s, 0, "pikachu", "thunderJolt", -4, 9, 1.6);
+    launch(s, 1, "mario", "fireball", 4, 9, -1.4);
+    const { states, events } = run(s, 3, () => [0, 0]);
+    expect(events.some((e) => e.clanks.length > 0)).toBe(true);
+    // Within 9%: both lose; the Fireball is gone, the Jolt cannot be, and no fighter met it.
+    expect(states[2].projectiles.map((p) => [p.defId, p.hitPorts])).toEqual([["thunderJolt", []]]);
+  });
+
+  it("weighs a clank before the 1v1 bonus: in a one-on-one, an uncharged Charge Shot (5%) and Link's forward tilt (13% ×1.05 = 13.65) are within 9%, and Link rebounds", () => {
+    // Weighed after the ×1.2 bonus the tilt would be 16.38 against 6: more than 9%, and swing on.
+    const { at, states } = clankWith(() => {
+      const s = field("link");
+      s.rules = { ...s.rules, oneOnOne: true };
+      launch(s, 0, "samus", "chargeShot", -50, 7.5, 1.6);
+      return s;
+    }, Btn.Left | Btn.Attack | Btn.Soft);
+    expect(states[at].projectiles).toEqual([]);
+    expect([states[at].fighters[1].action, states[at].fighters[1].move]).toEqual(["rebound", null]);
+  });
+
+  it("weighs a copied shot at its ×1.2: Fox's forward smash (14% ×1.05 = 14.7) beats Samus's uncharged Charge Shot (5%) but not Kirby's copy of it (6%)", () => {
+    // The copy is Kirby's, holding Samus's ability (a copied shot whose Kirby has lost
+    // the copy is dropped, `dropLostCopies`).
+    const outcome = (damageMul: number) => {
+      const { at, states } = clankWith(() => {
+        const s = duel(damageMul === COPY_DAMAGE ? "kirby" : "samus", "fox", -70, 0);
+        if (damageMul === COPY_DAMAGE) Object.assign(s.fighters[0].combat, { copy: "samus", copyFrames: COPY_GRACE_FRAMES });
+        launch(s, 0, "samus", "chargeShot", -50, 6, 1.6, 0, 0, damageMul);
+        return s;
+        // From a press on step 10: the shot meets the smash's 14% box (frames 13-14),
+        // not its later 11% one.
+      }, Btn.Left | Btn.Attack, 40, 10);
+      return [states[at].fighters[1].action, states[at].fighters[1].move];
+    };
+    expect(outcome(fx(1))).toEqual(["attack", "fsmash"]);
+    expect(outcome(COPY_DAMAGE)).toEqual(["rebound", null]);
   });
 
   it("Fox's Blaster and F.L.U.D.D.'s water (OFF) never clank: through a jab, at any timing", () => {

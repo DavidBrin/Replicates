@@ -73,8 +73,8 @@ describe("the status alias table", () => {
     const actions = Object.keys(STATUS_KIND_OF_ACTION) as ActionState[];
     // 50 through Plan 5 Task 4b; Task 8 adds Donkey Kong's carry and the carried,
     // Task 9 Kirby's mouthful, the swallowed and the spat, Task 11 the
-    // footstooled, and Task 12 the crawl.
-    expect(actions).toHaveLength(57);
+    // footstooled, Task 12 the crawl, and Task 13c's fix round 1 the rebound.
+    expect(actions).toHaveLength(58);
     const kinds = new Set(actions.map((a) => STATUS_KIND_OF_ACTION[a]));
     expect(kinds.size).toBe(actions.length);
     for (const a of actions) expect(ACTION_OF_STATUS_KIND[STATUS_KIND_OF_ACTION[a]]).toBe(a);
