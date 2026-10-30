@@ -1350,7 +1350,7 @@ function resolveHits(
       const contact = contactPoint(capsuleOf(c), hurtboxes[reachOf(c).index]);
       // A windbox only pushes (Plan 5, Task 6: `applyWindbox`), invincible victim
       // and raised shield included, so it goes first.
-      if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c);
+      if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c, events);
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
       else if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
@@ -2455,7 +2455,8 @@ function applyHit(
  * (`kineticPush`), where it stacks with the fighter's own movement and decays as
  * a launch does. Nothing else: no damage, hitstun, hitlag for either fighter
  * (`DisableHitlag=true`), status change, stale entry or hit event (the hitbox
- * row's `nogfx=t`, SmashWiki "Mario (SSBU)/Down special"). The fighter goes on
+ * row's `nogfx=t`, SmashWiki "Mario (SSBU)/Down special"); a `pushes` event
+ * says who pushed whom, for kill credit. The fighter goes on
  * with what it was doing, and a helpless one stays helpless: SmashWiki
  * "F.L.U.D.D." (https://www.ssbwiki.com/F.L.U.D.D.), it "can push opponents away
  * from the stage during their recovery without giving them another chance to
@@ -2465,6 +2466,10 @@ function applyHit(
  * - On the ground it only slides the fighter: "windboxes cannot lift opponents
  *   off the ground, but can push them off edges". UNVERIFIED: the slide is the
  *   push's horizontal part, at that part's speed.
+ * - Super armour does not stop it: SmashWiki "Armor"
+ *   (https://www.ssbwiki.com/Armor), a fighter in super armour does not
+ *   "flinch nor take any knockback when attacked by a harmful hitbox, but
+ *   flinchless hitboxes (like windboxes) will still move the character".
  * - A raised shield takes nothing: "Pushing attacks that do not deal damage are
  *   ineffective against shielding opponents". Nor does an invincible fighter
  *   (`FighterState.invincible`: the hit connects and transfers nothing). Either
@@ -2479,9 +2484,12 @@ function applyHit(
  * Every windbox on this roster deals 0% (`schema.test.ts`), the case the shield
  * rule names, so no damage is dealt here.
  */
-function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate): void {
+function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate, events: StepEvents): void {
   recordHit(c, attacker, victim.port);
   if (victim.invincible > 0 || hitReachesShield(victim, victimDef, c)) return;
+  // It reached the body: who pushed whom, for the results screen's kill credit
+  // (`StepEvents.pushes`), whatever the push then does.
+  events.pushes.push({ attacker: attacker.port, victim: victim.port });
   // A launch parked in its freeze replaces any push when it fires
   // (`releasePendingLaunch`), and a frozen fighter does not move before then,
   // so nothing is left of a push on one.

@@ -262,8 +262,9 @@ export interface Hitbox {
   /** `collision_attr_turn` (SmashWiki "Reverse"): the victim is turned round (Plan 5: Cape). */
   readonly reverse?: boolean;
   /**
-   * A windbox (Plan 5, Task 6: F.L.U.D.D.): smash-script `Flinchless=true,
-   * DisableHitlag=true`. SmashWiki "Windbox" (https://www.ssbwiki.com/Windbox):
+   * A windbox (Plan 5, Task 6: F.L.U.D.D.): a smash-script `Flinchless=true`
+   * box (SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox: it "prevents the
+   * hitbox from inflicting hitstun or hitlag"). SmashWiki "Windbox" (https://www.ssbwiki.com/Windbox):
    * "hitboxes that deal knockback, but cause no hitstun". It pushes by its
    * knockback and does nothing else (no damage, hitstun, hitlag, stale entry or
    * hit event), and a raised shield, a ledge and a counter do not take it the
@@ -326,7 +327,10 @@ export interface ProjectileDef {
   readonly vy: number;
   /** Per-frame downward acceleration. Zero for a laser, non-zero for a bomb. */
   readonly gravity: number;
-  /** Frames before it expires on its own. */
+  /**
+   * Frames it lives, the frame it spawns on included: ages 0 to `lifetime` − 1
+   * (SmashWiki's "Lifetime"; Plan 5, Task 6 fix round 1).
+   */
   readonly lifetime: number;
   /** Damage and knockback. `startFrame`/`endFrame` are relative to the spawn. */
   readonly hitbox: Hitbox;
@@ -1160,6 +1164,13 @@ export interface StepEvents {
   reflects: { port: number; x: number; y: number }[];
   /** Counters that caught something this frame: whose, and where it met the bubble (Plan 5, Task 5). */
   counters: { port: number; x: number; y: number }[];
+  /**
+   * Windbox pushes that reached a body this frame, who pushed whom (Plan 5,
+   * Task 6 fix round 1). A push reports no hit (F.L.U.D.D.'s row is `nogfx=t`),
+   * but the results screen credits a KO through one as through a hit
+   * (`killCredit.ts`; SmashWiki "Windbox").
+   */
+  pushes: { attacker: number; victim: number }[];
 }
 
 export function emptyEvents(): StepEvents {
@@ -1175,5 +1186,6 @@ export function emptyEvents(): StepEvents {
     finalSmashes: [],
     reflects: [],
     counters: [],
+    pushes: [],
   };
 }

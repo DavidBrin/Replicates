@@ -17,6 +17,7 @@ import type { BoneName, PoseAngles } from "../../skeleton";
 import type { MoveSlot } from "@/engine/types";
 import { mario } from "@/fighters/mario";
 import type { PoseName } from "../../poses/library";
+import { samplePose } from "../../poses/clip";
 import { poses } from "./poses";
 import { rig } from "./rig";
 import { fx, projectiles } from "./fx";
@@ -682,5 +683,61 @@ describe("F.L.U.D.D. is water, on the frame the brace happens", () => {
     // The yellow tip, the nozzle's last shape, ends at its mouth, 3.8 along from the grip.
     const tip = p.ctx.calls.filter((c, i) => i >= p.drainedAt && c.method === "roundRect").at(-1)!;
     expect(Number(tip.args[0]) + Number(tip.args[2])).toBeCloseTo(12 * 3.8, 6);
+    // ...pointing up its 12°: canvas angles run clockwise, so the turn is negative.
+    const turn = p.ctx.calls.find((c, i) => i >= p.drainedAt && c.method === "rotate")!;
+    expect(Number(turn.args[0])).toBeCloseTo(-Math.atan2(toFloat(def.vy), toFloat(def.vx)), 6);
+  });
+
+  it("stretches the glob along its own heading, with its highlight trailing", () => {
+    for (const dir of [1, -1]) {
+      const ctx = createMockContext();
+      projectiles.water({ ctx, u: 12, age: 3, dir, heading: -0.2, charge: 1, fraction: 0, returning: false, frame: 3 });
+      const [body, highlight] = ctx.calls.filter((c) => c.method === "ellipse");
+      // Its long axis along the flight, tilted as the flight is.
+      expect(Number(body.args[4]), `dir ${dir}`).toBe(-0.2);
+      expect(Number(body.args[2])).toBeGreaterThan(Number(body.args[3]));
+      expect(Number(highlight.args[4])).toBe(-0.2);
+      // The highlight sits behind the glob's centre, the way it came from.
+      expect(Math.sign(Number(highlight.args[0])), `dir ${dir}`).toBe(-dir);
+    }
+  });
+});
+
+describe("F.L.U.D.D.'s hands stay on the nozzle while it pumps (Plan 5, Task 6 fix round 1)", () => {
+  /*
+   * Pumps leave on frames 21 to 51 (SmashWiki "Mario (SSBU)/Down special":
+   * "Pumps 21-32, …, 51-62"). The brace re-timed onto the 67-frame move eased
+   * his arms down over 37-45, while three pumps were still to leave and the
+   * nozzle hung in the air for another sixteen frames.
+   */
+  const clip = poses.downB!;
+  const move = mario.moves.downB!;
+  const pumps = move.projectiles!.map((p) => p.spawnFrame);
+  const last = Math.max(...pumps);
+  const brace = clip.keys.find((k) => Math.abs(k.t - 21 / move.totalFrames) < 1e-9)!;
+  const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  it("holds the brace from the first pump to the last, both hands, and has the arms down six frames later", () => {
+    for (const arm of [ARM_R, ARM_L]) {
+      const held = tipOf(brace.pose, arm);
+      const at = (frame: number) => tipOf(samplePose(clip, frame / move.totalFrames).angles, arm);
+      for (const f of pumps) expect(distance(at(f), held), `frame ${f}`).toBeLessThan(0.75);
+      expect(distance(at(last + 6), held)).toBeGreaterThan(3);
+    }
+  });
+
+  it("lowers the nozzle with them: whole on the last pump, fading, gone six frames later", () => {
+    const nozzle = (frame: number) => {
+      const p = paint("downB", frame);
+      return {
+        shapes: p.ctx.calls.filter((c, i) => i >= p.drainedAt && c.method === "roundRect").length,
+        // The first alpha the deferred half sets: the nozzle's.
+        alpha: Number(p.ctx.calls.find((c, i) => i >= p.drainedAt && c.method === "set:globalAlpha")?.args[0] ?? 0),
+      };
+    };
+    expect(nozzle(last).shapes).toBe(4);
+    expect(nozzle(last + 3).shapes).toBe(4);
+    expect(nozzle(last + 3).alpha).toBeLessThan(nozzle(last).alpha);
+    expect(nozzle(last + 6).shapes).toBe(0);
   });
 });

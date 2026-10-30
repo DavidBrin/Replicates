@@ -57,10 +57,11 @@ import { computeKnockback } from "@/engine/knockback";
 import { fighterParams } from "@/engine/params";
 import { projectileHitbox } from "@/engine/projectile";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
+import { hasSuperArmour } from "@/engine/states";
 import { Btn } from "@/engine/types";
 import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, ProjectileState, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
-import { FIGHTERS, fox, mario } from "./index";
+import { FIGHTERS, donkeyKong, fox, mario } from "./index";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
@@ -143,7 +144,7 @@ describe("F.L.U.D.D.'s published numbers", () => {
     expect(PUMP.hitbox).toEqual({
       id: 0,
       startFrame: 0,
-      endFrame: 12,
+      endFrame: 11,
       x: 0,
       y: 0,
       radius: fx(3.2),
@@ -159,6 +160,8 @@ describe("F.L.U.D.D.'s published numbers", () => {
     expect(PUMP.charged!.hitbox).toEqual({ baseKnockback: fx(55), radius: fx(4.8) });
     expect(PUMP.reflectable).toBe(true);
     expect(PUMP.lifetime).toBe(12);
+    // UNVERIFIED (ruling (b), fix round 1): the nozzle's mouth beside his head.
+    expect([PUMP.offsetX, PUMP.offsetY]).toEqual([fx(6.5), fx(9.7)]);
     expect(PUMP.gravity).toBe(fx(0.17));
   });
 
@@ -185,8 +188,11 @@ describe("F.L.U.D.D.", () => {
     expect(Math.max(...fox.map((f) => f.x))).toBeGreaterThan(fx(12 + 3));
     expect(fox.every((f) => f.damage === 0)).toBe(true);
     expect(fox.some((f) => f.action === "hitstun" || f.action === "tumble" || f.hitlag > 0 || f.hitstun > 0)).toBe(false);
-    // Nothing reports a hit (the row's `nogfx=t`), and nobody freezes.
+    // Nothing reports a hit (the row's `nogfx=t`), and nobody freezes; each
+    // push says who pushed whom, for kill credit.
     expect(events.every((e) => e.hits.length === 0)).toBe(true);
+    expect(events.flatMap((e) => e.pushes)).toContainEqual({ attacker: 0, victim: 1 });
+    expect(events.flatMap((e) => e.pushes).every((p) => p.attacker === 0 && p.victim === 1)).toBe(true);
     expect(states.every((s) => s.fighters[0].hitlag === 0)).toBe(true);
   });
 
@@ -201,7 +207,7 @@ describe("F.L.U.D.D.", () => {
     const { states, events } = play(duel(24), frames(80, tap, () => Btn.Shield));
     const idle = run(duel(24), frames(80, () => 0, () => Btn.Shield));
     // The water reached the shield and was spent there: a pump is gone before its 12 frames.
-    const spent = states.some((s, i) => i > 0 && pumps(states[i - 1]).some((p) => p.age < 12 && !pumps(s).some((q) => q.instanceId === p.instanceId)));
+    const spent = states.some((s, i) => i > 0 && pumps(states[i - 1]).some((p) => p.age < PUMP.lifetime - 1 && !pumps(s).some((q) => q.instanceId === p.instanceId)));
     expect(spent).toBe(true);
     // ...and the shield took nothing from it: no pushback, no wear, no shieldstun.
     states.forEach((s, i) => {
@@ -210,6 +216,8 @@ describe("F.L.U.D.D.", () => {
       expect(s.fighters[1].action, `step ${i}`).toBe(idle[i].fighters[1].action);
     });
     expect(events.every((e) => e.shieldHits.length === 0)).toBe(true);
+    // Nor does it count as a push for kill credit.
+    expect(events.every((e) => e.pushes.length === 0)).toBe(true);
   });
 });
 
@@ -217,14 +225,15 @@ describe("F.L.U.D.D.'s timing, through step()", () => {
   /** Mario alone: Fox stands at the far edge, out of the water's ~50-unit reach. */
   const alone = () => duel(150);
 
-  it("fires a bare press's seven pumps on frames 21 to 51, each living 12 frames, and acts again on frame 68", () => {
+  it("fires a bare press's seven pumps on frames 21 to 51, each living 12 frames (21-32 …), and acts again on frame 68", () => {
     const states = run(alone(), frames(80, bare));
     // Step i is frame i + 1, counted from the press.
     const born = states.flatMap((s, i) => pumps(s).filter((p) => p.age === 0).map(() => i + 1));
     expect(born).toEqual([21, 26, 31, 36, 41, 46, 51]);
     for (const id of new Set(states.flatMap((s) => pumps(s).map((p) => p.instanceId)))) {
       const ages = states.flatMap((s) => pumps(s).filter((p) => p.instanceId === id).map((p) => p.age));
-      expect(ages, `pump ${id}`).toEqual(Array.from({ length: 13 }, (_, a) => a));
+      // Ages 0 to 11: "Pumps 21-32, 26-37, …", the spawn frame counted.
+      expect(ages, `pump ${id}`).toEqual(Array.from({ length: 12 }, (_, a) => a));
     }
     // No charge at all: the 0% water.
     expect(states[20].projectiles[0].charge).toBe(0);
@@ -324,7 +333,7 @@ describe("the push (SmashWiki \"Windbox\": knockback without the flinch)", () =>
     const scene = (fire: boolean) => {
       const s = duel(24);
       Object.assign(s.fighters[0], { x: fx(70) });
-      Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, x: fx(92), y: fx(38) });
+      Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, x: fx(92), y: fx(44) });
       return run(s, frames(40, fire ? bare : () => 0));
     };
     const pushed = scene(true);
@@ -352,7 +361,7 @@ describe("the push (SmashWiki \"Windbox\": knockback without the flinch)", () =>
     const scene = (fire: boolean) => {
       const s = duel(24);
       Object.assign(s.fighters[0], { x: fx(70) });
-      Object.assign(s.fighters[1], { action: "specialFall", grounded: false, platform: -1, x: fx(92), y: fx(38), jumpsUsed: 2, airDodged: true });
+      Object.assign(s.fighters[1], { action: "specialFall", grounded: false, platform: -1, x: fx(92), y: fx(44), jumpsUsed: 2, airDodged: true });
       s.fighters[1].combat.helplessMove = "upB";
       s.fighters[1].combat.specialStall = true;
       return run(s, frames(40, fire ? bare : () => 0));
@@ -386,7 +395,7 @@ describe("the push (SmashWiki \"Windbox\": knockback without the flinch)", () =>
     const hung = run(s, frames(3, () => 0))[2];
     expect(hung.fighters[1].action).toBe("ledgeHang");
     hung.fighters[1].intangible = 0;
-    Object.assign(hung.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(104), y: fx(16), facing: -1 });
+    Object.assign(hung.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(104), y: fx(13), facing: -1 });
     return hung;
   }
 
@@ -404,7 +413,7 @@ describe("the push (SmashWiki \"Windbox\": knockback without the flinch)", () =>
     const states = run(hung, frames(40, bare));
     const path = firstPumpPath(states);
     // On to the end of its life, never spent on him.
-    expect(path.map((p) => p.age)).toEqual(Array.from({ length: 13 }, (_, a) => a));
+    expect(path.map((p) => p.age)).toEqual(Array.from({ length: 12 }, (_, a) => a));
     expect(path.every((p) => p.hitPorts.length === 0)).toBe(true);
     for (const x of states) expect(x.fighters[1]).toMatchObject({ action: "ledgeHang", x: hung.fighters[1].x, y: hung.fighters[1].y });
   });
@@ -418,7 +427,7 @@ describe("the push (SmashWiki \"Windbox\": knockback without the flinch)", () =>
     expect(after.slice(0, 10).every((x) => x.fighters[1].action === "ledgeGetUp" && x.fighters[1].intangible === 0)).toBe(true);
     const path = firstPumpPath([...before, ...after]);
     expect(path.every((p) => p.hitPorts.length === 0)).toBe(true);
-    expect(path.map((p) => p.age)).toEqual(Array.from({ length: 13 }, (_, a) => a));
+    expect(path.map((p) => p.age)).toEqual(Array.from({ length: 12 }, (_, a) => a));
   });
 
   it("does nothing to an invincible fighter, and is spent on them", () => {
@@ -426,28 +435,148 @@ describe("the push (SmashWiki \"Windbox\": knockback without the flinch)", () =>
     s.fighters[1].invincible = 120;
     const { states, events } = play(s, frames(40, bare));
     expect(states.every((x) => x.fighters[1].x === fx(12) && x.fighters[1].kinetic.damageX === 0)).toBe(true);
-    expect(events.every((e) => e.hits.length === 0)).toBe(true);
+    expect(events.every((e) => e.hits.length === 0 && e.pushes.length === 0)).toBe(true);
     // Spent: the first pump is gone before its 12 frames.
     const first = pumps(states[20])[0];
     const life = states.filter((x) => pumps(x).some((p) => p.instanceId === first.instanceId)).length;
-    expect(life).toBeLessThan(13);
+    expect(life).toBeLessThan(PUMP.lifetime);
   });
 
   it("is spent on an invincible fighter (UNVERIFIED): a pump that outlives its hits does not push him once he is hittable", () => {
-    // Fox is invincible through the first pump's first contact (step 23) and
-    // hittable on its next (24), with the same pump still on him.
+    // Fox is invincible through the first pump's first contact (step 24) and
+    // hittable on its next (25), with the same pump still on him.
     const s = duel(24, "fox", "marioHose");
-    s.fighters[1].invincible = 25;
-    const states = run(s, frames(30, bare));
-    expect(states[23].fighters[1].invincible).toBeGreaterThan(0);
-    expect(states[24].fighters[1].invincible).toBe(0);
-    const first = pumps(states[24])[0];
-    expect(first.age).toBe(4);
+    s.fighters[1].invincible = 26;
+    const states = run(s, frames(32, bare));
+    expect(states[24].fighters[1].invincible).toBeGreaterThan(0);
+    expect(states[25].fighters[1].invincible).toBe(0);
+    const first = pumps(states[25])[0];
+    expect(first.age).toBe(5);
     expect(first.hitPorts).toEqual([1]);
-    // Nothing moves him until the second pump comes (step 28).
-    expect(states.slice(0, 28).every((x) => x.fighters[1].kinetic.damageX === 0)).toBe(true);
+    // Nothing moves him until the second pump comes (step 29).
+    expect(states.slice(0, 29).every((x) => x.fighters[1].kinetic.damageX === 0)).toBe(true);
     // The control: hittable all along, the same pump pushes him on its first contact.
-    expect(pushedAt(run(duel(24, "fox", "marioHose"), frames(30, bare)))).toBe(23);
+    expect(pushedAt(run(duel(24, "fox", "marioHose"), frames(32, bare)))).toBe(24);
+  });
+});
+
+describe("the push and what the fighter is doing (Plan 5, Task 6 fix round 1)", () => {
+  /** The bare-press duel one step before the first pump reaches Fox (step 24), for `edit` to stage him. */
+  function beforeContact(edit: (fox: FighterState) => void, withPump = true): GameState {
+    const s = cloneState(run(duel(24), frames(24, bare))[23]);
+    edit(s.fighters[1]);
+    if (!withPump) s.projectiles = [];
+    return s;
+  }
+  const next = (s: GameState, n = 1) => run(s, frames(n, (i) => bare(i + 24)));
+
+  it("passes through an intangible fighter, unspent", () => {
+    const states = run(
+      (() => {
+        const s = duel(24);
+        s.fighters[1].intangible = 60;
+        return s;
+      })(),
+      frames(40, bare),
+    );
+    expect(states.every((x) => x.fighters[1].kinetic.damageX === 0)).toBe(true);
+    const id = pumps(states[20])[0].instanceId;
+    const path = states.flatMap((x) => pumps(x).filter((p) => p.instanceId === id));
+    expect(path.map((p) => p.age)).toEqual(Array.from({ length: 12 }, (_, a) => a));
+    expect(path.every((p) => p.hitPorts.length === 0)).toBe(true);
+  });
+
+  it("leaves an invincible fighter's own movement alone, a push he already had included", () => {
+    const stage = (withPump: boolean) =>
+      beforeContact((f) => {
+        f.invincible = 30;
+        f.kinetic = { ...f.kinetic, damageX: -fx(1), damageY: 0 };
+        f.launchSpeed = fx(1);
+        f.vx = -fx(1);
+      }, withPump);
+    const pushed = next(stage(true))[0].fighters[1];
+    const control = next(stage(false))[0].fighters[1];
+    expect(control.kinetic.damageX).toBeLessThan(0);
+    expect(pushed.kinetic).toEqual(control.kinetic);
+    expect(pushed.launchSpeed).toBe(control.launchSpeed);
+  });
+
+  it("pushes a frozen fighter that has no launch waiting, who slides once the freeze ends", () => {
+    const states = next(beforeContact((f) => Object.assign(f, { hitlag: 6 })), 12);
+    const f = states[0].fighters[1];
+    expect(f.hitlag).toBeGreaterThan(0);
+    expect(f.pendingFacing).toBe(0);
+    expect(f.kinetic.damageX).toBe(mul(mul(pumpKnockback(0, 77), LAUNCH_SPEED_RATIO), cosDeg(fx(55))));
+    const thawed = states.findIndex((x) => x.fighters[1].hitlag === 0);
+    expect(thawed).toBeGreaterThan(0);
+    expect(states[thawed - 1].fighters[1].x).toBe(states[0].fighters[1].x);
+    expect(states[thawed + 1].fighters[1].x).toBeGreaterThan(states[0].fighters[1].x);
+  });
+
+  it("moves a fighter in super armour (SmashWiki \"Armor\"): Donkey Kong's stored full Giant Punch", () => {
+    // DK's armour runs frames 9-20 of a stored full punch from the press
+    // (`donkeyKong.ts`); pressed on step 12, it covers the water's arrival.
+    const s = duel(24, "donkeyKong");
+    s.fighters[1].combat.storedCharge = 110;
+    const states = run(s, frames(40, bare, (i) => (i === 12 ? Btn.Special : 0)));
+    const at = pushedAt(states);
+    expect(at).toBeGreaterThan(19);
+    const dk = states[at].fighters[1];
+    expect(dk.move).toBe("neutralB");
+    expect(hasSuperArmour(dk, donkeyKong)).toBe(true);
+    expect(dk.kinetic.damageX).toBe(mul(mul(pumpKnockback(0, donkeyKong.attributes.weight), LAUNCH_SPEED_RATIO), cosDeg(fx(55))));
+  });
+});
+
+describe("the push and a grab (UNVERIFIED: no source covers either; Plan 5, Task 6 fix round 1)", () => {
+  const RULES3: MatchRules = { ...RULES, oneOnOne: false };
+  /** Mario at −12 facing right; `holder` holding `held` to the right of him. */
+  function hold(holder: 1 | 2, held: 1 | 2, holderX: number, facing: 1 | -1): GameState {
+    const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }, { defId: "marth" }], RULES3, 5);
+    Object.assign(s.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-12), y: 0, facing: 1, intangible: 0 });
+    Object.assign(s.fighters[holder], { action: "grabHold", actionFrame: 0, grounded: true, platform: 0, x: fx(holderX), y: 0, facing, intangible: 0, grabbing: held });
+    Object.assign(s.fighters[held], { action: "grabbed", actionFrame: 0, grounded: true, platform: 0, x: fx(holderX + 6 * facing), y: 0, facing: -facing, intangible: 0, grabbedBy: holder, grabTimer: 500 });
+    return s;
+  }
+  const play3 = (s: GameState, n: number) => {
+    let st = s;
+    let prev: InputFrame[] = [0, 0, 0];
+    const out: { state: GameState; events: StepEvents }[] = [];
+    for (let i = 0; i < n; i++) {
+      const now = [bare(i), 0, 0];
+      const r = step(st, now, { prevInputs: prev });
+      st = r.state;
+      prev = now;
+      out.push(r);
+    }
+    return out;
+  };
+
+  it("gives a held fighter a one-frame push that the hold wipes, and he stays held", () => {
+    // Marth (port 2) at x 20 facing left holds Fox in front of him, in the water's path.
+    const steps = play3(hold(2, 1, 20, -1), 40);
+    const at = steps.findIndex((r) => r.events.pushes.some((p) => p.victim === 1));
+    expect(at).toBeGreaterThan(19);
+    expect(steps[at].state.fighters[1].kinetic.damageX).toBeGreaterThan(0);
+    expect(steps[at + 1].state.fighters[1].kinetic.damageX).toBe(0);
+    for (const r of steps) {
+      expect(r.state.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 2 });
+      expect(r.state.fighters[1].x - r.state.fighters[2].x).toBe(steps[0].state.fighters[1].x - steps[0].state.fighters[2].x);
+    }
+    expect(steps.at(-1)!.state.fighters[2].x).toBe(steps[0].state.fighters[2].x);
+  });
+
+  it("slides a captor, who keeps the hold and brings the held fighter along", () => {
+    // Fox (port 1) at x 12 facing away from Mario holds Marth; the water comes from behind.
+    const steps = play3(hold(1, 2, 12, 1), 40);
+    const at = steps.findIndex((r) => r.events.pushes.some((p) => p.victim === 1));
+    expect(at).toBeGreaterThan(19);
+    expect(steps.at(-1)!.state.fighters[1].x).toBeGreaterThan(steps[at].state.fighters[1].x + fx(3));
+    for (const r of steps) {
+      expect(r.state.fighters[1]).toMatchObject({ action: "grabHold", grabbing: 2 });
+      expect(r.state.fighters[2]).toMatchObject({ action: "grabbed", grabbedBy: 1 });
+      expect(r.state.fighters[2].x - r.state.fighters[1].x).toBe(steps[0].state.fighters[2].x - steps[0].state.fighters[1].x);
+    }
   });
 });
 
@@ -458,8 +587,8 @@ describe("the push against a launch still live (UNVERIFIED: SmashWiki \"Knockbac
    * `speed`. The control has no pump.
    */
   function launched(speed: number, withPump: boolean): GameState {
-    const states = run(duel(24), frames(23, bare));
-    const s = cloneState(states[22]);
+    const states = run(duel(24), frames(24, bare));
+    const s = cloneState(states[23]);
     const f = s.fighters[1];
     Object.assign(f, { action: "tumble", actionFrame: 0, grounded: false, platform: -1, y: fx(1), hitstun: 30, launchSpeed: speed, vx: 0, vy: speed });
     f.kinetic = { ...f.kinetic, controlX: 0, stopX: 0, motionX: 0, motionY: 0, gravityY: 0, damageX: 0, damageY: speed };
@@ -481,13 +610,15 @@ describe("the push against a launch still live (UNVERIFIED: SmashWiki \"Knockbac
     expect(pumps(step(launched(fast, true), [0, 0], { prevInputs: [0, 0] }).state)).toHaveLength(0);
   });
 
-  it("turns one between 1.1 and 2 times its speed, keeping the speed", () => {
+  it("turns one between 1.1 and 2 times its speed toward the sum of the two, keeping the speed", () => {
     const mid = fx(3);
     const f = after(mid, true);
     const c = after(mid, false);
     expect(f.launchSpeed).toBe(c.launchSpeed);
     expect(c.kinetic.damageX).toBe(0);
-    expect(f.kinetic.damageX).toBeGreaterThan(0);
+    // Along the launch plus the whole 55° push, its rise included.
+    const sum = { x: mul(push, cosDeg(fx(55))), y: c.kinetic.damageY + mul(push, sinDeg(fx(55))) };
+    expect(f.kinetic.damageY / f.kinetic.damageX).toBeCloseTo(sum.y / sum.x, 2);
     expect(f.hitstun).toBe(c.hitstun);
     expect(f.action).toBe("tumble");
   });

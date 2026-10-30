@@ -527,13 +527,13 @@ describe("what the Reflector reflects", () => {
     expect(reflected).toBeGreaterThan(0);
     const boomerang = (i: number) => states[i].projectiles.find((p) => p.defId === "boomerang");
     expect(boomerang(reflected)).toMatchObject({ owner: 1, age: 0, returning: false });
-    // Lifetime 151 renewed (×1): it turns on the frame its age reaches 76.
-    expect(boomerang(reflected + 75)?.vx).toBeLessThan(0);
-    expect(boomerang(reflected + 76)?.vx).toBeGreaterThan(0);
-    expect(boomerang(reflected + 76)?.returning).toBe(true);
+    // Lifetime 125 renewed (×1): it turns on the frame its age reaches 63.
+    expect(boomerang(reflected + 62)?.vx).toBeLessThan(0);
+    expect(boomerang(reflected + 63)?.vx).toBeGreaterThan(0);
+    expect(boomerang(reflected + 63)?.returning).toBe(true);
     // Caught by Fox, not hitting him.
-    const gone = states.findIndex((q, i) => i > reflected + 76 && boomerang(i) === undefined);
-    expect(gone).toBeGreaterThan(reflected + 76);
+    const gone = states.findIndex((q, i) => i > reflected + 63 && boomerang(i) === undefined);
+    expect(gone).toBeGreaterThan(reflected + 63);
     expect(Math.abs(toFloat(boomerang(gone - 1)!.x) - 70)).toBeLessThan(12);
     expect(states[gone].fighters[1].damage).toBe(0);
   });

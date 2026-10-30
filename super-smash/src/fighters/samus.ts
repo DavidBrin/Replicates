@@ -682,7 +682,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 60,
+            endFrame: 59,
             x: fx(0),
             y: fx(0),
             radius: fx(1.9),
@@ -702,7 +702,9 @@ const legacy: FighterDef = {
       name: "Missile",
       totalFrames: 54,
       // Two variants off one input. A *tilt* fires the homing missile below —
-      // 8% at a flat 0 degrees, living 118 frames. A *smash* fires a Super
+      // 8% at a flat 0 degrees, living 120 frames (SmashWiki "Samus
+      // (SSBU)/Side special", https://www.ssbwiki.com/Samus_(SSBU)/Side_special:
+      // Homing Missile "Lifetime 120 frames", "Missile 18-137"). A *smash* fires a Super
       // Missile: 12% at 65 degrees, faster and straight, which only starts
       // moving forward around frame 50, and that delay is exactly why she can
       // act before it arrives and follow it in. Both are reflectable.
@@ -720,7 +722,7 @@ const legacy: FighterDef = {
           vx: fx(1.5),
           vy: fx(0),
           gravity: fx(0),
-          lifetime: 118,
+          lifetime: 120,
           destroyOnHit: true,
           visual: "missile",
           // samus_missile `Homing`: `Reflectable=true`.
@@ -728,7 +730,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 118,
+            endFrame: 119,
             x: fx(0),
             y: fx(0),
             radius: fx(3.0),
@@ -807,7 +809,14 @@ const legacy: FighterDef = {
       name: "Bomb",
       totalFrames: 47,
       // She curls into Morph Ball and lays a bomb, generated on frame 11, which
-      // falls, settles, and auto-detonates 83 frames later. The blast also pops
+      // falls, settles, and explodes 72 frames later, on frames 83-100
+      // (SmashWiki "Samus (SSBU)/Down special",
+      // https://www.ssbwiki.com/Samus_(SSBU)/Down_special: "Bomb generation 11",
+      // "Maximum duration before exploding 72 frames", "Explosion (early, mid,
+      // late) 83-94, 95-97, 98-100"; Plan 5, Task 6 fix round 1). Published, not
+      // modelled: the early, mid and late explosions' own numbers (one box
+      // here), the "Detection hitbox 33-82" that sets it off early, and the
+      // bomb's own fall ("Gravity 0.03", "Initial vertical speed 0.5"). The blast also pops
       // Samus herself upward, which is a recovery mixup rather than a side
       // effect.
       //
@@ -823,17 +832,17 @@ const legacy: FighterDef = {
           vx: fx(0),
           vy: fx(0),
           gravity: fx(0.08),
-          lifetime: 83,
+          lifetime: 90,
           destroyOnHit: true,
           bounces: 1,
           visual: "bomb",
           // samus_bomb `Fall`: `Reflectable=true`.
           reflectable: true,
           hitbox: {
-            // Live only at the end of its life — that is the detonation.
+            // Live only at the end of its life, frames 83-100: the explosion.
             id: 0,
-            startFrame: 82,
-            endFrame: 83,
+            startFrame: 72,
+            endFrame: 89,
             x: fx(0),
             y: fx(0),
             radius: fx(5.0),

@@ -617,7 +617,11 @@ const legacy: FighterDef = {
       // completely different move.
       //
       // It weakens over a very long life — 6% fresh, 5% from frame 53, 4% from
-      // frame 86 — which `ProjectileDef` has no field for, so what is encoded
+      // frame 86 — on the ground 96 frames, 19-114 (SmashWiki "Pikachu
+      // (SSBU)/Neutral special",
+      // https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special: grounded jolt
+      // "Lifetime 96 frames"; the aerial jolt's 98, which starts over on
+      // landing, is not modelled) — which `ProjectileDef` has no field for, so what is encoded
       // is the clean hit. Reflectable and absorbable. Every phase uses the
       // Sakurai angle with low knockback: pressure and combo tool, never a kill.
       hitboxes: [],
@@ -630,7 +634,7 @@ const legacy: FighterDef = {
           vx: fx(1.6),
           vy: fx(0.2),
           gravity: fx(0.05),
-          lifetime: 95,
+          lifetime: 96,
           destroyOnHit: true,
           bounces: 8,
           visual: "spark",

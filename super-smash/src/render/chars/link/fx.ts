@@ -900,8 +900,9 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
    */
   remoteBomb: ({ ctx, u, age, frame }) => {
     const r = u * 1.25;
-    // 1800-frame life, flashing over the last 45.
-    const dying = age > 1755;
+    // 1800-frame life, ages 0-1799, flashing over the last 45 (SmashWiki "Link
+    // (SSBU)/Down special": "Flashing time before automatic explosion 45 frames").
+    const dying = age >= 1755;
     const lit = dying ? (frame % 6 < 3 ? 1 : 0.15) : 0.55 + Math.sin(age * 0.12) * 0.25;
     glow(ctx, 0, 0, r * (dying ? 3.2 : 2.2), `rgba(95,230,224,${0.2 + lit * 0.3})`);
     bombBody(ctx, r, lit);

@@ -10,8 +10,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { toFloat } from "@/engine/fixed";
-import type { FighterDef, Hitbox, MoveDef, MoveSlot } from "@/engine/types";
+import { fx, toFloat } from "@/engine/fixed";
+import { advanceProjectile, spawnProjectile } from "@/engine/projectile";
+import type { FighterDef, FighterState, Hitbox, MoveDef, MoveSlot, StageDef } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS } from "./acmd/active";
 import { AERIAL_SLOTS, FIGHTERS, REQUIRED_SLOTS, getFighter } from "./index";
 
@@ -223,9 +224,58 @@ describe("projectiles", () => {
       expect(h.endFrame).toBeGreaterThanOrEqual(h.startFrame);
       expect(
         h.endFrame,
-        `${fighter.name}'s ${projectile.id} is live on frame ${h.endFrame} of a ${projectile.lifetime}-frame life`
-      ).toBeLessThanOrEqual(projectile.lifetime);
+        `${fighter.name}'s ${projectile.id} is live at age ${h.endFrame} of a ${projectile.lifetime}-frame life (ages 0 to ${projectile.lifetime - 1})`
+      ).toBeLessThan(projectile.lifetime);
     }
+  });
+
+  /**
+   * Each projectile's published life, counting the frame it appears on (Plan 5,
+   * Task 6 fix round 1): a pump that leaves on frame 21 and lives 12 frames is
+   * live on 21-32, not 21-33. The life, then the hitbox's window in frames of
+   * age (0 = the spawn frame), from each move's SmashWiki page.
+   */
+  const PUBLISHED_LIFE: readonly [fighter: string, id: string, life: number, window: readonly [number, number], source: string][] = [
+    // "Lifetime 70 frames"; "Clean hit 17-21", "Late hit 22-46", "Latest hit 47-86".
+    ["mario", "fireball", 70, [0, 69], "https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special"],
+    // "Lifetime 12 frames"; "Pumps 21-32, 26-37, …".
+    ["mario", "water", 12, [0, 11], "https://www.ssbwiki.com/Mario_(SSBU)/Down_special"],
+    // "Lifetime 60 frames"; "Hitbox 16-75".
+    ["samus", "chargeShot", 60, [0, 59], "https://www.ssbwiki.com/Samus_(SSBU)/Neutral_special"],
+    // Homing Missile "Lifetime 120 frames"; "Missile 18-137".
+    ["samus", "missile", 120, [0, 119], "https://www.ssbwiki.com/Samus_(SSBU)/Side_special"],
+    // "Bomb generation 11", "Maximum duration before exploding 72 frames",
+    // "Explosion (early, mid, late) 83-94, 95-97, 98-100": frames 11-100, exploding from 83.
+    ["samus", "bomb", 90, [72, 89], "https://www.ssbwiki.com/Samus_(SSBU)/Down_special"],
+    // "Lifetime 22 frames"; "Clean hit 11-12", "Mid hit 13-19", "Late hit 20-32".
+    ["fox", "blaster", 22, [0, 21], "https://www.ssbwiki.com/Fox_(SSBU)/Neutral_special"],
+    // "Lifetime 46 frames (2.0.0 onward)"; "Arrow (from release) 16-61 (1-46)".
+    ["link", "arrow", 46, [0, 45], "https://www.ssbwiki.com/Link_(SSBU)/Neutral_special"],
+    // A tilt throw: "Lifetime 125 frames (tilt)"; "Tilt input hitboxes (clean, late, returning) 27-36, 37-71, 72-151".
+    ["link", "boomerang", 125, [0, 124], "https://www.ssbwiki.com/Link_(SSBU)/Side_special"],
+    // "Maximum time before exploding 1800 frames (30 seconds)".
+    ["link", "remoteBomb", 1800, [0, 1799], "https://www.ssbwiki.com/Link_(SSBU)/Down_special"],
+    // The grounded jolt: "Lifetime 96 frames"; "Clean hit 19-52", "Mid hit 53-85", "Late hit 86-114".
+    ["pikachu", "thunderJolt", 96, [0, 95], "https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special"],
+  ];
+
+  it("lists every projectile on the roster in the published lives", () => {
+    const listed = new Set(PUBLISHED_LIFE.map(([f, id]) => `${f} ${id}`));
+    const launched = new Set(FIGHTERS.flatMap((f) => everyProjectile(f).map(({ projectile }) => `${f.id} ${projectile.id}`)));
+    expect(listed).toEqual(launched);
+  });
+
+  it.each(PUBLISHED_LIFE)("%s's %s lives its published %i frames, its spawn frame included", (fighter, id, life, window, source) => {
+    const def = everyProjectile(getFighterOrThrow(fighter)).find((p) => p.projectile.id === id)!.projectile;
+    expect([def.hitbox.startFrame, def.hitbox.endFrame], source).toEqual(window);
+    // Out in the open: no surface to bounce off or die against, no blast zone to reach.
+    const open = { platforms: [], blastZone: { left: -fx(1e7), right: fx(1e7), top: fx(1e7), bottom: -fx(1e7) } } as unknown as StageDef;
+    const owner = { port: 0, defId: fighter, x: 0, y: 0, facing: 1, charge: 0 } as unknown as FighterState;
+    const p = spawnProjectile(def, owner, 1);
+    // Live on the frame it spawns (age 0), then one frame per step it survives.
+    let frames = 1;
+    while (advanceProjectile(p, def, open, null, frames).alive) frames += 1;
+    expect(frames, source).toBe(life);
   });
 
   it.each(each)("%s gives every projectile a positive radius and damage", (_name, fighter) => {

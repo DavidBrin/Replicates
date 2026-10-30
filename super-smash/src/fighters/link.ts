@@ -610,7 +610,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 46,
+            endFrame: 45,
             x: fx(0),
             y: fx(0),
             radius: fx(2.0),
@@ -633,8 +633,11 @@ const legacy: FighterDef = {
       projectiles: [
         {
           // Out, decelerating, then back — `returns` is the whole move. It
-          // lives 151 frames on a tilt throw; a *smash* input throws it further
-          // and harder (8% → 9.6% clean) and stretches that to 192. Link
+          // lives 125 frames on a tilt throw, frames 27-151 (SmashWiki "Link
+          // (SSBU)/Side special", https://www.ssbwiki.com/Link_(SSBU)/Side_special:
+          // "Lifetime 125 frames (tilt)", "Tilt input hitboxes (clean, late,
+          // returning) 27-36, 37-71, 72-151"); a *smash* input throws it further
+          // and harder (8% → 9.6% clean) and stretches that to 167 (27-192). Link
           // catches it in a 9-frame animation, which is skipped if he is
           // mid-attack.
           //
@@ -648,7 +651,7 @@ const legacy: FighterDef = {
           vx: fx(2.6),
           vy: fx(0),
           gravity: fx(0),
-          lifetime: 151,
+          lifetime: 125,
           destroyOnHit: false,
           returns: true,
           visual: "boomerang",
@@ -657,7 +660,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 151,
+            endFrame: 124,
             x: fx(0),
             y: fx(0),
             radius: fx(3.0),
@@ -772,7 +775,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 1800,
+            endFrame: 1799,
             x: fx(0),
             y: fx(0),
             radius: fx(7.0),

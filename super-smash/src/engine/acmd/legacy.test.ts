@@ -194,8 +194,8 @@ describe("a legacy hitbox with a far end", () => {
   });
 });
 
-// Plan 5, Task 6: a windbox is smash-script `Flinchless=true, DisableHitlag=true`
-// (rubendal Data Viewer 13.0.1, `mario_pumpwater` `Regular`), both ways.
+// Plan 5, Task 6: a windbox is a smash-script `Flinchless=true` box (F.L.U.D.D.'s
+// `mario_pumpwater` `Regular` sets `DisableHitlag=true` too), both ways.
 describe("a windbox through the legacy compile", () => {
   const box: Hitbox = {
     id: 0,
@@ -228,10 +228,21 @@ describe("a windbox through the legacy compile", () => {
     expect(live(move(plain))[0].windbox).toBeUndefined();
   });
 
-  it("needs both: `DisableHitlag` alone (Donkey Kong's, Kirby's imported boxes) or `Flinchless` alone is a hit", () => {
-    for (const flags of [{ flinchless: false, noHitlag: true }, { flinchless: true, noHitlag: false }]) {
-      const script: AcmdScript = { name: "game_test", motion: "attack_11", commands: [{ op: "frame", frame: 1 }, { op: "attack", params: { ...attackFromHitbox(box), ...flags } }] };
-      expect(scriptHitboxes(runScript(script, 1), "mario", "attack_11", 1, LEGACY_BONE_TABLE)[0].windbox, JSON.stringify(flags)).toBeUndefined();
-    }
+  // SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox): `Flinchless` "prevents
+  // the hitbox from inflicting hitstun or hitlag; any knockback coded for the
+  // hitbox instead pushes or pulls opponents, which is commonly referred to as a
+  // windbox" (Plan 5, Task 6 fix round 1).
+  const scripted = (flags: { flinchless: boolean; noHitlag: boolean }) => {
+    const script: AcmdScript = { name: "game_test", motion: "attack_11", commands: [{ op: "frame", frame: 1 }, { op: "attack", params: { ...attackFromHitbox(box), ...flags } }] };
+    return scriptHitboxes(runScript(script, 1), "mario", "attack_11", 1, LEGACY_BONE_TABLE)[0];
+  };
+
+  it("is `Flinchless` alone, with or without `DisableHitlag`", () => {
+    expect(scripted({ flinchless: true, noHitlag: false }).windbox).toBe(true);
+    expect(scripted({ flinchless: true, noHitlag: true }).windbox).toBe(true);
+  });
+
+  it("is not `DisableHitlag` alone: Donkey Kong's and Kirby's imported boxes stay hits", () => {
+    expect(scripted({ flinchless: false, noHitlag: true }).windbox).toBeUndefined();
   });
 });

@@ -96,7 +96,8 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     rehit: 0,
     reflectable: false,
     absorbable: false,
-    // Plan 5, Task 6: a windbox is `Flinchless=true, DisableHitlag=true`.
+    // Plan 5, Task 6: a windbox is `Flinchless=true`; written with
+    // `DisableHitlag=true` too, as F.L.U.D.D.'s water is (`mario_pumpwater`).
     flinchless: hb.windbox === true,
     noHitlag: hb.windbox === true,
     direct: true,

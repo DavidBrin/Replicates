@@ -166,8 +166,12 @@ export function advanceProjectile(
   const prevX = p.x;
   const prevY = p.y;
 
+  // A projectile is live on the frame it spawns (age 0) and lives `lifetime`
+  // frames in all, ages 0 to `lifetime` − 1: SmashWiki's counts include the
+  // spawn frame (Mario's "Lifetime 70 frames" Fireball is "17-86"; Plan 5,
+  // Task 6 fix round 1).
   p.age += 1;
-  if (p.age > def.lifetime) return { alive: false, prevX, prevY };
+  if (p.age >= def.lifetime) return { alive: false, prevX, prevY };
 
   // A boomerang turns at the halfway point of its life, which is what makes its
   // range a fixed distance rather than a function of how long you hold it.

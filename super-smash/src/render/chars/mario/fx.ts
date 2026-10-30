@@ -29,16 +29,30 @@ import type { ProjectilePainter } from "../../fxKit";
 const NOZZLE = 3.8;
 
 /**
- * Where F.L.U.D.D.'s pumps leave, in world units from his feet, and the angle
- * they leave at: read off the move's own pump (`mario.ts`), so the drawn
- * nozzle cannot drift from the simulated water (P5-R6). Null for a fighter
- * whose down special pumps nothing.
+ * Where F.L.U.D.D.'s pumps leave, in world units from his feet, the angle they
+ * leave at, and the frames of the first and last: read off the move's own
+ * pumps (`mario.ts`), so the drawn nozzle cannot drift from the simulated water
+ * (P5-R6). Null for a fighter whose down special pumps nothing.
  */
-function muzzleOf(def: FighterDef): { x: number; y: number; angle: number } | null {
-  const pump = def.moves.downB?.projectiles?.[0];
-  if (pump === undefined) return null;
-  return { x: toFloat(pump.offsetX), y: toFloat(pump.offsetY), angle: Math.atan2(toFloat(pump.vy), toFloat(pump.vx)) };
+function muzzleOf(def: FighterDef): { x: number; y: number; angle: number; first: number; last: number } | null {
+  const pumps = def.moves.downB?.projectiles ?? [];
+  if (pumps.length === 0) return null;
+  const pump = pumps[0];
+  const frames = pumps.map((p) => p.spawnFrame);
+  return {
+    x: toFloat(pump.offsetX),
+    y: toFloat(pump.offsetY),
+    angle: Math.atan2(toFloat(pump.vy), toFloat(pump.vx)),
+    first: Math.min(...frames),
+    last: Math.max(...frames),
+  };
 }
+
+/**
+ * Frames the arms take to come down off the nozzle after the last pump, and the
+ * nozzle with them (`poses.ts`'s `downB`: the brace held to 51, down by 57).
+ */
+const NOZZLE_DOWN = 6;
 
 /** A pump's life (SmashWiki "Mario (SSBU)/Down special": "Lifetime 12 frames"). */
 const WATER_LIFETIME = 12;
@@ -569,10 +583,13 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     };
     tank();
 
+    // Up into his hands as the brace forms, and down with them once the last
+    // pump has left.
     const raise = Math.min(1, Math.max(0, (frame - 16) / 5));
-    if (raise > 0) over(() => {
+    const lower = Math.min(1, Math.max(0, (muzzle.last + NOZZLE_DOWN - frame) / NOZZLE_DOWN));
+    if (raise > 0 && lower > 0) over(() => {
       ctx.save();
-      ctx.globalAlpha = alpha * raise;
+      ctx.globalAlpha = alpha * raise * lower;
       ctx.translate(gx, gy);
       ctx.scale(dir, 1);
       ctx.rotate(-muzzle.angle);
@@ -597,7 +614,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 
     // Spatter at the muzzle while it pumps: from the first pump on frame 21
     // (SmashWiki: "Pumps 21-32, …") to the last one's leaving on 51.
-    if (frame >= 21 && frame <= 51) over(() => {
+    if (frame >= muzzle.first && frame <= muzzle.last) over(() => {
       ctx.save();
       ctx.globalAlpha = 0.45 * alpha;
       ctx.fillStyle = "#EAF6FF";

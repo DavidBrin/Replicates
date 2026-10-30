@@ -1143,13 +1143,14 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
    * The Morph Ball bomb.
    *
    * Not the shared cartoon bomb with a fuse: a small dark sphere with a hot
-   * band, which is what the Morph Ball drops. It lives 83 frames and detonates
-   * at the end of them, so the band's blink accelerates as it runs out —
+   * band, which is what the Morph Ball drops. It explodes 72 frames after it
+   * is laid (SmashWiki "Samus (SSBU)/Down special": "Maximum duration before
+   * exploding 72 frames"), so the band's blink accelerates as it runs out —
    * the timer is a hitbox the opponent has to read, and a bomb that looks the
    * same at frame 5 and frame 80 is a hitbox they cannot.
    */
   bomb: ({ ctx, u, age }) => {
-    const life = Math.min(1, age / 83);
+    const life = Math.min(1, age / 72);
     // 1.25 units, so it is a bit over half the Morph Ball's diameter and about
     // a fifth of her height — the proportion it has in the game, and the one
     // that keeps it distinguishable from the ball that laid it.

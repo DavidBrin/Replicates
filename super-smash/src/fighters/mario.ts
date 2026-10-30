@@ -74,18 +74,30 @@ const HALF_WIDTH = 2.0;
  *   all three grow linearly with the charge, and that the added speed is along
  *   the aim, so `vy` grows with `vx`.
  * - The flight: "Default shot angle 12°", "Lifetime 12 frames", "Gravity 0.17".
- *   Its "Falling speed 3" is never reached in 12 frames (0.894 − 12 × 0.17).
- * - UNVERIFIED: the spawn point (8 in front, 6.5 up), and that a pump is gone
- *   after its first hit. Not modelled: the stick's aim ("Maximum upward
- *   deviation 50°", "Maximum downward deviation 18°", "Deviation per frame
- *   1.9°").
+ *   Its "Falling speed 3" is never reached in its 12 frames (0.894 − 11 × 0.17).
+ * - UNVERIFIED: the spawn point, 6.5 in front and 9.7 up: the nozzle's mouth
+ *   in his hands beside his head (SmashWiki "F.L.U.D.D.",
+ *   https://www.ssbwiki.com/F.L.U.D.D.: "In Smash, it is shown being used next
+ *   to his head, with Mario grabbing the nozzle"). No number is published: the
+ *   script places the box on the water's own origin (`X=0.0, Y=0.0, Z=0.0`),
+ *   and the page's "Vertical offset 0.5u" names no origin. The height is
+ *   SmashWiki's hitbox picture (https://www.ssbwiki.com/File:MarioDSpecialSSBU.png)
+ *   worked back to the spawn: its two spheres sit 7.95 units apart along 12.4°,
+ *   two frames of their 4.3-a-frame speed difference, so it shows the pumps two
+ *   frames out, and two frames back the water is about 9.5-10 up (Plan 5, Task
+ *   6 fix round 1, ruling (b)). At this height the water passes over a
+ *   standing Kirby, and over a standing Pikachu but point-blank; whether
+ *   Ultimate's does is not published.
+ * - UNVERIFIED: that a pump is gone after its first hit. Not modelled: the
+ *   stick's aim ("Maximum upward deviation 50°", "Maximum downward deviation
+ *   18°", "Deviation per frame 1.9°").
  */
 function waterPump(spawnFrame: number): ProjectileDef {
   return {
     id: "water",
     spawnFrame,
-    offsetX: fx(8.0),
-    offsetY: fx(6.5),
+    offsetX: fx(6.5),
+    offsetY: fx(9.7),
     vx: fx(4.206), // 4.3 · cos 12°
     vy: fx(0.894), // 4.3 · sin 12°
     gravity: fx(0.17),
@@ -98,7 +110,7 @@ function waterPump(spawnFrame: number): ProjectileDef {
     hitbox: {
       id: 0,
       startFrame: 0,
-      endFrame: 12,
+      endFrame: 11,
       x: fx(0),
       y: fx(0),
       radius: fx(3.2),
@@ -684,7 +696,10 @@ const legacy: FighterDef = {
           // Thrown underarm on frame 17 and pulled down by gravity, so it
           // bounces along the ground rather than flying flat — which is the
           // whole character of the move. It hops four times before expiring,
-          // and dies on contact. Reflectable and absorbable.
+          // and dies on contact. Reflectable and absorbable. It lives 70 frames,
+          // 17-86 (SmashWiki "Mario (SSBU)/Neutral special",
+          // https://www.ssbwiki.com/Mario_(SSBU)/Neutral_special: "Lifetime 70
+          // frames", "Latest hit 47-86").
           id: "fireball",
           spawnFrame: 17,
           offsetX: fx(5.2),
@@ -701,7 +716,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 70,
+            endFrame: 69,
             x: fx(0),
             y: fx(0),
             radius: fx(2.6),

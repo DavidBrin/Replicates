@@ -667,7 +667,10 @@ const legacy: FighterDef = {
       // character.
       //
       // It also does not disappear on contact, which is what lets a single
-      // laser tag two opponents lined up in a four-player match.
+      // laser tag two opponents lined up in a four-player match. It lives 22
+      // frames, 11-32 (SmashWiki "Fox (SSBU)/Neutral special",
+      // https://www.ssbwiki.com/Fox_(SSBU)/Neutral_special: "Lifetime 22
+      // frames", "Clean hit 11-12", "Late hit 20-32").
       hitboxes: [],
       projectiles: [
         {
@@ -686,7 +689,7 @@ const legacy: FighterDef = {
           hitbox: {
             id: 0,
             startFrame: 0,
-            endFrame: 22,
+            endFrame: 21,
             x: fx(0),
             y: fx(0),
             radius: fx(2.0),

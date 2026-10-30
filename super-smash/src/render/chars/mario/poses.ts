@@ -1703,11 +1703,10 @@ const upB: PoseClip = {
  * had both hands out at hip height in front of a nozzle drawn over his
  * shoulder, so the two never met and the water appeared to come out of his
  * face. Here both hands accumulate to about 75° at the wrist — 2.7 units
- * forward of the shoulder and 2.5 above it — which is exactly beside the head.
- * `fx.ts` drew the nozzle's grip there until Plan 5 put its muzzle on the
- * pumps' spawn point (P5-R6: 8 in front and 6.5 up, UNVERIFIED in `mario.ts`),
- * which brings the grip about three units below these hands. One of the two
- * moves when that spawn point is settled.
+ * forward of the shoulder and 2.5 above it — which is exactly beside the head,
+ * and exactly where `fx.ts` draws the nozzle's grip: its mouth is the pumps'
+ * spawn point (P5-R6; `mario.ts`, 6.5 in front and 9.7 up, UNVERIFIED), 3.8
+ * back along their 12°.
  *
  * `strike` is 21/67 (Plan 5: the move is now 67 frames — a 19-frame charge
  * entry and 49 after release — and the first pump still leaves on frame 21).
@@ -1719,7 +1718,11 @@ const upB: PoseClip = {
 const downB: PoseClip = {
   loop: false,
   strike: 21 / 67,
-  // Plan 5: keys re-timed to the 67-frame move at their old frames (×48/67).
+  // Plan 5: keys re-timed to the 67-frame move. The brace holds from the first
+  // pump (frame 21) to the last (51: SmashWiki "Mario (SSBU)/Down special",
+  // "Pumps 21-32, …, 51-62"), so his hands stay on the nozzle while it pumps
+  // (Task 6 fix round 1); the arms come down by 57. UNVERIFIED: how fast they
+  // come down; the published animation runs to 76, past where he acts (68).
   keys: [
     {
       t: 0,
@@ -1776,7 +1779,7 @@ const downB: PoseClip = {
       ease: "hold",
     },
     {
-      t: 37.4 / 67,
+      t: 51 / 67,
       pose: P({
         torso: -10, head: 10, hip: 8,
         thighR: 128, shinR: 44, footR: -80,
@@ -1790,7 +1793,7 @@ const downB: PoseClip = {
       ease: "out",
     },
     {
-      t: 45.1 / 67,
+      t: 57 / 67,
       pose: P({
         torso: 4, head: -2,
         thighR: 146, shinR: 20, footR: -88,

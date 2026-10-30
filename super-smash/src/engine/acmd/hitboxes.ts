@@ -143,10 +143,13 @@ function attackHitbox(
     ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
     ...(a.collisionAttr === "collision_attr_turn" ? { reverse: true } : {}),
     ...(a.forceReaction === true ? { forceReaction: true } : {}),
-    // Plan 5, Task 6: `Flinchless=true, DisableHitlag=true` is a windbox
-    // (F.L.U.D.D.'s `mario_pumpwater`). No imported box is flinchless; the ones
-    // with `DisableHitlag` alone (Donkey Kong's, Kirby's) stay hits.
-    ...(a.flinchless && a.noHitlag ? { windbox: true } : {}),
+    // Plan 5, Task 6: `Flinchless=true` is a windbox. SmashWiki "Hitbox"
+    // (https://www.ssbwiki.com/Hitbox): it "prevents the hitbox from inflicting
+    // hitstun or hitlag; any knockback coded for the hitbox instead pushes or
+    // pulls opponents, which is commonly referred to as a windbox". No imported
+    // box is flinchless; the ones with `DisableHitlag` alone (Donkey Kong's,
+    // Kirby's) stay hits.
+    ...(a.flinchless ? { windbox: true } : {}),
   };
 }
 

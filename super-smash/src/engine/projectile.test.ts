@@ -318,11 +318,14 @@ describe("charge scaling", () => {
 });
 
 describe("flight", () => {
-  it("expires exactly at its lifetime", () => {
+  it("lives exactly its lifetime, the frame it spawns on included", () => {
+    // Ages 0 (the spawn frame) to lifetime − 1, so `lifetime` frames in all:
+    // SmashWiki's counts include the spawn frame (Plan 5, Task 6 fix round 1).
     const p = spawnProjectile(ARROW, fighter(), 1);
-    for (let i = 0; i < ARROW.lifetime; i++) {
-      expect(advanceProjectile(p, ARROW, STAGE, null, i).alive).toBe(true);
+    for (let age = 1; age < ARROW.lifetime; age++) {
+      expect(advanceProjectile(p, ARROW, STAGE, null, age).alive).toBe(true);
     }
+    expect(p.age).toBe(ARROW.lifetime - 1);
     expect(advanceProjectile(p, ARROW, STAGE, null, ARROW.lifetime).alive).toBe(false);
   });
 

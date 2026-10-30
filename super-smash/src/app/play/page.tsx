@@ -38,6 +38,7 @@ import { bootstrapEngine, resolveFighterId, resolveMatchStage, schemeForMenuId }
 import { startLinkMonitor } from "@/game/linkMonitor";
 import { runnerSlotsFor } from "@/game/onlineConfig";
 import { GAME_SIM_CONTEXT } from "@/game/simContext";
+import { createTracker, trackFrame } from "@/game/killCredit";
 import { useBake } from "@/game/useBake";
 import { useWorld3d, type World3dModule } from "@/game/useWorld3d";
 // Types only: the module itself (and three.js) arrives through `useWorld3d`'s `import()`.
@@ -56,23 +57,6 @@ import type { LinkHealth } from "@/net/online/watchdog";
 import type { NetStats } from "@/net/rollback";
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from "@/render/renderer";
 import { worldToScreen } from "@/render/camera";
-
-/**
- * Who gets credit for a kill.
- *
- * `StepEvents.kos` reports who died, not who did it — the simulation has no
- * reason to care, since a stock is a stock. The results screen does care, so
- * the attribution is done here, in the presentation layer, the way the real
- * game does it: whoever last landed a hit on you owns your death, and if nobody
- * has touched you recently, you walked off the stage yourself.
- *
- * Three seconds, because that is Ultimate's own rule — a KO only counts as a
- * self-destruct if no opponent has hit you within the last three minutes of
- * game time in their scoring, but for a single stock the practical window that
- * feels right is much shorter. Anything longer and a fighter who was hit once
- * at the start of the stock and then dived into the blast zone reads as a kill.
- */
-const KILL_CREDIT_FRAMES = 180;
 
 /** Let the KO play out before cutting away — the freeze and the blast are the payoff for the whole match. */
 const RESULT_DELAY_MS = 2400;
@@ -98,24 +82,6 @@ const ONLINE_MODEL_WAIT_MS = 5_000;
  */
 const PICTURE_GONE = "The browser stopped drawing the 3D world and has not given it back. The match is still running: reload the page to bring the picture back.";
 const PICTURE_GONE_ONLINE = "The browser stopped drawing the 3D world and has not given it back. The match is still running: reloading the page brings the picture back, but leaves this online match.";
-
-interface StatTracker {
-  readonly kos: number[];
-  readonly falls: number[];
-  readonly sds: number[];
-  readonly lastHitBy: number[];
-  readonly lastHitFrame: number[];
-}
-
-function createTracker(count: number): StatTracker {
-  return {
-    kos: new Array(count).fill(0),
-    falls: new Array(count).fill(0),
-    sds: new Array(count).fill(0),
-    lastHitBy: new Array(count).fill(-1),
-    lastHitFrame: new Array(count).fill(-99999),
-  };
-}
 
 function toRunnerSlots(players: readonly PlayerSlot[], seed: number): RunnerSlot[] {
   return players.map((p) => ({
@@ -288,19 +254,8 @@ function mountMatch(args: MountArgs): Mounted {
         // simulation is advancing.
         (window as unknown as { __smashFrame?: number }).__smashFrame = state.frame;
 
-        for (const hit of events.hits) {
-          if (hit.attacker === hit.victim) continue;
-          tracker.lastHitBy[hit.victim] = hit.attacker;
-          tracker.lastHitFrame[hit.victim] = state.frame;
-        }
-        for (const ko of events.kos) {
-          tracker.falls[ko.port] += 1;
-          const killer = tracker.lastHitBy[ko.port];
-          const recent = state.frame - tracker.lastHitFrame[ko.port] <= KILL_CREDIT_FRAMES;
-          if (killer >= 0 && recent) tracker.kos[killer] += 1;
-          else tracker.sds[ko.port] += 1;
-          tracker.lastHitBy[ko.port] = -1;
-        }
+        // Who gets credit for a kill (`killCredit.ts`).
+        trackFrame(tracker, state.frame, events);
       },
       onEnd: (outcome: MatchOutcome) => {
         const stats: PlayerResultStat[] = ports.map((port) => ({
