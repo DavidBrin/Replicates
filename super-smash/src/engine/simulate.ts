@@ -102,7 +102,7 @@ import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import { pinHeldFighters, ridesCaptor } from "./held";
 import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
-import { GROUND_EXIT } from "./groundExit";
+import { stopsAtEdge } from "./groundExit";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -795,6 +795,9 @@ export function step(
     const before = launchBefore(f);
     // The ECB from this frame's bones (Plan 4), or Plan 2's box without a bake.
     const ecb = ecbFor(i, f);
+    // Which way is off the platform it stands on, for an edge stop that a push can override.
+    const underfoot = f.grounded && f.platform >= 0 ? stage.platforms[f.platform] : undefined;
+    const outward = underfoot === undefined ? 0 : f.x >= platformCentreX(underfoot, s.frame) ? 1 : -1;
     const outcome = resolveCollision(
       f,
       preIntegrate[i].x,
@@ -802,9 +805,10 @@ export function step(
       stage,
       defs[i].attributes,
       s.frame,
-      // The catch statuses and the shield stop at the edge instead of sliding off it
-      // (`GROUND_EXIT`, Plan 5, Task 12 fix round 2).
-      { cliffStop: GROUND_EXIT[f.action] === "cliffStop", ecb },
+      // The statuses that stop at the edge instead of sliding off it: the catch
+      // statuses, the shield, the rolls, a waveland, a grounded attack's own movement
+      // (`GROUND_EXIT`, `stopsAtEdge`; Plan 5, Task 12 fix rounds 2 and 3).
+      { cliffStop: stopsAtEdge(f, outward), ecb },
     );
     // A wall that stopped the body is remembered for a wall jump, or a wall tech
     // jump (Plan 5, Task 10), before the tech below reads it.

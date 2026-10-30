@@ -977,8 +977,9 @@ export function finishLedgeOption(f: FighterState, intent: Intent, ctx: StateCon
 }
 
 /**
- * The catch statuses: CATCH, CATCH_WAIT, CATCH_ATTACK and THROW, the ones that
- * stop at a cliff (`CollisionOptions.cliffStop`).
+ * The catch statuses: CATCH, CATCH_WAIT, CATCH_ATTACK and THROW. They stop at a
+ * cliff (`CollisionOptions.cliffStop`), as their `GROUND_EXIT` rows say, with the
+ * shield, the dodges and the rest of that table's `cliffStop` rows.
  */
 export function isCatchStatus(action: ActionState): boolean {
   return action === "grab" || action === "grabHold" || action === "pummel" || action === "throw";
@@ -997,7 +998,8 @@ export function isCatchStatus(action: ActionState): boolean {
  * (`special` in a move with a `release`), which hold the fighter in his mouth
  * until their release lets it out (`resolveInhaleReleases`). These replace Plan
  * 3's stand-in, under which `special` held while its move owned a catch box.
- * None stops at a cliff: that is the catch statuses' alone.
+ * None of these stops at a cliff by its holding: the catch statuses do, by their
+ * `GROUND_EXIT` rows; the carry, the mouthful and a special keep going.
  */
 export function isHolding(f: Pick<FighterState, "action" | "move">, def: FighterDef): boolean {
   if (isCatchStatus(f.action) || f.action === "cargoCarry" || f.action === "inhaleHold") return true;
@@ -1300,9 +1302,12 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   if (f.action === "airDodge") {
     // Read before `startAction`, which clears it: `charge` is how an air dodge
     // remembers its direction (`airDodgeCharge`).
+    // Either way the landing lag stops at the edge, a waveland's (ruling R-T12f;
+    // `CombatState.landingCliffStop`, cleared by the landing lag's `end`).
     if (!isDirectionalAirDodge(f)) {
       startAction(f, "landingLag");
       f.charge = AIR_DODGE_LANDING_LAG;
+      f.combat.landingCliffStop = true;
       return;
     }
     // Directional: 19 frames at the earliest landing down to 10 at the latest
@@ -1312,6 +1317,7 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
     kineticSetX(f, clamp(f.vx, -AIR_DODGE_LANDING_SLIDE_MAX, AIR_DODGE_LANDING_SLIDE_MAX), "stop");
     startAction(f, "landingLag");
     f.charge = lag;
+    f.combat.landingCliffStop = true;
     return;
   }
   // UNVERIFIED (Plan 5): a special still charging in the air (Charge Shot, Giant
@@ -1354,10 +1360,15 @@ export function onLeftGround(f: FighterState): void {
   }
   // Every other status by its edge rule (Plan 5, Task 12 fix round 2, ruling
   // R-T12d; `groundExit.ts`): a status that is grounded by nature becomes its fall
-  // on this frame. A landing's lag plays on in the air, and so do the moves, the
-  // reels and the rest; the cliff-stop statuses never get here.
+  // on this frame. A landing's lag plays on in the air, and so do the specials, the
+  // reels and the rest. A cliff-stop status gets here only by rising off the ground
+  // (`resolveCollision`'s rising branch), and keeps itself.
   const exit = GROUND_EXIT[f.action];
   if (exit === "fall" || exit === "tumbleFall") startAction(f, exit);
+  // A grounded attack's own movement stops at the edge (`stopsAtEdge`), so one that
+  // leaves the ground was pushed off: the ledge cancel, a fall (fix round 3, ruling
+  // R-T12g; SmashWiki "Ledge-canceling"). One that rises off it by itself carries on.
+  else if (exit === "stopUnlessPushed" && f.vy <= 0) startAction(f, "fall");
 }
 
 /**

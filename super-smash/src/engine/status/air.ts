@@ -132,6 +132,11 @@ export const STATUS_LANDING_ATTACK_AIR: FighterStatus = {
       endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
   },
+  // A waveland's edge stop is this landing's alone, however it is left (fix round 3,
+  // ruling R-T12f; `CombatState.landingCliffStop`).
+  end(f) {
+    f.combat.landingCliffStop = false;
+  },
 };
 
 /** Both helpless statuses forget their move however they are left (`CombatState.helplessMove`). */

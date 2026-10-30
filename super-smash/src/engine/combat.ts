@@ -210,6 +210,16 @@ export interface CombatState {
    * clears it; any other status clears it at the next frame's count.
    */
   footstoolFrame: number;
+  /**
+   * Plan 5, Task 12 fix round 3 (ruling R-T12f): this landing lag is an air
+   * dodge's, a waveland, so it stops at the edge rather than sliding off
+   * (`stopsAtEdge`; SmashWiki "Wavedash": "wavedashes cannot slide off edges in
+   * Ultimate"). SSBU's FIGHTER_INSTANCE_WORK_ID_FLAG_ENABLE_LANDING_CLIFF_STOP, set
+   * by the air dodge for its landing. Set on entering the landing lag from an air
+   * dodge (`onLanded`) and cleared by the landing lag's `end` however it is left:
+   * its own end, a hit, a grab, a ledge or a KO.
+   */
+  landingCliffStop: boolean;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -253,6 +263,7 @@ export function emptyCombat(): CombatState {
     sinceAttack: SINCE_ATTACK_CAP,
     footstools: 0,
     footstoolFrame: 0,
+    landingCliffStop: false,
   };
 }
 
@@ -294,5 +305,6 @@ export function cloneCombat(c: CombatState): CombatState {
     sinceAttack: c.sinceAttack,
     footstools: c.footstools,
     footstoolFrame: c.footstoolFrame,
+    landingCliffStop: c.landingCliffStop,
   };
 }

@@ -18,21 +18,30 @@
  *   landing, or from a freefall landing)" cancels it in Smash 64 and Melee,
  *   "although in later games it can only be performed with specific actions and
  *   moves [...], no longer being possible with any aerial or free-fall landing lag".
+ *   An air dodge's landing lag, the waveland, is the exception (fix round 3, ruling
+ *   R-T12f): it stops at the edge (`CombatState.landingCliffStop`, `stopsAtEdge`).
+ *   SmashWiki "Wavedash" (https://www.ssbwiki.com/Wavedash, revision 2063890):
+ *   "wavedashes cannot slide off edges in Ultimate".
  * - `cliffStop`: the status stops at the edge and never slides off (`resolveCollision`'s
- *   `cliffStop`).
- * - `keep`: the status carries on as itself: it is airborne already, a move, a reel,
+ *   `cliffStop`): its movement halts there and the status plays on.
+ * - `stopUnlessPushed`: a grounded attack (fix round 3, ruling R-T12g). Its own movement
+ *   stops at the edge, as `cliffStop`; a push toward the edge on the DAMAGE energy (a
+ *   windbox's, `kineticPush`; a knockback slide) carries it off, and leaving the
+ *   ground cancels it into a fall, the ledge cancel (`onLeftGround`).
+ * - `keep`: the status carries on as itself: it is airborne already, a special, a reel,
  *   held by someone, on a ledge, or has its own published rule (each row says).
  *
  * Not modelled (UNVERIFIED): the edge slip itself. The same page: a fighter that
  * "edge slips in the reverse direction they were looking [...] will enter their
  * edge slip animation, and be unable to perform any action for a certain amount of
- * frames" (Ultimate: 25 to 30 by fighter). Here it falls free to act, as one
- * facing forward does; the replica has no edge-slip status.
+ * frames" (Ultimate: 24 to 30 by fighter, 25 or 26 for the eight here). Here it
+ * falls free to act, as one facing forward does; the replica has no edge-slip
+ * status.
  */
 
-import type { ActionState } from "./types";
+import type { ActionState, FighterState } from "./types";
 
-export type GroundExit = "fall" | "tumbleFall" | "lag" | "cliffStop" | "keep";
+export type GroundExit = "fall" | "tumbleFall" | "lag" | "cliffStop" | "stopUnlessPushed" | "keep";
 
 /** Each status's edge rule (ruling R-T12d). A new action is a compile error here until it is given one. */
 export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
@@ -62,29 +71,44 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   landingLag: "lag",
   specialFall: "keep",
   specialLanding: "lag",
-  // A move carries its own edge behaviour (ruling R-T12d: a grounded attack goes on
-  // off an edge, and no attack is changed without a source).
-  attack: "keep",
+  // A grounded attack stops at the edge against its own movement (ruling R-T12g).
+  // SmashWiki "Dash attack" (https://www.ssbwiki.com/Dash_attack, revision 2049916):
+  // "Kirby's dash attack in Melee is the only one in the series that can carry the
+  // user off platforms"; WuBor's reimplementation gives every jab, tilt, smash and
+  // dash attack a cliff stop (supporting only). Pushed off, it is cancelled: SmashWiki
+  // "Ledge-canceling", "Windbox ledge cancel": "a windbox to push the fighter off a
+  // ledge during their attack, with nearly all grounded attacks [...] being
+  // cancelable in this way". Not told apart (UNVERIFIED, carried): the attacker's own
+  // shield pushback (the page's "Shield pushback ledge cancel") rides the same energy
+  // as its own movement, so it stops at the edge too. An aerial is airborne already
+  // and never meets the stop. A special keeps its own movement, by move (ruling R-T12d).
+  attack: "stopUnlessPushed",
   special: "keep",
   // The catch statuses stop at the edge (Plan 3; `isCatchStatus`).
   grab: "cliffStop",
   grabHold: "cliffStop",
   pummel: "cliffStop",
   throw: "cliffStop",
-  // SmashWiki "Shield" (https://www.ssbwiki.com/Shield, revision 2057379): Smash 4's
-  // shields are "no longer being vulnerable to edge slipping", and "Ultimate shields
-  // remain similar to Smash 4's". UNVERIFIED for the shield's raise and drop, read as
-  // the shield's.
+  // SmashWiki "Shield" (https://www.ssbwiki.com/Shield, revision 2057379): shield
+  // pushback "can even push the shielder off an edge and cause edge slipping, except
+  // in Smash 4 and Ultimate". UNVERIFIED for the shield's raise and drop, read as the
+  // shield's.
   shieldStart: "cliffStop",
   shield: "cliffStop",
   shieldRelease: "cliffStop",
   shieldStun: "cliffStop",
-  // UNVERIFIED: a broken shield's stun is not ended by the fall; it plays out in the
-  // air, as a landing's lag does.
+  // The same page, "Shield breaking": "the character can get pushed off and continue
+  // falling until they reach the bottom blast line": the stun plays on in the air. (Its
+  // launch, knockdown and stun are one status here.)
   shieldBroken: "lag",
-  // UNVERIFIED: no page names the dodges at an edge; they are on their feet.
-  spotDodge: "fall",
-  roll: "fall",
+  // SmashWiki "Roll" (https://www.ssbwiki.com/Roll, revision 2047810): "characters cannot
+  // roll off edges; should they roll towards an edge, the character's movement will
+  // instantly halt at the edge while the remainder of the animation continues" (ruling
+  // R-T12e). UNVERIFIED for the spot dodge, which SmashWiki calls stationary (so only a
+  // slide brings it to an edge): read as the rolls'; WuBor's reimplementation gives the
+  // ESCAPE status a cliff stop (supporting only).
+  spotDodge: "cliffStop",
+  roll: "cliffStop",
   airDodge: "keep",
   // The reels carry on (a grounded flinch ends in a fall in the air, `endStatus`).
   hitstun: "keep",
@@ -94,11 +118,16 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   grabbed: "keep",
   thrown: "keep",
   // UNVERIFIED: lying down is not "on their feet"; one that slides off tumbles and
-  // lies down again where it lands. Getting up and the techs are on their feet.
+  // lies down again where it lands, and like any tumble after the hitstun it is free
+  // to act at once (`airMain`; SmashWiki "Tumbling": "After hitstun ends, tumbling
+  // characters can carry out most normal airborne actions"). Getting up and the
+  // standing tech are on their feet.
   downed: "tumbleFall",
   getUp: "fall",
   tech: "fall",
-  techRoll: "fall",
+  // SmashWiki "Tech" (https://www.ssbwiki.com/Tech, revision 2028146), the rolling tech:
+  // "Rolling against an edge will halt the roll's sideways movement" (ruling R-T12e).
+  techRoll: "cliffStop",
   techWall: "keep",
   techCeiling: "keep",
   // The ledge statuses are placed by the ledge.
@@ -123,3 +152,20 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   dead: "keep",
   entering: "keep",
 };
+
+/**
+ * Whether `f` stops at the edge of the platform it stands on this frame: the
+ * collision step's `cliffStop`. `outward` is the side of the platform's centre the
+ * fighter is on (+1 right, −1 left).
+ *
+ * A `cliffStop` row always does; a waveland's landing lag does (ruling R-T12f); a
+ * grounded attack does unless a push toward that edge rides its DAMAGE energy
+ * (ruling R-T12g), which carries it off to be cancelled (`onLeftGround`).
+ */
+export function stopsAtEdge(f: Pick<FighterState, "action" | "kinetic" | "combat">, outward: number): boolean {
+  const exit = GROUND_EXIT[f.action];
+  if (exit === "cliffStop") return true;
+  if (exit === "lag") return f.action === "landingLag" && f.combat.landingCliffStop;
+  if (exit === "stopUnlessPushed") return f.kinetic.damageX * outward <= 0;
+  return false;
+}

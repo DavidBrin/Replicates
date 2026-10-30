@@ -672,6 +672,20 @@ describe("engine golden trace", () => {
   // mario-fox, donkeyKong-pikachu and the three other labs are byte-identical. No pin
   // trips and no step is re-tuned. So now: hits 38/20/18/19, 6, 0, 1, 4 and 1; shield
   // hits 5/0/0/1, 3, 0, 0, 0 and 0; KOs 1/2/1/1, 1, 2, 0, 0 and 0.
+  // Plan 5 Task 12's fix round 3 (rulings R-T12e to R-T12g: the rolls and the spot
+  // dodge stop at the edge, SmashWiki "Roll" and "Tech"; so does a waveland, SmashWiki
+  // "Wavedash"; and a grounded attack against its own movement, SmashWiki "Dash
+  // attack", a push carrying it off into a fall) moved three CPU matches:
+  // mario-fox from the 201-300 sample (Fox's roll stops at the stage's left edge on
+  // 263, where it rolled off onto the ledge before), donkeyKong-pikachu from 2301-2400
+  // (Donkey Kong's dash attack stops at the left edge on 2394) and kirby-marth from
+  // 3301-3400 (Marth's roll stops at the right edge on 3383). Setting each ruling
+  // back alone: the rolls alone move kirby-marth, the attack stop alone moves
+  // donkeyKong-pikachu, each of the two moves mario-fox, and the spot dodge and the
+  // waveland move nothing here. Hits 34, 22 and 20; shield hits 2, 1 and 0; KOs 1, 2
+  // and 1 there. link-samus, the script and the four labs are byte-identical. So now:
+  // hits 34/22/18/20, 6, 0, 1, 4 and 1; shield hits 2/1/0/0, 3, 0, 0, 0 and 0; KOs
+  // 1/2/1/1, 1, 2, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

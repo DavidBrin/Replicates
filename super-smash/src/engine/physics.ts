@@ -206,10 +206,12 @@ export interface CollisionOptions {
   readonly passThroughSoft?: boolean;
   /**
    * A grounded fighter that reaches the edge of its platform stops there rather
-   * than walking off it. UNVERIFIED: the game's catch statuses (CATCH, CATCH_WAIT,
-   * CATCH_ATTACK, THROW) use `GROUND_CORRECT_KIND_GROUND_CLIFF_STOP`; the replica
-   * has no per-status ground-correct kind, so the four statuses pass this flag
-   * (Plan 3, Task 14, fix round 2). Nothing else in the engine stops at a cliff.
+   * than walking off it. The game's statuses each name a ground-correct kind
+   * (`GROUND_CORRECT_KIND_GROUND_CLIFF_STOP` for the catch statuses, CATCH,
+   * CATCH_WAIT, CATCH_ATTACK and THROW; Plan 3, Task 14, fix round 2); the replica
+   * reads its own per-status table instead (`GROUND_EXIT`, `stopsAtEdge`; Plan 5,
+   * Task 12 fix rounds 2 and 3): the catch statuses, the shield, the rolls, a
+   * waveland and a grounded attack's own movement.
    */
   readonly cliffStop?: boolean;
   /** This frame's ECB from the bake (Plan 4); `ecbOf` when absent. */
