@@ -938,6 +938,19 @@ const legacy: FighterDef = {
       // He turns into a rock and drops. The armour is the point: he is
       // invulnerable for the whole transformation, which is why it works as a
       // recovery mixup and a get-off-me button rather than as an attack.
+      //
+      // A landing does not end it (Plan 5, Task 13, the Task 5 review's carry: one
+      // dropped from 30 landed into `land` on frame 18, before its box came out on
+      // 29). SmashWiki "Kirby (SSBU)/Down special"
+      // (https://www.ssbwiki.com/Kirby_(SSBU)/Down_special, revision 2041256): "The
+      // stone transformation (and subsequent protection) lasts a minimum of 18
+      // frames and a maximum of 150 frames, depending on when the special move
+      // button is pressed again", and its hitbox table has a "Landing" hit. So the
+      // stone lands as a stone and plays its frames out on the ground. UNVERIFIED:
+      // that the falling box (frames 29-47 here) is what comes out on the ground;
+      // the page's landing hit (14% at 25°, beside him) is not modelled, nor the
+      // 150-frame hold or its cancel.
+      keepsOnLanding: true,
       hitboxes: [
         {
           id: 0,

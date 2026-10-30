@@ -179,7 +179,7 @@ import {
   shieldPushback,
 } from "./shield";
 import { absHitbox, scriptHitboxes, unplacedHitbox } from "./acmd/hitboxes";
-import { moveScriptFrame, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
+import { moveScriptFrame, moveSpawns, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
 import { gameScriptFor } from "./acmd/legacy";
 import "./status";
 import { releaseHeld, struggleInGrab } from "./status/grab";
@@ -1173,7 +1173,7 @@ function advanceProjectiles(s: GameState, ctx: SimContext, stage: StageDef): Pre
 /**
  * Whether `f`'s status was entered this tick, so its `actionFrame` 0 is a first
  * frame rather than a held one. `advanceFighter` counts `actionFrame` up before a
- * status runs, a held charge pins it at 1 or later (`chargeHoldFrame`), and only
+ * status runs, a held charge pins it at 1 or later (`smashHoldFrame`), and only
  * `changeStatus` writes 0: so a fighter that was not frozen this tick and is on
  * frame 0 entered its status this tick, whatever frame it left — including 0,
  * for a status entered the tick before (Plan 3, Task 18).
@@ -1203,10 +1203,11 @@ function spawnDueProjectiles(
     if (f.actionFrame === beforeActionFrame[i] && !enteredThisTick(f, frozen[i])) continue;
     const run = moveScriptFrame(defs[i], f);
     if (run === null) continue;
-    for (const cmd of run.state.fired) {
-      if (cmd.op !== "spawnProjectile") continue;
-      // The script says which and when; what flies is still the move's `ProjectileDef`.
-      const def = findProjectileDef(defs[i], cmd.id);
+    // The script says which and when, or the legacy move where an imported script
+    // launches nothing (`moveSpawns`, Plan 5, Task 13); what flies is still the
+    // move's `ProjectileDef`.
+    for (const id of moveSpawns(defs[i], f, run)) {
+      const def = findProjectileDef(defs[i], id);
       if (def === undefined) continue;
       const move = defs[i].moves[f.move];
       const sc = move?.specialCharge;

@@ -1,8 +1,9 @@
 /**
  * The commands the importer leaves as `unknown` that Plan 5 runs: a throw's
- * `ATTACK_ABS` and `ATK_HIT_ABS`, a pummel's `set_catch_only_all`, and Marth's
+ * `ATTACK_ABS` and `ATK_HIT_ABS`, a pummel's `set_catch_only_all`, Marth's
  * throws' `FT_CATCH_STOP` and Fox's grabs' `FT_START_ADJUST_MOTION_FRAME` (fix
- * round 1).
+ * round 1), and the `generate_article` of a projectile the roster defines
+ * (Task 13).
  *
  * Lifted here, at activation, rather than in the generated files, so the
  * committed imports stay byte-for-byte what `scripts/import-acmd.mjs` wrote.
@@ -16,6 +17,19 @@ import { parseArgs, unhash } from "./parse";
 const ABS = /^ATTACK_ABS\((.*)\)$/;
 /** `FT_CATCH_STOP(4, 1)`: the stop's length, then a flag the replica does not read. */
 const CATCH_STOP = /^FT_CATCH_STOP\((\d+),/;
+/** `ArticleModule::generate_article(FIGHTER_MARIO_GENERATE_ARTICLE_FIREBALL)`, and nothing else after it. */
+const ARTICLE = /^ArticleModule::generate_article\(([A-Z_]+)\)$/;
+
+/**
+ * Articles that are a projectile the roster already defines (Plan 5, Task 13),
+ * so `generate_article` launches that `ProjectileDef` on the script's own frame.
+ * An article missing here stays `unknown`, and a move generating one keeps its
+ * compiled legacy move (`activatable`).
+ */
+export const ARTICLE_PROJECTILES: Readonly<Record<string, string>> = {
+  FIGHTER_MARIO_GENERATE_ARTICLE_FIREBALL: "fireball",
+  FIGHTER_PIKACHU_GENERATE_ARTICLE_DENGEKIDAMA: "thunderJolt",
+};
 
 /**
  * `ATTACK_ABS(Kind=…, ID=0, Damage=8.0, Angle=45, KBG=65, FKB=0, BKB=60, Hitlag=0.0, …)`,
@@ -60,6 +74,9 @@ function lift(c: AcmdCommand): AcmdCommand {
   if (c.raw === "FT_START_ADJUST_MOTION_FRAME_arg1(1)") return { op: "motionRate", rate: [1, 1] };
   const stop = CATCH_STOP.exec(c.raw);
   if (stop !== null && Number(stop[1]) >= 1) return { op: "catchStop", frames: Number(stop[1]) };
+  const article = ARTICLE.exec(c.raw);
+  const id = article === null ? undefined : ARTICLE_PROJECTILES[article[1]];
+  if (id !== undefined) return { op: "spawnProjectile", id };
   return c;
 }
 

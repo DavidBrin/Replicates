@@ -21,17 +21,21 @@
   "link": [
     "bair",
     "bthrow",
+    "dsmash",
     "fthrow",
     "ftilt",
     "jab3",
     "nair",
+    "upB",
     "uthrow",
     "utilt"
   ],
   "samus": [
     "bair",
+    "dsmash",
     "dtilt",
     "fair",
+    "fsmash",
     "ftilt",
     "jab2",
     "nair",
@@ -46,9 +50,11 @@
   "fox": [
     "bair",
     "dair",
+    "fsmash",
     "ftilt",
     "nair",
-    "uair"
+    "uair",
+    "usmash"
   ],
   "pikachu": [
     "bair",
@@ -62,13 +68,16 @@
   ],
   "marth": [
     "dair",
+    "dsmash",
     "dtilt",
     "fair",
+    "fsmash",
     "ftilt",
     "jab1",
     "jab2",
     "nair",
     "uair",
+    "usmash",
     "utilt"
   ]
 }

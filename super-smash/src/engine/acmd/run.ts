@@ -6,14 +6,14 @@
  * the four can never disagree about which frame the move is on.
  */
 
-import { moveFrameOf } from "../hitbox";
+import { actionFrameOf, chargeHoldFrame, moveFrameOf } from "../hitbox";
 import { ONE } from "../fixed";
 import { isUnmodelledAutolink } from "../knockback";
 import type { FighterDef, FighterState, MoveSlot } from "../types";
 import { newBonePose } from "./bones";
 import type { BoneTable } from "./bones";
 import { flatten, runScript, scheduleOf } from "./interpreter";
-import type { ScriptFrameState } from "./interpreter";
+import type { ActiveMomentum, ScriptFrameState } from "./interpreter";
 import { gameScriptFor } from "./legacy";
 import type { AcmdScript } from "./types";
 
@@ -34,6 +34,88 @@ export function moveScriptFrame(def: FighterDef, f: Pick<FighterState, "move" | 
   if (script === null) return null;
   const gameFrame = moveFrameOf(f.actionFrame);
   return { script, gameFrame, state: runScript(script, gameFrame) };
+}
+
+/* ------------------------------------------------ what a script leaves out -- */
+
+/** The flag a smash's script raises on the frame its charge holds (`WorkModule::on_flag`). */
+const START_SMASH_HOLD = "FIGHTER_STATUS_ATTACK_FLAG_START_SMASH_HOLD";
+
+const opsCache = new WeakMap<AcmdScript, ReadonlySet<string>>();
+
+/** Which commands a script uses at all, loops included (cached per script object). */
+function opsOf(script: AcmdScript): ReadonlySet<string> {
+  let ops = opsCache.get(script);
+  if (ops === undefined) {
+    const found = new Set<string>();
+    for (const c of flatten(script)) found.add(c.op);
+    ops = found;
+    opsCache.set(script, ops);
+  }
+  return ops;
+}
+
+/**
+ * A move's scripted movement this frame (Plan 5, Task 13). An imported `game_`
+ * script publishes none: SSBU moves a fighter by its animation's translation,
+ * which no source publishes. So a move running one keeps its legacy `momentum`,
+ * on the legacy move's frames (quoted from one, as `gameFrame` is), the earliest
+ * listed window winning where two are live, as the compiled script's `order`
+ * does. A compiled legacy script carries it as `momentum` commands already, and
+ * a script with any `momentum` command of its own is taken at its word.
+ */
+export function moveMomentum(def: Pick<FighterDef, "moves">, f: Pick<FighterState, "move">, run: MoveScriptFrame): ActiveMomentum | null {
+  if (run.state.momentum !== null || f.move === null || opsOf(run.script).has("momentum")) return run.state.momentum;
+  for (const m of def.moves[f.move]?.momentum ?? []) {
+    const until = m.frame + (m.hold ?? 0);
+    if (run.gameFrame >= m.frame && run.gameFrame <= until) return { x: m.x, y: m.y, until, ...(m.airOnly === true ? { airOnly: true } : {}) };
+  }
+  return null;
+}
+
+/**
+ * Super armour this frame (Plan 5, Task 13): the script's, or, for a script
+ * that never sets it, the legacy move's `superArmourFrames` window.
+ */
+export function moveSuperArmour(def: Pick<FighterDef, "moves">, f: Pick<FighterState, "move">, run: MoveScriptFrame): boolean {
+  if (run.state.superArmour || f.move === null || opsOf(run.script).has("superArmour")) return run.state.superArmour;
+  const w = def.moves[f.move]?.superArmourFrames;
+  return w !== undefined && run.gameFrame >= w[0] && run.gameFrame <= w[1];
+}
+
+/**
+ * The projectiles launched this frame (Plan 5, Task 13): the script's own
+ * `spawnProjectile` (an imported `generate_article` the roster defines,
+ * `ARTICLE_PROJECTILES`, or a compiled legacy spawn), or, for a script that
+ * launches nothing, the legacy move's `spawnFrame`s.
+ */
+export function moveSpawns(def: Pick<FighterDef, "moves">, f: Pick<FighterState, "move">, run: MoveScriptFrame): string[] {
+  if (f.move === null || opsOf(run.script).has("spawnProjectile")) {
+    return run.state.fired.flatMap((c) => (c.op === "spawnProjectile" ? [c.id] : []));
+  }
+  return (def.moves[f.move]?.projectiles ?? []).filter((p) => p.spawnFrame === run.gameFrame).map((p) => p.id);
+}
+
+/**
+ * The `actionFrame` a charging smash holds on (ruling P5-R15, one rule for every
+ * reader: `attackMain` and the renderer's `MoveTiming.chargeHold`): the game
+ * frame its script raises `FIGHTER_STATUS_ATTACK_FLAG_START_SMASH_HOLD`, where
+ * the game holds it, else `chargeHoldFrame(move)`, one short of its earliest
+ * box. Every imported smash script raises it before its first box; a compiled
+ * legacy script never does. Read off the schedule, so no frame is run.
+ */
+export function smashHoldFrame(def: Pick<FighterDef, "moves" | "scripts">, f: Pick<FighterState, "move">): number {
+  if (f.move === null) return 1;
+  const script = gameScriptFor(def, f.move);
+  if (script !== null) {
+    const { commands, fire } = scheduleOf(script);
+    for (let i = 0; i < commands.length; i++) {
+      const c = commands[i];
+      if (c.op === "setFlag" && c.on && c.flag === START_SMASH_HOLD) return Math.max(1, actionFrameOf(fire[i]));
+    }
+  }
+  const move = def.moves[f.move];
+  return move === undefined ? 1 : chargeHoldFrame(move);
 }
 
 /**

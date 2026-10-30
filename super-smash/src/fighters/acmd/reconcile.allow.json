@@ -6,12 +6,6 @@
   "donkeyKong neutralB faf": "legacy 70 / game_specialn 63",
   "donkeyKong downB hitboxes": "legacy some / game_speciallwstart none",
   "link fsmash lead": "legacy 14%/361°/bkb30/kbg100 / game_attacks4 7%/69°/bkb45/kbg12",
-  "link dsmash lead": "legacy 17%/78°/bkb40/kbg88 / game_attacklw4 16%/78°/bkb40/kbg88",
-  "link dsmash faf": "legacy 57 / game_attacklw4 55",
-  "link upB first": "legacy 7 / game_specialhi 4",
-  "link upB last": "legacy 39 / game_specialhi 36",
-  "link upB faf": "legacy 77 / game_specialhi 74",
-  "samus fsmash lead": "legacy 14%/361°/bkb40/kbg100 / game_attacks4 12%/361°/bkb16/kbg112",
   "samus neutralB faf": "legacy 45 / game_specialnstart 14",
   "samus sideB faf": "legacy 55 / game_specials 58",
   "kirby rapidJab first": "legacy 5 / game_attack100 1",
@@ -41,8 +35,5 @@
   "pikachu upB last": "legacy 33 / game_specialhi1 300",
   "pikachu downB hitboxes": "legacy some / game_speciallw none",
   "marth dashAttack lead": "legacy 13%/45°/bkb93/kbg58 / game_attackdash 10%/45°/bkb70/kbg55",
-  "marth fsmash lead": "legacy 18%/361°/bkb80/kbg80 / game_attacks4 13%/361°/bkb48/kbg75",
-  "marth usmash lead": "legacy 17%/89°/bkb40/kbg95 / game_attackhi4 3%/125°/fkb155/kbg100/sw",
-  "marth dsmash lead": "legacy 12%/361°/bkb57/kbg88 / game_attacklw4 8%/361°/bkb60/kbg88",
   "marth bair lead": "legacy 12.5%/361°/bkb40/kbg94 / game_attackairb 9%/361°/bkb40/kbg85"
 }

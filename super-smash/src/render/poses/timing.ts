@@ -25,7 +25,7 @@ import { DEFAULT_GROUND_DODGE, dodgeIntangible, groundDodgeOf, rollOf } from "@/
 import { toFloat } from "@/engine/fixed";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
-import { actionFrameOf, chargeHoldFrame } from "@/engine/hitbox";
+import { actionFrameOf } from "@/engine/hitbox";
 import {
   DASH_INTERRUPT_FRAME,
   JUMP_SQUAT_FRAMES,
@@ -54,7 +54,7 @@ import {
 import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttributes, MoveSlot } from "@/engine/types";
 import { STRIDE_UNITS } from "@/engine/acmd/poseClock";
 import { THROW_SLOTS, gameScriptFor } from "@/engine/acmd/legacy";
-import { throwStrikeFrame } from "@/engine/acmd/run";
+import { smashHoldFrame, throwStrikeFrame } from "@/engine/acmd/run";
 import { clipFor } from "../chars/poses";
 import { airDodgeClipTime } from "./airDodge";
 import { samplePose, type PoseSample } from "./clip";
@@ -453,8 +453,9 @@ export interface MoveTiming {
   readonly lastActive: number;
   /**
    * A chargeable move's hold frame, the `actionFrame` a held charge pins it on
-   * (`chargeHoldFrame`, the engine's own rule): the frame before `firstActive`,
-   * and never before frame 1, so no hitbox is live while it charges. A special
+   * (`smashHoldFrame`, the engine's own rule, P5-R15): where its script raises
+   * START_SMASH_HOLD, else the frame before `firstActive` and never before frame
+   * 1, so no hitbox is live while it charges. A special
    * that charges on B holds on its loop frame instead, `loopFrame − 1` (Plan 5,
    * `specialChargeMain`; P5-R1), and carries on past it once released. Absent
    * for a move that cannot charge.
@@ -497,7 +498,7 @@ export function moveTimingFor(
     ...(m.specialCharge !== undefined
       ? { chargeHold: m.specialCharge.loopFrame - 1 }
       : m.chargeable
-        ? { chargeHold: chargeHoldFrame(m) }
+        ? { chargeHold: smashHoldFrame(def, { move }) }
         : {}),
   };
 }
@@ -545,10 +546,13 @@ export function poseTimeFor(
   // held: the engine keeps `charge` once the button comes up (frozen, for the
   // swing's damage) until the move ends, so a smash with charge is still
   // charging only while its frame sits on the hold. Past it, it swings. With
-  // no hold frame to go on (no move timing), any charge parks.
+  // no hold frame to go on (no move timing), any charge parks. Never further on
+  // than the swing resumes from: a smash whose script holds it early (P5-R15:
+  // Pikachu's down smash on frame 3) parks on its hold frame's own pose, as the
+  // bake does, so the release moves the pose on, not back.
   const charging = fighter.charge > 0 && fighter.actionFrame <= (timing?.chargeHold ?? Infinity);
   if (charging && (name === "fsmash" || name === "usmash" || name === "dsmash")) {
-    return (strike ?? 0.3) * 0.55;
+    return Math.min((strike ?? 0.3) * 0.55, poseTimeFor(name, { ...fighter, charge: 0 }, frame, timing, jump));
   }
 
   // The air dodge plays in two halves around its intangible window (`airDodgeClipTime`).

@@ -29,7 +29,7 @@ import { bonePoint, newBonePose } from "./bones";
 import type { BonePose, BoneTable } from "./bones";
 import { runScript, scheduleOf } from "./interpreter";
 import type { ScriptFrameState } from "./interpreter";
-import type { AbsParams, AcmdScript, AttackParams, CatchParams, MotionKind } from "./types";
+import type { AbsParams, AcmdScript, AttackParams, AttackSetoff, CatchParams, MotionKind } from "./types";
 
 /** `collision_attr_*` ↔ the replica's `HitEffect`. */
 export const EFFECT_OF_ATTR: Readonly<Record<string, HitEffect>> = {
@@ -123,6 +123,30 @@ function resolve(
   return bonePoint(POSE, p.x, p.y, p.z);
 }
 
+/**
+ * Whether a box with this `Clang_Rebound` setting passes through opposing boxes
+ * rather than clanking (Plan 5, Task 13, engine-wide, the Task 5 review's carry).
+ *
+ * `ATTACK_SETOFF_KIND_OFF` is the no-clank setting: SmashWiki "Priority"
+ * (https://www.ssbwiki.com/Priority, revision 2049993), "Transcendent priority
+ * ... refers to hitboxes that cannot clank with other hitboxes", names Mario's
+ * "Forward smash (sweetspot only)", Mario's Cape and Marth's Dancing Blade and
+ * Dolphin Slash for Ultimate, and those are exactly the boxes their scripts set
+ * OFF (`game_attacks4`'s fire sweetspot alone); SmashWiki's hitbox tables mark an
+ * OFF box `clang=f` (Kirby's Stone, https://www.ssbwiki.com/Kirby_(SSBU)/Down_special).
+ *
+ * UNVERIFIED stand-in: `ATTACK_SETOFF_KIND_THRU` stays transcendent, as it has
+ * been since Plan 2. The published reading is "cannot rebound" instead: Fox's
+ * forward smash, THRU in `game_attacks4`, is in "Priority"'s Ultimate list of
+ * "Moves that cannot rebound", and its hitbox table marks it `rebound=f` but not
+ * `clang=f` (https://www.ssbwiki.com/Fox_(SSBU)/Forward_smash, revision 1686307).
+ * The engine models no trample (a box that clanks and goes on), so THRU keeps the
+ * nearer of the two models it has.
+ */
+export function cannotClank(clang: AttackSetoff): boolean {
+  return clang === "ATTACK_SETOFF_KIND_OFF" || clang === "ATTACK_SETOFF_KIND_THRU";
+}
+
 function attackHitbox(
   a: AttackParams,
   gameFrame: number,
@@ -143,7 +167,7 @@ function attackHitbox(
     knockbackGrowth: a.kbg,
     ...(effect !== undefined && effect !== "normal" ? { effect } : {}),
     ...(a.fkb > 0 ? { fixedKnockback: a.fkb } : {}),
-    ...(a.clang === "ATTACK_SETOFF_KIND_THRU" ? { transcendent: true } : {}),
+    ...(cannotClank(a.clang) ? { transcendent: true } : {}),
     ...(a.hitlag !== ONE ? { hitlagMultiplier: a.hitlag } : {}),
     ...(setoff !== undefined ? { shieldstunMultiplier: setoff } : {}),
     ...((a.meteor ?? isSpikeAngle(a.angle)) ? { meteor: true } : {}),

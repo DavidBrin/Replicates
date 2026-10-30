@@ -11,16 +11,20 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { decideCpu, type CpuWorld } from "@/ai/cpu";
+import { flatten } from "@/engine/acmd/interpreter";
 import { fx } from "@/engine/fixed";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
+import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, StageDef } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
+import { bakedContext } from "@/game/bake";
+import { readBakeFromDisk } from "@/game/bakeNode";
 import { STAGES } from "@/stages";
 import { finalDestination } from "@/stages/finalDestination";
 import { townAndCity } from "@/stages/townAndCity";
 import { cpuWorldFromDef } from "./cpu";
-import { recoveryFromDef, stageViewFromDef, upBInReach, upBPath } from "./behaviours";
+import { recoveryFromDef, stageViewFromDef, upBInReach, upBNowOrNever, upBPath } from "./behaviours";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
@@ -148,6 +152,95 @@ describe("when the CPU spends its up special", () => {
       expect(state.fighters[0].action, `frame ${i}`).not.toBe("dead");
       back = recovered(state.fighters[0]);
     }
+    expect(back).toBe(true);
+  });
+});
+
+/*
+ * Plan 5, Task 13 (the Task 4b review's carry): an up special that runs its
+ * imported script publishes no momentum (SSBU moves a fighter by its
+ * animation, which no source publishes). The engine keeps the legacy move's
+ * (`moveMomentum`), and so must the CPU's model, or it would read "no up special
+ * worth judging" and spend it as soon as it is needed. In the game, Link's Spin
+ * Attack is such a move: a limb-bone script the bake places.
+ */
+describe("the CPU's up special model in the game's form of each fighter (Plan 5, Task 13)", () => {
+  const GAME: SimContext = bakedContext(
+    { fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => [...STAGES, VOID].find((s) => s.id === id)! },
+    readBakeFromDisk(),
+  );
+  const fd = stageViewFromDef(finalDestination);
+
+  /** `id` in the air at `at` on `stage`, out of jumps, in the game's context; Mario standing far off. */
+  function airborneInGame(stage: string, id: string, at: Partial<FighterState>): GameState {
+    const s = createInitialState(stage, [{ defId: id }, { defId: "mario" }], RULES, 5, GAME);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, intangible: 0, invincible: 0, jumpsUsed: 2, ...at });
+    Object.assign(s.fighters[1], { action: "stand", actionFrame: 0, intangible: 0, invincible: 0, x: fx(2000) });
+    return s;
+  }
+
+  it("runs Link's up special from its imported script, which sets no momentum of its own", () => {
+    const link = GAME.fighter("link");
+    const script = link.scripts?.upB;
+    expect(script).toBeDefined();
+    expect(flatten(script!).some((c) => c.op === "momentum")).toBe(false);
+  });
+
+  it("exists for every fighter in the game's form, read off the move the engine runs", () => {
+    for (const def of FIGHTERS) expect(recoveryFromDef(GAME.fighter(def.id)), def.id).not.toBeNull();
+  });
+
+  it("puts Link where the game's step() does, every frame, facing either way and steering either way", () => {
+    const r = recoveryFromDef(GAME.fighter("link"))!;
+    const frames = r.totalFrames + 30;
+    for (const facing of [1, -1])
+      for (const toward of [1, -1]) {
+        const start = airborneInGame("void", "link", { x: 0, y: 0, vx: fx(0.5), vy: -fx(1.5), facing });
+        let state = start;
+        let prev: readonly InputFrame[] = [0, 0];
+        const engine: FighterState[] = [];
+        for (let i = 0; i < frames; i++) {
+          const now = [dir(toward) | (i === 0 ? Btn.Up | Btn.Special : 0), 0];
+          state = step(state, now, { prevInputs: prev, ctx: GAME }).state;
+          prev = now;
+          engine.push(state.fighters[0]);
+        }
+        const model = upBPath(r, { vx: fx(0.5), vy: -fx(1.5), facing, fastFalling: false }, toward, frames);
+        expect(engine[r.totalFrames - 1].action).toBe("special");
+        expect(engine[r.totalFrames].action).toBe("specialFall");
+        expect(model.map((p) => [p.x, p.y]), `facing ${facing}, toward ${toward}`).toEqual(engine.map((f) => [f.x - start.fighters[0].x, f.y - start.fighters[0].y]));
+      }
+  });
+
+  it("does not spend Link's up special at once out of its reach, and still gets him back", () => {
+    // Link out of jumps, 120 off Final Destination's left ledge (x -80) and 80 up:
+    // the up special first reaches from 73 frames of drifting in (measured), and
+    // without the model the CPU spent it on the first frame it could.
+    let state = airborneInGame("finalDestination", "link", { x: fx(-200), y: fx(80), vx: 0, vy: 0, facing: 1 });
+    const world: CpuWorld = cpuWorldFromDef(GAME.fighter("link"), fd);
+    expect(world.recovery).not.toBeNull();
+    const r = world.recovery!;
+    const judged = (f: FighterState): boolean => upBInReach(f, fd.leftLedge, fd, r) || upBNowOrNever(f, fd, r);
+    expect(judged(state.fighters[0]), "out of reach where it starts").toBe(false);
+    let prev: readonly InputFrame[] = [0, 0];
+    let seed = 7;
+    let firstPress = -1;
+    let back = false;
+    for (let i = 0; i < 400 && !back; i++) {
+      const self = state.fighters[0];
+      const d = decideCpu(state, 0, 9, seed, world);
+      seed = d.seed;
+      if (firstPress < 0 && (d.input & Btn.Special) !== 0) {
+        firstPress = i;
+        expect(judged(self), `pressed on frame ${i} out of reach`).toBe(true);
+      }
+      const now = [d.input, 0];
+      state = step(state, now, { prevInputs: prev, ctx: GAME }).state;
+      prev = now;
+      expect(state.fighters[0].action, `frame ${i}`).not.toBe("dead");
+      back = recovered(state.fighters[0]);
+    }
+    expect(firstPress).toBeGreaterThan(30);
     expect(back).toBe(true);
   });
 });

@@ -1121,10 +1121,12 @@ describe("a Copy Ability's end (Task 9 fix round 1)", () => {
 
   it("runs no frame of a lost copy's next special: B on the hand-off starts Kirby's own Inhale (fix round 2)", () => {
     // A forged copy whose neutral special has a box on its frame 1, reaching Mario.
+    // Its own move, not Mario's Fireball script (which runs since Plan 5, Task 13).
     const mario = BY_ID.get("mario")!;
     const copycat = {
       ...mario,
       id: "copycat",
+      scripts: Object.fromEntries(Object.entries(mario.scripts ?? {}).filter(([slot]) => slot !== "neutralB")),
       moves: {
         ...mario.moves,
         neutralB: {

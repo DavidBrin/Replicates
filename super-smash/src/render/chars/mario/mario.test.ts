@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { toFloat } from "@/engine/fixed";
+import { moveScriptFrame, moveSpawns } from "@/engine/acmd/run";
 import { actionFrameOf } from "@/engine/hitbox";
 import { deg } from "../../skeleton";
 import type { BoneName, PoseAngles } from "../../skeleton";
@@ -187,14 +188,18 @@ describe("the moves with no hitbox are timed off their own event", () => {
    * all projectile, the other does no damage at all. `moveTimingFor` therefore
    * finds no `firstActive`, the strike remap never engages, and the clip runs
    * linearly across the move. Which means `strike` is not a hint here, it is a
-   * literal fraction, and Fireball's has to be the frame the ball appears:
-   * `spawnFrame` is compared against `moveFrameOf(actionFrame)`, so frame 17 is
-   * actionFrame 16.
+   * literal fraction, and Fireball's has to be the frame the ball appears: the
+   * game frame the script the sim runs launches it on (Plan 5, Task 13:
+   * `moveSpawns`, game frame 16), which is actionFrame 15.
    */
   it("releases the fireball on the frame it spawns", () => {
     const move = mario.moves.neutralB!;
     expect(move.hitboxes).toHaveLength(0);
-    const spawn = move.projectiles![0].spawnFrame;
+    let spawn = -1;
+    for (let g = 1; g <= move.totalFrames && spawn < 0; g++) {
+      if (moveSpawns(mario, { move: "neutralB" }, moveScriptFrame(mario, { move: "neutralB", actionFrame: actionFrameOf(g) })!).length > 0) spawn = g;
+    }
+    expect(spawn).toBe(16);
     expect(poses.neutralB!.strike).toBeCloseTo(actionFrameOf(spawn) / move.totalFrames, 2);
   });
 

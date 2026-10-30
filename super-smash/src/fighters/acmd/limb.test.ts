@@ -157,9 +157,19 @@ describe.skipIf(UPDATING)("the bones a box may hang off (ruling R12)", () => {
  * until their clip is fixed, which is the only change this list may see —
  * entries leave it, none join. Pinned here.
  * Task 13b re-posed six of the seven; Samus's down air stays (its reason).
+ * Plan 5, Task 13 (2026-10-30, ruling P5-R16): the one exception. Three
+ * smashes its fallbacks free join, each with its placement fault as the reason:
+ * Mario's and Kirby's forward smashes (the box on the trailing limb,
+ * `strike.test.ts`) and Pikachu's up smash (its tail's reach, `reach.test.ts`).
+ * Their clip fixes are carried; from here, entries again only leave.
  */
 describe.skipIf(UPDATING)("the held slots (limb.hold.json)", () => {
-  const PINNED: readonly (readonly [string, MoveSlot])[] = [["samus", "dair"]];
+  const PINNED: readonly (readonly [string, MoveSlot])[] = [
+    ["samus", "dair"],
+    ["mario", "fsmash"],
+    ["kirby", "fsmash"],
+    ["pikachu", "usmash"],
+  ];
 
   it("are exactly these, each with the placement fault it waits on", () => {
     expect(LIMB_HOLD.map((h) => [h.fighter, h.move])).toEqual(PINNED);

@@ -283,6 +283,18 @@ describe("the limb a box rides is the limb that strikes (Plan 4, Task 13b)", () 
     expect(faults.filter((f) => !excepted(f)).map((f) => f.text)).toEqual([]);
   });
 
+  // Ruling P5-R16: two of the held slots are held for this test's fault, so each
+  // hold is still needed while its clip strikes with the other limb.
+  it.each([
+    ["mario", "fsmash", "arml"],
+    ["kirby", "fsmash", "footl"],
+  ] as const)("still catches %s %s, held for its box on %s (lift the hold when the clip is fixed)", (id, slot, bone) => {
+    const def = withReferenceScripts(FIGHTERS.find((f) => f.id === id)!, REFERENCE_SCRIPTS[id], [slot], null);
+    const caught = faultsOf(def, slot, "F").filter((f) => !excepted(f));
+    expect(caught.length).toBeGreaterThan(0);
+    expect(caught.every((f) => f.key === `${id} ${slot} ${bone}`)).toBe(true);
+  });
+
   it("needs every exception it lists: one that no longer fires is stale", () => {
     const fired = new Set(faults.filter(excepted).map((f) => f.key));
     expect(Object.keys(EXCEPTIONS).filter((k) => !fired.has(k))).toEqual([]);

@@ -658,6 +658,12 @@ export interface MoveDef {
   readonly airTotalFrames?: number;
   /** First and last move frame the fighter is intangible (Plan 5: SmashWiki "Intangibility a-b"). */
   readonly intangible?: readonly [number, number];
+  /**
+   * A landing does not end the move: it plays on to its own end on the ground,
+   * where a special would otherwise land into `land` (Plan 5, Task 13: Kirby's
+   * Stone, which lands as a stone; `onLanded`).
+   */
+  readonly keepsOnLanding?: boolean;
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
   /**

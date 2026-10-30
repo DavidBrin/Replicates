@@ -53,7 +53,7 @@ import {
 } from "./constants";
 import { dodgeIntangible, groundDodgeOf, rollCharge, rollOf } from "./groundDodge";
 import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
-import { moveScriptFrame } from "./acmd/run";
+import { moveMomentum, moveScriptFrame, moveSuperArmour } from "./acmd/run";
 import { actionFrameOf, clearHitRecord } from "./hitbox";
 import {
   carrierOf,
@@ -1098,7 +1098,9 @@ export function respawnInvincibilityFrames(framesWaited: number): number {
 export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
   if (f.move === null) return false;
   if (f.action !== "attack" && f.action !== "special") return false;
-  if (moveScriptFrame(def, f)?.state.superArmour === true) return true;
+  // The script's armour, or the legacy window where an imported script sets none (Plan 5, Task 13).
+  const run = moveScriptFrame(def, f);
+  if (run !== null && moveSuperArmour(def, f, run)) return true;
   // A stored full charge's own armour (Plan 5: Giant Punch), timed from the press.
   const w = fullChargeArmour(f, def);
   return w !== null && f.actionFrame >= w[0] && f.actionFrame <= w[1];
@@ -1141,7 +1143,8 @@ export function heavyArmourOf(f: Pick<FighterState, "action" | "move">, def: Fig
 function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   const live = f.move !== null && (f.action === "attack" || f.action === "special" || f.action === "throw");
   const run = live ? moveScriptFrame(ctx.def, f) : null;
-  const m = run?.state.momentum ?? null;
+  // The script's momentum, or the legacy move's where an imported script publishes none (Plan 5, Task 13).
+  const m = run === null ? null : moveMomentum(ctx.def, f, run);
   if (run === null || m === null) {
     // No hold is live: the move ended, was cut short (a landing clears `move`
     // mid-hold, so its last frame never ran) or has not reached its momentum.
@@ -1266,6 +1269,8 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // landing does to an aerial swallow or spit.
   if (f.action === "cargoCarry" || f.action === "throw" || f.action === "inhaleHold") return;
   if (f.action === "special" && f.grabbing >= 0 && f.move !== null && ctx.def.moves[f.move]?.release !== undefined) return;
+  // A move that lands as itself plays on (Plan 5, Task 13: Kirby's Stone; `MoveDef.keepsOnLanding`).
+  if (f.action === "special" && f.move !== null && ctx.def.moves[f.move]?.keepsOnLanding === true) return;
   // A tumble that reaches the floor lies down: in hitstun, one too slow to
   // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
   // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").

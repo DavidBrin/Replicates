@@ -1289,10 +1289,12 @@ const jab3: PoseClip = {
  * has a consequence for the timing that catches everyone: `moveTimingFor`
  * derives `firstActive` from hitboxes, finds none, and `poseTimeFor` falls
  * back to `actionFrame / total`. So `strike` does nothing here and every `t`
- * below is literally the fraction of 49 frames it happens at. `spawnFrame` is
- * compared against `moveFrameOf(actionFrame)`, so the ball appears on
- * actionFrame 16, i.e. t = 16/49 = 0.327 — not 17/49 — and that is where the
- * hand has to be open and forward.
+ * below is literally the fraction of 49 frames it happens at. Since Plan 5,
+ * Task 13 the move runs its imported `game_specialn`, which launches the ball
+ * on game frame 16 (`FT_MOTION_RATE` 1.15, `generate_article` on motion frame
+ * 14), i.e. actionFrame 15, t = 15/49 — a frame before the 17 the legacy
+ * `spawnFrame`, UFD and SmashWiki give — and that is where the hand has to be
+ * open and forward. The keys before and after it keep their frames.
  *
  * **It is not an underarm toss.** Round one authored it as one, reasoning back
  * from the fact that the fireball bounces along the ground. That reasoning is
@@ -1323,7 +1325,7 @@ const jab3: PoseClip = {
  */
 const neutralB: PoseClip = {
   loop: false,
-  strike: 0.327,
+  strike: 15 / 49,
   keys: [
     {
       t: 0,
@@ -1364,13 +1366,13 @@ const neutralB: PoseClip = {
       offsetY: -0.55,
       ease: "in",
     },
-    // Release, actionFrame 16. Palm accumulated 22 + 18 + 55 = 95 at the wrist
-    // with the elbow still bent: an open hand out beside his face, 3.6 units
-    // forward of the shoulder and a shade above it, which is where the
-    // projectile's (5.2, 6.4) spawn is. Off hand flung back and up. Deep lunge
-    // under both, rear heel lifted.
+    // Release, actionFrame 15 (game frame 16, the script's spawn). Palm
+    // accumulated 22 + 18 + 55 = 95 at the wrist with the elbow still bent: an
+    // open hand out beside his face, 3.6 units forward of the shoulder and a
+    // shade above it, which is where the projectile's (5.2, 6.4) spawn is. Off
+    // hand flung back and up. Deep lunge under both, rear heel lifted.
     {
-      t: 0.327,
+      t: 15 / 49,
       pose: P({
         torso: 22, head: -12, hip: -6,
         thighR: 124, shinR: 22, footR: -94,
@@ -1383,8 +1385,8 @@ const neutralB: PoseClip = {
       scaleX: 1.1,
       ease: "hold",
     },
-    // Frames 17–21. A degree of settle and nothing else: the release reads as
-    // *held* for its five frames, which is what the original does.
+    // Frames 16–21. A degree of settle and nothing else: the release reads as
+    // *held* for its frames, which is what the original does.
     {
       t: 0.42,
       pose: P({

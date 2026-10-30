@@ -39,6 +39,11 @@
     "class": "clip-gain",
     "reason": "accepted by the controller (ruling on the clip-gains): the published motion spins with the arms outstretched, and the box rides armr at full extension, 11.0 -> 25.6, x2.33 against a size cap of 2.19 (D57)"
   },
+  "link dsmash": {
+    "measured": "SWEEP F: best 12.5 -> 21.5 (x1.72)",
+    "class": "sweep",
+    "reason": "a two-sided sweep, in front and then behind (ruling P5-R17, SWEEP F; Plan 5 Task 13 frees it): the legacy box stands still at 12.5 while the baked blade (sword2, on handr) swings round him, 21.5 in front at its best; judged by its best reach, which is not below the legacy one"
+  },
   "link ftilt": {
     "measured": "F: best 13.5 -> 21.2 (x1.57)",
     "class": "size",
@@ -54,6 +59,11 @@
     "class": "size",
     "reason": "a clip-placed limb (kneer) reaching 9.5 -> 13.7, x1.44, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
   },
+  "link upB": {
+    "measured": "SWEEP F: best 12.0 -> 18.9 (x1.57)",
+    "class": "sweep",
+    "reason": "Spin Attack, a spin (ruling P5-R17, SWEEP F; Plan 5 Task 13 frees it): the legacy box stands still at 12.0 while the baked blade (sword2, on handr) circles him, 18.9 in front at its best; judged by its best reach, which is not below the legacy one"
+  },
   "link utilt": {
     "measured": "U: best 18.5 -> 37.5 (x2.03)",
     "class": "clip-gain",
@@ -63,6 +73,11 @@
     "measured": "B: best 11.5 -> 18.3 (x1.59)",
     "class": "size",
     "reason": "a clip-placed limb (kneer) reaching 11.5 -> 18.3, x1.59, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+  },
+  "samus dsmash": {
+    "measured": "SWEEP F: best 11.5 -> 18.6 (x1.62)",
+    "class": "sweep",
+    "reason": "a two-sided leg sweep (ruling P5-R17, SWEEP F; Plan 5 Task 13 frees it): the legacy box stands still at 11.5 while the baked right knee (kneer) swings round her, 18.6 in front at its best; judged by its best reach, which is not below the legacy one"
   },
   "samus dtilt": {
     "measured": "F: best 10.5 -> 21.6 (x2.06)",
@@ -178,6 +193,11 @@
     "measured": "U: best 19.4 -> 34.9 (x1.80)",
     "class": "size",
     "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.4 -> 34.9, x1.80, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+  },
+  "marth usmash": {
+    "measured": "U: best 19.6 -> 35.2 (x1.79)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.6 -> 35.2, x1.79, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Plan 5 Task 13 frees it (ruling P5-R17, U); the blade the model holds lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
   },
   "marth utilt": {
     "measured": "U: best 18.4 -> 33.7 (x1.83)",

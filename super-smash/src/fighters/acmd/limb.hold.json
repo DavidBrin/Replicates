@@ -3,5 +3,20 @@
     "fighter": "samus",
     "move": "dair",
     "reason": "placement: the meteor box (armr x 5.2, radius 5) cannot reach below her: with the cannon arm plumb and her body pitched forward 90 degrees its centre stays 5.9 above her feet, so the down air reaches at best 0.9 short of them against the legacy 6.0 to 6.5 below (an estimated position, D17); closing that needs her whole body about 7 units lower in the air, which no published number gives (Task 13b)"
+  },
+  {
+    "fighter": "mario",
+    "move": "fsmash",
+    "reason": "placement: both boxes of game_attacks4 (the arm box and the fire sweetspot, x 5.4 off the elbow) ride arml, the left arm, while our clip punches with the right: on frames 15 to 17 the left hand is 3.1 forward, 2.5 to 2.7 behind the right, so the sweetspot sits at 7.5 forward off a fist that is not swinging (strike.test). The clip needs re-posing to punch with the left arm (ruling P5-R16, carried to polish)"
+  },
+  {
+    "fighter": "kirby",
+    "move": "fsmash",
+    "reason": "placement: game_attacks4's boxes ride footl, the left foot, while our clip strikes with the right arm: on frames 13 to 19 the left leg's far joint is 1.5 behind his origin, 8.7 behind the right arm (strike.test), and its forward reach is below 0.8x the legacy table's on 4 of 7 shared frames, worst frame 16, 8.4 to 5.9 (reach.test). The clip needs a forward kick on the left leg (ruling P5-R16, carried to polish)"
+  },
+  {
+    "fighter": "pikachu",
+    "move": "usmash",
+    "reason": "placement: game_attackhi4's boxes ride the tail (tail1, tail3, tail4), and our clip never swings the tail up over his head: its best upward reach is 7.8 against the legacy 11.4 (x0.69), below 0.8x on all 8 shared frames (reach.test, class U). The clip needs the tail's overhead arc (ruling P5-R16, carried to polish)"
   }
 ]

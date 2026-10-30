@@ -379,8 +379,9 @@ const tipper: FxFn = (c) => {
   const move = c.f.move ? c.def.moves[c.f.move] : undefined;
   if (!move) return NOTHING;
 
-  // A charging move needs no case of its own: the engine parks a smash the
-  // frame before its earliest hitbox (`chargeHoldFrame`), and Shield Breaker,
+  // A charging move needs no case of its own: the engine parks a smash where
+  // its script raises START_SMASH_HOLD, before any box (`smashHoldFrame`, P5-R15;
+  // Marth's three run their scripts from Plan 5, Task 13), and Shield Breaker,
   // which charges on B, on its loop frame (Plan 5: game frame 11, eight before
   // its boxes open on 19). `strengthFor` is zero for every box there, so a held
   // Shield Breaker shows no sheen on the point, and the released swing flashes

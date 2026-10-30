@@ -634,6 +634,21 @@ describe("engine golden trace", () => {
   // CPU crawls) and added the crawl lab: one hit (the down tilt out of the crawl,
   // 7.56%), no shield hits, no KO. So now: hits 32/20/18/21, 6, 0, 1, 4 and 1;
   // shield hits 0/0/0/0, 3, 0, 0, 0 and 0; KOs 1/2/1/0, 1, 2, 0, 0 and 0.
+  // Plan 5 Task 13 (moves with momentum, a projectile, armour or a smash charge run
+  // their scripts; a script's ATTACK_SETOFF_KIND_OFF box cannot clank; Kirby's Stone
+  // lands as a stone; the CPU's up special model keeps a script's legacy momentum)
+  // moved five, each where a freed move first comes out: mario-fox from the
+  // 1801-1900 sample (Fox's forward smash on 1810, a limb script now), link-samus
+  // from 201-300 (Link's Spin Attack on 163: its blade boxes from frame 4, not 7,
+  // and its end at 74, not 77), kirby-marth from 2401-2500 (Marth's up smash on
+  // 2409), the script from 1501-1600 (Mario's Fireball, from its script, hits Fox on
+  // 1576, not 1577) and the Inhale lab from 201-300 (the copied Fireballs, a frame
+  // earlier too: 286 and 340). The other four are byte-identical. No pin trips and no
+  // step is re-tuned. Hits 32, 26 and 21 in the three CPU matches; shield hits 0, 0
+  // and 1; KOs 1, 1 and 0, Samus's in link-samus by a hit, tumbling at 144% on 2978.
+  // The script and the Inhale lab keep their 6 and 4 hits and their KOs. So now: hits
+  // 32/20/26/21, 6, 0, 1, 4 and 1; shield hits 0/0/0/1, 3, 0, 0, 0 and 0; KOs
+  // 1/2/1/0, 1, 2, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

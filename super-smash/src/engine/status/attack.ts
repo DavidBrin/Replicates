@@ -14,7 +14,8 @@
  */
 
 import { SMASH_CHARGE_MAX } from "../constants";
-import { actionFrameOf, chargeHoldFrame, clearHitRecord, moveFrameOf } from "../hitbox";
+import { smashHoldFrame } from "../acmd/run";
+import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
 import { specialChargeMain } from "../specialCharge";
 import { reflectorMain, specialStallExec } from "../reflect";
@@ -53,10 +54,11 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   }
   // A special that loops while B is held (Plan 5, Task 9 fix round 1: Kirby's Inhale).
   if (f.action === "special" && move.holdLoop !== undefined) holdLoopMain(f, intent, move.holdLoop);
-  // Charging a smash holds the animation on the frame before its earliest
-  // hitbox goes live (`chargeHoldFrame`), so nothing can be hit while it charges.
+  // Charging a smash holds the animation where its script raises START_SMASH_HOLD,
+  // else on the frame before its earliest hitbox goes live (`smashHoldFrame`,
+  // ruling P5-R15), so nothing can be hit while it charges.
   if (f.action === "attack" && move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
-    const holdFrame = chargeHoldFrame(move);
+    const holdFrame = smashHoldFrame(ctx.def, f);
     if (f.actionFrame >= holdFrame) {
       f.actionFrame = holdFrame;
       f.charge += 1;

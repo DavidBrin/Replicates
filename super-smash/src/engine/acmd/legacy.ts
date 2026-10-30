@@ -111,7 +111,8 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     z: hb.x,
     hitlag: hb.hitlagMultiplier ?? ONE,
     sdi: ONE,
-    clang: hb.transcendent ? "ATTACK_SETOFF_KIND_THRU" : "ATTACK_SETOFF_KIND_ON",
+    // A transcendent box is the published no-clank setting (`cannotClank`, Plan 5 Task 13).
+    clang: hb.transcendent ? "ATTACK_SETOFF_KIND_OFF" : "ATTACK_SETOFF_KIND_ON",
     facing: "ATTACK_LR_CHECK_F",
     setWeight: hb.setWeight === true,
     shieldDamage: 0,

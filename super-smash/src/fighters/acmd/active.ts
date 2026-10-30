@@ -14,10 +14,14 @@
  *   (`lift.ts`; Plan 5, Task 7), so throws and pummels qualify like any move; a
  *   throw that lands by `ATK_HIT_ABS` alone hangs no box, and needs none;
  *   `REVERSE_LR` runs only in a throw, whose status turns the thrower;
- * - its legacy move carries nothing the script would drop: no scripted
- *   momentum, projectile, super armour, smash charge or special charge (those
- *   stay on the compiled legacy script until the energies and the charge read
- *   the script);
+ * - its legacy move carries nothing timed against its own frames that the
+ *   script cannot carry (`PLAN5_BEHAVIOUR`: a charge loop, a reflector or
+ *   counter window, a mouthful, a carry, a stall, ...). Scripted momentum,
+ *   projectiles, super armour and a smash's charge no longer keep a move off
+ *   its script (Plan 5, Task 13): the engine reads each from the script, or from
+ *   the legacy move where the script publishes none (`engine/acmd/run.ts`), and
+ *   a `generate_article` of a projectile the roster defines is lifted to a
+ *   spawn (`lift.ts`);
  * - every command is one the interpreter runs, or a cosmetic one listed below;
  * - the script clears its own boxes — one that leaves them for its status to
  *   clear (Fox's Reflector) would keep them live for the whole move here;
@@ -65,6 +69,8 @@ const RUN_OPS: ReadonlySet<AcmdCommand["op"]> = new Set([
   "hitAbs",
   "catchOnly",
   "catchStop",
+  // Plan 5, Task 13: a roster projectile's `generate_article`, lifted by `liftScript`.
+  "spawnProjectile",
 ]);
 
 /** Engine calls with no effect on the replica's sim: collision pushboxes, hit-height tags, VFX, grab-cut bookkeeping. */
@@ -109,6 +115,39 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
   return true;
 }
 
+/**
+ * Fields whose behaviour is timed against the legacy move's frames, and which
+ * no `game_` script carries (Plan 5): a charge loop, a reflector or counter
+ * window and its counterattack, Inhale's mouthful, its held loop and pull, its
+ * release and its aerial length, Donkey Kong's carry and his cargo throws'
+ * knockback armour, a stall, an aerial animation's length, the move's own
+ * intangibility, a copied move's damage. A move carrying any of them keeps its
+ * compiled legacy script, so they stay on the frames they were authored on.
+ *
+ * Not here: what the engine reads off the script, or off the legacy move where
+ * the script publishes nothing (`moveMomentum`, `moveSpawns`, `moveSuperArmour`,
+ * `smashHoldFrame`; Task 13); a back throw's `turnAt`, which only places the
+ * turn in the compiled script, a script turning by its own `REVERSE_LR` (Task 7,
+ * P5-R7); and `helpless`, the fall that follows whatever ends the move. Tasks 14
+ * and 16 add a Final Smash's phases and a rehit.
+ */
+export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
+  "specialCharge",
+  "reflector",
+  "counter",
+  "counterDamage",
+  "inhale",
+  "holdLoop",
+  "release",
+  "aerialTotalFrames",
+  "cargo",
+  "heavyArmour",
+  "stall",
+  "airTotalFrames",
+  "intangible",
+  "copyDamage",
+];
+
 /** Plan 3's bones: the root alone, the only bone `LEGACY_BONE_TABLE` places. */
 export const ROOT_BONE_ONLY = (bone: string): boolean => bone === "top";
 
@@ -124,16 +163,16 @@ export function activatable(
   placeable: (bone: string) => boolean = ROOT_BONE_ONLY,
 ): boolean {
   if (move === undefined) return false;
-  if (move.momentum !== undefined || move.projectiles !== undefined) return false;
-  if (move.superArmourFrames !== undefined || move.chargeable === true || move.specialCharge !== undefined) return false;
+  if (PLAN5_BEHAVIOUR.some((k) => move[k] !== undefined)) return false;
   const lifted = liftScript(script);
   const bones = new Set<string>();
   if (!runnable(lifted.commands, bones, THROW_SLOTS.has(slot))) return false;
-  // A throw lands by ATK_HIT_ABS, and may hang no box on a bone at all.
-  const throws = THROW_SLOTS.has(slot) && lifted.commands.some(function lands(c: AcmdCommand): boolean {
-    return c.op === "hitAbs" || (c.op === "loop" && c.body.some(lands));
-  });
-  if ((bones.size === 0 && !throws) || ![...bones].every(placeable)) return false;
+  // A throw lands by ATK_HIT_ABS, a projectile special by its spawn (Task 13):
+  // either may hang no box on a bone at all.
+  const lands = function lands(c: AcmdCommand): boolean {
+    return (THROW_SLOTS.has(slot) && c.op === "hitAbs") || c.op === "spawnProjectile" || (c.op === "loop" && c.body.some(lands));
+  };
+  if ((bones.size === 0 && !lifted.commands.some(lands)) || ![...bones].every(placeable)) return false;
   const end = runScript(lifted, CLEARED_BY);
   return end.attacks.length + end.catches.length === 0;
 }
@@ -203,16 +242,18 @@ function syncedTable(def: FighterDef, slot: MoveSlot, script: AcmdScript, bones:
 
 /**
  * The slots each fighter runs from its imported script — every slot the rule
- * admits, no more (pinned by `active.test.ts`). 66 of the roster's moves; Plan 5
- * Task 7 added the 28 throws and pummels whose ATTACK_ABS the throw status now reads.
+ * admits, no more (pinned by `active.test.ts`). 71 of the roster's moves; Plan 5
+ * Task 7 added the 28 throws and pummels whose ATTACK_ABS the throw status now reads,
+ * and Task 13 the 5 its momentum, spawn, armour and charge fallbacks free: Mario's
+ * down smash and Fireball, Pikachu's forward and down smashes and Thunder Jolt.
  */
 export const ACTIVE_SCRIPT_SLOTS: Readonly<Record<string, readonly MoveSlot[]>> = {
-  mario: ["jab1", "dashAttack", "dair", "grab", "dashGrab", "pummel", "fthrow", "uthrow", "dthrow"],
+  mario: ["jab1", "dashAttack", "dsmash", "dair", "neutralB", "grab", "dashGrab", "pummel", "fthrow", "uthrow", "dthrow"],
   donkeyKong: ["dashAttack", "dair", "grab", "dashGrab", "pummel", "uthrow", "dthrow"],
   link: ["jab1", "jab2", "dtilt", "fair", "dair", "grab", "dashGrab", "pummel", "dthrow"],
   samus: ["dashAttack", "pummel", "fthrow", "bthrow", "uthrow", "dthrow"],
   kirby: ["jab1", "jab2", "dashAttack", "fair", "bair", "dair", "grab", "dashGrab", "pummel", "fthrow", "bthrow", "dthrow"],
   fox: ["jab1", "jab2", "grab", "dashGrab", "pummel", "fthrow"],
-  pikachu: ["jab1", "dtilt", "nair", "fair", "grab", "dashGrab", "fthrow", "bthrow", "uthrow"],
+  pikachu: ["jab1", "dtilt", "fsmash", "dsmash", "nair", "fair", "neutralB", "grab", "dashGrab", "fthrow", "bthrow", "uthrow"],
   marth: ["sideB", "grab", "dashGrab", "pummel", "fthrow", "bthrow", "uthrow", "dthrow"],
 };

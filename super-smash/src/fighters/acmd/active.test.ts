@@ -11,7 +11,7 @@ import { ATTACK, clearAll, frame, loop, reverseLr, unknown } from "@/engine/acmd
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
-import { prepareFighterScripts } from "@/engine/acmd/run";
+import { prepareFighterScripts, smashHoldFrame } from "@/engine/acmd/run";
 import { fx } from "@/engine/fixed";
 import { activeHitboxes, chargeHoldFrame } from "@/engine/hitbox";
 import { createInitialState, step } from "@/engine/simulate";
@@ -238,7 +238,7 @@ describe("an activated script in a real match", () => {
  * hold (`chargeHoldFrame`) read a move's `MoveDef`, and the sim reads its script. An activated slot's `MoveDef` table is the
  * script's own boxes (`withReferenceScripts`), so every reader sees what the sim runs.
  *
- * Every proof runs against the bake's bones, for the 66 root-bone slots (tables placed
+ * Every proof runs against the bake's bones, for the 71 root-bone slots (tables placed
  * through the root-bone table, the plain roster) and for Plan 4's limb-bone slots (tables
  * placed through the bake, `withLimbScripts(def, bake.bones)`).
  */
@@ -268,10 +268,12 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     return out;
   }
 
-  // Plan 5 Task 7: +28 throws and pummels on the root bone, +6 on limbs.
-  it("activates 66 slots, and the bake 56 more", () => {
-    expect(ACTIVE).toHaveLength(66);
-    expect(LIMB).toHaveLength(56);
+  // Plan 5 Task 7: +28 throws and pummels on the root bone, +6 on limbs. Task 13: +5 on
+  // the root (Mario's down smash and Fireball, Pikachu's smashes and Thunder Jolt) and +9
+  // on limbs, three more held (P5-R16).
+  it("activates 71 slots, and the bake 65 more", () => {
+    expect(ACTIVE).toHaveLength(71);
+    expect(LIMB).toHaveLength(65);
   });
 
   it.each(SYNCED)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {
@@ -310,40 +312,60 @@ describe("what render, the CPU and the charge hold read of an activated move", (
       expect(timing.chargeHold).toBeUndefined();
       return;
     }
+    // A projectile special (Task 13) lands by its spawn and hangs no box: no live
+    // frame to start from, and nothing to hold.
+    if (live.length === 0) {
+      expect(move.projectiles?.length ?? 0, "a move with no box launches something").toBeGreaterThan(0);
+      expect(timing.firstActive).toBe(-1);
+      expect(timing.chargeHold).toBeUndefined();
+      return;
+    }
     // `chargeHoldFrame`: one actionFrame before the earliest live one (`actionFrameOf(first) - 1`).
     expect(chargeHoldFrame(move)).toBe(Math.max(1, live[0] - 2));
+    // A smash holds where its script raises START_SMASH_HOLD, before any box (P5-R15).
+    if (move.chargeable === true) {
+      expect(timing.chargeHold).toBe(smashHoldFrame(def, { move: slot }));
+      expect(timing.chargeHold).toBeLessThan(live[0] - 1);
+    }
     expect(timing.firstActive).toBe(live[0] - 1);
     expect(timing.lastActive).toBe(live[live.length - 1] - 1);
   });
 
-  it.each(SYNCED)("%s %s: no armour, and no projectile, on any frame of the script", (_id, slot, def) => {
+  // Task 13: a script may launch its move's projectile, on its own frame, once; no
+  // activated move carries armour, from its script or its legacy move.
+  it.each(SYNCED)("%s %s: no armour on any frame of the script, and only its own projectiles, each once", (_id, slot, def) => {
     expect(armourWindow(def, slot)).toBeNull();
-    expect(def.moves[slot]!.projectiles).toBeUndefined();
+    const own = (def.moves[slot]!.projectiles ?? []).map((p) => p.id);
     const script = gameScriptFor(def, slot)!;
+    const launched: string[] = [];
     for (let g = 1; g <= def.moves[slot]!.totalFrames + 10; g++) {
       const st = runScript(script, g);
       expect(st.superArmour, `frame ${g}`).toBe(false);
-      expect(st.fired.filter((c) => c.op === "spawnProjectile"), `frame ${g}`).toEqual([]);
+      for (const c of st.fired) if (c.op === "spawnProjectile") launched.push(c.id);
     }
+    expect(launched).toEqual(own);
   });
 });
 
-// Plan 3, Task 18 (carried from Plan 2 Task 16): the imported Super Jump Punch carries scripted
-// momentum the legacy move holds and the script cannot (`MoveDef.momentum`), so the rule keeps it
-// on its compiled legacy script. Without the momentum it would still stay: its script runs engine
-// calls the replica does not (`SA_SET`, `notify_event_msc_cmd`, a costume-flag query).
+// Plan 3, Task 18 (carried from Plan 2 Task 16): the imported Super Jump Punch's legacy move
+// carries scripted momentum (`MoveDef.momentum`). Since Plan 5, Task 13 that keeps no move off its
+// script (the engine keeps the legacy momentum, `moveMomentum`); it stays on its compiled legacy
+// script because the script runs engine calls the replica does not (`SA_SET`,
+// `notify_event_msc_cmd`, a costume-flag query).
 describe("Mario's up special", () => {
   const mario = FIGHTERS.find((f) => f.id === "mario")!;
   const script = REFERENCE_SCRIPTS.mario.scripts.game_specialhi;
 
-  it("stays on its legacy script: it carries momentum", () => {
+  it("stays on its legacy script: its script runs engine calls the replica does not", () => {
     expect(mario.moves.upB?.momentum).toBeDefined();
     expect(activatable("upB", mario.moves.upB, script)).toBe(false);
     expect(ACTIVE_SCRIPT_SLOTS.mario).not.toContain("upB");
     expect(mario.scripts?.upB).toBeUndefined();
   });
 
-  it("and would stay without it: its script runs engine calls the replica does not", () => {
+  it("and its momentum is not why (Task 13): with or without it, the same", () => {
     expect(activatable("upB", { ...mario.moves.upB!, momentum: undefined }, script)).toBe(false);
+    const runnable = { ...script, commands: script.commands.filter((c) => c.op !== "unknown") };
+    expect(activatable("upB", mario.moves.upB, runnable)).toBe(activatable("upB", { ...mario.moves.upB!, momentum: undefined }, runnable));
   });
 });

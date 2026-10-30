@@ -979,7 +979,8 @@ const legacy: FighterDef = {
       // - The boxes cannot clank: the page's table gives each `clang=f` and
       //   `rebound=f` (its template files them under "Attacks with hitboxes that
       //   cannot clang"), the script `Clang_Rebound=ATTACK_SETOFF_KIND_OFF`.
-      //   `transcendent`, which the legacy compile writes as `THRU`.
+      //   `transcendent`, which the legacy compile writes as that same `OFF`
+      //   (Plan 5, Task 13: `cannotClank`).
       // - They "ignore most kinds of armor, except Yoshi's double jump" (the
       //   page; the script's `AttackModule::set_force_reaction(0..3, true,
       //   false)`): `forceReaction`.

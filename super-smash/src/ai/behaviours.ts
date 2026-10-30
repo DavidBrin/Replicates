@@ -38,7 +38,7 @@ import {
   type StageDef,
 } from "@/engine/types";
 import type { ActiveMomentum } from "@/engine/acmd/interpreter";
-import { moveScriptFrame } from "@/engine/acmd/run";
+import { moveMomentum, moveScriptFrame } from "@/engine/acmd/run";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
 import {
   AIR_DODGE_SLIDE_DISTANCE,
@@ -411,13 +411,18 @@ export interface RecoveryMove {
 
 /**
  * A fighter's up special as `recover` judges it, read off the script the engine
- * runs (`moveScriptFrame`), or null when it has none or it moves the fighter
- * nowhere of its own (no momentum on any frame).
+ * runs (`moveScriptFrame`) with the engine's own momentum rule (`moveMomentum`:
+ * an imported script publishes none, and the legacy move's is kept; Plan 5,
+ * Task 13), or null when it has none or it moves the fighter nowhere of its own
+ * (no momentum on any frame).
  */
 export function recoveryFromDef(def: FighterDef): RecoveryMove | null {
   const move = def.moves.upB;
   if (move === undefined) return null;
-  const momentum = Array.from({ length: move.totalFrames }, (_, i) => moveScriptFrame(def, { move: "upB", actionFrame: i })?.state.momentum ?? null);
+  const momentum = Array.from({ length: move.totalFrames }, (_, i) => {
+    const run = moveScriptFrame(def, { move: "upB", actionFrame: i });
+    return run === null ? null : moveMomentum(def, { move: "upB" }, run);
+  });
   if (momentum.every((m) => m === null)) return null;
   const p = fighterParams(def);
   return { totalFrames: move.totalFrames, momentum, params: p, helplessDrift: mul(p.air_speed_x_stable, move.helpless?.airSpeed ?? ONE) };

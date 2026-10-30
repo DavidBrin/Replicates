@@ -71,7 +71,10 @@ describe("a charged smash attack's pose", () => {
       expect(charging[0].actionFrame, "parked on the hold frame").toBe(timing?.chargeHold);
       expect(charging[0].actionFrame, "parked on a live hitbox frame").toBeLessThan(timing?.firstActive ?? -1);
       const parked = time(charging[0]);
-      expect(parked, "parked on the wind-up").toBe((clipFor(def.id, poseNameFor(charging[0]))?.strike ?? 0.3) * 0.55);
+      // Partway up the wind-up, or the hold frame's own pose where the hold comes
+      // earlier than that (Plan 5, Task 13, P5-R15: a script's START_SMASH_HOLD).
+      const coiled = (clipFor(def.id, poseNameFor(charging[0]))?.strike ?? 0.3) * 0.55;
+      expect(parked, "parked on the wind-up").toBe(Math.min(coiled, time({ ...charging[0], charge: 0 })));
       for (const f of charging) expect(time(f), `charging, frame ${f.actionFrame}`).toBe(parked);
       // Once let go, the swing plays exactly as an uncharged one does on the same frame.
       for (const f of released) {

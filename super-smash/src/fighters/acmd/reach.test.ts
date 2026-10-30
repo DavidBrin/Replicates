@@ -286,7 +286,9 @@ describe("adopted moves reach about as far as they did, every frame, the way the
  * first drawn are pinned by `strike.test.ts`.
  */
 describe("the ratchet", () => {
-  it("still catches every held slot, so each hold is still needed (lift it when its clip is fixed)", () => {
+  // Mario's forward smash reaches far enough: its fault is the limb the box rides,
+  // which only the striking-limb test sees, and pins (`strike.test.ts`; P5-R16).
+  it("still catches every held slot it can see, so each hold is still needed (lift it when its clip is fixed)", () => {
     const passing: string[] = [];
     for (const h of LIMB_HOLD) {
       const { legacy } = pair(h.fighter);
@@ -294,7 +296,7 @@ describe("the ratchet", () => {
       const v = verdictOf(legacy, forced, h.move, DIRECTION[`${h.fighter} ${h.move}`]);
       if (!(v.losses.length > 0 || v.sweepLoss)) passing.push(`${h.fighter} ${h.move}`);
     }
-    expect(passing).toEqual([]);
+    expect(passing).toEqual(["mario fsmash"]);
   });
 
   it("catches Samus's down air with the cannon at her chest, on every live frame", () => {
