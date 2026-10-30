@@ -488,6 +488,13 @@ describe("engine golden trace", () => {
   // 1/2/0/1, 1 and 2. One KO is by a hit (Marth in kirby-marth, tumbling); the
   // others are self-destructs: Mario during a Cape, Donkey Kong during a
   // Headbutt, and Pikachu in special fall after a Quick Attack.
+  // Plan 5 Task 7 (throws read ATTACK_ABS, pummels are catch-only, and both run
+  // their scripts) moved only the script, from its 201-300 sample: the pummel's
+  // script freezes 14 frames and lasts its 6, and the forward throw lands with no
+  // freeze, so the throw is pressed on 238 and lands on 250 (`goldenScript.ts`), and
+  // from 300 on both fighters are where they were. No CPU match grabs, so the four
+  // and the lab keep their traces: hits 17/33/20/23, 6 and 0; shield hits 0/0/0/0,
+  // 3 and 0; KOs 1/2/0/1, 1 and 2, as before.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

@@ -22,6 +22,8 @@
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
+import { runScript } from "@/engine/acmd/interpreter";
+import { gameScriptFor } from "@/engine/acmd/legacy";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
@@ -301,7 +303,9 @@ describe("a thrown fighter is thrown", () => {
  * throws are `ATTACK_ABS` and its pummel is catch-only (`set_catch_only_all`):
  * both hit the held fighter, with no collision test (SmashWiki "Pummel",
  * https://www.ssbwiki.com/Pummel: pummels "continue until the opponent is
- * eventually thrown or breaks free").
+ * eventually thrown or breaks free"). Since Plan 5 Task 7 every throw runs that
+ * way: its catch-only boxes hurt the fighter held, and its launch lands once,
+ * by `ATK_HIT_ABS`.
  */
 describe("every fighter's pummel and throws land on the fighter held", () => {
   /** `holder` holding `victim`, both on Final Destination's floor, the holder facing right. */
@@ -365,20 +369,33 @@ describe("every fighter's pummel and throws land on the fighter held", () => {
     ["dthrow", Btn.Down],
   ] as const;
 
+  /** The angle of the ATTACK_ABS a throw's script lands, read off the script at its ATK_HIT_ABS. */
+  function launchAngle(def: (typeof FIGHTERS)[number], slot: (typeof THROWS)[number][0]): number {
+    const script = gameScriptFor(def, slot)!;
+    for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) {
+      const st = runScript(script, g);
+      if (st.fired.some((c) => c.op === "hitAbs")) return st.throwAbs!.angle;
+    }
+    throw new Error(`${def.id} ${slot} lands no throw`);
+  }
+
   describe.each(FIGHTERS.map((f) => [f.id, f] as const))("%s", (id, def) => {
-    it.each(THROWS)("%s lands once and launches the way its box points (a back throw, behind)", (slot, button) => {
+    it.each(THROWS)("%s lands its launch once and launches the way it points (a back throw, behind)", (slot, button) => {
       const ticks = press(holding(id, victimFor(id)), button, 140);
       const hits = ticks.flatMap((t) => t.events.hits);
-      expect(hits, "the throw should land").toHaveLength(1);
-      const hit = ticks.findIndex((t) => t.events.hits.length > 0);
-      const box = def.moves[slot]!.hitboxes.find((h) => h.id === hits[0].hitboxId)!;
+      // Its catch-only hits (Kirby's stomps, Link's kicks) hurt and hold; the
+      // last hit is the one launch.
+      const launches = hits.filter((h) => h.knockback > 0);
+      expect(launches, "the throw should land its launch once").toHaveLength(1);
+      expect(hits.at(-1)).toBe(launches[0]);
+      const hit = ticks.findIndex((t) => t.events.hits.includes(launches[0]));
       // The victim is no longer held, and is launched when the freeze ends.
-      const out = ticks.findIndex((t, i) => i > hit && t.state.fighters[1].hitlag === 0);
+      const out = ticks.findIndex((t, i) => i >= hit && t.state.fighters[1].hitlag === 0 && t.state.fighters[1].pendingFacing === 0);
       const v = ticks[out].state.fighters[1];
       expect(v.grabbedBy).toBe(-1);
       expect(v.hitstun).toBeGreaterThan(0);
       // The holder faces right, so "forward" is +x.
-      const cos = Math.cos((toFloat(box.angle) * Math.PI) / 180);
+      const cos = Math.cos((toFloat(launchAngle(def, slot)) * Math.PI) / 180);
       if (slot === "bthrow") expect(v.vx).toBeLessThan(0);
       else if (Math.abs(cos) < 0.05) expect(Math.abs(v.vx)).toBeLessThan(Math.abs(v.vy) * 0.2 + 1);
       else expect(Math.sign(v.vx)).toBe(Math.sign(cos));

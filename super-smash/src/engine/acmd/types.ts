@@ -119,6 +119,31 @@ export interface CatchParams {
   readonly situation: CollisionSituation;
 }
 
+/**
+ * smash-script `ATTACK_ABS(Kind, ID, Damage, Angle, KBG, FKB, BKB, Hitlag, …)`: a
+ * throw's launch (`FIGHTER_ATTACK_ABSOLUTE_KIND_THROW`) or what the held
+ * fighter takes if let go mid-throw (`…_KIND_CATCH`). It hits no hurtbox: the
+ * throw status applies it to the held fighter on `ATK_HIT_ABS` (Plan 5, Task 7).
+ * Not read: its `FacingRestrict`, `ATTACK_LR_CHECK_F` on every roster throw
+ * (rubendal SSBU Data Viewer, patch 13.0.1), so the launch goes the way the
+ * thrower faces then.
+ */
+export interface AbsParams {
+  readonly kind: "throw" | "catch";
+  /** Percent, Q12. */
+  readonly damage: number;
+  /** Degrees, Q12. */
+  readonly angle: number;
+  /** Knockback growth, fixed and base knockback: Q12 of the raw values, as `AttackParams`'. */
+  readonly kbg: number;
+  readonly fkb: number;
+  readonly bkb: number;
+  /** Hitlag multiplier (ONE = 1.0×); every published throw but Pikachu's down throw uses 0. */
+  readonly hitlag: number;
+  /** `collision_attr_*`. */
+  readonly collisionAttr: string;
+}
+
 /** A rate as an exact fraction: game frames per motion frame (`FT_MOTION_RATE`'s FSM). */
 export type Rate = readonly [num: number, den: number];
 
@@ -162,8 +187,14 @@ export type AcmdCommand =
   | { readonly op: "momentum"; readonly x: number; readonly y: number; readonly hold: number; readonly order: number }
   /** `ArticleModule::generate_article` — here, a `ProjectileDef` id. */
   | { readonly op: "spawnProjectile"; readonly id: string }
-  /** `REVERSE_LR()`. */
+  /** `REVERSE_LR()`: in a throw, the thrower turns round (Plan 5, Task 7). */
   | { readonly op: "reverseLr" }
+  /** `ATTACK_ABS(…)` (Plan 5, Task 7). */
+  | { readonly op: "attackAbs"; readonly params: AbsParams }
+  /** `ATK_HIT_ABS(FIGHTER_ATTACK_ABSOLUTE_KIND_THROW, …)`: the throw lands now (Plan 5, Task 7). */
+  | { readonly op: "hitAbs" }
+  /** `AttackModule::set_catch_only_all(on, …)`: the live boxes hit only the held fighter (Plan 5, Task 7). */
+  | { readonly op: "catchOnly"; readonly on: boolean }
   /** `for(N Iterations){ … }`. */
   | { readonly op: "loop"; readonly count: number; readonly body: readonly AcmdCommand[] }
   /** Anything the replica does not interpret yet, kept verbatim so nothing is lost on import. */

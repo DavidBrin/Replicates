@@ -155,7 +155,7 @@ import {
   shieldDamage,
   shieldPushback,
 } from "./shield";
-import { scriptHitboxes } from "./acmd/hitboxes";
+import { absHitbox, scriptHitboxes } from "./acmd/hitboxes";
 import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
 import "./status";
 import { releaseHeld, struggleInGrab } from "./status/attack";
@@ -509,11 +509,12 @@ interface Candidate {
   readonly chargeScale: number;
   readonly destroyOnHit: boolean;
   /**
-   * The only port this candidate may hit, or null for anyone it reaches. A
-   * pummel and the four throws hit the fighter their owner holds and nobody
-   * else, wherever that fighter is: the game's `set_catch_only_all` /
-   * `ATTACK_ABS` (Plan 5, Task 7 reads the script's own). `-1` is "the fighter
-   * held" when nobody is, which no port equals.
+   * The only port this candidate may hit, or null for anyone it reaches. A box
+   * live under `set_catch_only_all` (a pummel's, a throw's hits before its
+   * launch: Plan 5, Task 7) hits the fighter its owner holds and nobody else,
+   * wherever that fighter is, and only for damage (`applyHeldHit`); a throw's
+   * launch is no candidate at all (`resolveThrows`). `-1` is "the fighter held"
+   * when nobody is, which no port equals.
    */
   readonly onlyPort: number | null;
   suppressed: boolean;
@@ -806,6 +807,7 @@ export function step(
   reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
   resolveClanks(s, candidates, events, destroyed);
   resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed);
+  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events);
   if (destroyed.size > 0) {
     s.projectiles = s.projectiles.filter((p) => !destroyed.has(p.instanceId));
   }
@@ -1013,7 +1015,7 @@ function gatherHitboxes(
         projectile: null,
         chargeScale: f.action === "attack" ? chargeMultiplier(f.charge) : ONE,
         destroyOnHit: false,
-        onlyPort: f.action === "pummel" || f.action === "throw" ? f.grabbing : null,
+        onlyPort: run.state.catchOnly ? f.grabbing : null,
         suppressed: false,
       });
     }
@@ -1154,8 +1156,8 @@ function resolveClanks(
       const cb = candidates[b];
       if (ca.attacker === cb.attacker) continue;
       if (reflected.has(ca) || reflected.has(cb)) continue;
-      // A pummel or a throw on a held fighter is not a hitbox in the world (SSBU's
-      // `ATTACK_ABS`, `set_catch_only_all`): nothing clanks with it.
+      // A catch-only box (`set_catch_only_all`: a pummel's, a throw's hits on the
+      // fighter held) is not a hitbox in the world: nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
       if (ca.suppressed && cb.suppressed) continue;
       if (!capsulesOverlap(capsuleOf(ca), capsuleOf(cb))) continue;
@@ -1273,10 +1275,18 @@ function resolveHits(
       // ledge (`ledge`) until they end, pinned to it as the hang is.
       if (c.hitbox.windbox === true && victim.ledge !== null) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
+      // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
+      // holds alone, and hits anyone else it reaches (Mario's back throw: `game_throwb`
+      // hangs an 8% `hip` box on frame 13 with no `set_catch_only_all`, and lands
+      // the throw by `ATK_HIT_ABS` on 44). UNVERIFIED: a stand-in; no source says
+      // what such a box does to the fighter held. Not a projectile, which has left
+      // its owner's move.
+      if (c.onlyPort === null && c.projectile === null && captorOf(s, victim) === s.fighters[c.attacker]) continue;
       if (c.onlyPort !== null) {
-        // Catch-only (a pummel, a throw): the fighter held, wherever the box is.
-        // Not geometry-tested: the game holds the victim at the box, and a legacy
-        // box sits there only for some of the roster (Plan 3, Task 14).
+        // Catch-only (a pummel, a throw's hits before its launch): the fighter
+        // held, wherever the box is. Not geometry-tested: the game holds the
+        // victim at the box, and a legacy box sits there only for some of the
+        // roster (Plan 3, Task 14).
         if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
       } else if (bubble !== null && !c.hitbox.grabbing && c.hitbox.windbox !== true && sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, bubble)) {
         caught.add(c);
@@ -1344,7 +1354,8 @@ function resolveHits(
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
       else if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
-      else if (c.slot === "pummel" && c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
+      // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
+      else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
         applyHit(s, attacker, victim, defs[v], c, contact, intents[v], events);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
@@ -1362,6 +1373,69 @@ function resolveHits(
   }
 
   if (s.smashBall.active) resolveSmashBallHits(s, candidates, events);
+}
+
+/**
+ * Throws (Plan 5, Task 7): what a throw's script fires on the frame it reaches.
+ *
+ * - `REVERSE_LR()` turns the thrower round (ruling P5-R7): Samus's back throw on
+ *   12, Mario's on 40, a legacy back throw on its `turnAt`. Everything the
+ *   throw does after, its launch included, is the way the thrower then faces.
+ * - `ATK_HIT_ABS` lays the live `ATTACK_ABS` launch on the fighter held — no
+ *   hurtbox, no geometry, nothing to clank with — through the ordinary hit
+ *   pipeline (`applyHit`): damage, staleness, knockback, the release. Every
+ *   published throw but Pikachu's down throw carries `Hitlag=0.0`, so nobody
+ *   freezes and the launch fires at once. Not on a fighter the throw no longer
+ *   holds: a hit on the thrower, or a KO either side, has ended the link
+ *   (`releaseGrab`) before this frame.
+ *
+ * Each fires once, on the frame the move steps onto: a frame held by a freeze
+ * is run again but not acted on again, as `spawnDueProjectiles` does it (a
+ * second turn would face the thrower forward again).
+ *
+ * UNVERIFIED: where the hit is reported. The game lays the throw at its `throw`
+ * joint; here the spark is the held fighter's position (`holdAtCaptor`).
+ */
+function resolveThrows(
+  s: GameState,
+  defs: readonly FighterDef[],
+  frozen: readonly boolean[],
+  beforeActionFrame: readonly number[],
+  intents: readonly Intent[],
+  events: StepEvents,
+): void {
+  for (let i = 0; i < s.fighters.length; i++) {
+    const f = s.fighters[i];
+    if (frozen[i] || f.action !== "throw" || f.move === null) continue;
+    if (f.actionFrame === beforeActionFrame[i] && !enteredThisTick(f, frozen[i])) continue;
+    const run = moveScriptFrame(defs[i], f);
+    if (run === null) continue;
+    for (const cmd of run.state.fired) {
+      if (cmd.op === "reverseLr") f.facing = -f.facing;
+      if (cmd.op !== "hitAbs" || run.state.throwAbs === null) continue;
+      const v = f.grabbing;
+      const victim = v >= 0 ? s.fighters[v] : undefined;
+      if (victim === undefined || captorOf(s, victim) !== f || victim.action === "dead") continue;
+      const at = { x: victim.x, y: victim.y };
+      const c: Candidate = {
+        attacker: i,
+        hitbox: absHitbox(run.state.throwAbs),
+        x: at.x,
+        y: at.y,
+        prevX: at.x,
+        prevY: at.y,
+        dx: 0,
+        dy: 0,
+        slot: f.move,
+        projectile: null,
+        chargeScale: ONE,
+        destroyOnHit: false,
+        onlyPort: null,
+        suppressed: false,
+      };
+      applyHit(s, f, victim, defs[v], c, at, intents[v], events);
+    }
+  }
 }
 
 /**
@@ -1898,8 +1972,10 @@ function freezeVictim(victim: FighterState, lag: number): void {
 }
 
 /**
- * A pummel: damage, a freeze for both fighters, and nothing else (Plan 3, Task
- * 14; Plan 5, Task 7 keeps the name). The victim stays held: no knockback, no
+ * A catch-only hit on the fighter held — a pummel, or a throw's hits before its
+ * launch (Kirby's down-throw stomps): damage, a freeze for both fighters, and
+ * nothing else (Plan 3, Task 14; Plan 5, Task 7 sends every `set_catch_only_all`
+ * box here). The victim stays held: no knockback, no
  * hitstun, no release and no status change, and the escape timer is untouched
  * (SmashWiki "Grab": the grab time is "not affected by pummeling"; "Pummel":
  * pummels "continue until the opponent is eventually thrown or breaks free"). It
@@ -1941,34 +2017,21 @@ function applyHeldHit(
 }
 
 /**
- * The facing a launch is measured from. Everything launches the way its box
- * points from the attacker's facing, except a back throw, which launches behind
- * the thrower. UNVERIFIED: a stand-in for the game's `REVERSE_LR` (Plan 5, Task
- * 7). The roster's legacy back-throw angles are mixed: Link's, Kirby's, Pikachu's
- * and Marth's are authored behind already (over 90°), Mario's, Donkey Kong's,
- * Samus's and Fox's point forward, so only a forward-pointing one is turned round.
- */
-function launchFacing(c: Candidate, attacker: FighterState): number {
-  if (c.slot !== "bthrow") return attacker.facing;
-  const pointsForward = c.hitbox.angle < fx(90) || c.hitbox.angle > fx(270);
-  return pointsForward ? -attacker.facing : attacker.facing;
-}
-
-/**
  * The facing a hit's launch is measured from. A box with no LR rule launches
- * forwards (`launchFacing`: the way its owner faces, or the way its projectile
- * points). `ATTACK_LR_CHECK_POS` launches away from the attacker by position,
- * and `ATTACK_LR_CHECK_B` backwards (Plan 3, Task 16).
+ * forwards: the way its owner faces, or the way its projectile points.
+ * `ATTACK_LR_CHECK_POS` launches away from the attacker by position, and
+ * `ATTACK_LR_CHECK_B` backwards (Plan 3, Task 16).
  *
- * A box that carries its own rule replaces `launchFacing`'s back-throw
- * stand-in, which exists for the legacy tables, whose angles say nothing (a
- * back throw that said `_B` would otherwise be turned round twice). UNVERIFIED:
- * that reading; Plan 5, Task 7 replaces the stand-in with `REVERSE_LR`.
+ * A back throw is no exception (Plan 5, Task 7, ruling P5-R7): one that launches
+ * behind either says so in its angle (over 90°: Link's, Kirby's, Pikachu's,
+ * Marth's) or turns its thrower round first (`REVERSE_LR`, `resolveThrows`:
+ * Samus's and Mario's scripts, and the legacy ones that point forward, by
+ * `MoveDef.turnAt`), and launches the way the thrower then faces.
  */
 function launchSourceFacing(c: Candidate, attacker: FighterState, victim: FighterState): number {
   const hb = c.hitbox;
   const forward = c.projectile !== null ? c.projectile.facing : attacker.facing;
-  if (hb.lr === undefined) return c.projectile !== null ? forward : launchFacing(c, attacker);
+  if (hb.lr === undefined) return forward;
   if (hb.lr === "back") return -forward;
   // UNVERIFIED: origin to origin (the attacker's, or its projectile's, against the
   // victim's), and a victim level with it launches the way the attacker faces;
@@ -2323,11 +2386,15 @@ function applyHit(
   victim.combat.asdi = lag > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
   parkAutolink(victim, hb, c, attacker);
-  // Which way the launch goes, for the spark: fixed now, because a hit with no
-  // freeze fires (and clears) it below. An autolink points along its own vector,
-  // as it stands at contact (the victim may SDI before it is computed for real).
+  // Which way the launch goes, for the spark: the un-DI'd direction (DI is
+  // sampled on the last frame of hitlag, so this is the launch as the *hit* set
+  // it, right for a graphic that fires on the contact frame). Fixed now, because
+  // a hit with no freeze fires (and clears) the parked launch below — as every
+  // published throw but one does: `Hitlag=0.0` (Plan 5, Task 7; before it, such
+  // a hit reported 0°). An autolink points along its own vector, as it stands at
+  // contact (the victim may SDI before it is computed for real).
   const link = victim.combat.autolink ? autolinkVector(parkedAutolink(victim.combat), victim.x, victim.y) : null;
-  const linkAngle = link !== null ? vectorWorldAngle(link.vx, link.vy, sourceFacing) : null;
+  const sparkAngle = link !== null ? vectorWorldAngle(link.vx, link.vy, sourceFacing) : launchWorldAngle(victim.pendingAngle, victim.pendingFacing);
 
   victim.hitstun = effectiveHitstun(kb, speedUp);
   victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
@@ -2375,10 +2442,7 @@ function applyHit(
     contactX: contact.x,
     contactY: contact.y,
     knockback: kb,
-    // The un-DI'd direction. DI has not been chosen yet — it is sampled on the
-    // last frame of hitlag — so this is the launch as the *hit* set it, which
-    // is the right thing for a graphic that fires on the contact frame.
-    angle: linkAngle ?? launchWorldAngle(victim.pendingAngle, victim.pendingFacing),
+    angle: sparkAngle,
     hitboxId: hb.id,
   });
 }
@@ -2506,7 +2570,7 @@ function resolveSmashBallHits(
   const ball = s.smashBall;
   const target = circle(ball.x, ball.y, SMASH_BALL_RADIUS);
   for (const c of candidates) {
-    // A pummel or a throw hits the fighter held and nothing else.
+    // A catch-only box hits the fighter held and nothing else.
     if (c.suppressed || c.onlyPort !== null) continue;
     const attacker = s.fighters[c.attacker];
     if (alreadyHit(attacker, SMASH_BALL_TARGET)) continue;

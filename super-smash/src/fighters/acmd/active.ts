@@ -9,8 +9,11 @@
  *   for Plan 3, the root bone `top`, the only bone `LEGACY_BONE_TABLE` places;
  *   for Plan 4's limb-bone scripts (`limb.ts`), the root and every bone our
  *   clips place (`render3d/retarget/placeable.ts`);
- * - the move is not one a status drives rather than its script: a throw
- *   (`ATTACK_ABS`) or a pummel (`set_catch_only_all`);
+ * - a throw's `ATTACK_ABS`/`ATK_HIT_ABS` and a pummel's `set_catch_only_all`
+ *   are lifted into commands the throw status and the hit pipeline honour
+ *   (`lift.ts`; Plan 5, Task 7), so throws and pummels qualify like any move; a
+ *   throw that lands by `ATK_HIT_ABS` alone hangs no box, and needs none;
+ *   `REVERSE_LR` runs only in a throw, whose status turns the thrower;
  * - its legacy move carries nothing the script would drop: no scripted
  *   momentum, projectile, super armour, smash charge or special charge (those
  *   stay on the compiled legacy script until the energies and the charge read
@@ -31,9 +34,11 @@
 import { LEGACY_BONE_TABLE, type BoneTable } from "@/engine/acmd/bones";
 import { scriptHitboxTable } from "@/engine/acmd/hitboxes";
 import { runScript } from "@/engine/acmd/interpreter";
+import { THROW_SLOTS } from "@/engine/acmd/legacy";
 import { isUnmodelledAutolink } from "@/engine/knockback";
 import type { AcmdCommand, AcmdScript } from "@/engine/acmd/types";
 import type { FighterDef, Hitbox, MoveDef, MoveSlot } from "@/engine/types";
+import { liftScript } from "./lift";
 import type { ReferenceFighter } from "./reference";
 
 /**
@@ -55,6 +60,10 @@ const RUN_OPS: ReadonlySet<AcmdCommand["op"]> = new Set([
   "shieldSetoffMul",
   "motionRate",
   "loop",
+  // Plan 5, Task 7: lifted from `unknown` by `liftScript`.
+  "attackAbs",
+  "hitAbs",
+  "catchOnly",
 ]);
 
 /** Engine calls with no effect on the replica's sim: collision pushboxes, hit-height tags, VFX, grab-cut bookkeeping. */
@@ -66,19 +75,30 @@ const COSMETIC_PREFIXES: readonly string[] = [
   "GrabModule::set_rebound",
   "methodlua2cpp::L2CFighterAnimcmdGameCommon::game_CaptureCutCommon",
   "FT_START_ADJUST_MOTION_FRAME",
+  // Plan 5, Task 7: a throw's KO camera and cut-in zoom, and two calls read as
+  // bookkeeping. UNVERIFIED for those two: `FT_LEAVE_NEAR_OTTOTTO` steps the
+  // thrower back from a ledge's teeter (the catch statuses stop at the cliff
+  // here instead), and `FT_CATCH_STOP` holds the throw for a few frames.
+  "CHECK_FINISH_CAMERA",
+  "FighterCutInManager::",
+  "FT_LEAVE_NEAR_OTTOTTO",
+  "FT_CATCH_STOP",
 ];
 
 /** Longer than any move: a box still live here is never cleared by its script. */
 const CLEARED_BY = 300;
 
-const STATUS_DRIVEN: ReadonlySet<MoveSlot> = new Set(["pummel", "fthrow", "bthrow", "uthrow", "dthrow"]);
-
-function runnable(commands: readonly AcmdCommand[], bones: Set<string>): boolean {
+function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing: boolean): boolean {
   for (const c of commands) {
     if (c.op === "attack" || c.op === "catch") bones.add(c.params.bone);
     if (c.op === "attack" && isUnmodelledAutolink(c.params.angle)) return false;
     if (c.op === "loop") {
-      if (!runnable(c.body, bones)) return false;
+      if (!runnable(c.body, bones, throwing)) return false;
+      continue;
+    }
+    // Only the throw status turns its fighter (`resolveThrows`).
+    if (c.op === "reverseLr") {
+      if (!throwing) return false;
       continue;
     }
     if (c.op === "unknown") {
@@ -104,21 +124,26 @@ export function activatable(
   script: AcmdScript,
   placeable: (bone: string) => boolean = ROOT_BONE_ONLY,
 ): boolean {
-  if (move === undefined || STATUS_DRIVEN.has(slot)) return false;
+  if (move === undefined) return false;
   if (move.momentum !== undefined || move.projectiles !== undefined) return false;
   if (move.superArmourFrames !== undefined || move.chargeable === true || move.specialCharge !== undefined) return false;
+  const lifted = liftScript(script);
   const bones = new Set<string>();
-  if (!runnable(script.commands, bones)) return false;
-  if (bones.size === 0 || ![...bones].every(placeable)) return false;
-  const end = runScript(script, CLEARED_BY);
+  if (!runnable(lifted.commands, bones, THROW_SLOTS.has(slot))) return false;
+  // A throw lands by ATK_HIT_ABS, and may hang no box on a bone at all.
+  const throws = THROW_SLOTS.has(slot) && lifted.commands.some(function lands(c: AcmdCommand): boolean {
+    return c.op === "hitAbs" || (c.op === "loop" && c.body.some(lands));
+  });
+  if ((bones.size === 0 && !throws) || ![...bones].every(placeable)) return false;
+  const end = runScript(lifted, CLEARED_BY);
   return end.attacks.length + end.catches.length === 0;
 }
 
 /**
  * `def` with `slots` running their imported scripts: `scripts[slot]` is the
- * reference script, and the move's `totalFrames` becomes the script's
- * published first actionable frame − 1 (`CancelFrame`), so the move ends when
- * the game's does.
+ * reference script, its throw and pummel commands lifted (`liftScript`), and
+ * the move's `totalFrames` becomes the script's published first actionable
+ * frame − 1 (`CancelFrame`), so the move ends when the game's does.
  *
  * The move's `hitboxes` become the script's own boxes, frame for frame
  * (`scriptHitboxTable`), because the sim is not their only reader: the
@@ -153,7 +178,7 @@ export function withReferenceScripts(
     const key = ref.slots[slot];
     const move = def.moves[slot];
     if (key === undefined || move === undefined) throw new Error(`${def.id} ${slot}: no reference script or legacy move`);
-    const script = ref.scripts[key];
+    const script = liftScript(ref.scripts[key]);
     scripts[slot] = script;
     const faf = ref.faf[key];
     moves[slot] = {
@@ -176,15 +201,16 @@ function syncedTable(def: FighterDef, slot: MoveSlot, script: AcmdScript, bones:
 
 /**
  * The slots each fighter runs from its imported script — every slot the rule
- * admits, no more (pinned by `active.test.ts`). 38 of the roster's moves.
+ * admits, no more (pinned by `active.test.ts`). 66 of the roster's moves; Plan 5
+ * Task 7 added the 28 throws and pummels whose ATTACK_ABS the throw status now reads.
  */
 export const ACTIVE_SCRIPT_SLOTS: Readonly<Record<string, readonly MoveSlot[]>> = {
-  mario: ["jab1", "dashAttack", "dair", "grab", "dashGrab"],
-  donkeyKong: ["dashAttack", "dair", "grab", "dashGrab"],
-  link: ["jab1", "jab2", "dtilt", "fair", "dair", "grab", "dashGrab"],
-  samus: ["dashAttack"],
-  kirby: ["jab1", "jab2", "dashAttack", "fair", "bair", "dair", "grab", "dashGrab"],
-  fox: ["jab1", "jab2", "grab", "dashGrab"],
-  pikachu: ["jab1", "dtilt", "nair", "fair", "grab", "dashGrab"],
-  marth: ["sideB", "grab", "dashGrab"],
+  mario: ["jab1", "dashAttack", "dair", "grab", "dashGrab", "pummel", "fthrow", "uthrow", "dthrow"],
+  donkeyKong: ["dashAttack", "dair", "grab", "dashGrab", "pummel", "uthrow", "dthrow"],
+  link: ["jab1", "jab2", "dtilt", "fair", "dair", "grab", "dashGrab", "pummel", "dthrow"],
+  samus: ["dashAttack", "pummel", "fthrow", "bthrow", "uthrow", "dthrow"],
+  kirby: ["jab1", "jab2", "dashAttack", "fair", "bair", "dair", "grab", "dashGrab", "pummel", "fthrow", "bthrow", "dthrow"],
+  fox: ["jab1", "jab2", "grab", "dashGrab", "pummel", "fthrow"],
+  pikachu: ["jab1", "dtilt", "nair", "fair", "grab", "dashGrab", "fthrow", "bthrow", "uthrow"],
+  marth: ["sideB", "grab", "dashGrab", "pummel", "fthrow", "bthrow", "uthrow", "dthrow"],
 };

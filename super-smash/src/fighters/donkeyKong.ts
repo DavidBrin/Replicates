@@ -755,6 +755,12 @@ const legacy: FighterDef = {
       slot: "bthrow",
       name: "Cargo Back Throw",
       totalFrames: 42,
+      // The launch below points forward: he turns round on frame 15, as his
+      // non-cargo back throw does (`game_throwb`: `frame(15) REVERSE_LR()
+      // ATK_HIT_ABS(…)`, rubendal SSBU Data Viewer 13.0.1,
+      // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Donkey%20Kong/data.json).
+      // UNVERIFIED for the cargo throw: its own script is not in the data.
+      turnAt: 15,
       hitboxes: [
         {
           // His hardest-hitting throw and his best kill throw. The non-cargo

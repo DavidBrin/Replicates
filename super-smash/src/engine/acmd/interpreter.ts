@@ -32,7 +32,7 @@
  * 9 × 10^9.
  */
 
-import type { AcmdCommand, AcmdScript, AttackParams, CatchParams, HitStatus, Rate } from "./types";
+import type { AbsParams, AcmdCommand, AcmdScript, AttackParams, CatchParams, HitStatus, Rate } from "./types";
 
 export interface ActiveMomentum {
   readonly x: number;
@@ -53,6 +53,16 @@ export interface ScriptFrameState {
   readonly wholeHit: HitStatus;
   /** The live scripted velocity, if any, with the lowest `order`. */
   readonly momentum: ActiveMomentum | null;
+  /** The live `ATTACK_ABS` throw launch, if any: what `ATK_HIT_ABS` lands (Plan 5, Task 7). */
+  readonly throwAbs: AbsParams | null;
+  /**
+   * `set_catch_only_all`: the live boxes hit only the fighter held (Plan 5, Task
+   * 7), until the script says otherwise or `clear_all` ends it with the boxes.
+   * UNVERIFIED: the game marks the boxes live when it is called, and here it
+   * holds for the script until then; no imported script opens a box after the
+   * call before a `clear_all`, so the two agree on the roster.
+   */
+  readonly catchOnly: boolean;
   /** The motion frame this game frame shows, floored — what a bone table is indexed by. */
   readonly motionFrame: number;
   /** Commands that ran on exactly this game frame, in script order. */
@@ -250,6 +260,8 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
   const fired: AcmdCommand[] = [];
   let superArmour = false;
   let wholeHit: HitStatus = "HIT_STATUS_NORMAL";
+  let throwAbs: AbsParams | null = null;
+  let catchOnly = false;
 
   for (let i = 0; i < commands.length; i++) {
     const c = commands[i];
@@ -268,6 +280,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
       case "clearAll":
         attacks.clear();
         shieldSetoff.clear();
+        catchOnly = false;
         break;
       case "clear":
         attacks.delete(c.id);
@@ -300,9 +313,18 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
       case "momentum":
         windows.push({ x: c.x, y: c.y, start: e, until: e + c.hold, order: c.order });
         break;
+      case "attackAbs":
+        // The CATCH kind is what a fighter let go mid-throw takes; nothing reads it yet.
+        if (c.params.kind === "throw") throwAbs = c.params;
+        break;
+      case "catchOnly":
+        catchOnly = c.on;
+        break;
       case "motionRate": // the rate change is a segment in the schedule
       case "spawnProjectile":
+      // Passive: the throw status reads them off `fired` (`resolveThrows`).
       case "reverseLr":
+      case "hitAbs":
       case "unknown":
         break;
     }
@@ -324,6 +346,8 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
     superArmour,
     wholeHit,
     momentum,
+    throwAbs,
+    catchOnly,
     motionFrame: motionFrameAt(segments, gameFrame),
     fired,
   };

@@ -1,7 +1,8 @@
 /**
  * Every fighter's imported reference scripts, by fighter id (Plan 2, Task 16).
- * Each fighter takes its generated module directly and runs its scripts in 38
- * move slots (`withReferenceScripts`, `active.ts`; Plan 3 Task 18). The game
+ * Each fighter takes its generated module directly and runs its scripts in 66
+ * move slots (`withReferenceScripts`, `active.ts`; Plan 3 Task 18, and Plan 5
+ * Task 7's 28 throws and pummels). The game
  * reads this table for Plan 4's limb-bone slots (`limb.ts`), which run only in
  * its baked context; the reconciliation and self-check tests read it too.
  */

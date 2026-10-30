@@ -222,7 +222,12 @@ export const STATUS_CATCH_ATTACK: FighterStatus = {
     // A press on any frame of the pummel, the last included, is kept for the hold it
     // hands off to (a second pummel, a throw), as in every other status: the input
     // buffer is for every action (Plan 3 final wave, part 4).
-    if (f.actionFrame >= PUMMEL_FRAMES) handOff(f, "grabHold", intent, ctx);
+    //
+    // It lasts its move, as an attack does: a pummel run from its script ends on
+    // the script's first actionable frame − 1, 5 to 7 frames on this roster
+    // (rubendal `CancelFrame` 6 to 8; ruling P5-R10), after its freeze.
+    const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
+    if (f.actionFrame >= (move?.totalFrames ?? PUMMEL_FRAMES)) handOff(f, "grabHold", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };

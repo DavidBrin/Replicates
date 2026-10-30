@@ -257,8 +257,9 @@ export function statusDuration(
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":
       return LEDGE_JUMP_FRAMES;
+    // The fighter's own pummel, as its status runs it (ruling P5-R10).
     case "pummel":
-      return PUMMEL_FRAMES;
+      return def.moves.pummel?.totalFrames ?? PUMMEL_FRAMES;
     // Hitstun counts down while `actionFrame` counts up: their sum is the reel's length.
     case "hitstun":
       return f.actionFrame + f.hitstun;

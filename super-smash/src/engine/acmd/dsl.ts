@@ -9,6 +9,7 @@
 import { fx } from "../fixed";
 import { MAX_RATE_TERM, assertWhole, isRate, scheduleOf } from "./interpreter";
 import type {
+  AbsParams,
   AcmdCommand,
   AcmdScript,
   AttackLr,
@@ -155,6 +156,43 @@ export const wholeHit = (status: HitStatus): AcmdCommand => ({ op: "wholeHit", s
 export const intangible = (on: boolean): AcmdCommand => wholeHit(on ? "HIT_STATUS_XLU" : "HIT_STATUS_NORMAL");
 export const spawnProjectile = (id: string): AcmdCommand => ({ op: "spawnProjectile", id });
 export const reverseLr = (): AcmdCommand => ({ op: "reverseLr" });
+
+export interface AbsSpec {
+  readonly kind?: AbsParams["kind"];
+  readonly damage: number;
+  readonly angle: number;
+  readonly kbg: number;
+  readonly fkb?: number;
+  readonly bkb: number;
+  readonly hitlag?: number;
+  readonly collisionAttr?: string;
+}
+
+/**
+ * `ATTACK_ABS(…)` (Plan 5, Task 7). Omitted arguments take the values the
+ * game's throws use: the THROW kind, no fixed knockback, `Hitlag=0.0` and a
+ * normal hit (rubendal SSBU Data Viewer, patch 13.0.1, every roster throw but
+ * one).
+ */
+export function attackAbs(s: AbsSpec): AcmdCommand {
+  return {
+    op: "attackAbs",
+    params: {
+      kind: s.kind ?? "throw",
+      damage: fx(s.damage),
+      angle: fx(s.angle),
+      kbg: fx(s.kbg),
+      fkb: fx(s.fkb ?? 0),
+      bkb: fx(s.bkb),
+      hitlag: fx(s.hitlag ?? 0),
+      collisionAttr: s.collisionAttr ?? "collision_attr_normal",
+    },
+  };
+}
+/** `ATK_HIT_ABS(FIGHTER_ATTACK_ABSOLUTE_KIND_THROW, …)`: the throw lands now. */
+export const hitAbs = (): AcmdCommand => ({ op: "hitAbs" });
+/** `AttackModule::set_catch_only_all(on, false)`. */
+export const catchOnly = (on: boolean): AcmdCommand => ({ op: "catchOnly", on });
 export function loop(count: number, body: readonly AcmdCommand[]): AcmdCommand {
   assertWhole("loop count", count, 0);
   return { op: "loop", count, body };

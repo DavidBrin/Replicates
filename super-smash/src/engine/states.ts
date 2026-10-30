@@ -121,6 +121,11 @@ export const GRAB_MASH_BUTTON = 144;
 export const GRAB_MASH_STICK = 80;
 /** Frames a fighter who broke out of a grab cannot be grabbed again: "around one second" (SmashWiki "Grab", Ultimate). */
 export const GRAB_RELEASE_IMMUNITY = 60;
+/**
+ * A pummel or a throw with no move to read a length from. Every roster pummel
+ * and throw has one, and lasts it (`MoveDef.totalFrames`, ruling P5-R10).
+ * UNVERIFIED: both numbers.
+ */
 export const PUMMEL_FRAMES = 10;
 export const THROW_FRAMES = 40;
 /** Ledge options are locked out for the first few frames of the hang. */

@@ -987,6 +987,10 @@ const legacy: FighterDef = {
       slot: "bthrow",
       name: "Back Throw",
       totalFrames: 59,
+      // The launch below points forward: he turns round first, on frame 40
+      // (`game_throwb`: `frame(40) … REVERSE_LR()`, rubendal SSBU Data Viewer
+      // 13.0.1, https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Mario/data.json).
+      turnAt: 40,
       hitboxes: [
         {
           // Three full spins before the release on frame 44, which is why it is

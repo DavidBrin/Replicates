@@ -616,6 +616,13 @@ export interface MoveDef {
   readonly intangible?: readonly [number, number];
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
+  /**
+   * A back throw whose legacy launch box points forward turns its thrower round
+   * on this move frame, before the launch: the game's `REVERSE_LR()`, which the
+   * legacy compile writes there (`legacyGameScript`; Plan 5, Task 7, ruling
+   * P5-R7). A throw run from its imported script turns where its script says.
+   */
+  readonly turnAt?: number;
   /** A jab that loops until the button is released. */
   readonly rapid?: boolean;
   /** Which move follows this one if the button is pressed again in time. */

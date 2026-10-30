@@ -79,7 +79,10 @@ export function attackClipTime(strike: number | undefined, firstActive: number, 
 export interface ScriptTiming {
   /** Motion frames the move lasts. */
   readonly frames: number;
-  /** First motion frame with a live ATTACK or CATCH, or −1. */
+  /**
+   * The motion frame the move strikes on: a throw's `ATK_HIT_ABS` (ruling
+   * P5-R9), else the first with a live ATTACK or CATCH, or −1.
+   */
   readonly firstActive: number;
 }
 
@@ -87,12 +90,14 @@ export interface ScriptTiming {
 export function scriptTiming(script: AcmdScript, totalGameFrames: number): ScriptTiming {
   let frames = 1;
   let firstActive = -1;
+  let strike = -1;
   for (let g = 1; g <= Math.max(1, totalGameFrames); g++) {
     const st = runScript(script, g);
     if (st.motionFrame > frames) frames = st.motionFrame;
     if (firstActive < 0 && st.attacks.length + st.catches.length > 0) firstActive = st.motionFrame;
+    if (strike < 0 && st.fired.some((c) => c.op === "hitAbs")) strike = st.motionFrame;
   }
-  return { frames, firstActive };
+  return { frames, firstActive: strike >= 0 ? strike : firstActive };
 }
 
 /** One status motion: which action (and variant) it stands for. */

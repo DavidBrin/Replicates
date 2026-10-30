@@ -29,7 +29,7 @@ import { bonePoint, newBonePose } from "./bones";
 import type { BonePose, BoneTable } from "./bones";
 import { runScript, scheduleOf } from "./interpreter";
 import type { ScriptFrameState } from "./interpreter";
-import type { AcmdScript, AttackParams, CatchParams, MotionKind } from "./types";
+import type { AbsParams, AcmdScript, AttackParams, CatchParams, MotionKind } from "./types";
 
 /** `collision_attr_*` ↔ the replica's `HitEffect`. */
 export const EFFECT_OF_ATTR: Readonly<Record<string, HitEffect>> = {
@@ -58,6 +58,33 @@ export const ATTR_OF_EFFECT: Readonly<Record<HitEffect, string>> = {
   bury: "collision_attr_bury",
   paralyze: "collision_attr_paralyze",
 };
+
+/**
+ * A throw's `ATTACK_ABS` as the hitbox the hit pipeline takes (Plan 5, Task 7).
+ * It has no position, no size and no frames: the throw status lays it on the
+ * fighter held on `ATK_HIT_ABS` (`resolveThrows`), wherever they are. Its
+ * numbers map as an ATTACK's do (`attackHitbox`): `bkb` is the base knockback,
+ * a non-zero `fkb` the fixed knockback, an effect with no `HitEffect` a plain
+ * hit (Samus's `collision_attr_elec_whip`).
+ */
+export function absHitbox(a: AbsParams): Hitbox {
+  const effect = EFFECT_OF_ATTR[a.collisionAttr];
+  return {
+    id: 0,
+    startFrame: 0,
+    endFrame: 0,
+    x: 0,
+    y: 0,
+    radius: 0,
+    damage: a.damage,
+    angle: a.angle,
+    baseKnockback: a.bkb,
+    knockbackGrowth: a.kbg,
+    ...(effect !== undefined && effect !== "normal" ? { effect } : {}),
+    ...(a.fkb > 0 ? { fixedKnockback: a.fkb } : {}),
+    ...(a.hitlag !== ONE ? { hitlagMultiplier: a.hitlag } : {}),
+  };
+}
 
 /** Scratch for `BoneTable.pose`, reused so resolving a hitbox allocates no pose. Not state. */
 const POSE = newBonePose();

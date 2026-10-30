@@ -6,12 +6,15 @@ import {
   ATTACK,
   CATCH,
   atkPower,
+  attackAbs,
   catchClear,
   catchClearAll,
+  catchOnly,
   clear,
   clearAll,
   decimalRatio,
   frame,
+  hitAbs,
   intangible,
   loop,
   momentum,
@@ -558,5 +561,49 @@ describe("fire frames are exact for every rate (Review Focus #3)", () => {
     steps.push({ t: "wait", n: 4 }, { t: "mark", id: 0 });
     expect(oracle(steps, 1000).fires.get(0)).toBe(186);
     expect(interpreterFires(steps, 1000).get(0)).toBe(186);
+  });
+});
+
+/*
+ * Plan 5, Task 7: a throw's `ATTACK_ABS` is a launch held for `ATK_HIT_ABS`, and
+ * `set_catch_only_all` marks the live boxes as the held fighter's alone. Names
+ * and arguments are smash-script's (`ATTACK_ABS(Kind, ID, Damage, Angle, KBG,
+ * FKB, BKB, Hitlag, ...)`), as rubendal's data spells them.
+ */
+describe("throws and catch-only boxes (Plan 5)", () => {
+  const launch = attackAbs({ damage: 8, angle: 45, kbg: 65, bkb: 60 });
+  const letGo = attackAbs({ kind: "catch", damage: 3, angle: 361, kbg: 100, bkb: 60 });
+
+  it("holds the throw's launch from its ATTACK_ABS on, and fires ATK_HIT_ABS on its own frame alone", () => {
+    const s = script("game_throwf", "throw_f", [launch, letGo, frame(13), hitAbs()]);
+    expect(runScript(s, 1).throwAbs).toEqual({ kind: "throw", damage: fx(8), angle: fx(45), kbg: fx(65), fkb: 0, bkb: fx(60), hitlag: 0, collisionAttr: "collision_attr_normal" });
+    for (let g = 1; g <= 20; g++) {
+      const st = runScript(s, g);
+      expect(st.throwAbs?.kind, `frame ${g}`).toBe("throw");
+      expect(st.fired.some((c) => c.op === "hitAbs"), `frame ${g}`).toBe(g === 13);
+      // Neither is a box: nothing is live in the world.
+      expect(st.attacks, `frame ${g}`).toEqual([]);
+    }
+  });
+
+  it("keeps a CATCH kind out of the launch: that one is what a fighter let go mid-throw takes", () => {
+    expect(runScript(script("t", "throw_f", [letGo]), 1).throwAbs).toBeNull();
+  });
+
+  it("is not catch-only until set_catch_only_all says so, and clear_all ends it with the boxes", () => {
+    const s = script("game_throwlw", "throw_lw", [frame(9), hit(0), catchOnly(true), wait(2), clearAll(), wait(2), hit(0)]);
+    const at = (g: number) => runScript(s, g);
+    expect(at(8).catchOnly).toBe(false);
+    expect(at(9).catchOnly).toBe(true);
+    expect(at(10).catchOnly).toBe(true);
+    // Cleared on 11; the box issued again on 13 without the call is a box in the world.
+    expect(at(11).catchOnly).toBe(false);
+    expect(at(13).attacks).toHaveLength(1);
+    expect(at(13).catchOnly).toBe(false);
+  });
+
+  it("turns catch-only off when the script says false", () => {
+    const s = script("t", "catch_attack", [frame(1), hit(0), catchOnly(true), frame(3), catchOnly(false)]);
+    expect([1, 2, 3].map((g) => runScript(s, g).catchOnly)).toEqual([true, true, false]);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "./acmd/bones";
-import { ATTACK, CATCH, catchClearAll, clearAll, frame } from "./acmd/dsl";
+import { ATTACK, CATCH, attackAbs, catchClearAll, catchOnly, clearAll, frame, hitAbs, reverseLr } from "./acmd/dsl";
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { runScript } from "./acmd/interpreter";
 import { attackFromHitbox } from "./acmd/legacy";
@@ -3520,6 +3520,7 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
 
     // Plan 3, Task 17: the same with a capsule pummel box, which spans 38 to 42 units
     // out: a capsule is geometry only for what has geometry, and a catch-only box has none.
+    // Catch-only by its script, as every roster pummel is (`set_catch_only_all`, Plan 5 Task 7).
     it("does not clank a capsule pummel with an opposing hitbox either", () => {
       const clanking: FighterDef = {
         ...BASE_DEF,
@@ -3531,6 +3532,7 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
             commands: [
               frame(1),
               ATTACK({ id: 0, bone: "top", damage: 2, angle: 361, kbg: 0, bkb: 0, size: 5, x: 0, y: 6, z: 38, z2: 42 }),
+              catchOnly(true),
               frame(2),
               clearAll(),
             ],
@@ -3766,11 +3768,15 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
   });
 
   describe("throws land on the held fighter (SSBU throws are `ATTACK_ABS`: no collision)", () => {
-    const throwing = (slot: "fthrow" | "bthrow", angle: number, x: number): FighterDef => ({
+    const throwing = (slot: "fthrow" | "bthrow", angle: number, x: number, turnAt?: number): FighterDef => ({
       ...BASE_DEF,
       moves: {
         ...BASE_DEF.moves,
-        [slot]: move(slot, { totalFrames: 20, hitboxes: [hitbox({ startFrame: 4, endFrame: 4, x, angle, damage: fx(6), baseKnockback: fx(60), knockbackGrowth: fx(70) })] }),
+        [slot]: move(slot, {
+          totalFrames: 20,
+          ...(turnAt !== undefined ? { turnAt } : {}),
+          hitboxes: [hitbox({ startFrame: 4, endFrame: 4, x, angle, damage: fx(6), baseKnockback: fx(60), knockbackGrowth: fx(70) })],
+        }),
       },
     });
 
@@ -3790,15 +3796,56 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       expect(out.vx).toBeGreaterThan(0);
     });
 
-    // Plan 5, Task 7 replaces this with the game's `REVERSE_LR`; the roster's own
-    // back-throw angles are mixed (Mario's 45° points forward, Marth's 140° behind).
+    // Ruling P5-R7 (Plan 5, Task 7): the game's `REVERSE_LR` replaced the stand-in
+    // that turned every forward-pointing back throw's launch. The roster's back
+    // throws either point behind (Marth's 140°) or turn their thrower first: a
+    // script by its own `REVERSE_LR`, a legacy move on its `turnAt` (Mario's 45°).
     it.each([
-      ["a box authored pointing forward (45°)", 45],
-      ["a box authored pointing behind (135°)", 135],
-    ])("sends a back throw behind the thrower: %s", (_name, angle) => {
-      const out = launch(throwing("bthrow", fx(angle), fx(-4)), Btn.Left);
+      ["a box authored pointing forward (45°), turning on frame 3", 45, 3],
+      ["a box authored pointing behind (135°)", 135, undefined],
+    ])("sends a back throw behind the thrower: %s", (_name, angle, turnAt) => {
+      const out = launch(throwing("bthrow", fx(angle), fx(-4), turnAt), Btn.Left);
       expect(out.hits).toBe(1);
       expect(out.vx).toBeLessThan(0);
+    });
+
+    // The characterization before Task 7 pinned this one launching behind too.
+    it("launches a back throw authored forward, that never turns, forward: only REVERSE_LR turns one", () => {
+      expect(launch(throwing("bthrow", fx(45), fx(-4)), Btn.Left).vx).toBeGreaterThan(0);
+    });
+
+    // Ruling P5-R8 (UNVERIFIED stand-in): a box of the captor's that is not
+    // catch-only (Mario's back-throw hip box) leaves the fighter it holds alone and
+    // hits whoever else it reaches.
+    it("leaves the fighter held to the throw when the captor swings a box in the world, and hits a bystander", () => {
+      const def: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, bthrow: move("bthrow", { totalFrames: 30, hitboxes: [] }) },
+        scripts: {
+          bthrow: {
+            name: "game_throwb",
+            motion: "throw_b",
+            commands: [
+              attackAbs({ damage: 6, angle: 45, kbg: 70, bkb: 60 }),
+              // A sweep both ways round the captor: the held fighter 8 in front, the bystander 12 behind.
+              frame(4),
+              ATTACK({ id: 0, bone: "top", damage: 5, angle: 361, kbg: 0, bkb: 0, size: 6, x: 0, y: 6, z: -12, z2: 8 }),
+              frame(6),
+              clearAll(),
+              frame(10),
+              hitAbs(),
+            ],
+          },
+        },
+      };
+      const ctx = ctxFor(def);
+      const s = holdingPair(standing3(ctx), 100);
+      const frames = play(s, 30, (i) => [i === 2 ? Btn.Left : 0, 0, 0], ctx);
+      const hits = frames.flatMap((f) => f.events.hits);
+      expect(hits.map((h) => [h.victim, h.knockback > 0])).toEqual([
+        [2, false],
+        [1, true],
+      ]);
     });
 
     it("leaves a forward throw's direction alone when its box points forward", () => {
@@ -4291,28 +4338,45 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       const out = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
       return { hits: frames.flatMap((f) => f.events.hits).length, vx: frames[out].state.fighters[1].vx };
     }
-    const throwWith = (slot: "fthrow" | "bthrow", over: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
-      slotScripted(slot, [frame(4), throwBox(over), frame(5), clearAll()]);
+    /**
+     * A throw as the game writes one (Plan 5, Task 7): `ATTACK_ABS` held from the
+     * start and landed by `ATK_HIT_ABS` on frame 4, after `before` (a turn, a
+     * catch-only box).
+     */
+    const throwWith = (slot: "fthrow" | "bthrow", before: readonly AcmdCommand[] = []) =>
+      slotScripted(slot, [attackAbs({ damage: 6, angle: 45, kbg: 70, bkb: 60 }), ...before, frame(4), hitAbs()]);
+    /** A throw whose only box is catch-only and lands no launch: what the box alone does. */
+    const catchOnlyBox = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
+      slotScripted("fthrow", [frame(4), throwBox({ bkb: 0, kbg: 0, ...over }), catchOnly(true), frame(5), clearAll()]);
 
-    it("leaves a throw's launch direction alone unless its script says otherwise", () => {
+    it("launches a throw the way the thrower faces, and only REVERSE_LR turns one", () => {
       expect(thrown(throwWith("fthrow"), Btn.Right)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v > 0) });
-      // The legacy stand-in for REVERSE_LR still turns a back throw round.
-      expect(thrown(throwWith("bthrow"), Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
+      // A back throw at 45° that never turns goes forward: nothing stands in for the turn.
+      expect(thrown(throwWith("bthrow"), Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v > 0) });
+      expect(thrown(throwWith("bthrow", [frame(3), reverseLr()]), Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
     });
 
-    it("launches a throw backwards when its script says ATTACK_LR_CHECK_B, and a back throw only once", () => {
-      const back = (slot: "fthrow" | "bthrow", button: Btn) =>
-        thrown(throwWith(slot, { facing: "ATTACK_LR_CHECK_B" }), button);
-      expect(back("fthrow", Btn.Right)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
-      // Not turned by the stand-in as well: a second turn would send it forwards again.
-      expect(back("bthrow", Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
+    it("turns the thrower once per REVERSE_LR, a frame held by a freeze included", () => {
+      // The catch-only hit on frame 3 freezes both; the frame is run again through
+      // the freeze, and the turn on it must not be taken again.
+      const ctx = throwWith("bthrow", [frame(3), throwBox({ bkb: 0, kbg: 0 }), catchOnly(true), reverseLr(), frame(4), clearAll()]);
+      const frames = play(holding(ctx), 40, (i) => [i === 2 ? Btn.Left : 0, 0], ctx);
+      const hits = frames.flatMap((f) => f.events.hits);
+      expect(hits.map((h) => h.knockback > 0)).toEqual([false, true]);
+      const held = frames.findIndex((f) => f.events.hits.length > 0);
+      expect(frames[held].state.fighters[0].hitlag, "the catch-only hit freezes the thrower on the turn's frame").toBeGreaterThan(0);
+      // Turned on the hit's frame and on every frame after, the frozen ones included.
+      expect(frames.slice(held).map((f) => f.state.fighters[0].facing)).toEqual(frames.slice(held).map(() => -1));
+      expect(frames.at(-1)!.state.fighters[1].x).toBeLessThan(frames.at(-1)!.state.fighters[0].x);
+      // Two turns face forward again.
+      expect(thrown(throwWith("bthrow", [frame(2), reverseLr(), frame(3), reverseLr()]), Btn.Left).vx).toBeGreaterThan(0);
     });
 
-    // Plan 3, Task 17: a capsule changes nothing here. A throw box is still not
+    // Plan 3, Task 17: a capsule changes nothing here. A catch-only box is still not
     // geometry-tested against the fighter held, whatever its two ends say.
-    it("lands a capsule throw box on the fighter held, wherever its ends are", () => {
-      expect(thrown(throwWith("fthrow", { z: 40, z2: 60 }), Btn.Right).hits).toBe(1);
-      expect(thrown(throwWith("fthrow", { z: -30, z2: -45 }), Btn.Right).hits).toBe(1);
+    it("lands a capsule catch-only box on the fighter held, wherever its ends are", () => {
+      expect(thrown(catchOnlyBox({ z: 40, z2: 60 }), Btn.Right).hits).toBe(1);
+      expect(thrown(catchOnlyBox({ z: -30, z2: -45 }), Btn.Right).hits).toBe(1);
     });
 
     // A held victim is grounded only over its captor's platform (`holdAtCaptor`); the
@@ -4321,23 +4385,24 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       const atLip = (s: GameState) => {
         s.fighters[0].x = fx(78);
       };
-      const mask = (situation: "COLLISION_SITUATION_MASK_G" | "COLLISION_SITUATION_MASK_A") => throwWith("fthrow", { situation });
+      const mask = (situation: "COLLISION_SITUATION_MASK_G" | "COLLISION_SITUATION_MASK_A") => catchOnlyBox({ situation });
 
-      it("lands a ground-only throw on a victim held over the stage, not past its edge", () => {
+      it("lands a ground-only catch-only box on a victim held over the stage, not past its edge", () => {
         expect(thrown(mask("COLLISION_SITUATION_MASK_G"), Btn.Right).hits).toBe(1);
         expect(thrown(mask("COLLISION_SITUATION_MASK_G"), Btn.Right, atLip).hits).toBe(0);
       });
 
-      it("lands an air-only throw on a victim held past the stage's edge, not over it", () => {
+      it("lands an air-only catch-only box on a victim held past the stage's edge, not over it", () => {
         expect(thrown(mask("COLLISION_SITUATION_MASK_A"), Btn.Right).hits).toBe(0);
         expect(thrown(mask("COLLISION_SITUATION_MASK_A"), Btn.Right, atLip).hits).toBe(1);
       });
     });
 
     describe("and a pummel that re-arms", () => {
-      // Two 2% hits a press, the second a `clear_all` re-arm of the first.
+      // Two 2% hits a press, the second a `clear_all` re-arm of the first; each
+      // catch-only, as the game's pummels are.
       const hit = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) => box({ damage: 2, angle: 361, bkb: 0, kbg: 0, z: 40, ...over });
-      const ctx = slotScripted("pummel", [frame(1), hit(), frame(2), clearAll(), frame(3), hit(), frame(4), clearAll()]);
+      const ctx = slotScripted("pummel", [frame(1), hit(), catchOnly(true), frame(2), clearAll(), frame(3), hit(), catchOnly(true), frame(4), clearAll()]);
 
       it("stales once a press, not once a hit; the next press is staled by the first", () => {
         const frames = play(holding(ctx), 80, (i) => [i === 2 || i === 40 ? Btn.Attack : 0, 0], ctx);

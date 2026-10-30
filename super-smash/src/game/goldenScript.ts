@@ -151,11 +151,23 @@
  * 1577, Fox lies down on 1670, Mario is trumped on 1786, Fox's KO is on 1860 and the
  * respawn on 1934.
  *
+ * Plan 5 Task 7 (throws read `ATTACK_ABS`; pummels are catch-only; both run their
+ * scripts) re-tuned the forward throw. Mario's pummel is `game_catchattack` now:
+ * the same 1.6%, but its `Hitlag=2.1` freezes both for 14 frames, not 7, and it
+ * lasts its move's 6 frames, not a flat 10 (ruling P5-R10), so he is back in the
+ * hold on 237, not 234, and the throw pressed on 235 went unread: he threw on 274,
+ * and everything after moved 39 frames, losing the smash, the forward tilt, the
+ * fireball, the short-hop neutral air and four of the states. The throw is now
+ * pressed on 238; it is `game_throwf`, the same 8% at 45° landed by `ATK_HIT_ABS` on
+ * its frame 13 (250) with `Hitlag=0.0`, so nobody freezes and Fox's hitstun ends on
+ * 280, not 289. He stands until 290 and walks from there as he did, and from 274 on
+ * both are where they were: every event from 300 on keeps its frame.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
- * (Fox breaking free on 140, the pummel on 217, the throw on 247, the shield break
+ * (Fox breaking free on 140, the pummel on 217, the throw on 250, the shield break
  * on 649, the techs on 783 and 1029, the hangs on 861, 1193, 1299, 1400 and 1781,
  * the trump on 1786, the hits on 747, 1006, 1577 and 1635, Fox down on 1670, time
- * up on 2014). All were checked against a run after Plan 4 Task 12.
+ * up on 2014). All were checked against a run after Plan 5 Task 7.
  */
 
 import { Btn } from "@/engine/types";
@@ -218,14 +230,15 @@ const STEPS: readonly ScriptStep[] = [
   // through the throw; it does not tumble, so (Task 4) the stick bends nothing.
   [1, G, 0], //                   201: grab
   [15, 0, 0],
-  [1, A, 0], //                   217: pummel (it lands), then back to grabHold on 234
-  [17, 0, 0],
-  [1, R, SOFT | U], //            235: forward throw: Fox is thrown, then launched
-  [38, 0, SOFT | U],
+  [1, A, 0], //                   217: pummel (it lands), then back to grabHold on 237
+  [20, 0, 0],
+  [1, R, SOFT | U], //            238: forward throw: Fox is thrown, then launched
+  [35, 0, SOFT | U],
   // Task 3: the smash below launches a grounded Fox at 38°, so the fight moves to
   // the left of the stage. Mario still walks in to about 8 for the jabs, past Fox,
   // who walks back toward the middle and turns round to shield from him.
-  [33, R | SOFT, L | SOFT], //    274: Fox walks left (from 291, when his hitstun ends)
+  [16, R | SOFT, 0], //           274: Mario walks in; Fox stands (from 280, when his hitstun ends)
+  [17, R | SOFT, L | SOFT], //    290: Fox walks left
   [1, R | SOFT, R | SOFT], //     307: Fox turns back to face Mario
   [5, R | SOFT, 0],
   [1, L | SOFT, 0], //            313: Mario turns round to face Fox

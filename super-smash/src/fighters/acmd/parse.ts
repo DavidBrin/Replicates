@@ -9,10 +9,10 @@
  * Numbers stay decimal here. The generated TypeScript turns them into Q12 with
  * `fx()` at module load, exactly as the hand-written fighter files do.
  *
- * Not read: `ATTACK_ABS`, the command a throw's damage and launch are written
- * with. It parses as `unknown`, so no imported throw carries its hit, and
- * every throw sits in the reconcile ratchet as a disagreement (about 51 of
- * `reconcile.allow.json`'s 136 entries) until Plan 5 Task 7 lifts it.
+ * Not read here: `ATTACK_ABS`/`ATK_HIT_ABS`, the commands a throw's damage and
+ * launch are written with, and `set_catch_only_all`. They parse as `unknown`,
+ * so the generated files stay what the importer wrote, and Plan 5 Task 7 lifts
+ * them where a script is switched on (`lift.ts`, with `parseArgs` below).
  */
 
 export type RawArgs = Readonly<Record<string, string>>;

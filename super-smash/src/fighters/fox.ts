@@ -930,6 +930,11 @@ const legacy: FighterDef = {
       slot: "bthrow",
       name: "Back Throw",
       totalFrames: 49,
+      // The launch below points forward: he turns round on frame 10, the frame
+      // it lands (`game_throwb`: `frame(10) REVERSE_LR() ATK_HIT_ABS(…)`, rubendal
+      // SSBU Data Viewer 13.0.1,
+      // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Fox/data.json).
+      turnAt: 10,
       hitboxes: [
         {
           id: 0,

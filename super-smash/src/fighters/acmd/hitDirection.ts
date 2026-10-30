@@ -16,10 +16,15 @@ export type Klass = Dir | `SWEEP ${Dir}`;
  * arc whose legacy box stands still (Samus's spinning neutral air, Pikachu's
  * drill). The neutral airs that are not spins are classed forward, as the
  * Task 13 review's per-frame survey classed them. Held slots are classed too,
- * so the slot is ready when its hold is lifted.
+ * so the slot is ready when its hold is lifted. Plan 5 Task 7's throws and
+ * pummel by where their boxes hit before the launch: Mario's back-throw hip
+ * box and Link's back-throw kicks behind him, Link's forward-throw kicks
+ * ahead, his up-throw sword above, Pikachu's down-throw hip press below, his
+ * pummel ahead.
  */
 export const DIRECTION: Readonly<Record<string, Klass>> = {
   "mario bair": "B",
+  "mario bthrow": "B",
   "mario dtilt": "F",
   "mario fair": "F",
   "mario ftilt": "F",
@@ -34,9 +39,12 @@ export const DIRECTION: Readonly<Record<string, Klass>> = {
   "donkeyKong jab2": "F",
   "donkeyKong nair": "F",
   "link bair": "B",
+  "link bthrow": "B",
+  "link fthrow": "F",
   "link ftilt": "F",
   "link jab3": "F",
   "link nair": "F",
+  "link uthrow": "U",
   "link utilt": "U",
   "samus bair": "B",
   "samus dair": "D",
@@ -58,7 +66,9 @@ export const DIRECTION: Readonly<Record<string, Klass>> = {
   "pikachu bair": "B",
   "pikachu dair": "SWEEP D",
   "pikachu dashAttack": "F",
+  "pikachu dthrow": "D",
   "pikachu ftilt": "F",
+  "pikachu pummel": "F",
   "pikachu uair": "U",
   "pikachu utilt": "U",
   "marth dair": "D",

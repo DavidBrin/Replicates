@@ -938,6 +938,11 @@ const legacy: FighterDef = {
       slot: "bthrow",
       name: "Back Throw",
       totalFrames: 49,
+      // The launch below points forward: she turns round on frame 12, the frame
+      // it lands (`game_throwb`: `frame(12) REVERSE_LR() ATK_HIT_ABS(…)`, rubendal
+      // SSBU Data Viewer 13.0.1,
+      // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Samus/data.json).
+      turnAt: 12,
       hitboxes: [
         {
           id: 0,

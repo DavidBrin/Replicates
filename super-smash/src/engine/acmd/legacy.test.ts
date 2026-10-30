@@ -8,8 +8,17 @@ import type { Hitbox, MoveDef, MoveSlot } from "../types";
 import { LEGACY_BONE_TABLE } from "./bones";
 import { scriptHitboxes } from "./hitboxes";
 import { runScript } from "./interpreter";
-import { SLOT_MOTION, attackFromHitbox, gameScriptFor, legacyGameScript } from "./legacy";
+import { SLOT_MOTION, absFromHitbox, attackFromHitbox, gameScriptFor, legacyGameScript } from "./legacy";
 import type { AcmdScript } from "./types";
+
+const THROWS: ReadonlySet<MoveSlot> = new Set(["fthrow", "bthrow", "uthrow", "dthrow"]);
+
+/** The box a legacy throw launches with: the last to open. */
+function lastToOpen(move: MoveDef): Hitbox | null {
+  let last: Hitbox | null = null;
+  for (const hb of move.hitboxes) if (!hb.grabbing && (last === null || hb.startFrame >= last.startFrame)) last = hb;
+  return last;
+}
 
 /** A hitbox with its defaults spelled out, so "absent" and "explicitly the default" compare equal. */
 function canonical(hb: Hitbox) {
@@ -57,7 +66,8 @@ function legacyMomentum(move: MoveDef, frame: number) {
 
 describe("legacy moves compiled to game_ scripts", () => {
   it("covers the whole roster", () => {
-    expect(MOVES.length).toBeGreaterThan(150);
+    // 166 before Plan 5 Task 7 ran 28 throws and pummels from their scripts.
+    expect(MOVES.length).toBeGreaterThan(130);
     // No sampling: every defined move of every fighter is a case below, filed under its own
     // slot, or runs a script of its own.
     const overridden = FIGHTERS.reduce((n, f) => n + Object.keys(f.scripts ?? {}).length, 0);
@@ -75,10 +85,14 @@ describe("legacy moves compiled to game_ scripts", () => {
     }
   });
 
-  it.each(MOVES)("%s %s: the same hitboxes, in the same order, on every frame", (fighterId, _slot, move) => {
+  it.each(MOVES)("%s %s: the same hitboxes, in the same order, on every frame", (fighterId, slot, move) => {
     const script = legacyGameScript(move);
+    // Plan 5: a throw's launch is an ATTACK_ABS, not a box in the world.
+    const launch = THROWS.has(slot) ? lastToOpen(move) : null;
     for (let g = 1; g <= move.totalFrames + 10; g++) {
-      const want = activeHitboxes(move, g).map(canonical);
+      const want = activeHitboxes(move, g)
+        .filter((hb) => hb !== launch)
+        .map(canonical);
       const got = scriptHitboxes(runScript(script, g), fighterId, script.motion, g, LEGACY_BONE_TABLE).map(canonical);
       expect(got, `frame ${g}`).toEqual(want);
     }
@@ -94,6 +108,47 @@ describe("legacy moves compiled to game_ scripts", () => {
       expect(st.superArmour, `armour on frame ${g}`).toBe(armour !== undefined && g >= armour[0] && g <= armour[1]);
       expect(st.momentum, `momentum on frame ${g}`).toEqual(legacyMomentum(move, g));
     }
+  });
+
+  it.each(MOVES.filter(([, slot]) => THROWS.has(slot)))("%s %s: lands its launch on the held fighter, on its frame (Plan 5)", (_id, _slot, move) => {
+    const script = legacyGameScript(move);
+    const launch = lastToOpen(move)!;
+    for (let g = 1; g <= move.totalFrames + 10; g++) {
+      const st = runScript(script, g);
+      expect(st.catchOnly, `catch-only on frame ${g}`).toBe(true);
+      expect(st.fired.some((c) => c.op === "hitAbs"), `ATK_HIT_ABS on frame ${g}`).toBe(g === launch.startFrame);
+      if (g >= launch.startFrame) expect(st.throwAbs).toEqual(absFromHitbox(launch));
+    }
+  });
+
+  it("lets a pummel hit only the fighter held (Plan 5)", () => {
+    for (const [, slot, move] of MOVES) {
+      if (slot === "pummel") expect(runScript(legacyGameScript(move), 1).catchOnly).toBe(true);
+    }
+  });
+
+  // Ruling P5-R7: a legacy back throw authored pointing forward turns its thrower
+  // on `turnAt`, the game's `REVERSE_LR()`; nothing else ever turns one.
+  it.each(MOVES.filter(([, slot]) => THROWS.has(slot)))("%s %s: turns its thrower exactly on its turnAt, if it has one (Plan 5)", (_id, _slot, move) => {
+    const script = legacyGameScript(move);
+    for (let g = 1; g <= move.totalFrames + 10; g++) {
+      const turns = runScript(script, g).fired.filter((c) => c.op === "reverseLr").length;
+      expect(turns, `REVERSE_LR on frame ${g}`).toBe(g === move.turnAt ? 1 : 0);
+    }
+  });
+
+  it("compiles turnAt only where it is set, and to nothing but a turn", () => {
+    const plain: MoveDef = {
+      slot: "bthrow",
+      name: "stand-in",
+      totalFrames: 20,
+      hitboxes: [{ id: 0, startFrame: 6, endFrame: 6, x: 0, y: 0, radius: ONE, damage: ONE, angle: 45 * ONE, baseKnockback: 0, knockbackGrowth: 0 }],
+    };
+    const without = legacyGameScript(plain).commands;
+    const turning = legacyGameScript({ ...plain, turnAt: 5 }).commands;
+    expect(without.some((c) => c.op === "reverseLr")).toBe(false);
+    expect(turning.filter((c) => !(c.op === "reverseLr" || (c.op === "frame" && c.frame === 5)))).toEqual(without);
+    expect(runScript(legacyGameScript({ ...plain, turnAt: 5 }), 5).fired.map((c) => c.op)).toEqual(["reverseLr"]);
   });
 
   it("names each script after the motion its slot plays", () => {

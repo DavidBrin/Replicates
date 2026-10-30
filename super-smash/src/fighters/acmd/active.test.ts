@@ -25,6 +25,7 @@ import { FIGHTERS } from "../index";
 import { STAGES } from "@/stages";
 import { ACTIVE_SCRIPT_SLOTS, activatable } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
+import { liftScript } from "./lift";
 import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
 import { readBakeFromDisk } from "@/game/bakeNode";
 
@@ -100,7 +101,7 @@ describe("which imported scripts run (Plan 3, Task 18)", () => {
       expect(Object.keys(def.scripts ?? {}).sort(), def.id).toEqual([...active].sort());
       for (const slot of active) {
         const key = ref.slots[slot] as string;
-        expect(def.scripts?.[slot], `${def.id} ${slot}`).toBe(ref.scripts[key]);
+        expect(def.scripts?.[slot], `${def.id} ${slot}`).toBe(liftScript(ref.scripts[key]));
         const faf = ref.faf[key];
         if (faf !== undefined) expect(def.moves[slot]?.totalFrames, `${def.id} ${slot}`).toBe(faf - 1);
       }
@@ -112,15 +113,20 @@ describe("which imported scripts run (Plan 3, Task 18)", () => {
   it("activates no script with a box on any bone but the root", () => {
     for (const def of FIGHTERS) {
       for (const script of Object.values(def.scripts ?? {}) as AcmdScript[]) {
-        expect([...bones(script.commands)], `${def.id} ${script.name}`).toEqual(["top"]);
+        // A throw that lands only by ATK_HIT_ABS hangs no box at all (Plan 5).
+        const hung = [...bones(script.commands)];
+        expect(hung.every((b) => b === "top"), `${def.id} ${script.name}: ${hung.join(",")}`).toBe(true);
       }
     }
   });
 
-  it("keeps throws and pummels on their legacy scripts: their statuses drive them", () => {
+  // Plan 5: a throw lands through its ATTACK_ABS, so it may hang no box on a
+  // bone; every active throw lands somewhere.
+  it("runs a throw's script only when it has an ATK_HIT_ABS to land", () => {
     for (const def of FIGHTERS) {
-      for (const slot of ["pummel", "fthrow", "bthrow", "uthrow", "dthrow"] as const) {
-        expect(ACTIVE_SCRIPT_SLOTS[def.id]).not.toContain(slot);
+      for (const slot of ["fthrow", "bthrow", "uthrow", "dthrow"] as const) {
+        if (!ACTIVE_SCRIPT_SLOTS[def.id].includes(slot)) continue;
+        expect(def.scripts?.[slot]?.commands.some((c) => c.op === "hitAbs"), `${def.id} ${slot}`).toBe(true);
       }
     }
   });
@@ -208,7 +214,7 @@ describe("an activated script in a real match", () => {
  * hold (`chargeHoldFrame`) read a move's `MoveDef`, and the sim reads its script. An activated slot's `MoveDef` table is the
  * script's own boxes (`withReferenceScripts`), so every reader sees what the sim runs.
  *
- * Every proof runs against the bake's bones, for Plan 3's 38 root-bone slots (tables placed
+ * Every proof runs against the bake's bones, for the 66 root-bone slots (tables placed
  * through the root-bone table, the plain roster) and for Plan 4's limb-bone slots (tables
  * placed through the bake, `withLimbScripts(def, bake.bones)`).
  */
@@ -238,9 +244,10 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     return out;
   }
 
-  it("activates 38 slots, and the bake 50 more", () => {
-    expect(ACTIVE).toHaveLength(38);
-    expect(LIMB).toHaveLength(50);
+  // Plan 5 Task 7: +28 throws and pummels on the root bone, +6 on limbs.
+  it("activates 66 slots, and the bake 56 more", () => {
+    expect(ACTIVE).toHaveLength(66);
+    expect(LIMB).toHaveLength(56);
   });
 
   it.each(SYNCED)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {
@@ -258,12 +265,29 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     expect(moveReach(def.moves[slot]!)).toBe(furthest);
   });
 
+  /** The game frame a throw's `ATK_HIT_ABS` lands on, or null for a move that lands none. */
+  function strikeOf(def: FighterDef, slot: MoveSlot): number | null {
+    const script = gameScriptFor(def, slot)!;
+    for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) if (runScript(script, g).fired.some((c) => c.op === "hitAbs")) return g;
+    return null;
+  }
+
   it.each(SYNCED)("%s %s: the charge hold and the animation timing start from the sim's first live frame", (_id, slot, def) => {
     const live = simLive(def, slot);
     const move = def.moves[slot]!;
+    const timing = moveTimingFor(def, slot)!;
+    // Ruling P5-R9: a throw strikes on its `ATK_HIT_ABS`, boxes or none (a box-less
+    // throw would otherwise have no strike at all), and is live until its last box
+    // or the launch, whichever is later. A throw never charges.
+    const strike = strikeOf(def, slot);
+    if (strike !== null) {
+      expect(timing.firstActive).toBe(strike - 1);
+      expect(timing.lastActive).toBe(Math.max(strike, ...live) - 1);
+      expect(timing.chargeHold).toBeUndefined();
+      return;
+    }
     // `chargeHoldFrame`: one actionFrame before the earliest live one (`actionFrameOf(first) - 1`).
     expect(chargeHoldFrame(move)).toBe(Math.max(1, live[0] - 2));
-    const timing = moveTimingFor(def, slot)!;
     expect(timing.firstActive).toBe(live[0] - 1);
     expect(timing.lastActive).toBe(live[live.length - 1] - 1);
   });

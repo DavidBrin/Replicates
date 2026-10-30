@@ -1518,23 +1518,27 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   },
 
   /**
-   * Down throw — ten stomps at a literal 270 degrees, then a release. The def
-   * runs the stomping hitbox from frame 9 to 42 and the launcher on 58, so the
-   * clip is a bounce cycle across that window rather than one shape.
+   * Down throw — ten stomps at a literal 270 degrees, then a release. The
+   * script stomps from frame 9 to 42 (and once more on 56) and releases on 58,
+   * so the clip is a bounce cycle across that window rather than one shape.
    *
-   * total 87, firstActive 8, strike 0.12:
-   *   t(f) = 0.12 + 0.88·(f − 8)/79
-   *   end of the stomps, actionFrame 41 → t = 0.487
+   * A throw's clip anchors on its release, its `ATK_HIT_ABS` (Plan 5, Task 7,
+   * ruling P5-R9): total 87, firstActive 57, strike 0.666:
+   *   t(f) = 0.666·f/57 up to the release, 0.666 + 0.334·(f − 57)/30 after
+   *   first stomp,       actionFrame 8  → t = 0.0935
+   *   end of the stomps, actionFrame 41 → t = 0.479
    *   the launcher,      actionFrame 57 → t = 0.666
-   * Five bounces across 0.12–0.487 is one every seven frames, which is the
-   * cadence that reads as stomping rather than as vibrating.
+   * — every key on the frame it had when the clip anchored on the first stomp
+   * (firstActive 8, strike 0.12). Five bounces across 0.0935–0.479 is one every
+   * seven frames, which is the cadence that reads as stomping rather than as
+   * vibrating.
    */
   dthrow: {
     loop: false,
-    strike: 0.12,
+    strike: 0.666,
     keys: [
       { t: 0, pose: P({ ...STANCE, upperArmR: 120, forearmR: -30, upperArmL: 240, forearmL: 30 }), ease: "in" },
-      ...stomps(0.12, 0.487, 5),
+      ...stomps(0.0935, 0.479, 5),
       {
         // The launcher: he hauls them up and out.
         t: 0.666,

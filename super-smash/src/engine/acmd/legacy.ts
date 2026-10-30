@@ -8,6 +8,13 @@
  * root bone `top` with its legacy offset as the script's Z (forward) and Y (up),
  * so `LEGACY_BONE_TABLE` puts it exactly where it is today.
  *
+ * A throw compiles as SSBU writes one (Plan 5, Task 7): its launch, the last
+ * box to open, is `ATTACK_ABS` + `ATK_HIT_ABS` on that box's frame, laid on the
+ * fighter held whatever the geometry; every box of a throw or a pummel is
+ * `set_catch_only_all`, hitting the fighter held and nobody else; and a back
+ * throw authored pointing forward turns its thrower on `MoveDef.turnAt`
+ * (`REVERSE_LR`, ruling P5-R7).
+ *
  * `FighterDef.scripts` overrides a slot with a hand-written or imported script;
  * Plans 3 and 4 move slots onto the imported, bone-attached scripts there.
  */
@@ -15,7 +22,7 @@
 import { ONE } from "../fixed";
 import type { FighterDef, Hitbox, MoveDef, MoveSlot } from "../types";
 import { ATTR_OF_EFFECT } from "./hitboxes";
-import type { AcmdCommand, AcmdScript, AttackParams, MotionKind } from "./types";
+import type { AbsParams, AcmdCommand, AcmdScript, AttackParams, MotionKind } from "./types";
 
 /** Which SSBU motion each move slot plays (rubendal `Motions`, e.g. Mario's `game_attacks3` → `attack_s3_s`). */
 export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
@@ -122,8 +129,19 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
     return b;
   };
 
+  // A throw's launch is `ATTACK_ABS` + `ATK_HIT_ABS` (Plan 5): the last box to
+  // open is the launch, applied to the held fighter whatever the geometry, and
+  // any box before it hits the held fighter only, as a pummel's does.
+  const isThrow = THROW_SLOTS.has(move.slot);
+  const launch = isThrow ? lastToOpen(move.hitboxes) : null;
+  if (isThrow || move.slot === "pummel") at(1).open.push({ op: "catchOnly", on: true });
+  if (isThrow && move.turnAt !== undefined) at(move.turnAt).open.push({ op: "reverseLr" });
   for (const hb of move.hitboxes) {
     if (hb.endFrame < hb.startFrame) continue;
+    if (hb === launch) {
+      at(hb.startFrame).open.push({ op: "attackAbs", params: absFromHitbox(hb) }, { op: "hitAbs" });
+      continue;
+    }
     if (hb.grabbing) {
       at(hb.startFrame).open.push({
         op: "catch",
@@ -165,10 +183,38 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
   return { name: `game_${SLOT_MOTION[move.slot].replace(/_/g, "")}`, motion: SLOT_MOTION[move.slot], commands };
 }
 
+/** The four throws, whose launch is an `ATTACK_ABS` the throw status lands (Plan 5, Task 7). */
+export const THROW_SLOTS: ReadonlySet<MoveSlot> = new Set(["fthrow", "bthrow", "uthrow", "dthrow"]);
+
+/** The box a legacy throw launches with: the last to open (the later listed of a tie). */
+function lastToOpen(hitboxes: readonly Hitbox[]): Hitbox | null {
+  let last: Hitbox | null = null;
+  for (const hb of hitboxes) if (!hb.grabbing && (last === null || hb.startFrame >= last.startFrame)) last = hb;
+  return last;
+}
+
+/**
+ * A legacy throw box as `ATTACK_ABS(Kind=FIGHTER_ATTACK_ABSOLUTE_KIND_THROW, …)`,
+ * field for field as `attackFromHitbox` maps a box: `bkb` the base knockback, a
+ * fixed knockback `fkb`, the box's hitlag multiplier.
+ */
+export function absFromHitbox(hb: Hitbox): AbsParams {
+  return {
+    kind: "throw",
+    damage: hb.damage,
+    angle: hb.angle,
+    kbg: hb.knockbackGrowth,
+    fkb: hb.fixedKnockback ?? 0,
+    bkb: hb.baseKnockback,
+    hitlag: hb.hitlagMultiplier ?? ONE,
+    collisionAttr: ATTR_OF_EFFECT[hb.effect ?? "normal"],
+  };
+}
+
 const compiled = new WeakMap<MoveDef, AcmdScript>();
 
 /** The script a fighter runs for a move slot: its override, else the compiled legacy move. */
-export function gameScriptFor(def: FighterDef, slot: MoveSlot): AcmdScript | null {
+export function gameScriptFor(def: Pick<FighterDef, "moves" | "scripts">, slot: MoveSlot): AcmdScript | null {
   const own = def.scripts?.[slot];
   if (own !== undefined) return own;
   const move = def.moves[slot];

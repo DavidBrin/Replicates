@@ -658,7 +658,8 @@ describe("a connecting pummel", () => {
       hitstun: 0,
     });
 
-    // The pummel's 10 frames, then the hold it came from, which is still there.
+    // The pummel's 19 frames (its move's, ruling P5-R10), then the hold it came
+    // from, which is still there.
     expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["pummel", "grabHold"]);
     expect(ticks[39].state.fighters[0]).toMatchObject({ action: "grabHold", grabbing: 1 });
     expect(ticks[39].state.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
@@ -683,11 +684,14 @@ describe("the four throws", () => {
     expect(started.fighters[0]).toMatchObject({ action: "throw", move: t.slot, grabbing: 1, hitThisMove: [] });
     expect(started.fighters[1]).toMatchObject({ action: "thrown", grabbedBy: 0 });
 
-    // The throw's hitbox connects: the one hit, a shared freeze, and the link is cut.
+    // The throw's launch lands: the one hit, a shared freeze, and the link is cut.
+    // Since Plan 5 Task 7 the box is compiled to the game's `ATTACK_ABS` +
+    // `ATK_HIT_ABS`, laid on the fighter held: reported where they stand (8 units
+    // out, on the floor), not where the box was (6, 6).
     const connected = ticks.findIndex((k) => k.hits.length > 0);
     expect(connected).toBe(HOLD_INPUT_TICK + 5);
     expect(ticks[connected].hits).toEqual([
-      { attacker: 0, victim: 1, damage: 30107, x: 24576, y: 24576, contactX: 24576, contactY: 24576, knockback: 310933, angle: t.angle, hitboxId: 0 },
+      { attacker: 0, victim: 1, damage: 30107, x: 32768, y: 0, contactX: 32768, contactY: 0, knockback: 310933, angle: t.angle, hitboxId: 0 },
     ]);
     expect(ticks.filter((k) => k.hits.length > 0)).toHaveLength(1);
     const [a, b] = ticks[connected].state.fighters;

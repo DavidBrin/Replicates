@@ -11,6 +11,7 @@ import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { FIGHTERS } from "../index";
 import { REFERENCE_SCRIPTS } from "./index";
+import { liftScript } from "./lift";
 import { withLimbScripts } from "./limb";
 
 /**
@@ -21,7 +22,11 @@ import { withLimbScripts } from "./limb";
  * last active frame, the lowest-id hitbox's damage/angle/knockback (its bkb,
  * or its fkb and any bkb beside it, its growth and set weight) on that
  * first frame, and first actionable frame (`CancelFrame`, which is the
- * move's `totalFrames + 1`). "Runs" is `gameScriptFor`: the imported script
+ * move's `totalFrames + 1`). A throw's launch counts as a hit (ruling P5-R9):
+ * the frame its `ATK_HIT_ABS` fires is active, and on a first frame with no
+ * box live its `ATTACK_ABS` is the lead. The first actionable frame is
+ * compared whenever both sides give one, whether or not either has a hit.
+ * "Runs" is `gameScriptFor`: the imported script
  * for a slot Plan 3 activated (`acmd/active.ts`), else the compiled legacy
  * move — which `legacy.test.ts` proves frame-identical to its table — as the
  * game plays it: with Plan 4's limb-bone scripts on (`limb.ts`). Every disagreement is listed in `reconcile.allow.json`
@@ -31,9 +36,12 @@ import { withLimbScripts } from "./limb";
  *
  *   UPDATE_RECONCILE=1 pnpm vitest run src/fighters/acmd/reconcile.test.ts
  *
- * Throws are not genuinely reconciled yet: the parser does not read
- * `ATTACK_ABS` (parse.ts), so about 51 of the entries, every throw, are its
- * blind spot rather than real disagreements. Plan 5 Task 7 lifts it.
+ * Throws are reconciled since Plan 5 Task 7: the scripts the game runs carry
+ * their `ATTACK_ABS` lifted (`lift.ts`), and the reference scripts are lifted
+ * here the same way. The throw and pummel entries went 60 → 10, the legacy
+ * throws whose frames or numbers really differ (Donkey Kong's cargo throws,
+ * Kirby's up throw); comparing every first actionable frame added 5 moves with
+ * no hit on either side (105 → 60 in all).
  */
 
 const ALLOW_FILE = join(process.cwd(), "src", "fighters", "acmd", "reconcile.allow.json");
@@ -43,44 +51,46 @@ interface Facts {
   first: number;
   last: number;
   lead: string;
-  faf: number;
 }
 
 const fmt = (n: number): string => String(Math.round(toFloat(n) * 1000) / 1000);
 
-/** The facts of a script, run until `horizon`. */
-function scriptFacts(s: AcmdScript, horizon: number): Omit<Facts, "faf"> | null {
+/**
+ * A hit's damage/angle/knockback: a `bkb` beside an `fkb` and set weight are
+ * knockback too (Plan 3, Task 16b): `+bkbN` after the fkb, `/sw` at the end.
+ */
+function leadOf(a: { damage: number; angle: number; fkb: number; bkb: number; kbg: number; setWeight?: boolean }): string {
+  const kb = a.fkb > 0 ? `fkb${fmt(a.fkb)}${a.bkb !== 0 ? `+bkb${fmt(a.bkb)}` : ""}` : `bkb${fmt(a.bkb)}`;
+  return `${fmt(a.damage)}%/${fmt(a.angle)}°/${kb}/kbg${fmt(a.kbg)}${a.setWeight === true ? "/sw" : ""}`;
+}
+
+/** The facts of a script, run until `horizon`; a throw's `ATK_HIT_ABS` frame is active. */
+function scriptFacts(s: AcmdScript, horizon: number): Facts | null {
   let first = -1;
   let last = -1;
   for (let g = 1; g <= horizon; g++) {
     const st = runScript(s, g);
-    if (st.attacks.length + st.catches.length === 0) continue;
+    const lands = st.throwAbs !== null && st.fired.some((c) => c.op === "hitAbs");
+    if (st.attacks.length + st.catches.length === 0 && !lands) continue;
     if (first < 0) first = g;
     last = g;
   }
   if (first < 0) return null;
-  const a = runScript(s, first).attacks[0];
-  // A `bkb` beside an `fkb` and set weight are knockback too (Plan 3, Task 16b):
-  // `+bkbN` after the fkb, `/sw` at the end.
-  const kb = a === undefined ? "" : a.fkb > 0 ? `fkb${fmt(a.fkb)}${a.bkb !== 0 ? `+bkb${fmt(a.bkb)}` : ""}` : `bkb${fmt(a.bkb)}`;
-  return {
-    first,
-    last,
-    lead: a === undefined ? "grab" : `${fmt(a.damage)}%/${fmt(a.angle)}°/${kb}/kbg${fmt(a.kbg)}${a.setWeight ? "/sw" : ""}`,
-  };
+  const at = runScript(s, first);
+  const a = at.attacks[0];
+  const lead = a !== undefined ? leadOf(a) : at.catches.length > 0 || at.throwAbs === null ? "grab" : leadOf(at.throwAbs);
+  return { first, last, lead };
 }
 
 /** What the roster runs for `slot`: its script, until the move ends. */
 function runningFacts(def: FighterDef, slot: MoveSlot, move: MoveDef): Facts | null {
   const script = gameScriptFor(def, slot);
-  const facts = script === null ? null : scriptFacts(script, move.totalFrames + 1);
-  return facts === null ? null : { ...facts, faf: move.totalFrames + 1 };
+  return script === null ? null : scriptFacts(script, move.totalFrames + 1);
 }
 
+/** The reference script's facts, its throw commands lifted as the game's are. */
 function referenceFacts(fighter: string, key: string): Facts | null {
-  const ref = REFERENCE_SCRIPTS[fighter];
-  const facts = scriptFacts(ref.scripts[key], HORIZON);
-  return facts === null ? null : { ...facts, faf: ref.faf[key] ?? -1 };
+  return scriptFacts(liftScript(REFERENCE_SCRIPTS[fighter].scripts[key]), HORIZON);
 }
 
 function disagreements(): Record<string, string> {
@@ -100,12 +110,14 @@ function disagreements(): Record<string, string> {
         if (mine !== theirs) {
           out[`${def.id} ${slot} hitboxes`] = `legacy ${mine === null ? "none" : "some"} / ${key} ${theirs === null ? "none" : "some"}`;
         }
-        continue;
+      } else {
+        for (const k of ["first", "last", "lead"] as const) {
+          if (mine[k] !== theirs[k]) out[`${def.id} ${slot} ${k}`] = `legacy ${mine[k]} / ${key} ${theirs[k]}`;
+        }
       }
-      for (const k of ["first", "last", "lead", "faf"] as const) {
-        if (k === "faf" && theirs.faf < 0) continue;
-        if (mine[k] !== theirs[k]) out[`${def.id} ${slot} ${k}`] = `legacy ${mine[k]} / ${key} ${theirs[k]}`;
-      }
+      // Whenever both sides give one (ruling P5-R9), hits or none.
+      const faf = ref.faf[key];
+      if (faf !== undefined && move.totalFrames + 1 !== faf) out[`${def.id} ${slot} faf`] = `legacy ${move.totalFrames + 1} / ${key} ${faf}`;
     }
   }
   return out;

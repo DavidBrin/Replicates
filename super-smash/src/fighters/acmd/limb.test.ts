@@ -16,6 +16,7 @@ import { SKELETONS } from "@/render3d/skeletons";
 import { FIGHTERS } from "../index";
 import { ACTIVE_SCRIPT_SLOTS, activatable, withReferenceScripts } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
+import { liftScript } from "./lift";
 import { LIMB_HOLD, LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
 
 /**
@@ -103,7 +104,7 @@ describe("running the limb-bone scripts (Plan 4)", () => {
     for (const def of FIGHTERS) {
       const game = withLimbScripts(def, bake.bones);
       const ref = REFERENCE_SCRIPTS[def.id];
-      for (const slot of LIMB_SCRIPT_SLOTS[def.id] ?? []) expect(game.scripts?.[slot]).toBe(ref.scripts[ref.slots[slot]!]);
+      for (const slot of LIMB_SCRIPT_SLOTS[def.id] ?? []) expect(game.scripts?.[slot]).toBe(liftScript(ref.scripts[ref.slots[slot]!]));
       for (const slot of ACTIVE_SCRIPT_SLOTS[def.id] ?? []) expect(game.scripts?.[slot]).toBe(def.scripts?.[slot]);
       expect(withLimbScripts(def, bake.bones)).toBe(game);
     }
@@ -153,7 +154,7 @@ describe.skipIf(UPDATING)("the bones a box may hang off (ruling R12)", () => {
  * Slots the rule admits whose boxes our clips put somewhere a player would call
  * wrong (the Task 13 review's per-frame survey): they keep their legacy table
  * until their clip is fixed, which is the only change this list may see —
- * entries leave it, none join. Pinned here, as the status-driven slots are.
+ * entries leave it, none join. Pinned here.
  * Task 13b re-posed six of the seven; Samus's down air stays (its reason).
  */
 describe.skipIf(UPDATING)("the held slots (limb.hold.json)", () => {
@@ -213,7 +214,7 @@ describe.skipIf(UPDATING)("the game's form of a fighter, per bone table (ruling 
     const ref = REFERENCE_SCRIPTS.mario;
     for (const slot of LIMB_SCRIPT_SLOTS.mario) {
       const key = ref.slots[slot]!;
-      expect(input.scripts?.[slot], `mario ${slot}`).toBe(ref.scripts[key]);
+      expect(input.scripts?.[slot], `mario ${slot}`).toBe(liftScript(ref.scripts[key]));
       expect(input.moves[slot]!.hitboxes, `mario ${slot}`).toBe(MARIO.moves[slot]!.hitboxes);
       const faf = ref.faf[key];
       if (faf !== undefined) expect(input.moves[slot]!.totalFrames, `mario ${slot}`).toBe(faf - 1);

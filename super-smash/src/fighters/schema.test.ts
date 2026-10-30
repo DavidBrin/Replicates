@@ -428,10 +428,14 @@ describe("hitbox values", () => {
 
   it.each(each)("%s keeps hitboxes near the body that owns them", (_name, fighter) => {
     // A hitbox thirty units from a twelve-unit fighter is a units mistake, not
-    // a long sword. Projectiles are the deliberate exception.
+    // a long sword. Projectiles are the deliberate exception, and so is a slot
+    // run from its imported script (`ACTIVE_SCRIPT_SLOTS`): its table is the
+    // published script's boxes, not hand-typed numbers (Samus's up throw burns
+    // its victim 23 above her feet: `game_throwhi`, Plan 5 Task 7).
     const projectileSlots: MoveSlot[] = ["neutralB", "sideB", "downB", "upB"];
+    const scripted = new Set<MoveSlot>(ACTIVE_SCRIPT_SLOTS[fighter.id]);
     for (const { slot, hitbox } of everyHitbox(fighter)) {
-      if (projectileSlots.includes(slot)) continue;
+      if (projectileSlots.includes(slot) || scripted.has(slot)) continue;
       const reach = Math.abs(toFloat(hitbox.x));
       expect(
         reach,

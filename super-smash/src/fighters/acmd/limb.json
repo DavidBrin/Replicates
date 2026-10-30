@@ -1,6 +1,7 @@
 {
   "mario": [
     "bair",
+    "bthrow",
     "dtilt",
     "fair",
     "ftilt",
@@ -19,9 +20,12 @@
   ],
   "link": [
     "bair",
+    "bthrow",
+    "fthrow",
     "ftilt",
     "jab3",
     "nair",
+    "uthrow",
     "utilt"
   ],
   "samus": [
@@ -50,7 +54,9 @@
     "bair",
     "dair",
     "dashAttack",
+    "dthrow",
     "ftilt",
+    "pummel",
     "uair",
     "utilt"
   ],

@@ -37,6 +37,17 @@ export function moveScriptFrame(def: FighterDef, f: Pick<FighterState, "move" | 
 }
 
 /**
+ * The game frame a throw's `ATK_HIT_ABS` lands on — its strike, what its clip
+ * and its timing anchor on (ruling P5-R9) — or null for a script that fires
+ * none. Read off the schedule, so no frame is run.
+ */
+export function throwStrikeFrame(script: AcmdScript): number | null {
+  const { commands, fire } = scheduleOf(script);
+  for (let i = 0; i < commands.length; i++) if (commands[i].op === "hitAbs") return fire[i];
+  return null;
+}
+
+/**
  * Get every script a fighter can run ready for `bones`, at load, and refuse
  * one the sim could not run — so nothing is refused, and nothing is compiled,
  * mid-match.

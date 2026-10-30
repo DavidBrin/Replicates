@@ -144,6 +144,11 @@
     "class": "size",
     "reason": "a clip-placed limb (neck) reaching 6.6 -> 11.7, x1.78, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
   },
+  "pikachu pummel": {
+    "measured": "F: best 3.0 -> 15.0 (x5.01)",
+    "class": "root-exact",
+    "reason": "the box hangs off trans, the skeleton root, at the script's own offset (game_catchattack: z 9, radius 7) as the clip carries it; the legacy table transcribed a box 3.0 out. A pummel's box is catch-only (set_catch_only_all): it hits the fighter held wherever it is, so its reach spaces nothing (Plan 5, Task 7)"
+  },
   "pikachu uair": {
     "measured": "U: best 10.4 -> 17.7 (x1.70)",
     "class": "size",

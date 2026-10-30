@@ -1007,7 +1007,10 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    *
    * She hoists them and fires into them from touching distance, and the flash is
    * the entire difference between this and every other up throw on the roster.
-   * Hitbox is on frame 16 at (0, 9.0).
+   * The shot is on frame 15 and the throw lands on 16 (`game_throwhi`, run since
+   * Plan 5 Task 7); drawn at the legacy box's (0, 9.0), where the fighter held
+   * is (the script's fire box sits 23 up, on a `throw` joint the replica does
+   * not place).
    */
   uthrow: ({ ctx, x, y, u, frame }) => {
     const k = decay(frame, 15, 8);

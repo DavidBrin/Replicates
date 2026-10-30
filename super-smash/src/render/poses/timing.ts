@@ -53,6 +53,8 @@ import {
 } from "@/engine/states";
 import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttributes, MoveSlot } from "@/engine/types";
 import { STRIDE_UNITS } from "@/engine/acmd/poseClock";
+import { THROW_SLOTS, gameScriptFor } from "@/engine/acmd/legacy";
+import { throwStrikeFrame } from "@/engine/acmd/run";
 import { clipFor } from "../chars/poses";
 import { airDodgeClipTime } from "./airDodge";
 import { samplePose, type PoseSample } from "./clip";
@@ -106,6 +108,8 @@ export interface JumpTiming {
   readonly airDodge: AirDodgeAttributes;
   /** The fighter's spot dodge and rolls (Plan 3 final wave), carried for the same reason. */
   readonly groundDodge: GroundDodgeAttributes;
+  /** The fighter's pummel's length, its move's `totalFrames` (ruling P5-R10), carried for the same reason. */
+  readonly pummel: number;
 }
 
 const jumpTimings = new WeakMap<FighterDef, JumpTiming>();
@@ -123,6 +127,7 @@ export function jumpTimingFor(def: FighterDef): JumpTiming {
       ledgeSpeeds: jumpRiseSpeeds(p, "ledge"),
       airDodge: airDodgeOf(def.attributes),
       groundDodge: groundDodgeOf(def.attributes),
+      pummel: def.moves.pummel?.totalFrames ?? PUMMEL_FRAMES,
     };
     jumpTimings.set(def, t);
   }
@@ -390,8 +395,10 @@ export function actionDurationFor(
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":
       return LEDGE_JUMP_FRAMES;
+    // The fighter's own pummel, as its status runs it (ruling P5-R10). Without
+    // the fighter's timing, the engine's fallback.
     case "pummel":
-      return PUMMEL_FRAMES;
+      return jump?.pummel ?? PUMMEL_FRAMES;
     // Hitstun counts down while `actionFrame` counts up, so their sum is the
     // length of the reel — and it is different for every hit.
     case "hitstun":
@@ -430,19 +437,31 @@ export interface MoveTiming {
   readonly chargeHold?: number;
 }
 
-/** Read the timing of the move a fighter is currently performing. */
+/**
+ * Read the timing of the move a fighter is currently performing. A throw strikes
+ * on its `ATK_HIT_ABS` (ruling P5-R9): the launch, which is no box in its table,
+ * is what its clip anchors on, its boxes or none (Kirby's down-throw stomps come
+ * before it, Mario's forward throw has no box at all), and it is live until the
+ * later of its last box and the launch.
+ */
 export function moveTimingFor(
-  def: Pick<FighterDef, "moves"> | null | undefined,
+  def: Pick<FighterDef, "moves" | "scripts"> | null | undefined,
   move: MoveSlot | null,
 ): MoveTiming | undefined {
   const def_ = def?.moves;
   const m = move && def_ ? def_[move] : undefined;
-  if (!m) return undefined;
+  if (!m || !def || !move) return undefined;
   let first = -1;
   let last = -1;
   for (const hb of m.hitboxes) {
     if (first < 0 || hb.startFrame < first) first = hb.startFrame;
     if (hb.endFrame > last) last = hb.endFrame;
+  }
+  const script = THROW_SLOTS.has(move) ? gameScriptFor(def, move) : null;
+  const strike = script === null ? null : throwStrikeFrame(script);
+  if (strike !== null) {
+    first = strike;
+    last = Math.max(last, strike);
   }
   // Converted out of the frame-data convention and into `actionFrame`, which is
   // what every caller here counts in. See `moveFrameOf`.

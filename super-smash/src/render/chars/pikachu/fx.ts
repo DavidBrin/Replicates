@@ -1317,10 +1317,13 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 
   /**
    * Electric Throw: he lays them across his tail and shocks them, five hits of
-   * two percent. The current is on the tail, which is behind and below him.
+   * two percent: four catch-only zaps on frames 11, 15, 19 and 23 and the
+   * release on 30 (`game_throwf`, which the throw runs since Plan 5 Task 7; UFD
+   * "Forward Throw 11/15/19/23/30"). The current is on the tail, which is
+   * behind and below him.
    */
   fthrow: (c) => {
-    if (c.frame < 14 || c.frame > 38) return NOTHING;
+    if (c.frame < 11 || c.frame > 38) return NOTHING;
     const live = c.frame <= 33 ? 1 : Math.max(0, 1 - (c.frame - 33) / 5);
     electric(c.ctx, () => {
       arcBurst(c.ctx, c.x + c.dir * 2.4 * c.u, c.y - 3.2 * c.u, c.u * 4.2, 6, c.frame * 2.2, {
@@ -1328,7 +1331,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
         alpha: 0.8 * live,
         turn: c.frame * 0.3,
       });
-      for (const hit of [22, 24, 26, 28, 30]) {
+      for (const hit of [11, 15, 19, 23, 30]) {
         const k = pulse(c.frame, hit, 1, hit + 2);
         if (k > 0) spark(c.ctx, c.x + c.dir * 3.0 * c.u, c.y - 3.0 * c.u, c.u * 2.2 * k, c.frame);
       }
@@ -1336,9 +1339,12 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     return NOTHING;
   },
 
-  /** Heading: the throw finishes off the top of his skull on frame 16. */
+  /**
+   * Heading: the headbutt connects on frame 14 and the throw finishes off the
+   * top of his skull on 16 (`game_throwhi`; UFD "Up Throw 14/16").
+   */
   uthrow: (c) => {
-    const k = pulse(c.frame, 16, 1, 24);
+    const k = pulse(c.frame, 14, 1, 24);
     if (k <= 0) return NOTHING;
     electric(c.ctx, () => {
       spark(c.ctx, c.x, c.y - 6.0 * c.u, c.u * 3.0 * k, c.frame * 0.6);
@@ -1350,9 +1356,14 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     return NOTHING;
   },
 
-  /** Hip Press: all of his weight, straight down, on frame 29. */
+  /**
+   * Hip Press: all of his weight, straight down. The game runs its script since
+   * Plan 5 Task 7 (`game_throwlw`: the press on frame 14, the release on 21); the
+   * plain roster keeps the legacy table's 29 (UFD "Down Throw 29"), so the glow
+   * spans both.
+   */
   dthrow: (c) => {
-    const k = pulse(c.frame, 29, 1, 38);
+    const k = pulse(c.frame, 14, 1, 30);
     if (k <= 0) return NOTHING;
     electric(c.ctx, () => {
       spark(c.ctx, c.x + c.dir * 2.0 * c.u, c.y - 1.0 * c.u, c.u * 2.8 * k, c.frame * 0.5);
