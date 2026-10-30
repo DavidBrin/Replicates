@@ -589,6 +589,13 @@ describe("engine golden trace", () => {
   // (`goldenInhaleLab.ts`: the second inhale pulls Mario in, held, and the swallow's
   // star carries him out). Still four hits there, no shield hit, no KO; the other
   // seven are byte-identical, so the counts are as above.
+  // Plan 5 Task 7b's fix round 2 (the 1v1 bonus never reaches a shield, ruling
+  // R-7b-d; a trade never shortens a freeze, ruling R-7b-e, which no match reaches
+  // in a way that shows) moved only the script, from its 401-500 sample: its three
+  // jabs on Fox's shield, a one-on-one, take less of it, so it breaks on 659, not
+  // 649, and one step is re-tuned (`goldenScript.ts`). Still six hits there, three
+  // on the shield and one KO; the other seven are byte-identical, so the counts are
+  // as above.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

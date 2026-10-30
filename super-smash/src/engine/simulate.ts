@@ -1531,8 +1531,8 @@ function resolveThrows(
       if (cmd.op === "catchStop") {
         const victim = held();
         if (victim === null) continue;
-        freezeFighter(f, cmd.frames, f.hitlag);
-        freezeFighter(victim, cmd.frames, victim.hitlag);
+        freezeFighter(f, cmd.frames);
+        freezeFighter(victim, cmd.frames);
         // `invincible` counts down before each frame's hits, so `frames` covers the stop.
         victim.invincible = Math.max(victim.invincible, cmd.frames);
       }
@@ -1552,8 +1552,8 @@ function resolveThrows(
       const hb = unplacedHitbox(flash.params);
       const damage = swingDamage(f, throwCandidate(i, hb, f.move, { x: victim.x, y: victim.y }));
       const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
-      freezeVictim(victim, lag, victim.hitlag);
-      freezeFighter(f, lag, f.hitlag);
+      freezeVictim(victim, lag);
+      freezeFighter(f, lag);
     }
   }
 }
@@ -2165,15 +2165,19 @@ function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield
 
 /**
  * Freeze `f` for a freeze of `n` frames, counted from this one: the `n − 1`
- * frames after it (`framesAfterHit`; Plan 5, Task 7b), and never fewer than the
- * `atLeast` frames a freeze already running still holds (a second freeze lands
- * on a fighter in the first: knockback stacking, a throw's stop or partial hit).
- * Every freeze `step()` stores goes through here, `freezeVictim`'s included;
- * `triggerCounter` applies `framesAfterHit` itself (`combat.test.ts` lists every
- * write to `hitlag`).
+ * frames after it (`framesAfterHit`; Plan 5, Task 7b), and never fewer than a
+ * freeze it is already in still holds. A second freeze lands on a fighter in the
+ * first in a trade (both hits on one frame, in port order), in knockback
+ * stacking, and in a throw's stop or partial hit; each fighter keeps the longer,
+ * whichever is stored first (Plan 5, Task 7b fix round 2, ruling R-7b-e).
+ * UNVERIFIED: no source orders a trade; the nearest is SmashWiki "Priority"
+ * (https://www.ssbwiki.com/Priority), on clanks, "a rebounding character will
+ * suffer freeze frames equal to the hitlag of the stronger attack". Every freeze
+ * `step()` stores goes through here, `freezeVictim`'s included; `triggerCounter`
+ * applies the same rule itself (`combat.test.ts` lists every write to `hitlag`).
  */
-function freezeFighter(f: FighterState, n: number, atLeast = 0): void {
-  f.hitlag = Math.max(atLeast, framesAfterHit(n));
+function freezeFighter(f: FighterState, n: number): void {
+  f.hitlag = Math.max(f.hitlag, framesAfterHit(n));
 }
 
 /**
@@ -2182,8 +2186,8 @@ function freezeFighter(f: FighterState, n: number, atLeast = 0): void {
  * Plan 3 final wave). A hit with no frame of freeze after its own leaves nothing
  * to SDI in.
  */
-function freezeVictim(victim: FighterState, n: number, atLeast = 0): void {
-  freezeFighter(victim, n, atLeast);
+function freezeVictim(victim: FighterState, n: number): void {
+  freezeFighter(victim, n);
   victim.combat.victimFreeze = victim.hitlag > 0;
 }
 
@@ -2386,9 +2390,10 @@ function applyHit(
   // reflects the change in percent"; Rollout "instantly break[s] a shield" with
   // it). UNVERIFIED: that hitlag leaves it out, as it leaves the 1v1 bonus out.
   damage = mul(damage, c.damageMul);
-  // This hit's damage as the knockback formula's percent counts it: the Copy
-  // Ability's ×1.2 in, the 1v1 bonus out (ruling R-7b-b, above).
-  const kbPercentDamage = mul(lagDamage, c.damageMul);
+  // This hit's damage without the 1v1 bonus, the Copy Ability's ×1.2 in: what the
+  // knockback formula's percent counts (ruling R-7b-b, above), and all a shield
+  // takes (ruling R-7b-d, the shield path below).
+  const takenBefore1v1 = mul(lagDamage, c.damageMul);
 
   // A move joins the staleness queue once per swing, on its first connection —
   // a shield hit included, marked so it stales at 0.85 (SmashWiki "Stale-move
@@ -2399,6 +2404,14 @@ function applyHit(
   enterStaleQueue(attacker, c.slot, onShield);
 
   /* ---- the shield path ---- */
+  // The 1v1 bonus never reaches a shield (Plan 5, Task 7b fix round 2, ruling
+  // R-7b-d): SmashWiki "1v1 multiplier" (https://www.ssbwiki.com/1v1_multiplier),
+  // "It does not affect the length of hitstun, hitlag or shieldstun", and "Shields
+  // and stage elements are unaffected by the multiplier". So the shieldstun, the
+  // defender's pushback (from the unrounded shieldstun, SmashWiki "Shield",
+  // https://www.ssbwiki.com/Shield) and the shield damage read `takenBefore1v1`,
+  // Copy's ×1.2 kept (Task 9). UNVERIFIED: the attacker's pushback too; no page
+  // names it, and it follows the shield's reading.
   if (onShield) {
     const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
@@ -2415,7 +2428,7 @@ function applyHit(
     };
     const away = shieldPushDirection(c, attacker, victim);
     // Pushback reads the shieldstun *before* it is rounded (SmashWiki "Shield").
-    const stunExact = shieldstunExact(damage, stunOpts);
+    const stunExact = shieldstunExact(takenBefore1v1, stunOpts);
     if (isParrying(victim)) {
       // Perfect shield: no shield damage, no shieldstun, and the attacker is the
       // one left standing there — frozen longer than the defender, by the
@@ -2429,12 +2442,12 @@ function applyHit(
       freezeVictim(victim, parry.defender);
       if (!fromProjectile) freezeFighter(attacker, parry.attacker);
       kineticSetX(victim, away * shieldPushback(stunExact, true), "stop");
-      if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
+      if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(takenBefore1v1));
       events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
       return;
     }
-    victim.shieldHealth -= shieldDamage(damage);
-    victim.hitstun = computeShieldstun(damage, stunOpts);
+    victim.shieldHealth -= shieldDamage(takenBefore1v1);
+    victim.hitstun = computeShieldstun(takenBefore1v1, stunOpts);
     freezeVictim(victim, lag);
     if (!fromProjectile) freezeFighter(attacker, lag);
     kineticSetX(victim, away * shieldPushback(stunExact), "stop");
@@ -2442,7 +2455,7 @@ function applyHit(
     // projectile's owner is not there to be pushed (rubendal `AttackerShieldPushback`).
     // UNVERIFIED: that an airborne attacker is not pushed; rubendal's formula has
     // no situation, and the replica pushes only one on the ground.
-    if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
+    if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(takenBefore1v1));
     if (victim.shieldHealth <= 0) {
       victim.shieldHealth = 0;
       startAction(victim, "shieldBroken");
@@ -2458,7 +2471,7 @@ function applyHit(
   /* ---- the damage path ---- */
   // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback): p is "counted after
   // the attack's damage is added", the damage before the 1v1 bonus (R-7b-b).
-  const kbPercent = victim.damage + kbPercentDamage;
+  const kbPercent = victim.damage + takenBefore1v1;
   victim.damage += damage;
   // A Kirby hit may lose his Copy Ability (Plan 5, Task 9: `maybeLoseCopy`).
   maybeLoseCopy(s, victim, damage);
@@ -2476,17 +2489,26 @@ function applyHit(
   // R-7b-c): SmashWiki "Armor" (https://www.ssbwiki.com/Armor), "Armor is the
   // concept of sustaining hitlag and damage, but not sustaining any (or sustaining
   // reduced) knockback"; SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag), "both
-  // the attacker and target are frozen in place". The armoured move stands the
-  // freeze out on its frame, as any frozen move does, and never has a freeze it is
-  // already in cut short (its own hit may have landed this frame). UNVERIFIED:
-  // that it can SDI in the freeze, as the victim of any hit can; no source names
-  // armour. A projectile's owner is not at the hit and does not freeze.
+  // the attacker and target are frozen in place". SmashWiki "Piranha Plant
+  // (SSBU)/Down special" (https://www.ssbwiki.com/Piranha_Plant_(SSBU)/Down_special),
+  // of Long-Stem Strike's heavy armour: it "struggles against projectiles with high
+  // hitlag multipliers strangely, as the hitlag stops the move from tilting or
+  // lunging until the freeze frames end". The armoured move stands the freeze out
+  // on its frame, as any frozen move does, and keeps a longer freeze it is already
+  // in (a trade, ruling R-7b-e: `freezeFighter`). UNVERIFIED: that it can SDI in
+  // the freeze. No source names armour; SmashWiki "Hitlag"
+  // (https://www.ssbwiki.com/Hitlag), "During hitlag, defending characters are
+  // capable of performing smash directional influence", and SmashWiki "Smash
+  // directional influence" (https://www.ssbwiki.com/Smash_directional_influence),
+  // SDI "allows players to slightly alter their position during hitlag from being
+  // hit by an attack", shield SDI included. A projectile's owner is not at the hit
+  // and does not freeze.
   const armoured = (): void => {
     const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
       moveMultiplier: hb.hitlagMultiplier,
     });
-    freezeVictim(victim, lag, victim.hitlag);
+    freezeVictim(victim, lag);
     if (!fromProjectile) freezeFighter(attacker, lag);
     events.hits.push({
       attacker: attacker.port,
@@ -2617,7 +2639,7 @@ function applyHit(
       kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
     }
     victim.combat.comboHits += 1;
-    freezeVictim(victim, lag, victim.hitlag);
+    freezeVictim(victim, lag);
     if (!fromProjectile) freezeFighter(attacker, lag);
     events.hits.push({
       attacker: attacker.port,

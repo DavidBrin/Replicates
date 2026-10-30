@@ -6631,7 +6631,8 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
   // The controller's rule: one helper at every freeze, and no site works out its
   // own. Every write to `hitlag` in the engine's code, pinned: the countdown, the
   // KO's reset, the thrower's own freeze kept across its release, and the two that
-  // store a freeze, both through `framesAfterHit`. A new site fails here.
+  // store a freeze, both through `framesAfterHit` and both keeping a longer freeze
+  // already running (ruling R-7b-e). A new site fails here.
   it("is stored only through framesAfterHit: every write to hitlag in the engine, listed", () => {
     const root = join(process.cwd(), "src", "engine");
     const walk = (dir: string): string[] =>
@@ -6644,10 +6645,10 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
         .map((line) => `${relative(root, file)}: ${line}`),
     );
     expect(writes.sort()).toEqual([
-      "counter.ts: f.hitlag = framesAfterHit(c.freeze);",
+      "counter.ts: f.hitlag = Math.max(f.hitlag, framesAfterHit(c.freeze));",
       "simulate.ts: f.hitlag -= 1;",
       "simulate.ts: f.hitlag = 0;",
-      "simulate.ts: f.hitlag = Math.max(atLeast, framesAfterHit(n));",
+      "simulate.ts: f.hitlag = Math.max(f.hitlag, framesAfterHit(n));",
       "simulate.ts: f.hitlag = own;",
     ]);
   });
@@ -6791,21 +6792,78 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
       }
     });
 
-    // As the controller ruled (Task 7b fix round 1): shieldstun and the pushback read
-    // the damage dealt, the 1v1 bonus in. SmashWiki "Shieldstun"
-    // (https://www.ssbwiki.com/Shieldstun): d "is the damage the attack would deal if
-    // not shielded". UNVERIFIED against SmashWiki "1v1 multiplier"
-    // (https://www.ssbwiki.com/1v1_multiplier), which says it does "not affect the
-    // length of hitstun, hitlag or shieldstun". 12.6% stuns 12 where 10.5% stuns 10.
-    it("a shield in a 1v1: the shieldstun and the pushback read the damage dealt, the bonus in", () => {
-      const dealt = mul(JAB_DMG, fx(1.2));
-      expect([computeShieldstun(JAB_DMG), computeShieldstun(dealt)]).toEqual([10, 12]);
-      const frames = play(oneOnOne(standing()), 20, JAB_INTO_SHIELD);
-      const h = firstHit(frames);
-      const defender = frames[h].state.fighters[1];
-      expect(defender.hitstun).toBe(computeShieldstun(dealt));
-      expect(defender.vx).toBe(shieldPushback(shieldstunExact(dealt)));
-      expect(defender.vx).not.toBe(shieldPushback(shieldstunExact(JAB_DMG)));
+    // The 1v1 bonus never reaches a shield (Plan 5, Task 7b fix round 2, ruling
+    // R-7b-d): SmashWiki "1v1 multiplier" (https://www.ssbwiki.com/1v1_multiplier),
+    // "It does not affect the length of hitstun, hitlag or shieldstun", and
+    // "Shields and stage elements are unaffected by the multiplier". So the
+    // shieldstun, the defender's pushback (from the shieldstun unrounded, SmashWiki
+    // "Shield", https://www.ssbwiki.com/Shield) and the shield damage read the damage
+    // before it; UNVERIFIED for the attacker's pushback, which no page names, and
+    // which follows the shield's reading. For the fixture's fresh jab: shieldstun 10,
+    // the defender pushed 1.0259 and the attacker 0.4448 a frame, the shield down
+    // 12.4954, where the 12.6% dealt would make them 12, 1.1770, 0.5288 and 14.9937.
+    it("a jab on a shield does the same to it in a 1v1 as outside one", () => {
+      expect(computeShieldstun(JAB_DMG)).toBe(10);
+      expect(computeShieldstun(mul(JAB_DMG, fx(1.2)))).toBe(12);
+      expect(toFloat(shieldPushback(shieldstunExact(JAB_DMG)))).toBeCloseTo(1.0259, 4);
+      expect(toFloat(attackerShieldPushback(JAB_DMG))).toBeCloseTo(0.4448, 4);
+      expect(toFloat(shieldDamage(JAB_DMG))).toBeCloseTo(12.4954, 4);
+      const onShield = (s: GameState): { before: GameState; at: GameState } => {
+        const frames = play(s, 20, JAB_INTO_SHIELD);
+        const h = firstHit(frames);
+        expect(frames[h].events.shieldHits).toHaveLength(1);
+        return { before: frames[h - 1].state, at: frames[h].state };
+      };
+      const free = onShield(standing());
+      const one = onShield(oneOnOne(standing()));
+      for (const { before, at } of [free, one]) {
+        const [attacker, defender] = at.fighters;
+        expect(defender.hitstun).toBe(computeShieldstun(JAB_DMG));
+        expect(defender.vx).toBe(shieldPushback(shieldstunExact(JAB_DMG)));
+        expect(attacker.vx).toBe(-attackerShieldPushback(JAB_DMG));
+        expect(before.fighters[1].shieldHealth - defender.shieldHealth).toBe(shieldDamage(JAB_DMG) + SHIELD_DECAY_PER_FRAME);
+      }
+      for (const k of ["hitstun", "vx", "shieldHealth", "hitlag"] as const) {
+        expect(one.at.fighters.map((f) => f[k]), k).toEqual(free.at.fighters.map((f) => f[k]));
+      }
+    });
+
+    // What R-7b-d keeps: Kirby's Copy Ability's ×1.2 still reaches a shield (Plan 5,
+    // Task 9, ruling R-T9a: "a shield's included"), in a 1v1 as outside one. The
+    // fixture's jab as a copied move (`MoveDef.copyDamage`): 10.5 × 1.2 = 12.6% to
+    // the shield, which stuns 12 where the plain jab stuns 10; the 15.12% the 1v1
+    // bonus would add on top would stun 14.
+    it("a copied jab on a shield: Copy's ×1.2 in, the 1v1 bonus out", () => {
+      const copied: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, jab1: move("jab1", { copyDamage: fx(1.2) }) } };
+      const ctx = ctxFor(copied);
+      const taken = mul(JAB_DMG, fx(1.2));
+      expect([computeShieldstun(taken), computeShieldstun(mul(taken, fx(1.2)))]).toEqual([12, 14]);
+      for (const s of [standing(ctx), oneOnOne(standing(ctx))]) {
+        const frames = play(s, 20, JAB_INTO_SHIELD, ctx);
+        const h = firstHit(frames);
+        const [attacker, defender] = frames[h].state.fighters;
+        expect(defender.hitstun).toBe(computeShieldstun(taken));
+        expect(defender.vx).toBe(shieldPushback(shieldstunExact(taken)));
+        expect(attacker.vx).toBe(-attackerShieldPushback(taken));
+        expect(frames[h - 1].state.fighters[1].shieldHealth - defender.shieldHealth).toBe(shieldDamage(taken) + SHIELD_DECAY_PER_FRAME);
+      }
+    });
+
+    // A perfect shield too: the attacker's push off a parried hit reads the damage
+    // before the bonus (UNVERIFIED, as above).
+    it("a jab on a perfect shield pushes the attacker the same in a 1v1 as outside one", () => {
+      const parried = (s: GameState): GameState => {
+        s.fighters[1].action = "shield";
+        s.fighters[1].actionFrame = 10;
+        const held = play(cloneState(s), 20, JAB_INTO_SHIELD);
+        const k = held.findIndex((f) => f.events.shieldHits.length > 0);
+        return play(s, k + 1, (i) => [i === 0 ? Btn.Attack : 0, i < k - 2 ? Btn.Shield : 0])[k].state;
+      };
+      const free = parried(standing());
+      const one = parried(oneOnOne(standing()));
+      expect(free.fighters[1].action).toBe("shieldRelease");
+      expect(one.fighters[0].vx).toBe(-attackerShieldPushback(JAB_DMG));
+      expect(one.fighters.map((f) => f.vx)).toEqual(free.fighters.map((f) => f.vx));
     });
 
     // Both freeze alike, so the freeze moves neither's first free frame against the
@@ -6858,9 +6916,12 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
     });
 
     // UNVERIFIED (no source names armour): the armoured fighter's freeze is a hit's
-    // victim's, so it can SDI in it, as anyone hit can (SmashWiki "Smash directional
-    // influence", https://www.ssbwiki.com/Smash_directional_influence: SDI moves a
-    // fighter "during hitlag").
+    // victim's, so it can SDI in it, as anyone hit can. SmashWiki "Hitlag"
+    // (https://www.ssbwiki.com/Hitlag): "During hitlag, defending characters are
+    // capable of performing smash directional influence"; SmashWiki "Smash
+    // directional influence" (https://www.ssbwiki.com/Smash_directional_influence):
+    // SDI "allows players to slightly alter their position during hitlag from being
+    // hit by an attack", and shield SDI moves a fighter who does not flinch.
     it("super armour: the armoured fighter can SDI in its freeze (UNVERIFIED)", () => {
       const s = standing();
       Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
@@ -6872,8 +6933,10 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
     });
 
     // UNVERIFIED (no source orders a trade): an armoured fighter whose own hit lands
-    // on the same frame keeps the longer of the two freezes, as knockback stacking
-    // and a throw's freezes do (`freezeFighter`'s `atLeast`).
+    // on the same frame keeps the longer of the two freezes, as every fighter in a
+    // trade does (ruling R-7b-e, `freezeFighter`; SmashWiki "Priority",
+    // https://www.ssbwiki.com/Priority, the nearest: a rebounding fighter freezes for
+    // "the hitlag of the stronger attack").
     it("super armour: a fighter armouring a jab as his own 20% hit lands keeps his longer freeze (UNVERIFIED)", () => {
       const puncher: FighterDef = {
         ...BASE_DEF,
@@ -6891,6 +6954,51 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
       expect(theirs).toBe(19);
       expect(frames[h].events.hits.find((x) => x.victim === 1)!.knockback).toBe(0);
       expect(frames[h].state.fighters[1]).toMatchObject({ action: "special", hitlag: theirs - 1 });
+    });
+
+    // A trade never shortens a freeze (Plan 5, Task 7b fix round 2, ruling R-7b-e):
+    // each fighter keeps the longer of the freeze it already has and the new one,
+    // whichever port's hit resolves first. UNVERIFIED: no source orders a trade; the
+    // nearest is SmashWiki "Priority" (https://www.ssbwiki.com/Priority), on clanks,
+    // "a rebounding character will suffer freeze frames equal to the hitlag of the
+    // stronger attack". The fixture's fresh 10% jab (12 frames) against a transcendent
+    // 20% (⌊21 × 0.65 + 6⌋ = 19), landing on the same frame: both 18 after it.
+    it("a trade: both fighters keep the longer freeze, whichever port lands the stronger hit", () => {
+      const twenty: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, downB: move("downB", { totalFrames: 40, hitboxes: [hitbox({ damage: fx(20), transcendent: true })] }) },
+      };
+      const ctx = ctxFor(twenty);
+      const long = computeHitlag(mul(fx(20), STALE_FRESH_BONUS));
+      expect(long).toBe(19);
+      const traded = (strong: 0 | 1) => {
+        const keys = (i: number): readonly InputFrame[] =>
+          i === 0 ? (strong === 1 ? [Btn.Attack, Btn.Down | Btn.Special] : [Btn.Down | Btn.Special, Btn.Attack]) : [0, 0];
+        const frames = play(standing(ctx), 40, keys, ctx);
+        const h = frames.findIndex((f) => f.events.hits.length === 2);
+        expect(h, `port ${strong} strong`).toBeGreaterThan(0);
+        return { frames, h, keys };
+      };
+      const runs = [traded(1), traded(0)];
+      for (const { frames, h } of runs) {
+        expect(frames[h].state.fighters.map((f) => f.hitlag)).toEqual([long - 1, long - 1]);
+        // Both launches wait out the longer freeze and fire on its last frame.
+        for (const port of [0, 1]) {
+          expect(frames[h + long - 2].state.fighters[port].pendingFacing, `port ${port}`).not.toBe(0);
+          expect(frames[h + long - 1].state.fighters[port].pendingFacing, `port ${port}`).toBe(0);
+        }
+      }
+      expect(runs[0].h).toBe(runs[1].h);
+      // Mirror images: what the stronger hit did to one port, it did to the other.
+      const [a, b] = runs.map((r) => r.frames[r.h + long].state.fighters);
+      expect([b[1].vx, b[1].vy, b[0].vx, b[0].vy]).toEqual([-a[0].vx, a[0].vy, -a[1].vx, a[1].vy]);
+      // And from any frame, re-simulated hash-equal.
+      for (const { frames, keys } of runs) {
+        for (let k = 0; k < 39; k++) {
+          const again = play(cloneState(frames[k].state), 39 - k, (i) => keys(i + k + 1), ctx);
+          again.forEach((f, j) => expect(hashState(f.state), `snapshot ${k}, frame ${k + 1 + j}`).toBe(hashState(frames[k + 1 + j].state)));
+        }
+      }
     });
 
     it("an invincible fighter: the attacker n − 1, the 1v1 multiplier left out", () => {

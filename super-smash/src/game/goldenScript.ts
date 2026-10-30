@@ -182,11 +182,22 @@
  * the third frame after the trump ends on 1813, as before), and he lands on 1848.
  * Fox's KO is on 1857 and the respawn on 1931; time up stays on 2014.
  *
+ * Its fix round 2 (the 1v1 bonus never reaches a shield, ruling R-7b-d; SmashWiki
+ * "1v1 multiplier": "Shields and stage elements are unaffected by the multiplier")
+ * re-tuned one step. Mario's three jabs take 12.5 off Fox's shield, not 15.0, and
+ * stun it 10 frames, not 12, so it breaks on 659, not 649. Fox stands 0.3 units
+ * further on, the forward smash's near box reaches him (18.5%, not 22.4%; 82.05
+ * units, still a tumble), and he lands 1.3 units nearer (x 2.3, techs on 781) and
+ * techs again on 1026 after the forward tilt. His step in ahead of the fireball is
+ * dropped: standing still puts him where he was for the fireball (1577), the nair
+ * (1635; 74.75 units, still a reel, on his feet on 1672, not 1674) and the trump
+ * (1783), and every named frame after it is as it was.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
  * (Fox breaking free on 140, the pummel on 217, the throw on 250, the shield break
- * on 649, the techs on 780 and 1027, the hangs on 861, 1193, 1299, 1400 and 1781,
+ * on 659, the techs on 781 and 1026, the hangs on 861, 1193, 1299, 1400 and 1781,
  * the trump on 1783, the hits on 747, 1006, 1577 and 1635, Fox's KO on 1857, time
- * up on 2014). All were checked against a run after Plan 5 Task 7b's fix round 1.
+ * up on 2014). All were checked against a run after Plan 5 Task 7b's fix round 2.
  */
 
 import { Btn } from "@/engine/types";
@@ -273,15 +284,15 @@ const STEPS: readonly ScriptStep[] = [
   [1, A, S], //                   446: jab: shieldStun
   [30, 0, S],
   [1, A, S], //                   477: jab: shieldStun
-  [254, 0, S], //                 478: the shield breaks on 649: shieldBroken, stunned 389 frames
+  [254, 0, S], //                 478: the shield breaks on 659: shieldBroken, stunned 389 frames
   // Mario forward-smashes the stunned Fox, to the left, who holds a soft up through
   // the launch: 38° and a tumble, so the soft DI bends it, and Fox flies across the
   // stage and lands near its middle.
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
   [46, 0, SOFT | U], //           734: tumble (747); Mario can walk again on 800
-  [1, 0, S | SOFT | U], //        780: Fox presses shield as he lands, and techs in place on 780...
-  [19, 0, SOFT | U], //           781: ...(his launch is slow enough, under 3), then stands
+  [1, 0, S | SOFT | U], //        780: Fox presses shield a frame before he lands...
+  [19, 0, SOFT | U], //           781: ...and techs in place on 781 (his launch is slow enough, under 3), then stands
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
@@ -299,8 +310,8 @@ const STEPS: readonly ScriptStep[] = [
   [1, L | SOFT, 0], //           1001: facing left since the ledge
   [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006
   [21, 0, 0],
-  [1, 0, S], //                  1024: Fox presses shield 3 frames before he lands...
-  [18, 0, 0], //                 1025: ...and techs in place on 1027 (slow enough, under 3), then stands
+  [1, 0, S], //                  1024: Fox presses shield 2 frames before he lands...
+  [18, 0, 0], //                 1025: ...and techs in place on 1026 (slow enough, under 3), then stands
   [12, D, 0], //                 1043: crouchStart, crouch
   [12, 0, 0], //                 1055: crouchEnd
   [30, L, 0], //                 1067: walk, dashStart, run
@@ -323,8 +334,7 @@ const STEPS: readonly ScriptStep[] = [
   [17, R | SOFT, 0], //          1385: back onto the ledge (the hang begins on 1400)
   [13, 0, 0],
   [1, S, 0], //                  1415: ledgeRoll
-  [4, 0, R | SOFT], //           1416: Fox steps in, ahead of the fireball (4 frames: Task 7b's fix round left him nearer)
-  [46, 0, 0],
+  [50, 0, 0], //                 1416: Fox stands where he is for the fireball (Task 7b's fix rounds left him nearer)
   [1, J, 0], //                  1466: a tap is a short hop
   [6, 0, 0],
   [1, S, 0], //                  1473: airDodge, landing inside it: landingLag

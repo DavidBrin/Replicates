@@ -84,7 +84,9 @@ export function counterDamage(c: CounterDef, damage: number): number {
 export function triggerCounter(f: FighterState, def: FighterDef, c: CounterDef, caught: number): number {
   startMove(f, "special", c.then);
   f.combat.counterDamage = counterDamage(c, caught);
-  f.hitlag = framesAfterHit(c.freeze);
+  // Never shortening a freeze it is already in, as every freeze store (ruling
+  // R-7b-e, `freezeFighter` in simulate.ts).
+  f.hitlag = Math.max(f.hitlag, framesAfterHit(c.freeze));
   // Its frame 1, intangible when the counterattack's window starts there; the
   // freeze holds the frame, and with it the window (`step()`'s hitlag branch).
   updateDodgeIntangibility(f, def);
