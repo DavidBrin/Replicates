@@ -4,8 +4,10 @@
 
 A browser rebuild of **Super Smash Bros. Ultimate**'s versus mode, played on a laptop
 keyboard. The menus, the HUD and the physics are reproduced from measured values rather
-than approximated by feel; the fighters are drawn from code rather than from art files,
-because there is no legitimate way to obtain Nintendo's.
+than approximated by feel. In a match the fighters are SSBU's own models, built locally by
+`pnpm models` from a pinned download, never committed to this repository, and served by the
+deployed site; a checkout without them draws each fighter as a capsule stand-in of its own
+hurtboxes. Either way they are posed by the project's own animation clips (DECISIONS D57).
 
 This document is the contract the implementation was built against. Decisions and their
 reasoning live in [`DECISIONS.md`](DECISIONS.md); the evidence behind them is in
@@ -59,7 +61,10 @@ into it.
    └───────────────┬──────────────────────────────────────┘
                    │ reads state, sends inputs
    ┌───────────────▼──────────────────────────────────────┐
-   │  render/        canvas painter, camera, VFX           │
+   │  render/        2D overlay: HUD, tags, move effects,  │
+   │                 projectiles, particles; the clips     │
+   │  render3d/      three.js on WebGL: camera, stage,     │
+   │                 models, shields, sparks, presenter    │
    │  audio/         Web Audio synthesis                   │
    │  ai/            CPU input generation                  │
    │  net/           rollback session + transport port     │
@@ -72,11 +77,15 @@ into it.
    └──────────────────────────────────────────────────────┘
 ```
 
+`render3d/` and three.js load in their own chunk, after `/play` (or the animation lab) mounts.
+`scripts/models/` is the build-time model pipeline (fetch, Blender export, optimise, and the
+deploy guard), outside the app.
+
 **The rule that makes the rest work:** `engine/` imports nothing from `react`, `next`,
-`render/`, `audio/`, `net/` or `app/`, and calls no browser API at all. It is enforced by
-`src/engine/layering.test.ts`, which walks the import graph and fails the build on a
-violation — the same guard the sibling projects use, and here it protects determinism
-rather than just tidiness.
+`three`, `render/`, `render3d/`, `audio/`, `net/` or `app/`, and calls no browser API at all.
+It is enforced by `src/engine/layering.test.ts`, which walks the import graph and fails the
+build on a violation — the same guard the sibling projects use, and here it protects
+determinism rather than just tidiness.
 
 ### The simulation contract
 
@@ -92,6 +101,12 @@ Four rules, all enforced by tests:
 3. **No `Math.sin/cos/tan/pow/exp/log/atan2`.** These are permitted to differ between
    engines in their last bits. Trigonometry comes from the integer table in `fixed.ts`.
 4. **No mutation of the input state.** `step` returns a new state; the caller owns both.
+
+**Animation reaches the simulation only as baked integers.** Anything the sim reads from
+animation — the bones its hitboxes, hurtboxes and ECB hang from — comes from the build-time
+bake (`public/bake/roster.bin.gz`) as Q12 integers, through `BoneTable`/`BakeTables`. The float
+maths that makes the bake (retargeting the clips, forward kinematics) runs only at build time
+and in the renderer, and `layering.test.ts` also bans three.js and `render3d/` from `engine/`.
 
 Cosmetic state — particles, screen shake, audio — is derived from the returned `events`
 and lives outside `GameState`, so re-simulating eight frames after a rollback does not
@@ -170,6 +185,10 @@ The simulation is deterministic by construction (§3), which buys rollback.
   relayed WebSocket.
 - **Desync detection** hashes the state every 30 frames and compares; a mismatch is
   reported rather than left to manifest as two players seeing different winners.
+- **The lobby compares builds before a match.** Each peer's greeting carries its build id, the
+  protocol version, a fingerprint of the bone bake it installed and one of the rules and
+  script slots it runs; any difference is refused in the lobby, so two peers never simulate
+  different bones or scripts. A peer installs the bake before it opens or joins a room.
 
 ---
 
@@ -304,8 +323,14 @@ Load-bearing details, all from the reference screenshots:
   dark name bar beneath carrying the port colour.
 - **The percent ramps** white → yellow → red → dark maroon as damage climbs toward 300,
   and shakes when hit.
-- **Fighters are drawn, not blitted.** A bone hierarchy of capsules and circles, posed
-  from keyframe data and rendered to canvas — see DECISIONS D2.
+- **Fighters are SSBU's models, posed by the project's own clips.** Each model is posed by
+  the replica's hand-authored clips, retargeted onto its SSBU skeleton in the side plane, and
+  the sim reads the same bones from the bake, so a hitbox rides the limb the player sees.
+  Without the models each fighter is a stand-in: its own hurtbox capsules, in its port's
+  colour. The 2D rigs still draw the HUD's portraits and stock icons. See DECISIONS D57.
+- **The match is 3D, and WebGL is required.** The stage, fighters, shields and hit sparks are
+  three.js on WebGL, under a transparent 2D overlay (HUD, tags, move effects, projectiles).
+  Without WebGL no match starts, and the game says why in a sentence a player can act on.
 - **Type** is Anton for numerals and display, M PLUS Rounded 1c for menus — SIL Open Font
   License, chosen as the closest free analogues to Ultimate's proprietary faces.
 
@@ -321,6 +346,14 @@ Load-bearing details, all from the reference screenshots:
 - **Determinism** — the same seed and inputs produce an identical state hash, twice over;
   and a rollback of 8 frames reproduces the state that was never rolled back.
 - **Layering** — `engine/` imports nothing forbidden, checked by walking the import graph.
+- **The bake and its ratchets** — the bake regenerates byte for byte and its digest is
+  pinned; the limb ratchet (which script slots run on limb bones, `limb.json`), the reach
+  ratchet (every frame, in each direction, against the legacy boxes, `reach.test.ts`), the
+  strike test (each attack strikes with the limb its hitboxes ride) and the hurt ratchet
+  (each fighter's bone-derived hurtboxes against its old box, `hurt.allow.json`).
+- **3D E2E** — stand-ins when the models are not served, a lost and restored WebGL context,
+  the drawing buffer through resizes and device pixel ratios, and four fighters inside the
+  draw-call and triangle budget.
 - **E2E** (Playwright) — the full flow from title to results, both control schemes, and
   the screenshot capture behind `CAPTURE=1`.
 

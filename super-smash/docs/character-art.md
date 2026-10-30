@@ -32,7 +32,8 @@ the other particles, the KO flash, the magnifying glass).
 pnpm models:fetch      # the .blend files and textures, at a pinned commit, SHA-256-checked, into .model-cache/
 pnpm models            # Blender (portable, in .model-cache/tools/) exports, joins and optimises one glb per fighter
 pnpm models:check      # what `pnpm run deploy` runs first: every glb present, unchanged, under 25 MiB, built
-                       # against the committed skeletons by this pipeline, and nothing in public/models/ git would take
+                       # against the committed skeletons by this pipeline, nothing in public/models/ git would take,
+                       # and no model, texture or fetched file anywhere else in public/ (next build copies all of it)
 ```
 
 The models come from Worldblender's Blender re-exports. **Nothing Nintendo made
@@ -45,13 +46,15 @@ SHA-256s (`scripts/models/manifest.json`), which meshes are the fighter
 hurt-capsule sizes (`src/render3d/skeletons/*.json`, read out of the `.blend`
 files by a stdlib-only reader, `pnpm models:skeletons`, no Blender), and the
 bake. `noRippedAssets.test.ts` refuses any tracked file whose name, or whose
-size and hash, is a manifest file's.
+size and hash, is a manifest file's, and any in a pipeline format or starting
+with a model's or texture's magic number (`scripts/models/rippedFormats.mjs`).
 
 **Without `pnpm models`, every fighter is a stand-in**: their own hurtbox
 capsules on the same bones, in their port's colour, posed exactly as the model
 would be. A model that fails to
 load is a stand-in for that match only. The game, the sim and every test need
-neither Blender nor the model cache.
+neither Blender nor the model cache: a fresh clone's `pnpm test` is green, and
+the few checks of a local build skip.
 
 ### The retarget rule
 

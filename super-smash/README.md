@@ -10,9 +10,10 @@ The menus, the HUD and the physics are reproduced from measured values rather th
 approximated by feel: the knockback equation is Ultimate's, the stage geometry is Kurogane
 Hammer's, and the frame data comes out of the game's own decompiled scripts. The animation
 is the project's own — every move a hand-authored clip timed to its hitboxes — and in a match
-those clips pose each fighter's SSBU model, which `pnpm models` fetches and builds on your own
-machine and which is never committed to this repository. Without it, every fighter is a
-capsule stand-in ([D57](DECISIONS.md#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked)).
+those clips pose each fighter's SSBU model, which `pnpm models` builds from a pinned download
+and which is never committed to this repository; the deployed site serves them, and a checkout
+that has not built them draws every fighter as a capsule stand-in
+([D57](DECISIONS.md#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked)).
 
 It also does one thing the original does not: **rollback netcode**. Ultimate is delay-based.
 
@@ -62,6 +63,15 @@ pnpm run dev
 Open <http://localhost:3000>. Nothing to configure — no keys, no database, no account. The
 whole game runs in the browser.
 
+It needs **Node 26** (`.nvmrc`; `engines` in `package.json`). The fighters' bone bake is float
+maths whose last bits V8 decides, and its digest is pinned, so another Node could bake other
+bytes; `src/render3d/bake/nodeVersion.test.ts` fails on any other major. (The model scripts
+also need Node 24.2 or later, for `import.meta.main`.)
+
+A match needs **WebGL**. Without it no match starts, and the page says so: "This browser can't
+draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or try another
+browser."
+
 Online play needs the Worker as well: `pnpm preview` builds the static export and serves it
 with the Worker on <http://localhost:8787>. Open it in two browsers, then Online → Create room in
 one and Join room in the other.
@@ -81,10 +91,11 @@ one and Join room in the other.
 | `pnpm run deploy` | `models:check`, build and `wrangler deploy` (David's Cloudflare login) |
 | `pnpm models:fetch` | Fetch the fighter models at a pinned commit into the git-ignored `.model-cache/`, SHA-256-checked |
 | `pnpm models` | Export, join and optimise one glb per fighter into the git-ignored `public/models/` (needs Blender, portable, in `.model-cache/tools/`) |
-| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones |
+| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones, or with a model, texture or fetched file anywhere else in `public/` |
 
 Without `pnpm models` the game runs as it is, with every fighter a capsule stand-in; the
-simulation and every test need neither the models nor Blender.
+simulation and every test need neither the models nor Blender (a fresh clone's `pnpm test` is
+green, and the few checks of a local build skip).
 
 Screenshots are captured, not taken by hand:
 
@@ -258,8 +269,9 @@ velocity is a sum of KineticModule energies — control, stop, gravity, motion, 
 each action is a status object with `pre`/`main`/`exec`/`end` under a `FIGHTER_STATUS_KIND_*` name
 (`status/`); and every move runs as an ACMD `game_` script whose hitboxes hang off bones through a
 `BoneTable` (`acmd/`). The published scripts for all eight fighters are imported by
-`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`, and 38 moves, ones whose hitboxes
-all hang off the root bone, already run them (`src/fighters/acmd/active.ts`). Combat follows Ultimate's
+`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`, and 88 moves run them: 38 whose
+hitboxes all hang off the root bone (`src/fighters/acmd/active.ts`), and 50 whose hitboxes ride
+limb bones the bake places (`src/fighters/acmd/limb.json`). Combat follows Ultimate's
 published rules — the balloon speed-up, DI, shields, staling, teching, grabs, air dodges and the
 rest — and where no source settles one, the code says `UNVERIFIED:`
 ([D56](DECISIONS.md#d56--combat-follows-ultimates-published-rules)).
@@ -322,8 +334,40 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 | `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets; fails open |
 | `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, 2 peers, no timers |
 
-`pnpm run deploy` builds and runs `wrangler deploy`; it needs `wrangler login` on David's
-account, and the TURN secrets are set once with `wrangler secret put` (see `.env.example`). A
+**Before a deploy**, in this order:
+
+1. `pnpm models:fetch`: the `.blend` files and textures, at a pinned commit, SHA-256-checked,
+   into the git-ignored `.model-cache/`. GitLab refuses unauthenticated bursts (about 50 to 60
+   requests): the script stops with exit code 3 and says when the window resets, and the same
+   command run after that carries on.
+2. Blender 5.2.2, portable, in `.model-cache/tools/Blender.app` (macOS arm64; `BLENDER=` points
+   `pnpm models` at another copy). Install it from `super-smash/`:
+
+   ```bash
+   mkdir -p .model-cache/tools
+   curl -fL -o .model-cache/tools/blender-5.2.2-macos-arm64.dmg https://download.blender.org/release/Blender5.2/blender-5.2.2-macos-arm64.dmg
+   echo "dc4125399b8bfefe283cc1624d6cfc7809d1cac20ace51072127eb371f31f210  .model-cache/tools/blender-5.2.2-macos-arm64.dmg" | shasum -a 256 -c
+   hdiutil attach -nobrowse -readonly -mountpoint .model-cache/tools/mnt .model-cache/tools/blender-5.2.2-macos-arm64.dmg
+   cp -R .model-cache/tools/mnt/Blender.app .model-cache/tools/Blender.app
+   hdiutil detach .model-cache/tools/mnt
+   rm .model-cache/tools/blender-5.2.2-macos-arm64.dmg
+   ```
+
+   The checksum line must print `OK`; if it does not, delete the file and install nothing.
+3. `pnpm models`, then `pnpm run deploy` from a clean tree (nothing uncommitted in
+   `super-smash/`, so the build id is the commit's). The deploy runs `models:check` first,
+   which refuses any model missing, changed or built otherwise, and any model, texture or
+   fetched file anywhere else in `public/` (`next build` copies all of it); then `next build`
+   and `wrangler deploy`.
+4. After the deploy, check what the site serves:
+   `curl -sI https://david-smash.leaders-game.workers.dev/bake/roster.bin.gz` shows
+   `content-type: application/gzip` and no `content-encoding` header, and
+   `/models/index.json` and one glb it names both load. (A bake an edge decoded is still
+   accepted, since the page checks decoded bytes against the same digest, but the header should
+   be fixed.)
+
+`pnpm run deploy` needs `wrangler login` on David's account, and the TURN secrets are set once
+with `wrangler secret put` (see `.env.example`). A
 deploy restarts every room, which drops lobby sockets but not matches in progress — those are
 peer to peer. Each build is stamped with an id that online players compare, so two different
 deploys refuse each other in the lobby: the commit, plus a hash of any uncommitted changes in
@@ -374,10 +418,11 @@ A study, not a product, and not affiliated with Nintendo in any way.
 **David-Smash** is a rebuild of Super Smash Bros. Ultimate's versus mode as an exercise in
 agentic software development. Every sound and image in this repository is generated from
 code: no Nintendo sprites, models, textures, music or logos are reproduced or distributed
-anywhere in it. The fighter models a match draws are fetched and built on the player's own
-machine by `pnpm models` and are never committed; without them, the fighters are the project's
-own capsule stand-ins. Super Smash Bros. and all related characters and trademarks are
-the property of Nintendo. Non-commercial, educational, and free.
+anywhere in it. The fighter models a match draws are never committed to this repository:
+`pnpm models` builds them from a pinned download on the deploying machine, and the deployed
+site serves them; a checkout that has not run it draws the project's own capsule stand-ins.
+Super Smash Bros. and all related characters and trademarks are the property of Nintendo.
+Non-commercial, educational, and free.
 
 It was built from eight parallel research lanes, then a frozen engine contract, then six
 parallel build slices — engine, roster, renderer, menus, input and AI, netcode and audio —

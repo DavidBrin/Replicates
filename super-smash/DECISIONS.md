@@ -33,6 +33,8 @@ items later means adding a spawner, a pickup state and a throw state, none of wh
 
 ## D2 — Fighters are drawn from code, not from art files
 
+**Replaced by [D57](#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked) for the match's world (the rigs still draw the HUD's portraits and icons).**
+
 **Decision.** Every fighter is a bone hierarchy of capsules and circles, posed from
 keyframe data and painted to canvas. There are no sprites, no models, and no image assets
 in the repository at all.
@@ -222,6 +224,8 @@ fragmentation ceiling.
 ---
 
 ## D11 — Canvas 2D, with no rendering library
+
+**Replaced by [D57](#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked) for the match's world (the rigs still draw the HUD's portraits and icons).**
 
 **Decision.** The renderer is hand-written Canvas 2D. No PixiJS, no Three.js, no WebGL.
 
@@ -2766,7 +2770,9 @@ re-exports, fetched and built locally by `pnpm models`, never committed), animat
 replica's own 2D pose clips retargeted onto each SSBU skeleton, and the sim reads those same
 bones from integer tables baked at build time (`public/bake/roster.bin.gz`). Plan 4 built it in
 23 tasks and four inserted ones (9b, 13b, 21b, 21c); its last task made the 3D world the only way
-a match is drawn and removed the 2D fighter path it replaced.
+a match is drawn and removed the 2D fighter path it replaced. It replaces D2's figure (a bone
+hierarchy of capsules painted to canvas) and D11's Canvas-2D-only renderer for the match's world;
+the 2D rigs still draw the HUD's portraits, stock icons and magnifying glass.
 
 **Why the clips and not SSBU's animations.** SSBU's animations are game files; the clips are
 ours, already timed to every move's hitboxes (D34) and reviewed one by one (D41, D44). Driving
@@ -2848,9 +2854,12 @@ the page reports a stand-in for every fighter.
 **What it is not.** No ripped file is ever committed (spec §3.1): only bone names, bind matrices,
 capsule sizes and SHA-256s; the guard test refuses any tracked file whose name, or whose size and
 hash, is a manifest file's, and the pre-push scan hashes every blob a push would send against the
-manifest. No render or screenshot of a real model is committed either: the repo is public, and a
-picture of a model is a derivative of the ripped files. Captures go to the git-ignored
-`test-results/anim/`. A checkout without `pnpm models` plays with capsule stand-ins.
+manifest. Since the plan-final wave the guard test and the deploy guard also refuse a pipeline
+format by its name and a model's or texture's magic number under any name. No render or
+screenshot of a real model is committed either: the repo is public, and a picture of a model is
+a derivative of the ripped files. Captures go to the git-ignored `test-results/anim/`. The
+deployed site serves the glbs built on the deploying machine; a checkout without `pnpm models`
+plays with capsule stand-ins.
 
 **The inserted tasks.**
 - *9b, before the first bake* (ruling R5): a render-only re-time of the spot dodge and roll
@@ -2901,7 +2910,9 @@ adopted.
   baked rest half-widths; the captor's `throw` joint is carried to Plan 5.
 - *R8, artefacts against the plan*: the manifest (114 files), `meshes.json` and the eight
   skeleton SHA-256s matched exactly. Everything regenerated from them differed, each difference
-  explained in its task's report (table below).
+  explained in its task's report (table below). `meshes.json` matched at Task 6; Task 21b changed
+  it since, on review: it names each fighter's face meshes, and Mario's hair and Donkey Kong's
+  brow are drawn but kept out of the hurtbox measurement (`drawOnly`), so no capsule moved.
 - *R9, sparks on capsules*: a hit event carries the point of the hitbox's segment nearest the
   struck capsule, in integers (events are in neither the golden digest nor `hashState`), and the
   3D sparks spawn there; in the Task 18 review's sample, 34 of 538 hits landed away from the box's
@@ -2962,11 +2973,8 @@ against the model manifest.
   ftilt's clip, and with no length of its own in the pose clock it plays over the 30-frame
   fallback (`OPEN_ENDED_FRAMES`) against its 55-frame state. Kirby's borrows the ftilt whose legs 13b
   swapped, which stands because its published script hangs only a root box.
-- *The shield* (R11 keeps Plan 3's bubble, centred half-way up the legacy box): SSBU-sized
-  bodies poke out of it. Donkey Kong's head is 7.0 units out of a full shield; pokes on a worn
-  shield went from 0.1% to 5.6%; centring the bubble mid-body instead bares the feet (12.8%).
-  The scripted match's first jab poked Fox's shield until it was re-tuned. The shield on a bone is
-  carried.
+- *The shield* stays Plan 3's bubble (R11), and SSBU-sized bodies poke out of it: how far is
+  an open question (below). The shield on a bone is carried.
 - *The six actions Plan 3 added* (`tech`, `techRoll`, `techWall`, `techCeiling`, `tumbleFall`,
   `ledgeTrumped`) borrow existing clips (R11).
 - *Clip-gains*, each accepted with its reason in `reach.allow.json` and an eyeball in 3D left for
@@ -3000,6 +3008,29 @@ against the model manifest.
 - *Foot contact*: at idle the feet sink up to 1.1 below the floor, and crouch and shield lift
   them up to 2.4. The hurtboxes agree with the drawing, so it is clip and retarget fidelity, not
   a mismatch (`POLISH-BACKLOG.md`).
+- *The impact squash is not drawn* (Task 23 review): the 2D figure multiplied `squashFor` into its
+  root at draw time (a landing 1.22 times as wide and 0.8 as tall, easing out over six frames; a
+  stretch into a hit's freeze; a jump's crouch), and the model takes only the clip's own scale
+  (`render3d/bake/bake.ts`), so the squash went with the 2D path. It never moved a box.
+  `squashFor` and `rotationPivot` stay in `characterArt.ts` as test support, for the landing,
+  jump-squat and turned-pose clip tests written against them (plan-final ruling); putting the
+  squash back on the model's root, render only, is on `POLISH-BACKLOG.md`.
+- *WebGL is required.* Task 23 removed the 2D figure, so there is no Canvas 2D fallback: a
+  browser without WebGL gets no match, and the page says why in our words (`NO_WEBGL`: "This
+  browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or
+  try another browser."), not three.js's. A context the browser loses and has not given back
+  after 5 s (`CONTEXT_RESTORE_WAIT_MS`, a judgement, UNVERIFIED) brings up a notice over the match,
+  which keeps running: a reload brings the picture back (online, it also leaves the match).
+- *The bake download has a deadline.* The request and its body share `BAKE_TIMEOUT_MS`, 30 s (the
+  1.8 MB file through a 0.5 Mbit/s link); past it the download is aborted with "The fighters'
+  animation data took too long to download. Check your connection and try again.", in the lobby
+  (which offers Create and Join again) or over `/play`, and the next try asks afresh. A bake an
+  edge has already decoded (no gzip header) is checked against the same digest as it is (codex,
+  plan-final).
+- *The plan's "layering list stays unchanged"* (its lines 43 and 9464) is stale: Task 2's fix
+  round added `render3d` to `layering.test.ts`'s banned layers and Task 15 added `three` to its
+  banned packages, and the plan-final wave bans three.js's add-ons (`three-*`) and React Three
+  Fiber's scope (`@react-three/*`) by prefix.
 - *Faces and the side-on camera*: the export flattens the layered eyes into one texture and draws
   DK's brow as draw-only, kept out of the hurtbox measurement; 21c's head turn moves no box bone.
   In Ultimate the bodies turn toward the camera inside the animations, and that turn is part of
@@ -3011,7 +3042,11 @@ sizes (from mesh weights; Kirby's 7 capsules against the humanoid 11); the ECB's
 feet in the air and DK's airborne height; the size-modifier rule; the face-turn angles; the
 held-fighter placement; the shield's centre; and Donkey Kong's standing size (26.3 units against
 legacy 15.0), which is what "adopt SSBU sizes" means for him unless a spine-lean override
-(`RETARGET_OVERRIDES`) is asked for.
+(`RETARGET_OVERRIDES`) is asked for. The shield's numbers: R11 keeps the bubble centred half-way
+up the legacy box, and SSBU-sized bodies poke out of it. Donkey Kong's head is 7.0 units out of
+a full shield; pokes on a worn shield went from 0.1% to 5.6%; centring the bubble mid-body
+instead bares the feet (12.8%). The scripted match's first jab poked Fox's shield until it was
+re-tuned.
 
 **Adding to the bake.** The recipe is in the plan's "Interfaces for later phases"
 (`docs/superpowers/plans/2026-10-24-plan-4-3d-renderer.md`), brought up to the code at Task 23. A
@@ -3021,15 +3056,25 @@ motion that depends on `charge`, as the air dodge's direction and the roll's way
 `DODGE_CHARGES` entry in `render3d/bake/bake.ts`, or `bake.test.ts` fails because the bake never
 plays it; then re-bake, and run the reach, limb and hurt ratchets.
 
+**The plan-final wave** (after the whole-plan review and codex's pass), beyond the bake deadline
+and the WebGL sentence above. Node is pinned to 26 (`engines` and `.nvmrc`), because the bake's
+digest depends on V8's float maths and `import.meta.main` needs Node 24.2 or later;
+`nodeVersion.test.ts` fails on any other major. The stage rule is one shared helper
+(`game/stateInvariants.ts`, test support): no fighter's origin is ever inside a hard platform's
+body, checked on crafted states and on every frame of 56 baked CPU matches in the suite
+(`stageSweep.test.ts`), and a fighter rising with its feet level with a platform's underside now
+bonks on it (`physics.ts`); the golden did not move. `calibrate` refuses a drive table with two
+drives on one SSBU bone, or a turn on a "bind" drive. Leaving online `/play` before the match
+mounts leaves the room. A fresh clone's `pnpm test` is green without the models. The deploy guard
+audits all of `public/`, which `next build` copies whole, and it and the commit guard know a model
+or texture by its first bytes as well as by its name (`scripts/models/rippedFormats.mjs`).
+
 **Found and carried.** The controller's lists (`.superpowers/sdd/`) are the detail; this is the
 summary.
 - *Plan 5*: the captor's `throw` joint for a held fighter (R7) and Samus's tether, which needs a
   clip that places `throw` at the claw; the shield on a bone; clips of their own for the six
   borrowed actions; a contact point for shield hits; the CPU's spacing, which now reads baked limb
   reach; modelling 366° and 368° before DK's up special and Samus's up smash can run.
-- *The plan-final wave*: a Node version pin (`engines` and `.nvmrc`), because the bake digest
-  depends on V8's float maths and `import.meta.main` needs Node 24.2 or later; and the reviews'
-  remaining Minors.
 - *Polish*: the glancing blow's "chik" (R10); a decorative stage layer behind the play plane
   (R13); blob shadows and a camera tilt; the clip-gain and foot-contact eyeballs; and a SPEC §6
   question found in the lab — a keyboard player cannot forward-tilt from standing, because a held
