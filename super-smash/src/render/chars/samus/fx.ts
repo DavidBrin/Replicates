@@ -1112,8 +1112,10 @@ function zeroOrb(ctx: CanvasRenderingContext2D, x: number, y: number, r: number,
  * 3-unit seams between the boxes are narrower than any body, and the fringes pull
  * toward the centre ("Fighters are drawn to the center", SmashWiki "Zero Laser"),
  * so they are its edge. Flat at the near end, the main box's start, so nothing
- * reaches back over Samus; out to the boxes' far reach. The shading is a
- * presentation choice; its extents are the boxes'.
+ * reaches back over Samus, and only the main box's height there, opening to the
+ * envelope's over a short taper (fix round 4, ruling R-T17t); out to the boxes'
+ * far reach. The shading and the taper are presentation choices; its extents are
+ * the boxes'.
  */
 function zeroBeam(ctx: CanvasRenderingContext2D, boxes: readonly Hitbox[], frame: number, feetX: number, feetY: number, u: number, dir: number): void {
   const main = boxes.find((hb) => (hb.part ?? 0) === 0) ?? boxes[0];
@@ -1150,10 +1152,30 @@ function zeroBeam(ctx: CanvasRenderingContext2D, boxes: readonly Hitbox[], frame
   const g = ctx.createLinearGradient(0, top, 0, bottom);
   for (const [o, colour] of stops.sort((p, q) => p[0] - q[0])) g.addColorStop(o, colour);
   ctx.fillStyle = g;
-  const x0 = feetX + dir * near * u;
-  const x1 = feetX + dir * far * u;
-  ctx.fillRect(Math.min(x0, x1), top, Math.abs(x1 - x0), bottom - top);
+  // Its near end tapers (fix round 4, ruling R-T17t; the re-review 3's V4): at the
+  // muzzle it is the main box's height, opening to the envelope's over
+  // `ZERO_NEAR_TAPER`, so no edge the envelope's full height stands over her head.
+  const mouthLo = Math.max(lo, my - mr);
+  const mouthHi = Math.min(hi, my + mr);
+  const open = Math.min(near + ZERO_NEAR_TAPER, far);
+  const at = (ahead: number, up: number) => [feetX + dir * ahead * u, feetY - up * u] as const;
+  ctx.beginPath();
+  ctx.moveTo(...at(near, mouthHi));
+  ctx.lineTo(...at(open, hi));
+  ctx.lineTo(...at(far, hi));
+  ctx.lineTo(...at(far, lo));
+  ctx.lineTo(...at(open, lo));
+  ctx.lineTo(...at(near, mouthLo));
+  ctx.closePath();
+  ctx.fill();
 }
+
+/**
+ * How far past the muzzle Zero Laser's beam opens from its main box's height to
+ * its envelope's (fix round 4, ruling R-T17t), units: the muzzle flash's last
+ * radius (box 8's 15). Presentation choice.
+ */
+const ZERO_NEAR_TAPER = 15;
 
 /* ------------------------------------------------------------ projectiles -- */
 

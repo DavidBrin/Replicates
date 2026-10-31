@@ -38,7 +38,7 @@ import type { FighterSelection } from "@/engine/simulate";
 import { createCamera, updateCamera, type Camera } from "@/render/camera";
 import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
-import { render, renderBackground, sceneShiftAt, type RenderState } from "@/render/renderer";
+import { render, renderBackground, sceneDrawShift, sceneShiftAt, type RenderState } from "@/render/renderer";
 import { cpuInput, cpuWorldFromDef, type CpuWorld } from "@/ai/cpu";
 import { stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
@@ -47,7 +47,7 @@ import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollbac
 import type { Transport } from "@/net/transport";
 // Three-free (`render3d/anchors.ts`): the overlay's anchors cost the page no three.js.
 import { drawnTop, overlayAnchor } from "@/render3d/anchors";
-import { createSceneShiftEase, easeSceneShift } from "@/render/sceneShiftEase";
+import { createSceneShiftEase, easeSceneShift, peekSceneShift } from "@/render/sceneShiftEase";
 import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
 import { GAME_SIM_CONTEXT } from "./simContext";
 
@@ -391,15 +391,18 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // the trackers that read cosmetic state off the fighters directly (ground
     // dust, launch trails, charge motes, damage smoke) and which nothing else
     // calls at all.
-    stepVfx(vfx, events, state, defs);
-    updateHud(hud, state);
-    // The moves, for a Final Smash's end-hit punch-in, and how tall each fighter
-    // is drawn, from the bake, for a scene to keep its user whole and off the
-    // fighter it launches (Plan 5, Task 17).
+    //
+    // How tall each fighter is drawn, from the bake, first: a scene keeps its user
+    // whole and off the fighter it launches by it (Plan 5, Task 17), and the hit
+    // sparks of the user's scene go where the user is drawn as this step is, its
+    // eased shift with this step whole (fix round 4, ruling R-T17s).
     tops = state.fighters.map((f) => {
       const def = defs[f.port];
       return def ? drawnTop(def, f, state.frame, GAME_SIM_CONTEXT.bake) : null;
     });
+    stepVfx(vfx, events, state, defs, peekSceneShift(shiftEase, sceneDrawShift(state, defs, tops), state.frame));
+    updateHud(hud, state);
+    // The moves, for a Final Smash's end-hit punch-in, and the tops.
     updateCamera(camera, state, stage, events, defs, tops);
 
     // Sound is driven from the same events the particles are, on the same

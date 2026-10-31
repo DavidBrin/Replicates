@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Vector3, type Camera as ThreeCamera, type Object3D, type PerspectiveCamera } from "three";
 
 import { toFloat } from "@/engine/fixed";
-import type { FighterState, MatchRules } from "@/engine/types";
+import type { FighterState, MatchRules, StepEvents } from "@/engine/types";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
 import { createNullTransport } from "@/net/transport";
 import { VIEW_HEIGHT, VIEW_WIDTH, cameraTarget, createCamera } from "@/render/camera";
@@ -18,7 +18,7 @@ import { installBake } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
 import { GAME_SIM_CONTEXT } from "./simContext";
-import { FRAME_MS, createMatchRunner, type WorldPresenter } from "./matchRunner";
+import { FRAME_MS, createMatchRunner, type MatchRunnerOptions, type WorldPresenter } from "./matchRunner";
 
 // The real tag painter, watched: where the overlay hangs each port's tag.
 vi.mock("@/render/characterArt", async (orig) => {
@@ -164,10 +164,11 @@ describe("the match runner with a 3D presenter", () => {
 
 describe("the camera a Final Smash's scene gets (Plan 5, Task 17 fix round 2)", () => {
   /** Donkey Kong at −30 in Jungle Rush's `move` on `actionFrame`, Mario trapped 8 ahead: the scene, mid-play. */
-  function scene(move: "finalAttack" | "finalEnd", actionFrame: number, presenter?: WorldPresenter) {
+  function scene(move: "finalSmash" | "finalAttack" | "finalEnd", actionFrame: number, presenter?: WorldPresenter, onFrame?: MatchRunnerOptions["onFrame"]) {
     installBake(readBakeFromDisk());
     const runner = createMatchRunner({
       ...(presenter === undefined ? {} : { presenter }),
+      ...(onFrame === undefined ? {} : { onFrame }),
       stage: getStageOrThrow("finalDestination"),
       players: [
         { selection: { defId: "donkeyKong" }, cpuLevel: null },
@@ -220,6 +221,104 @@ describe("the camera a Final Smash's scene gets (Plan 5, Task 17 fix round 2)", 
     runner.advance(1);
     expect(shiftOf()).toBeLessThan(0);
     expect(shiftOf()).toBeGreaterThan(held);
+  });
+
+  it("eases it once a paint, at the paint's own sim time: two paints inside one step draw the release at two places (R-T17o; the re-review 3's N11)", () => {
+    const queued: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queued.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      installBake(readBakeFromDisk());
+      const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
+      const runner = createMatchRunner({
+        presenter,
+        stage: getStageOrThrow("finalDestination"),
+        players: [
+          { selection: { defId: "donkeyKong" }, cpuLevel: null },
+          { selection: { defId: "mario" }, cpuLevel: null },
+        ],
+        rules: RULES,
+        getFighter: (id) => GAME_SIM_CONTEXT.fighter(id),
+        background: canvasWith(createMockContext()),
+      });
+      // The loop's clock starts at 0 (`performance.now`); each queued frame is the browser's next.
+      runner.start(canvasWith(createMockContext()));
+      const [dk, mario] = runner.state.fighters;
+      Object.assign(dk, { action: "special", move: "finalAttack", actionFrame: 20, x: -30 * 4096, y: 0, grounded: true, platform: 0, facing: 1, intangible: 60 });
+      Object.assign(mario, { action: "finalTrapped", actionFrame: 40, x: -22 * 4096, y: 0, grounded: true, platform: 0, facing: -1, hitstun: 0, hitlag: 0 });
+      mario.combat.trappedBy = 0;
+      runner.state.cinematic = 0;
+      const paint = (ms: number) => {
+        queued.at(-1)!(ms);
+        const [rs, , alpha] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+        return { shift: rs.sceneShift[0] as number, alpha: alpha as number };
+      };
+      // A step, painted on it: backed off Mario, 8 ahead, to the barrage's 12.
+      expect(paint(FRAME_MS).shift).toBe(-4);
+      // Let him go; the next step lets go of the shift, which closes over 7 frames.
+      Object.assign(runner.state.fighters[1], { action: "stand", x: 60 * 4096 });
+      runner.state.fighters[1].combat.trappedBy = -1;
+      const onStep = paint(2 * FRAME_MS);
+      expect(onStep.alpha).toBe(0);
+      expect(onStep.shift).toBeCloseTo(-4 + 4 / 7, 9);
+      // Half a frame on, with no step between: the same release, half a frame further.
+      const halfway = paint(2.5 * FRAME_MS);
+      expect(halfway.alpha).toBeCloseTo(0.5, 9);
+      expect(halfway.shift).toBeCloseTo(-4 + 4 / 7 + 2 / 7, 9);
+      runner.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+      now.mockRestore();
+    }
+  });
+
+  it("sparks the uppercut's hit where Donkey Kong is drawn: the contact point plus the shift it hands the drawing (fix round 4, ruling R-T17s)", () => {
+    const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
+    const hits: StepEvents["hits"] = [];
+    // From the barrage's start, so the sim plays it and hands over to the uppercut itself.
+    const runner = scene("finalAttack", 0, presenter, (state, events) => {
+      if (state.fighters[0].move === "finalEnd") hits.push(...events.hits);
+    });
+    for (let i = 0; i < 200 && hits.length === 0; i++) runner.advance(1);
+    expect(hits.map((h) => h.attacker)).toEqual([0]);
+    const [rs] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    // Backed off Mario, 8 ahead, to the uppercut's 13.
+    expect(rs.sceneShift[0]).toBe(-5);
+    const burst = runner.vfx.particles.find((p) => p.kind === "burst")!;
+    expect([burst.x, burst.y]).toEqual([toFloat(hits[0].contactX) - 5, toFloat(hits[0].contactY)]);
+    runner.dispose();
+  });
+
+  it("sparks a punch that lands while Donkey Kong is let go of part way where he is drawn then, not where the release ends (R-T17s)", () => {
+    const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
+    const hits: StepEvents["hits"] = [];
+    // The start's last frame, so the sim hands over to the barrage itself; Mario held 2 ahead.
+    const runner = scene("finalSmash", 36, presenter, (_, events) => hits.push(...events.hits));
+    runner.state.fighters[1].x = -28 * 4096;
+    const handed = () => (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0].sceneShift[0] as number;
+    for (let i = 0; i < 80 && hits.length === 0; i++) runner.advance(1);
+    // The barrage's first punch; a frame on, he is drawn backed off to its 12.
+    expect(runner.state.fighters[0].move).toBe("finalAttack");
+    runner.advance(1);
+    expect(handed()).toBe(-10);
+    // Now Mario 6 ahead: the need falls to 6, eased over 7 frames, and the next punch
+    // (5 frames after the last) lands on the way.
+    runner.state.fighters[1].x = -24 * 4096;
+    hits.length = 0;
+    let before = handed();
+    for (let i = 0; i < 10 && hits.length === 0; i++) {
+      before = handed();
+      runner.advance(1);
+    }
+    expect(hits.map((h) => h.attacker)).toEqual([0]);
+    const after = handed();
+    expect(after).toBeLessThan(-6);
+    expect(after - before).toBeCloseTo(4 / 7, 9);
+    // The punch's step drawn whole: a frame on from the paint at its start.
+    const burst = runner.vfx.particles.find((p) => p.kind === "burst")!;
+    expect(burst.x - toFloat(hits[0].contactX)).toBeCloseTo(after + 4 / 7, 9);
+    runner.dispose();
   });
 
   it("punches in on the uppercut's hit, read off the move the runner hands it", () => {

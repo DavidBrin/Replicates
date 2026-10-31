@@ -177,13 +177,20 @@ function push(v: VfxState, p: Particle): void {
  * a shield that was just hit, whether that shield was in its release window
  * (Ultimate's perfect shield is on *release*, SPEC §4), how many stocks a KO'd
  * fighter had left. None of it is re-simulated.
+ *
+ * `shift` is where each fighter is drawn off its sim position along x, as this
+ * step is drawn (a Final Smash's user backed off the fighter it holds:
+ * `sceneShiftAt`, eased). A hit's spark is drawn off its contact point by its
+ * attacker's, so a scene's box sparks where the user it hangs on is drawn, not
+ * on that user's own thigh; the victim's shift does not move it (Plan 5, Task 17
+ * fix round 4, ruling R-T17s).
  */
-export function ingestEvents(v: VfxState, events: StepEvents, state: GameState): void {
+export function ingestEvents(v: VfxState, events: StepEvents, state: GameState, shift?: readonly number[]): void {
   for (const hit of events.hits) {
     // Where the box touched the body (Plan 4, R9), not `hit.x`/`hit.y`: that is
     // the box's near end, which for a sword's capsule is a blade's length from
     // the body it landed on.
-    const x = toFloat(hit.contactX);
+    const x = toFloat(hit.contactX) + (shift?.[hit.attacker] ?? 0);
     const y = toFloat(hit.contactY);
     const damage = toFloat(hit.damage);
     const kb = toFloat(hit.knockback);
@@ -991,9 +998,9 @@ export function trackSwings(v: VfxState, state: GameState): void {
   }
 }
 
-export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState, defs?: ChargeDefs): void {
+export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState, defs?: ChargeDefs, shift?: readonly number[]): void {
   trackSwings(v, state);
-  if (events) ingestEvents(v, events, state);
+  if (events) ingestEvents(v, events, state, shift);
   trackGroundFx(v, state, events);
   trackLaunchTrails(v, state);
   trackChargeGlow(v, state, defs);

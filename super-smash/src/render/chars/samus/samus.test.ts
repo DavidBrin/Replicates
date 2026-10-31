@@ -27,6 +27,12 @@ import { fxFor } from "../index";
 import { clipFor } from "../poses";
 import { poseNameFor } from "../../poses/timing";
 import { localHurtboxes } from "@/engine/acmd/hurtboxes";
+import { FINAL_SMASH_READY } from "@/engine/final";
+import { createInitialState, step } from "@/engine/simulate";
+import { Btn, type InputFrame } from "@/engine/types";
+import { FIGHTERS } from "@/fighters";
+import { bakedContext } from "@/game/bake";
+import { STAGES } from "@/stages";
 import { makeFighter } from "../../testFixtures";
 import { createMockContext, type MockContext } from "../../mockContext";
 
@@ -1082,28 +1088,50 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
   });
 
   /**
-   * The beam's fills (Task 17 fix round 3, ruling R-T17k): each `fillRect` in world
-   * units ahead of her feet and up from them, with the vertical gradient it was
-   * filled with (the last one created), its stops as fractions top to bottom.
+   * The beam's fills (Task 17 fix round 3, ruling R-T17k): each filled shape, a
+   * `fillRect` or a filled path of straight edges, its corners in world units ahead
+   * of her feet and up from them (`points`, and their extent), with the vertical
+   * gradient it was filled with (the last one created), its stops as fractions top
+   * to bottom.
    */
   function fills(frame: number, dir: 1 | -1 = 1) {
     const { ctx } = laserAt(frame, dir);
-    const out: { x0: number; x1: number; lo: number; hi: number; grad: { top: number; bottom: number; stops: [number, string][] } | null }[] = [];
+    type Corner = { ahead: number; up: number; sx: number };
+    const out: { x0: number; x1: number; lo: number; hi: number; points: Corner[]; grad: { top: number; bottom: number; stops: [number, string][] } | null }[] = [];
     let grad: { top: number; bottom: number; stops: [number, string][] } | null = null;
+    let path: Corner[] = [];
+    const corner = (sx: number, sy: number): Corner => ({ ahead: ((sx - FEET_X) / U) * dir, up: (FEET_Y - sy) / U, sx });
+    const shape = (points: Corner[]) => {
+      const xs = points.map((q) => q.ahead);
+      const ys = points.map((q) => q.up);
+      out.push({ x0: Math.min(...xs), x1: Math.max(...xs), lo: Math.min(...ys), hi: Math.max(...ys), points, grad });
+    };
     for (const c of ctx.calls) {
       if (c.method === "createLinearGradient") {
         const a = c.args.map(Number);
         grad = { top: (FEET_Y - a[1]) / U, bottom: (FEET_Y - a[3]) / U, stops: [] };
       }
       if (c.method === "addColorStop" && grad !== null) grad.stops.push([Number(c.args[0]), String(c.args[1]).replace(/\s/g, "")]);
+      if (c.method === "beginPath") path = [];
+      if (c.method === "moveTo" || c.method === "lineTo") path.push(corner(Number(c.args[0]), Number(c.args[1])));
+      if (c.method === "fill" && path.length >= 3) shape(path);
       if (c.method === "fillRect") {
         const [x, y, w, h] = c.args.map(Number);
-        const xs = [(x - FEET_X) / U, (x + w - FEET_X) / U].map((v) => v * dir).sort((p, q) => p - q);
-        const ys = [(FEET_Y - y) / U, (FEET_Y - y - h) / U].sort((p, q) => p - q);
-        out.push({ x0: xs[0], x1: xs[1], lo: ys[0], hi: ys[1], grad });
+        shape([corner(x, y), corner(x + w, y), corner(x + w, y + h), corner(x, y + h)]);
       }
     }
     return { out, strokes: shapes(ctx).strokes, circles: shapes(ctx).circles };
+  }
+  /** How high a filled shape stands `ahead` of her feet: the lowest and highest of its edges there. */
+  function heightAt(points: readonly { ahead: number; up: number }[], ahead: number): [number, number] {
+    const ups: number[] = [];
+    points.forEach((p, i) => {
+      const q = points[(i + 1) % points.length];
+      if ((ahead - p.ahead) * (ahead - q.ahead) > 1e-9) return;
+      ups.push(p.ahead === q.ahead ? p.up : p.up + ((q.up - p.up) * (ahead - p.ahead)) / (q.ahead - p.ahead));
+      if (p.ahead === q.ahead) ups.push(q.up);
+    });
+    return [Math.min(...ups), Math.max(...ups)];
   }
   const r2 = (v: number) => Math.round(v * 100) / 100;
   const box = (f: ReturnType<typeof fills>["out"][number]) => ({ x0: r2(f.x0), x1: r2(f.x1), lo: r2(f.lo), hi: r2(f.hi) });
@@ -1161,9 +1189,26 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
       const biggest = laserAt(frame, -1).circles.reduce((a, b) => (b.r > a.r ? b : a));
       expect(biggest.x, `frame ${frame}`).toBe(FEET_X - ahead * U);
     }
-    const { ctx } = laserAt(150, -1);
-    const rect = ctx.calls.find((c) => c.method === "fillRect")!.args.map(Number);
-    expect(rect[0] + Math.max(0, rect[2])).toBeLessThanOrEqual(FEET_X - 12 * U);
+    expect(Math.max(...fills(150, -1).out[0].points.map((q) => q.sx))).toBeLessThanOrEqual(FEET_X - 12 * U);
+  });
+
+  it("softens its near end (fix round 4, ruling R-T17t): at the muzzle, 12 ahead, only its main box's height, opening to the envelope's over 15 units", () => {
+    const r = (v: [number, number]) => v.map(r2);
+    // The beam with its fringes: 10 to 20 at the muzzle, -5 to 35 from 27 ahead.
+    for (const frame of [86, 150, 208]) {
+      const { points } = fills(frame).out[0];
+      expect(r(heightAt(points, 12)), `frame ${frame}`).toEqual([10, 20]);
+      expect(r(heightAt(points, 19.5)), `frame ${frame}`).toEqual([2.5, 27.5]);
+      for (const ahead of [27, 100, 168]) expect(r(heightAt(points, ahead)), `frame ${frame} at ${ahead}`).toEqual([-5, 35]);
+    }
+    // The end blast: its main blast's 4 to 26 at the muzzle, the envelope's -11.5 to 41.5 from 27.
+    for (const frame of [209, 216]) {
+      const { points } = fills(frame).out[0];
+      expect(r(heightAt(points, 12)), `frame ${frame}`).toEqual([4, 26]);
+      expect(r(heightAt(points, 27)), `frame ${frame}`).toEqual([-11.5, 41.5]);
+    }
+    // The beam alone (81-85) is its main box's height all along: nothing to open into.
+    expect(r(heightAt(fills(81).out[0].points, 12))).toEqual([10, 20]);
   });
 });
 
@@ -1197,5 +1242,38 @@ describe("Zero Laser's cannon, as the bake draws it (Task 17 fix round 3, ruling
     expect(poseNameFor({ action: "special", move: "finalSmash", jumpsUsed: 0, fastFalling: false })).toBe("finalSmash");
     // Everybody else's Final Smash start keeps their own neutral special's.
     for (const id of ["mario", "donkeyKong", "link", "fox", "kirby", "pikachu", "marth"]) expect(clipFor(id, "finalSmash"), id).toBe(clipFor(id, "neutralB"));
+  });
+
+  /**
+   * The clip moves her ECB, and the ECB moves her (fix round 4, ruling R-T17r; the
+   * re-review 3's N10). The ECB comes from the baked bones (Plan 4) and
+   * `resolveCollision` reads it every frame, at rest too, while she hangs still in
+   * the air through the move (ruling R-T16b). So hovering 10 under Final
+   * Destination's top, her back to its side wall (79.995), her own clip ends the
+   * move with her pushed out to 82.342 from 81.9 and 82.2, and leaves her at 82.5.
+   * Charge Shot's clip, which she played until fix round 3, left her at 82.796 from
+   * all three. A sim effect of a presentation clip, recorded for D58 and pinned here
+   * so the next clip change is seen. She is intangible throughout, so her hurt
+   * capsules change nothing.
+   */
+  it.each([
+    [81.9, 82.342],
+    [82.2, 82.342],
+    [82.5, 82.5],
+  ])("moves her in the sim beside a wall, through her ECB: hovering at x %s beside Final Destination's side wall, she ends Zero Laser at %s", (from, to) => {
+    const ctx = bakedContext({ fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((st) => st.id === id)! }, bake);
+    let s = createInitialState("finalDestination", [{ defId: "samus" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 6, ctx);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: q12(from), y: q12(-10), facing: 1, jumpsUsed: 2, intangible: 0, finalSmashReady: FINAL_SMASH_READY });
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: q12(-60), y: 0, facing: 1 });
+    let prev: InputFrame[] = [0, 0];
+    let last: number | null = null;
+    for (let i = 0; i < 300; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
+      s = step(s, now, { prevInputs: prev, ctx }).state;
+      prev = now;
+      if (s.fighters[0].action === "special" && s.fighters[0].move === "finalSmash") last = toFloat(s.fighters[0].x);
+    }
+    expect(last).not.toBeNull();
+    expect(last!).toBeCloseTo(to, 3);
   });
 });

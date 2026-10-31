@@ -255,7 +255,11 @@ describe("effects behind the stage's face (ruling R-T17l)", () => {
       state.fighters[0] = { ...state.fighters[0], actionFrame };
       const ctx = createMockContext();
       render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), stage: fd, fighters: [def("samus"), def("mario")] }, null, createCamera(fd), 1);
-      const beam = ctx.calls.findIndex((c) => c.method === "fillRect");
+      // The beam's one fill (fix round 4, ruling R-T17t: a tapered path), after its
+      // gradient, which carries effect_shoot's violet.
+      const shaded = ctx.calls.findIndex((c) => c.method === "addColorStop" && String(c.args[1]).replace(/\s/g, "").startsWith("rgba(70,50,160,"));
+      const beam = ctx.calls.findIndex((c, i) => i > shaded && c.method === "fill");
+      expect(shaded, `frame ${actionFrame + 1}`).toBeGreaterThan(0);
       expect(beam, `frame ${actionFrame + 1}`).toBeGreaterThan(0);
       expect(clippedAt(ctx, beam), `frame ${actionFrame + 1}`).toBe(true);
     }
@@ -405,6 +409,38 @@ describe("reflections and counters", () => {
     expect(sparks.length).toBeGreaterThan(0);
     // One `updateVfx` has run since: x += vx, y += vy, then vy += gravity and both × drag.
     for (const p of sparks) expect(Math.hypot(p.x - p.vx / p.drag + 10, p.y - (p.vy / p.drag - p.gravity) - 8)).toBeLessThan(1e-6);
+  });
+
+  it("a scene's hit sparks where its user is drawn: the contact point plus the user's draw shift; the victim's sparks stay put (fix round 4, ruling R-T17s)", () => {
+    const hit = (attacker: number, victim: number) => ({
+      attacker,
+      victim,
+      damage: fx(14),
+      x: fx(8),
+      y: fx(11),
+      contactX: fx(10),
+      contactY: fx(12),
+      knockback: fx(90),
+      angle: fx(70),
+      hitboxId: 0,
+    });
+    const state = makeState({ fighters: [makeFighter({ port: 0, x: fx(-30) }), makeFighter({ port: 1, x: fx(-22) })] });
+    /** Where the hit's spark was spawned: its burst, which does not move, and its sparks back-traced through one `updateVfx`. */
+    const sparked = (attacker: number, victim: number, shift?: readonly number[]) => {
+      const v = createVfx();
+      stepVfx(v, makeEvents({ hits: [hit(attacker, victim)] }), state, undefined, shift);
+      const burst = v.particles.find((p) => p.kind === "burst")!;
+      const born = v.particles.filter((p) => p.kind === "spark").map((p) => ({ x: p.x - p.vx / p.drag, y: p.y - (p.vy / p.drag - p.gravity) }));
+      expect(born.length).toBeGreaterThan(0);
+      for (const b of born) expect(Math.hypot(b.x - burst.x, b.y - burst.y)).toBeLessThan(1e-6);
+      return { x: burst.x, y: burst.y };
+    };
+    // Port 0 is a scene's user, drawn 11 back: its uppercut's spark goes with it.
+    expect(sparked(0, 1, [-11, 0])).toEqual({ x: -1, y: 12 });
+    // Without a shift, and for a hit the shifted fighter takes, the contact point itself.
+    expect(sparked(0, 1, [0, 0])).toEqual({ x: 10, y: 12 });
+    expect(sparked(1, 0, [-11, 0])).toEqual({ x: 10, y: 12 });
+    expect(sparked(0, 1)).toEqual({ x: 10, y: 12 });
   });
 
   it("a strong catch, 13% or more, lights its user up yellow; a weaker one does not (SmashWiki \"Counterattack\", \"Marth (SSBU)/Down special\")", () => {

@@ -72,19 +72,57 @@ interface Frame {
   into: boolean;
 }
 
-/** Every frame of the user's Final Smash parts, from the press. */
-function run(user: string, gap: number): Frame[] {
+/** Frames simulated past the end of the user's last Final Smash part, for its release to finish in. */
+const AFTER = 30;
+
+interface Scene {
+  readonly defs: readonly FighterDef[];
+  /** From the state before the press (0), one per step, to `AFTER` steps past the user's last Final Smash part. */
+  readonly states: readonly GameState[];
+  /** How tall each fighter is drawn on each step, from the bake: what the runner hands the drawing. */
+  readonly tops: readonly (readonly (number | null)[])[];
+  /** The step the user's last Final Smash part ends on: the first step it is in none. */
+  readonly ended: number;
+}
+
+const SCENES = new Map<string, Scene>();
+
+/** The user pressing Special at `gap` from Mario, stepped through its Final Smash and `AFTER` steps on. Simulated once per case. */
+function simulate(user: string, gap: number): Scene {
+  const key = `${user} ${gap}`;
+  const known = SCENES.get(key);
+  if (known !== undefined) return known;
   let s = ready(user, gap);
   const defs: FighterDef[] = [CTX.fighter(user), CTX.fighter("mario")];
-  const bones = bake.hurtboxes(user)!.map((h) => h.bone);
+  const states: GameState[] = [s];
   let prev: InputFrame[] = [0, 0];
-  const out: Frame[] = [];
-  const ease = createSceneShiftEase();
-  for (let i = 0; i < 600; i++) {
+  let started = false;
+  let ended = -1;
+  for (let i = 0; i < 900 && (ended < 0 || states.length <= ended + AFTER); i++) {
     const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
-    const before = s;
     s = step(s, now, { prevInputs: prev, ctx: CTX }).state;
     prev = now;
+    states.push(s);
+    const u = s.fighters[0];
+    const final = u.move === null || u.action !== "special" ? undefined : defs[0].moves[u.move]?.final;
+    if (final !== undefined) started = true;
+    else if (started && ended < 0) ended = states.length - 1;
+  }
+  const scene = { defs, states, tops: states.map((st) => st.fighters.map((f) => drawnTop(defs[f.port], f, st.frame, bake))), ended };
+  SCENES.set(key, scene);
+  return scene;
+}
+
+/** Every frame of the user's Final Smash parts, from the press. */
+function run(user: string, gap: number): Frame[] {
+  const { defs, states, tops } = simulate(user, gap);
+  const bones = bake.hurtboxes(user)!.map((h) => h.bone);
+  const out: Frame[] = [];
+  const ease = createSceneShiftEase();
+  for (let n = 1; n < states.length; n++) {
+    const i = n - 1;
+    const before = states[n - 1];
+    const s = states[n];
     const [u, v] = s.fighters;
     const final = u.move === null || u.action !== "special" ? undefined : defs[0].moves[u.move]?.final;
     if (final === undefined) {
@@ -96,7 +134,7 @@ function run(user: string, gap: number): Frame[] {
     if (v.action === "finalTrapped" && v.combat.trappedBy === u.port) held = "trapped";
     else if (launched && v.hitlag > 0) held = "frozen";
     else if (launched && v.hitstun > 0) held = "flying";
-    const rs = { current: s, previous: before, fighters: defs, tops: s.fighters.map((f) => drawnTop(defs[f.port], f, s.frame, bake)) };
+    const rs = { current: s, previous: before, fighters: defs, tops: tops[n] };
     const eased = [0, 0.5, 1].map((alpha) => easeSceneShift(ease, sceneShiftAt(rs, alpha), s.frame - 1 + alpha));
     const shift = eased[2];
     let into = false;
@@ -114,41 +152,46 @@ function run(user: string, gap: number): Frame[] {
   return out;
 }
 
+/**
+ * [user, activation gap, where it traps Mario]: each cinematic Final Smash's real
+ * trap distances (the re-review's N2 table: Fox where Mario stands, Kirby from 3
+ * (it misses at 2), Pikachu 6.9 to 15 after its dash, Marth −4 to 20, his dash
+ * carrying him level with or past Mario at the closest; Donkey Kong where Mario
+ * stands).
+ */
+const TRAPS = [
+  ["donkeyKong", 2, 2],
+  ["donkeyKong", 8, 8],
+  ["donkeyKong", 12, 12],
+  // Behind him (the re-review 2's N5): his trap box reaches back, and with no
+  // body push it catches a fighter inside or just behind him, to 7 back.
+  ["donkeyKong", -0.5, -0.5],
+  ["donkeyKong", -2, -2],
+  ["donkeyKong", -4, -4],
+  ["donkeyKong", -7, -7],
+  ["fox", 2, 2],
+  ["fox", 3, 3],
+  ["fox", 4, 4],
+  ["kirby", 3, 3],
+  ["kirby", 4, 4],
+  ["kirby", 5, 5],
+  ["pikachu", 2, 6.9],
+  ["pikachu", 4, 8.9],
+  ["pikachu", 8, 8.6],
+  ["pikachu", 10, 11],
+  ["pikachu", 30, 12],
+  ["pikachu", 54, 13.5],
+  ["pikachu", 42, 15],
+  ["marth", 2, -4],
+  ["marth", 6, 0],
+  ["marth", 10, 4],
+  ["marth", 14, 8],
+  ["marth", 18, 12],
+  ["marth", 26, 20],
+] as const;
+
 describe("no Final Smash user drawn inside the fighter it trapped, at its real trap distances (ruling R-T17i)", () => {
-  // [user, activation gap, where it traps Mario] (the re-review's N2 table: Fox
-  // where Mario stands, Kirby from 3 (it misses at 2), Pikachu 6.9 to 15 after
-  // its dash, Marth −4 to 20, his dash carrying him level with or past Mario at
-  // the closest; Donkey Kong where Mario stands).
-  it.each([
-    ["donkeyKong", 2, 2],
-    ["donkeyKong", 8, 8],
-    ["donkeyKong", 12, 12],
-    // Behind him (the re-review 2's N5): his trap box reaches back, and with no
-    // body push it catches a fighter inside or just behind him, to 7 back.
-    ["donkeyKong", -0.5, -0.5],
-    ["donkeyKong", -2, -2],
-    ["donkeyKong", -4, -4],
-    ["donkeyKong", -7, -7],
-    ["fox", 2, 2],
-    ["fox", 3, 3],
-    ["fox", 4, 4],
-    ["kirby", 3, 3],
-    ["kirby", 4, 4],
-    ["kirby", 5, 5],
-    ["pikachu", 2, 6.9],
-    ["pikachu", 4, 8.9],
-    ["pikachu", 8, 8.6],
-    ["pikachu", 10, 11],
-    ["pikachu", 30, 12],
-    ["pikachu", 54, 13.5],
-    ["pikachu", 42, 15],
-    ["marth", 2, -4],
-    ["marth", 6, 0],
-    ["marth", 10, 4],
-    ["marth", 14, 8],
-    ["marth", 18, 12],
-    ["marth", 26, 20],
-  ] as const)("%s from %s away, trapping at %s: the trap, the scene, the launch's freeze and its flight", (user, gap, trap) => {
+  it.each(TRAPS)("%s from %s away, trapping at %s: the trap, the scene, the launch's freeze and its flight", (user, gap, trap) => {
     const frames = run(user, gap);
     const caught = frames.find((f) => f.held === "trapped")!;
     expect(caught.ahead).toBeCloseTo(trap, 1);
@@ -179,23 +222,78 @@ describe("no Final Smash user drawn inside the fighter it trapped, at its real t
   });
 });
 
-describe("letting go (ruling R-T17o; the re-review 2's N7)", () => {
-  it.each([
-    ["donkeyKong", 2],
-    ["marth", 2],
-    ["marth", 6],
-    ["pikachu", 2],
-    ["fox", 2],
-    ["kirby", 3],
-  ] as const)("%s from %s away closes the gap over 6 to 8 frames, not in one", (user, gap) => {
-    const frames = run(user, gap);
-    // Every frame the drawn user comes back toward its own place, it comes at most
-    // an even share of the largest release there is, 13 units over the release's frames.
-    const steps = frames.slice(1).map((f, k) => ({ at: f.at, from: frames[k].shift, to: f.shift }));
-    const back = steps.filter((st) => Math.abs(st.to) < Math.abs(st.from) && Math.sign(st.to) !== -Math.sign(st.from));
-    expect(back.length).toBeGreaterThanOrEqual(SCENE_RELEASE_FRAMES - 1);
-    for (const st of back) expect(Math.abs(st.to - st.from), `frame ${st.at}`).toBeLessThanOrEqual(13 / SCENE_RELEASE_FRAMES + 1e-9);
-  });
+describe("letting go (rulings R-T17o and R-T17q; the re-review 2's N7 and 3's N9)", () => {
+  /**
+   * The shift the runner hands the drawing on each paint (`easeSceneShift` of
+   * `sceneShiftAt`, at the paint's sim time, frame − 1 + α), painting `hz` times a
+   * second from `phase` of a paint interval after the press, to `AFTER` frames past
+   * the user's last Final Smash part.
+   */
+  function painted(user: string, gap: number, hz: number, phase: number) {
+    const { defs, states, tops } = simulate(user, gap);
+    const ease = createSceneShiftEase();
+    const out: { time: number; target: number; drawn: number }[] = [];
+    for (let k = 0; ; k++) {
+      const t = 1 + (k + phase) * (60 / hz);
+      const n = Math.floor(t);
+      if (n >= states.length) break;
+      const alpha = t - n;
+      const target = sceneShiftAt({ current: states[n], previous: states[n - 1], fighters: defs, tops: tops[n] }, alpha);
+      const time = states[n].frame - 1 + alpha;
+      out.push({ time, target: target[0], drawn: easeSceneShift(ease, target, time)[0] });
+    }
+    return out;
+  }
+
+  /**
+   * Every release in a run of paints: from the last paint that held (drawn where
+   * the need is) to the first that draws the need again, with how far it came.
+   */
+  function releases(paints: ReturnType<typeof painted>) {
+    const out: { from: number; to: number; size: number; steps: number[] }[] = [];
+    for (let i = 1; i < paints.length; i++) {
+      if (paints[i].drawn === paints[i].target || paints[i - 1].drawn !== paints[i - 1].target) continue;
+      const end = paints.findIndex((p, k) => k > i && p.drawn === p.target);
+      const along = paints.slice(i - 1, end < 0 ? undefined : end + 1);
+      out.push({
+        from: paints[i - 1].time,
+        to: end < 0 ? Infinity : paints[end].time,
+        size: Math.abs(paints[i - 1].drawn - along.at(-1)!.target),
+        // How far it came on each paint, per frame of sim time.
+        steps: along.slice(1).flatMap((p, k) => (p.time > along[k].time ? [Math.abs(p.drawn - along[k].drawn) / (p.time - along[k].time)] : [])),
+      });
+    }
+    return out;
+  }
+
+  it.each(TRAPS)(
+    "%s from %s away, trapping at %s: every release ends within 8 frames of its last hold, and not in under 6, at 60, 75, 120 and 144 Hz, never faster than twice an even share; from then on the user is drawn where the sim has it",
+    (user, gap) => {
+      const { states, ended } = simulate(user, gap);
+      expect(ended, "the Final Smash ends").toBeGreaterThan(0);
+      expect(states.length - 1 - ended, "frames past its end").toBe(AFTER);
+      for (const hz of [60, 75, 120, 144]) {
+        // A paint on the step, one barely into it (N9's floating residue), and one halfway.
+        for (const phase of [0, 1e-9, 0.5]) {
+          const at = `${hz} Hz, phase ${phase}`;
+          const paints = painted(user, gap, hz, phase);
+          for (const r of releases(paints)) {
+            // Its 7 frames, and the paint it lands on: within 8 at 60 Hz.
+            expect(r.to - r.from, `${at}: the release from ${r.from.toFixed(2)}`).toBeLessThanOrEqual(SCENE_RELEASE_FRAMES + 60 / hz + 1e-9);
+            if (r.size >= 0.5) expect(r.to - r.from, `${at}: the release from ${r.from.toFixed(2)}`).toBeGreaterThanOrEqual(SCENE_RELEASE_FRAMES - 1);
+            for (const v of r.steps) expect(v, `${at}: the release from ${r.from.toFixed(2)}`).toBeLessThanOrEqual((2 * r.size) / SCENE_RELEASE_FRAMES + 1e-9);
+          }
+          // Never drawn nearer than the need; and let go for good: from the scene's
+          // last release on, drawn exactly where the sim has it, past the move's end.
+          for (const p of paints) expect(Math.abs(p.drawn), `${at}: ${p.time.toFixed(2)}`).toBeGreaterThanOrEqual(Math.abs(p.target));
+          const home = paints.findIndex((p, i) => paints.slice(i).every((q) => q.drawn === 0));
+          expect(home, at).toBeGreaterThanOrEqual(0);
+          expect(paints.slice(home).every((p) => p.target === 0)).toBe(true);
+          expect(paints.at(-1)!.time - paints[home].time, at).toBeGreaterThanOrEqual(AFTER);
+        }
+      }
+    },
+  );
 });
 
 describe("the camera on a Final Smash's end hit (ruling R-T17j)", () => {
