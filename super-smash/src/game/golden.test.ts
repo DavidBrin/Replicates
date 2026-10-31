@@ -853,6 +853,9 @@ describe("engine golden trace", () => {
   // appends frames 601-800 (ruling R-T11a): Link throws the Boomerang on 601 and, with
   // it out, throws again on 651, which fails (`expectSmashSpecials`); no hit. Every
   // count is as it was.
+  // Plan 5 Task 13b's fix round 2 (a tumble's fall lands on a soft platform, ruling
+  // R-T13b-g) left every trace byte-identical: no golden fighter comes down onto a
+  // soft platform in a tumble's fall with Down held. Every count is as it was.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

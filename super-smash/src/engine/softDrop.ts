@@ -76,11 +76,14 @@ export const SOFT_DROP: Readonly<Record<ActionState, SoftDrop>> = {
   // UNVERIFIED: a rebound is a reel out of a lost clank (Plan 5, Task 13c fix round 1).
   rebound: "stay",
   tumble: "stay",
-  // A tumble's fall is the tumble once its hitstun is over (`reelMain` enters it
-  // when the hitstun runs out, and a hit leaves it): out of hitstun, it drops
-  // through. SmashWiki "Tumbling" (https://www.ssbwiki.com/Tumbling): "After hitstun
-  // ends, tumbling characters can carry out most normal airborne actions".
-  tumbleFall: "drop",
+  // A tumble's fall, the tumble once its hitstun is over (`reelMain`), lands too, and
+  // lies down or techs as on any floor (fix round 2, ruling R-T13b-g, amending
+  // R-T13b-d): the page's "tumbling and reeling characters, who will fly upward
+  // through soft platforms, but will land in a lying position upon a soft platform
+  // if they contact it from above". SmashWiki "Tumbling"
+  // (https://www.ssbwiki.com/Tumbling) lists no drop-through among the actions open
+  // after hitstun.
+  tumbleFall: "stay",
   // Held, thrown, lying down: placed by their captor, or on the ground.
   grabbed: "stay",
   thrown: "stay",

@@ -572,8 +572,31 @@ describe("dropping through a soft platform", () => {
     expect(fs.every((f) => f.y >= lower.y)).toBe(true);
   });
 
-  it("a tumble's fall, out of hitstun, does: Down held, it passes through", () => {
-    expect(passed(over("mario", { action: "tumbleFall", hitstun: 0 }, () => Btn.Down))).toBe(true);
+  it("a tumble's fall, out of hitstun, does not: Down held, it lands on it (ruling R-T13b-g)", () => {
+    // "tumbling and reeling characters [...] will land in a lying position upon a
+    // soft platform if they contact it from above"; a plain fall beside it still drops.
+    expect(landedOnTop(over("mario", { action: "tumbleFall", hitstun: 0 }, () => Btn.Down))).toBe(true);
+    expect(passed(over("mario", { action: "fall", hitstun: 0 }, () => Btn.Down))).toBe(true);
+  });
+
+  it("rolls back across a tumble's fall landing on it: a snapshot before the landing replays to the same hash", () => {
+    const s = scene("mario", { x: 0, y: fx(60), vy: fx(-1), action: "tumbleFall", hitstun: 0 }, "battlefield");
+    const run = (from: GameState, n: number): GameState => {
+      let state = from;
+      let prev: readonly InputFrame[] = [Btn.Down, 0];
+      for (let i = 0; i < n; i++) {
+        state = step(state, [Btn.Down, 0], { prevInputs: prev }).state;
+        prev = [Btn.Down, 0];
+      }
+      return state;
+    };
+    const mid = run(s, 3);
+    expect(mid.fighters[0].action).toBe("tumbleFall");
+    expect(mid.fighters[0].y).toBeGreaterThan(top);
+    const a = run(cloneState(mid), 20);
+    expect(a.fighters[0].y).toBe(top);
+    expect(a.fighters[0].grounded).toBe(true);
+    expect(hashState(run(cloneState(mid), 20))).toBe(hashState(a));
   });
 
   it("an air dodge does not (UNVERIFIED: no source lets one through)", () => {
@@ -609,7 +632,9 @@ describe("dropping through a soft platform", () => {
 describe("rollback through an up special", () => {
   // The aim each one holds at the cut, as the stick read on its aiming frame
   // (Q12 deflection): Fox on 30 (up-right), Pikachu's second leg on 20 (down-left),
-  // Mario's rise on 4 (down-left).
+  // Mario's rise on 4 (down-left; UNVERIFIED: the frame 4 read, which his page does
+  // not publish, as in `mario.ts`; the stick changes between frames 3 and 4, so this
+  // case pins it).
   for (const [id, cut, aim] of [
     ["fox", 35, [fx(1), fx(1)]],
     ["pikachu", 24, [fx(-1), fx(-1)]],
