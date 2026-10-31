@@ -1024,7 +1024,10 @@ const legacy: FighterDef = {
       name: "Jungle Rush",
       totalFrames: 96,
       intangible: [1, 96],
-      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 37 },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 19 to the
+      // fighter it holds, where the lunge this part holds stays off its body
+      // (`sceneDrawShift`); 12 from the barrage on, where its clips stay off.
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 37, sceneGap: fx(19) },
       hitboxes: [finalBox(0, 29, 34, { damage: 12, angle: 361, kbg: 0, radius: 13, x: 8, y: 10, x2: 28, y2: 10, hitlag: 5, transcendent: true, lr: "position" })],
     },
     finalAttack: {
@@ -1032,8 +1035,8 @@ const legacy: FighterDef = {
       name: "Jungle Rush (barrage)",
       totalFrames: 132,
       intangible: [1, 132],
-      // The drawing (Task 17 fix round 1, ruling R-T17d): no nearer than 12 to the
-      // fighter trapped, where the barrage's clip stays off its body.
+      // The drawing (Task 17 fix rounds 1 and 2, rulings R-T17d and R-T17i): no nearer
+      // than 12 to the fighter it holds, where the barrage's clip stays off its body.
       final: { phase: "attack", next: "finalEnd", sceneGap: fx(12) },
       hitboxes: [
         ...barrage(0, 6, 18, 4, { damage: 1.2, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
@@ -1046,7 +1049,10 @@ const legacy: FighterDef = {
       totalFrames: 61,
       aerialTotalFrames: 46,
       intangible: [1, 61],
-      final: { phase: "end", sceneGap: fx(12) },
+      // The drawing (Task 17 fix rounds 1 and 2, rulings R-T17d and R-T17i): 13, a
+      // unit past the barrage's, so his head clears the knee of a fighter the
+      // uppercut sends up past it.
+      final: { phase: "end", sceneGap: fx(13) },
       hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true })],
     },
   },

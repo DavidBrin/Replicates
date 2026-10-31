@@ -408,6 +408,37 @@ describe("the 3D presenter", () => {
     expect(scene.getObjectByName("fighter:0:mario")!.position.x).toBeCloseTo(-21, 9);
   });
 
+  it("keeps him backed off Mario flying up past the uppercut's fist, from the drawn tops it is handed (Task 17 fix round 2, R-T17i)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    // The uppercut has launched Mario (port 0) 2 ahead, 25 up: under the fist, 44 up.
+    state.fighters[3] = { ...state.fighters[3], x: fx(-30), facing: 1, action: "special", move: "finalEnd", actionFrame: 8 };
+    state.fighters[0] = { ...state.fighters[0], x: fx(-28), y: fx(25), facing: -1, action: "tumble", grounded: false, hitstun: 40 };
+    state.fighters[0].combat = { ...state.fighters[0].combat, launchSource: 3 };
+    const tops = state.fighters.map((_, i) => (i === 3 ? 44 : 18));
+    presenter.paint({ ...rs, tops }, createCamera(stage), 1, []);
+    expect(gl().scene!.getObjectByName("fighter:3:donkeyKong")!.position.x).toBeCloseTo(-41, 9);
+    presenter.paint(rs, createCamera(stage), 1, []);
+    expect(gl().scene!.getObjectByName("fighter:3:donkeyKong")!.position.x).toBeCloseTo(-30, 9);
+  });
+
+  it("measures the shift between where it draws the two: at the start of the launch's step, Mario still 2 ahead and Donkey Kong still backed off", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    state.fighters[3] = { ...state.fighters[3], x: fx(-30), facing: 1, action: "special", move: "finalEnd", actionFrame: 8 };
+    const before = structuredClone(state);
+    before.fighters[0] = { ...before.fighters[0], x: fx(-28), y: 0, facing: -1, action: "finalTrapped" };
+    before.fighters[0].combat = { ...before.fighters[0].combat, trappedBy: 3 };
+    // Now flying 9.5 further and 20 up: less than a snap, so drawn between.
+    state.fighters[0] = { ...state.fighters[0], x: fx(-18.5), y: fx(20), facing: -1, action: "tumble", grounded: false, hitstun: 40 };
+    state.fighters[0].combat = { ...state.fighters[0].combat, launchSource: 3 };
+    presenter.paint({ ...rs, previous: before }, createCamera(stage), 0, []);
+    expect(gl().scene!.getObjectByName("fighter:0:mario")!.position.x).toBeCloseTo(-28, 9);
+    expect(gl().scene!.getObjectByName("fighter:3:donkeyKong")!.position.x).toBeCloseTo(-41, 9);
+  });
+
   it("lights the scene with the look's values, tone mapping off and sRGB out (UNVERIFIED by eye: pinned so any change is deliberate)", () => {
     const { presenter, rs, stage, gl } = setup();
     presenter.paint(rs, createCamera(stage), 1, []);

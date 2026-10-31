@@ -1080,7 +1080,9 @@ const legacy: FighterDef = {
       name: "Team Star Fox",
       totalFrames: 84,
       intangible: [1, 84],
-      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 32 },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 6 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 32, sceneGap: fx(6) },
       hitboxes: [finalBox(0, 28, 31, { damage: 3, angle: 80, kbg: 100, fkb: 200, radius: 18, x: 20, y: 14, x2: 36, y2: 14, hitlag: 0.4, transcendent: true })],
     },
     finalAttack: {
@@ -1090,7 +1092,9 @@ const legacy: FighterDef = {
       intangible: [1, 240],
       // Its scene removes the damage percentages (Task 17 fix round 1, ruling R-T17e:
       // SmashWiki "Final Smash", Trivia, `FinalPhase.hidesHud`).
-      final: { phase: "attack", next: "finalEnd", hidesHud: true },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 10 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "attack", next: "finalEnd", hidesHud: true, sceneGap: fx(10) },
       hitboxes: [finalBox(0, 240, 240, { damage: 30, angle: 361, kbg: 80, fkb: 1, hitlag: 0, lr: "position" })],
     },
     finalEnd: {
@@ -1099,7 +1103,9 @@ const legacy: FighterDef = {
       totalFrames: 56,
       aerialTotalFrames: 46,
       intangible: [1, 56],
-      final: { phase: "end", hidesHud: true },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 9 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "end", hidesHud: true, sceneGap: fx(9) },
       hitboxes: [finalBox(0, 1, 1, { damage: 10, angle: 55, kbg: 144, bkb: 70, hitlag: 0, lr: "position" })],
     },
   },

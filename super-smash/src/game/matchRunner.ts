@@ -46,7 +46,7 @@ import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
 import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
 import type { Transport } from "@/net/transport";
 // Three-free (`render3d/anchors.ts`): the overlay's anchors cost the page no three.js.
-import { overlayAnchor } from "@/render3d/anchors";
+import { drawnTop, overlayAnchor } from "@/render3d/anchors";
 import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
 import { GAME_SIM_CONTEXT } from "./simContext";
 
@@ -256,6 +256,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   );
   let previous: GameState | null = null;
   let events: StepEvents | null = null;
+  /** How tall each fighter is drawn, from the bake, as of the last step (`drawnTop`). */
+  let tops: readonly (number | null)[] = [];
 
   // `step` needs the previous frame's inputs to tell a press from a hold. A
   // button is an edge, and `GameState` deliberately has no field for one.
@@ -388,7 +390,14 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // calls at all.
     stepVfx(vfx, events, state, defs);
     updateHud(hud, state);
-    updateCamera(camera, state, stage, events);
+    // The moves, for a Final Smash's end-hit punch-in, and how tall each fighter
+    // is drawn, from the bake, for a scene to keep its user whole and off the
+    // fighter it launches (Plan 5, Task 17).
+    tops = state.fighters.map((f) => {
+      const def = defs[f.port];
+      return def ? drawnTop(def, f, state.frame, GAME_SIM_CONTEXT.bake) : null;
+    });
+    updateCamera(camera, state, stage, events, defs, tops);
 
     // Sound is driven from the same events the particles are, on the same
     // frame, so a hit spark and its impact never drift apart. `setShieldHeld`
@@ -421,6 +430,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       cpu: players.map((p) => p.cpuLevel !== null),
       vfx,
       hud,
+      tops,
       // The 3D model's head, from the bake the sim steps with (Plan 4).
       anchors:
         presenter === null

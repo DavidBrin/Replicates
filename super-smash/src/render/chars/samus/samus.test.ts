@@ -24,6 +24,7 @@ import { resolve, type Skeleton } from "../../skeleton";
 import { poses } from "./poses";
 import { fx, projectiles } from "./fx";
 import { fxFor } from "../index";
+import { createMockContext, type MockContext } from "../../mockContext";
 
 const rig = getCharacterRig("samus");
 
@@ -1004,5 +1005,134 @@ describe("the missiles' launch (Plan 5, Task 17: the Task 13d review's Minor 5)"
     // The smoke hangs on after each, for as long.
     expect(launchAt("sideBSmash", 21 + 21)).toBe(launchAt("sideB", 18 + 21));
     expect(launchAt("sideBSmash", 21 + 22)).toBe(0);
+  });
+});
+
+describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
+  // Where Samus's feet are drawn, and the zoom: a box (x, y) in world units sits at
+  // (FEET_X + dir·x·U, FEET_Y − y·U).
+  const FEET_X = 600;
+  const FEET_Y = 700;
+  const U = 10;
+  const move = samus.moves.finalSmash!;
+
+  /** Everything the painter draws on `frame`: its strokes (width, from, to, colour) and its circles (centre, radius). */
+  function laserAt(frame: number, dir: 1 | -1 = 1) {
+    const ctx = createMockContext();
+    const painted = fxFor("samus", "finalSmash")!({
+      ctx: ctx as unknown as CanvasRenderingContext2D,
+      f: { facing: dir, charge: 0, move: "finalSmash", action: "special", actionFrame: frame - 1 } as never,
+      def: samus,
+      cam: { zoom: U } as never,
+      height: 12.2,
+      x: FEET_X,
+      y: FEET_Y,
+      u: U,
+      frame,
+      total: move.totalFrames,
+      t: frame / move.totalFrames,
+      dir,
+      over: (paint: () => void) => paint(),
+    });
+    return { ctx, painted, ...shapes(ctx) };
+  }
+
+  function shapes(ctx: MockContext) {
+    const strokes: { width: number; from: number[]; to: number[]; colour: string }[] = [];
+    const circles: { x: number; y: number; r: number }[] = [];
+    let width = 1;
+    let colour = "";
+    let from: number[] = [];
+    let to: number[] = [];
+    for (const c of ctx.calls) {
+      if (c.method === "set:lineWidth") width = Number(c.args[0]);
+      if (c.method === "set:strokeStyle") colour = String(c.args[0]);
+      if (c.method === "moveTo") from = c.args.map(Number);
+      if (c.method === "lineTo") to = c.args.map(Number);
+      if (c.method === "stroke") strokes.push({ width, from, to, colour });
+      if (c.method === "arc") circles.push({ x: Number(c.args[0]), y: Number(c.args[1]), r: Number(c.args[2]) });
+    }
+    return { strokes, circles };
+  }
+
+  /** The beams drawn: for each distinct line, its widest stroke, in world units. */
+  function beams(strokes: ReturnType<typeof shapes>["strokes"], dir: 1 | -1 = 1) {
+    const out = new Map<string, { x1: number; x2: number; y: number; height: number }>();
+    for (const st of strokes) {
+      const key = `${st.from.join(",")}>${st.to.join(",")}`;
+      const beam = {
+        x1: ((st.from[0] - FEET_X) / U) * dir,
+        x2: ((st.to[0] - FEET_X) / U) * dir,
+        y: (FEET_Y - st.from[1]) / U,
+        height: st.width / U,
+      };
+      const had = out.get(key);
+      if (had === undefined || had.height < beam.height) out.set(key, beam);
+    }
+    return [...out.values()].sort((a, b) => b.y - a.y);
+  }
+
+  const rounded = (v: { x1: number; x2: number; y: number; height: number }) => ({
+    x1: Math.round(v.x1 * 100) / 100,
+    x2: Math.round(v.x2 * 100) / 100,
+    y: Math.round(v.y * 100) / 100,
+    height: Math.round(v.height * 100) / 100,
+  });
+
+  it("is painted: today Samus has none, and the Final Smash is invisible", () => {
+    expect(fxFor("samus", "finalSmash")).toBeTypeOf("function");
+  });
+
+  it("charges where the start's effect puts it, from the start's frame 22, to the charge box's radius 10 at 17 ahead and 13 up by its frame 48", () => {
+    expect(laserAt(21).ctx.calls.filter((c) => c.method === "fill" || c.method === "stroke")).toEqual([]);
+    const early = laserAt(22).circles;
+    expect(early.length).toBeGreaterThan(0);
+    for (const frame of [48, 60, 68]) {
+      const biggest = laserAt(frame).circles.reduce((a, b) => (b.r > a.r ? b : a));
+      expect([biggest.x, biggest.y, biggest.r], `frame ${frame}`).toEqual([FEET_X + 17 * U, FEET_Y - 13 * U, 10 * U]);
+    }
+    expect(Math.max(...early.map((c) => c.r))).toBeLessThan(10 * U);
+  });
+
+  it("flashes at the muzzle on 70-80, at the muzzle boxes' sizes: radius 13, then 15, at 20 ahead and 15 up", () => {
+    for (const [frame, r] of [[70, 13], [76, 13], [77, 15], [80, 15]] as const) {
+      const biggest = laserAt(frame).circles.reduce((a, b) => (b.r > a.r ? b : a));
+      expect([biggest.x, biggest.y, biggest.r], `frame ${frame}`).toEqual([FEET_X + 20 * U, FEET_Y - 15 * U, r * U]);
+    }
+  });
+
+  it("fires the beam at its box's length and height: 12 to 162 ahead at 9 up, 10 high, on 81-208", () => {
+    for (const frame of [81, 85]) expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([{ x1: 12, x2: 162, y: 9, height: 10 }]);
+  });
+
+  it("adds samus_laser2's two fringe beams from 86, 14 above and 14 below it, 12 high", () => {
+    for (const frame of [86, 150, 208]) {
+      expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([
+        { x1: 12, x2: 162, y: 23, height: 12 },
+        { x1: 12, x2: 162, y: 9, height: 10 },
+        { x1: 12, x2: 162, y: -5, height: 12 },
+      ]);
+    }
+  });
+
+  it("ends in the three blasts, 209-216, at their boxes' sizes: the beam's 22 high, each fringe's 25", () => {
+    for (const frame of [209, 216]) {
+      expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([
+        { x1: 12, x2: 162, y: 23, height: 25 },
+        { x1: 12, x2: 162, y: 9, height: 22 },
+        { x1: 12, x2: 162, y: -5, height: 25 },
+      ]);
+    }
+    for (const frame of [217, 240, 263]) expect(laserAt(frame).strokes, `frame ${frame}`).toEqual([]);
+  });
+
+  it("mirrors with her: facing left, the beam runs left of her feet", () => {
+    expect(beams(laserAt(150, -1).strokes, -1).map(rounded)).toEqual(beams(laserAt(150).strokes).map(rounded));
+    for (const st of laserAt(150, -1).strokes) expect(st.to[0]).toBeLessThan(FEET_X);
+  });
+
+  it("is lit violet at its edge, the light its effect script casts: colour_blend 70, 50, 160 (effect_shoot)", () => {
+    const edge = laserAt(150).strokes.filter((st) => st.width === 10 * U).map((st) => st.colour);
+    expect(edge.some((colour) => colour.replace(/\s/g, "").startsWith("rgba(70,50,160"))).toBe(true);
   });
 });

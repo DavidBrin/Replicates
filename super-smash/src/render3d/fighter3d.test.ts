@@ -20,6 +20,7 @@ import { fx, toFloat } from "@/engine/fixed";
 import { FIGHTERS } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
 import { readBakeFromDisk } from "@/game/bakeNode";
+import { intangibleAlpha } from "@/render/renderer";
 import { PORT_COLOURS } from "@/render/rigKit";
 import { makeFighter } from "@/render/testFixtures";
 import { fighterPoser } from "./bake/bake";
@@ -318,6 +319,33 @@ describe("a fighter with a glb", () => {
     const freed = vi.spyOn(skeleton, "dispose");
     fighter.dispose();
     expect(freed).toHaveBeenCalledOnce();
+  });
+
+  it("draws a Final Smash's user whole, unblinking, though every part is intangible; dodges, the ledge, respawn and Marth's counterattack still blink (Task 17 fix round 2, ruling R-T17h)", () => {
+    const scene = armatureModel(poser.rig3, gltfMaterials());
+    const a = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene } });
+    const skin = () => materialsOf(a).get("skin")!.opacity;
+    // Mario Finale is intangible for its whole length by data.
+    expect(mario.moves.finalSmash!.intangible).toEqual([1, mario.moves.finalSmash!.totalFrames]);
+    for (const actionFrame of [0, 3, 6, 40]) {
+      a.update(frameOf(makeFighter({ action: "special", move: "finalSmash", actionFrame, intangible: 60 })));
+      expect(skin(), `frame ${actionFrame}`).toBe(1);
+    }
+    a.update(frameOf(makeFighter({ action: "spotDodge", actionFrame: 6, intangible: 4 })));
+    expect(skin()).toBe(0.42);
+    // Every cinematic part, and every single-part Final Smash, draws whole.
+    for (const def of FIGHTERS) {
+      for (const [slot, move] of Object.entries(def.moves)) {
+        const f = makeFighter({ defId: def.id, action: "special", move: slot as never, actionFrame: 6, intangible: 30 });
+        expect(intangibleAlpha(f, def), `${def.id} ${slot}`).toBe(move?.final === undefined ? 0.42 : 1);
+      }
+    }
+    const marth = FIGHTERS.find((d) => d.id === "marth")!;
+    expect(intangibleAlpha(makeFighter({ defId: "marth", action: "special", move: "counterAttack", actionFrame: 6, intangible: 5 }), marth)).toBe(0.42);
+    expect(intangibleAlpha(makeFighter({ action: "ledgeHang", actionFrame: 3, intangible: 20 }), mario)).toBe(0.8);
+    // A Final Smash's slot left behind on a fighter that has moved on is not one.
+    expect(intangibleAlpha(makeFighter({ action: "ledgeHang", move: "finalSmash", actionFrame: 3, intangible: 20 }), mario)).toBe(0.8);
+    expect(intangibleAlpha(makeFighter({ action: "respawnPlatform" }), mario)).toBe(0.85);
   });
 
   it("frees its own materials and skeleton, never the cache's geometry, materials or textures", () => {

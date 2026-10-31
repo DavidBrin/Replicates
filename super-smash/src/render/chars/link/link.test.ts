@@ -1105,6 +1105,20 @@ describe("the projectiles are his own", () => {
     expect(stops(paint(projectiles.arrow, 1)).some((colour) => colour.startsWith("rgba(95,230,224"))).toBe(false);
   });
 
+  it("glows over the Ancient Arrow's box, at its size: radius 5, 4 ahead along its flight (Task 17 fix round 2, ruling R-T17g)", () => {
+    const box = link.moves.finalSmash!.projectiles!.find((p) => p.id === "ancientArrow")!.hitbox!;
+    expect([toFloat(box.radius), toFloat(box.x), toFloat(box.y)]).toEqual([5, 4, 0]);
+    for (const heading of [0, 0.4, Math.PI]) {
+      const ctx = createMockContext();
+      projectiles.ancientArrow({ ctx, u: 12, age: 5, dir: 1, heading, charge: 1, fraction: 0, returning: false, frame: 5 } as unknown as ProjectileContext);
+      const arcs = ctx.calls.filter((c) => c.method === "arc").map((c) => c.args.slice(0, 3).map(Number));
+      const glow = arcs.reduce((a, b) => (b[2] > a[2] ? b : a));
+      expect(glow[0]).toBeCloseTo(4 * 12 * Math.cos(heading), 6);
+      expect(glow[1]).toBeCloseTo(4 * 12 * Math.sin(heading), 6);
+      expect(glow[2]).toBeCloseTo(5 * 12, 6);
+    }
+  });
+
   it("gives the arrow a hitbox worth the size it is drawn at", () => {
     // Not a drawing property: a sanity check that the graphic and the thing it
     // stands for are the same order of magnitude.

@@ -102,6 +102,13 @@ export interface RenderState {
    * his 2D rig. A fighter with none (no bake) falls back to the 2D rig's height.
    */
   readonly anchors?: readonly (OverlayAnchor | null)[];
+  /**
+   * Per port, how tall the fighter is drawn this frame, above its feet, in world
+   * units: its highest hurt capsule or its port tag (`render3d/anchors.ts`
+   * `drawnTop`, from the bake), or null without one. A Final Smash's scene keeps
+   * its user off a launched fighter while the two are level (`sceneDrawShift`).
+   */
+  readonly tops?: readonly (number | null)[];
 }
 
 /** A fighter's head in the 3D world, relative to their feet, in world units. */
@@ -188,27 +195,101 @@ export function interpolatePosition(
 /**
  * Where each fighter is drawn off its sim position this frame, in world units
  * along x: nowhere, but for a Final Smash's user whose part names a `sceneGap`
- * (`FinalPhase.sceneGap`; Plan 5, Task 17 fix round 1, ruling R-T17d) with a
- * fighter it trapped nearer than that ahead of it, which is drawn backed off to
- * the gap. The trapped fighter stays where the sim has it, as do both in the sim.
- * The overlay and the 3D presenter both draw through this.
+ * (`FinalPhase.sceneGap`; Plan 5, Task 17 fix rounds 1 and 2, rulings R-T17d and
+ * R-T17i). It is drawn backed away, to that gap along x, from each fighter it
+ * holds: one it trapped, and, in the scene's own parts, one it launched, through
+ * the launch's hitlag and on through its hitstun while the two are level, the
+ * victim neither above the user's drawn top nor below its own (`tops`, how tall
+ * each is drawn, from the bake: `RenderState.tops`; the gap where there are
+ * none). So the user holds back through the launch's freeze and the frame it
+ * fires on, and closes the gap only as the victim flies clear (10 to 25 units on
+ * its first frame of flight in the scene probe; Jungle Rush's uppercut sends it
+ * past the raised fist, 44 up, on its second). Away is back from a fighter ahead
+ * of it and on from one behind it; with fighters on both sides, the larger need
+ * wins. Everybody else, and both in the sim, stay where the sim has them.
+ * Measured between where the two are drawn (`at`, the sim's positions by
+ * default; `sceneShiftAt` passes the interpolated ones). The overlay and the 3D
+ * presenter both draw through this. Presentation choice: no source describes it.
  */
-export function sceneDrawShift(game: GameState, defs: readonly (FighterDef | null | undefined)[]): number[] {
+export function sceneDrawShift(
+  game: GameState,
+  defs: readonly (FighterDef | null | undefined)[],
+  tops?: readonly (number | null)[],
+  at: (f: FighterState) => { readonly x: number; readonly y: number } = simAt,
+): number[] {
   const shift = game.fighters.map(() => 0);
-  if (game.cinematic < 0) return shift;
-  const user = game.fighters.find((f) => f.port === game.cinematic);
-  if (user === undefined || user.move === null) return shift;
-  const gap = defs[user.port]?.moves[user.move]?.final?.sceneGap;
-  if (gap === undefined) return shift;
-  let need = 0;
-  for (const f of game.fighters) {
-    if (f.action !== "finalTrapped" || f.combat.trappedBy !== user.port) continue;
-    const ahead = (f.x - user.x) * user.facing;
-    if (ahead >= 0 && ahead < gap) need = Math.max(need, gap - ahead);
-  }
-  const at = game.fighters.indexOf(user);
-  if (need > 0) shift[at] = -user.facing * toFloat(need);
+  game.fighters.forEach((user, i) => {
+    if (user.action !== "special" || user.move === null) return;
+    const final = defs[user.port]?.moves[user.move]?.final;
+    if (final === undefined || final.sceneGap === undefined) return;
+    const gap = toFloat(final.sceneGap);
+    const u = at(user);
+    let back = 0;
+    let on = 0;
+    for (const f of game.fighters) {
+      if (f === user) continue;
+      const p = at(f);
+      if (!heldBy(game, f, user, final.phase !== "start", p.y - u.y, gap, tops)) continue;
+      const ahead = (p.x - u.x) * user.facing;
+      if (ahead >= 0) back = Math.max(back, gap - ahead);
+      else on = Math.max(on, gap + ahead);
+    }
+    if (back > 0 || on > 0) shift[i] = back >= on ? -user.facing * back : user.facing * on;
+  });
   return shift;
+}
+
+const simAt = (f: FighterState) => ({ x: toFloat(f.x), y: toFloat(f.y) });
+
+/**
+ * `sceneDrawShift` as drawn `alpha` of the way from the last step to this one:
+ * measured between the fighters where `interpolatePosition` draws them, the
+ * current step deciding who holds whom. A launch can carry its victim 10 to 20
+ * units in a step without a snap, so the shift of the step alone backed the user
+ * off a victim already drawn gone, or let it close on one still drawn there.
+ */
+export function sceneShiftAt(
+  state: {
+    readonly current: GameState;
+    readonly previous: GameState | null;
+    readonly fighters: readonly (FighterDef | null | undefined)[];
+    readonly tops?: readonly (number | null)[];
+  },
+  alpha: number,
+): number[] {
+  const before = state.previous;
+  if (before === null) return sceneDrawShift(state.current, state.fighters, state.tops);
+  return sceneDrawShift(state.current, state.fighters, state.tops, (f) =>
+    interpolatePosition(
+      before.fighters.find((p) => p.port === f.port),
+      f,
+      alpha,
+    ),
+  );
+}
+
+/**
+ * Does the user's scene keep clear of this fighter: one it trapped, or (in a
+ * scene part, past the start part's traps) one it launched, frozen in the
+ * launch's hitlag, or flying in its hitstun level with the user (`above`, how
+ * far over the user's feet its own are): its feet under the user's drawn top,
+ * and its own drawn top over the user's feet?
+ */
+function heldBy(
+  game: GameState,
+  f: FighterState,
+  user: FighterState,
+  launches: boolean,
+  above: number,
+  gap: number,
+  tops: readonly (number | null)[] | undefined,
+): boolean {
+  if (f.action === "finalTrapped") return f.combat.trappedBy === user.port;
+  if (!launches || f.action === "dead" || f.combat.launchSource !== user.port) return false;
+  if (f.hitlag > 0) return true;
+  if (f.hitstun <= 0) return false;
+  const tall = (g: FighterState) => tops?.[game.fighters.indexOf(g)] ?? gap;
+  return above >= 0 ? above < tall(user) : -above < tall(f);
 }
 
 /* ----------------------------------------------------------------- render -- */
@@ -282,8 +363,9 @@ export function drawScene(
 
   if (state.showBlastZone) drawBlastZone(ctx, stage, camera);
 
-  // A Final Smash's user backed off a fighter it trapped too close (R-T17d).
-  const shift = sceneDrawShift(game, state.fighters);
+  // A Final Smash's user backed off a fighter it holds, measured where the two
+  // are drawn this paint (R-T17d, R-T17i).
+  const shift = sceneShiftAt(state, interpolationAlpha);
   const drawn = state.current.fighters.map<DrawnFighter>((fighter, i) => {
     const previous = state.previous?.fighters.find((f) => f.port === fighter.port);
     const pos = interpolatePosition(previous, fighter, interpolationAlpha);
@@ -510,9 +592,17 @@ export function drawDepth(f: FighterState): number {
   }
 }
 
-/** Intangible frames blink; invincible ones do not (SPEC's distinction). */
-export function intangibleAlpha(f: FighterState): number {
-  if (f.intangible > 0) return f.actionFrame % 6 < 3 ? 0.42 : 0.8;
+/**
+ * Intangible frames blink; invincible ones do not (SPEC's distinction). Not in a
+ * Final Smash, though: every part is intangible for its whole length by data,
+ * nobody can touch its user anyway, and the freeze and the aura already say so,
+ * so a move with `MoveDef.final` draws whole (Plan 5, Task 17 fix round 2, ruling
+ * R-T17h; presentation choice, after the re-review's note that Ultimate draws no
+ * such fade). Dodges, the ledge, respawn and the counterattack keep the blink.
+ */
+export function intangibleAlpha(f: FighterState, def?: FighterDef | null): number {
+  const finalSmash = f.action === "special" && f.move !== null && def?.moves[f.move]?.final !== undefined;
+  if (f.intangible > 0 && !finalSmash) return f.actionFrame % 6 < 3 ? 0.42 : 0.8;
   if (f.invincible > 0) return 0.92;
   if (f.action === "respawnPlatform") return 0.85;
   return 1;

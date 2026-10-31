@@ -34,6 +34,7 @@ import {
 } from "../../fxKit";
 import { withAlpha } from "../../rigKit";
 import { SMASH_CHARGE_MAX } from "@/engine/constants";
+import { activeHitboxes } from "@/engine/hitbox";
 import { toFloat } from "@/engine/fixed";
 import type { Hitbox, MoveSlot } from "@/engine/types";
 
@@ -1031,7 +1032,116 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     ctx.fillRect(x - u * 0.9 * k, y - u * 13.5, u * 1.8 * k, u * 5.5);
     return NOTHING;
   },
+
+  /**
+   * Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g): every part drawn on
+   * its own box in `fighters/samus.ts`, live on its own frames, at its radius, so
+   * what is drawn is what hits.
+   *
+   * - The charge: `effect_finalstart` raises `samus_final_start` on the start's
+   *   frame 22, 19 ahead and 12.5 up (WuBoytH SSBU-Dumped-Scripts at `bac470d`,
+   *   https://github.com/WuBoytH/SSBU-Dumped-Scripts,
+   *   `hdr-format/samus/samus/FinalStart.txt`); drawn on the charge box (17 ahead,
+   *   13 up), growing to its radius, 10, by the box's first frame, 48, and held
+   *   through its last, 68.
+   * - The muzzle: its two boxes, radius 13 on 70-76 and 15 on 77-80, 20 ahead and
+   *   15 up.
+   * - The beam: its capsule, 12 to 162 ahead at 9 up, radius 5 (10 high), on
+   *   81-208; `samus_laser2`'s two fringe beams beside it, radius 6, 14 above and
+   *   14 below, from 86; then the three end blasts, radius 11 and 12.5, on 209-216.
+   *
+   * Its edge is the light the laser's own effect script casts:
+   * `color_blend!(agent, *MA_MSC_COLOR_BLEND_LIGHT_AXIS, 70, 50, 160, 255, ...)`
+   * on its first frame (`hdr-format/samus/samus_laser/Shoot.txt`, `effect_shoot`).
+   * The white core, the pale body, the pulse and the blasts' fade are
+   * presentation choices: the beam's own colours are in its effect files, which
+   * are not scripts.
+   */
+  finalSmash: ({ ctx, def, x, y, u, dir, frame, over }) => {
+    const move = def.moves.finalSmash;
+    if (move === undefined) return NOTHING;
+    const live = activeHitboxes(move, frame).filter((hb) => hb.windbox !== true);
+    const charge = move.hitboxes.find((hb) => hb.id === 0 && hb.x2 === undefined);
+    const gathering = charge !== undefined && frame >= ZERO_CHARGE_FROM && frame < charge.startFrame;
+    if (live.length === 0 && !gathering) return NOTHING;
+    const at = (hx: number, hy: number) => [x + dir * toFloat(hx) * u, y - toFloat(hy) * u] as const;
+    over(() => {
+      ctx.save();
+      if (gathering) {
+        const grown = (frame - ZERO_CHARGE_FROM + 1) / (charge.startFrame - ZERO_CHARGE_FROM + 1);
+        zeroOrb(ctx, ...at(charge.x, charge.y), toFloat(charge.radius) * u * grown, frame);
+      }
+      for (const hb of live) {
+        if (hb.x2 === undefined) zeroOrb(ctx, ...at(hb.x, hb.y), toFloat(hb.radius) * u, frame);
+        else {
+          const fade = hb.forceReaction === true ? 1 - (frame - hb.startFrame) / (hb.endFrame - hb.startFrame + 1) : 1;
+          zeroBeam(ctx, ...at(hb.x, hb.y), ...at(hb.x2, hb.y2 ?? hb.y), toFloat(hb.radius) * u, frame, hb.forceReaction === true, fade);
+        }
+      }
+      ctx.restore();
+    });
+    return NOTHING;
+  },
 };
+
+/** Zero Laser's charge shows from the start's frame 22 (`effect_finalstart`). */
+const ZERO_CHARGE_FROM = 22;
+/** The light round the laser, `effect_shoot`'s colour blend (rgb 70, 50, 160). */
+const ZERO_LIGHT = "70,50,160";
+const ZERO_BODY = "200,216,255";
+
+/**
+ * A round part of Zero Laser, its outer edge at the box's radius `r` (px): the
+ * charge and the muzzle flash. A violet bloom, a pale body and a white heart.
+ */
+function zeroOrb(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, frame: number): void {
+  if (r <= 0) return;
+  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.7);
+  glow(ctx, x, y, r, `rgba(${ZERO_LIGHT},0.85)`, `rgba(${ZERO_LIGHT},0.45)`);
+  ctx.fillStyle = `rgba(${ZERO_BODY},${0.7 + 0.2 * pulse})`;
+  circle(ctx, x, y, r * (0.55 + 0.08 * pulse));
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  circle(ctx, x, y, r * 0.3);
+}
+
+/**
+ * A capsule of Zero Laser, (x1, y1) to (x2, y2) in px, its outer edge at the
+ * box's radius `r` (px): the beam, a fringe beam, or (`blast`) an end blast.
+ * Round caps, as the box is a capsule.
+ */
+function zeroBeam(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  r: number,
+  frame: number,
+  blast: boolean,
+  fade: number,
+): void {
+  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.9 + x1 * 0.01);
+  const layers: readonly (readonly [number, string])[] = blast
+    ? [
+        [1, `rgba(${ZERO_LIGHT},${0.75 * fade})`],
+        [0.7, `rgba(${ZERO_BODY},${0.85 * fade})`],
+        [0.4, `rgba(255,255,255,${fade})`],
+      ]
+    : [
+        [1, `rgba(${ZERO_LIGHT},0.8)`],
+        [0.58 + 0.08 * pulse, `rgba(${ZERO_BODY},0.72)`],
+        [0.26 + 0.06 * pulse, "rgba(255,255,255,0.92)"],
+      ];
+  for (const [k, colour] of layers) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 2 * r * k;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+}
 
 /* ------------------------------------------------------------ projectiles -- */
 

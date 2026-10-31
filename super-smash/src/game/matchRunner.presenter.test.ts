@@ -5,11 +5,11 @@ import { toFloat } from "@/engine/fixed";
 import type { FighterState, MatchRules } from "@/engine/types";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
 import { createNullTransport } from "@/net/transport";
-import { VIEW_HEIGHT, VIEW_WIDTH, createCamera } from "@/render/camera";
+import { VIEW_HEIGHT, VIEW_WIDTH, cameraTarget, createCamera } from "@/render/camera";
 import * as characterArt from "@/render/characterArt";
 import { countCapsules, createMockContext } from "@/render/mockContext";
 import { INTERPOLATION_SNAP_UNITS, interpolatePosition, type RenderState } from "@/render/renderer";
-import { overlayAnchor } from "@/render3d/anchors";
+import { drawnTop, overlayAnchor } from "@/render3d/anchors";
 import { claimContext } from "@/render3d/fakeContext";
 import { createModelCache } from "@/render3d/models/loader";
 import { createRenderer3D, type GLLike } from "@/render3d/renderer3d";
@@ -159,6 +159,63 @@ describe("the match runner with a 3D presenter", () => {
     expect(unended.dispose).toHaveBeenCalledOnce();
     peers[1].dispose();
     vi.advanceTimersByTime(2_000);
+  });
+});
+
+describe("the camera a Final Smash's scene gets (Plan 5, Task 17 fix round 2)", () => {
+  /** Donkey Kong at −30 in Jungle Rush's `move` on `actionFrame`, Mario trapped 8 ahead: the scene, mid-play. */
+  function scene(move: "finalAttack" | "finalEnd", actionFrame: number, presenter?: WorldPresenter) {
+    installBake(readBakeFromDisk());
+    const runner = createMatchRunner({
+      ...(presenter === undefined ? {} : { presenter }),
+      stage: getStageOrThrow("finalDestination"),
+      players: [
+        { selection: { defId: "donkeyKong" }, cpuLevel: null },
+        { selection: { defId: "mario" }, cpuLevel: null },
+      ],
+      rules: RULES,
+      getFighter: (id) => GAME_SIM_CONTEXT.fighter(id),
+      background: canvasWith(createMockContext()),
+    });
+    runner.start(canvasWith(createMockContext()));
+    runner.stop();
+    const [dk, mario] = runner.state.fighters;
+    Object.assign(dk, { action: "special", move, actionFrame, x: -30 * 4096, y: 0, grounded: true, platform: 0, facing: 1, intangible: 60 });
+    Object.assign(mario, { action: "finalTrapped", actionFrame: 40, x: -22 * 4096, y: 0, grounded: true, platform: 0, facing: -1, hitstun: 0, hitlag: 0 });
+    mario.combat.trappedBy = 0;
+    runner.state.cinematic = 0;
+    return runner;
+  }
+
+  it("frames the scene to keep its user whole, from how tall the bake draws it: Donkey Kong's tag over his head; and hands the drawing the same tops", () => {
+    const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
+    const runner = scene("finalAttack", 20, presenter);
+    runner.advance(1);
+    const s = runner.state;
+    const tops = s.fighters.map((f) => drawnTop(GAME_SIM_CONTEXT.fighter(f.defId), f, s.frame, GAME_SIM_CONTEXT.bake));
+    const [rs] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    expect(rs.tops).toEqual(tops);
+    expect(tops[0]).toBeGreaterThan(30);
+    const stage = getStageOrThrow("finalDestination");
+    expect(s.cinematic).toBe(0);
+    expect(runner.camera.targetZoom).toBeCloseTo(cameraTarget(s, stage, tops).zoom, 9);
+    expect(runner.camera.targetZoom).toBeLessThan(cameraTarget(s, stage).zoom * 0.95);
+    runner.dispose();
+  });
+
+  it("punches in on the uppercut's hit, read off the move the runner hands it", () => {
+    // From the barrage's start, so the sim plays it and hands over to the uppercut itself.
+    const runner = scene("finalAttack", 0);
+    let launched = -1;
+    for (let i = 0; i < 200 && launched < 0; i++) {
+      runner.advance(1);
+      expect(runner.camera.koZoom.active, `frame ${i}`).toBe(runner.state.fighters[1].action !== "finalTrapped");
+      if (runner.state.fighters[1].action !== "finalTrapped") launched = i;
+    }
+    expect(launched).toBeGreaterThan(0);
+    expect(runner.state.fighters[0].move).toBe("finalEnd");
+    expect(runner.camera.koZoom.keep?.port).toBe(0);
+    runner.dispose();
   });
 });
 

@@ -16,7 +16,7 @@
 
 import { inCinematic } from "@/engine/final";
 import { toFloat } from "@/engine/fixed";
-import type { GameState, StageDef, StepEvents } from "@/engine/types";
+import type { FighterDef, GameState, StageDef, StepEvents } from "@/engine/types";
 
 /** The renderer's fixed internal resolution. Everything else letterboxes. */
 export const VIEW_WIDTH = 1920;
@@ -77,7 +77,23 @@ export interface KoZoom {
   frames: number;
   x: number;
   y: number;
+  /**
+   * A Final Smash's end hit (Plan 5, Task 17 fix round 2, ruling R-T17j): the
+   * port of the fighter that landed it, kept whole in the frame, and the zoom the
+   * camera had on the hit, which the punch builds on, so a scene's close-up holds
+   * through the launch instead of zooming out as the scene ends.
+   */
+  keep?: { port: number; zoom: number };
 }
+
+/**
+ * How tall each fighter is drawn this frame, above its feet, in world units: its
+ * highest hurt capsule or its port tag, whichever is higher (`render3d/anchors.ts`
+ * `drawnTop`, from the bake), or null where the bake does not say. The camera
+ * frames a scene, and a Final Smash's punch-in, to keep it whole: Jungle Rush's
+ * uppercut raises Donkey Kong's fist 44 units (the Task 17 re-review's N4).
+ */
+export type DrawnTops = readonly (number | null)[];
 
 export interface Camera {
   /** Centre of the view, in simulation units. */
@@ -146,7 +162,7 @@ export interface CameraTarget {
  * platform *are* included, because the player is about to control them and
  * needs to see where they are coming down.
  */
-export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
+export function cameraTarget(state: GameState, stage: StageDef, tops?: DrawnTops): CameraTarget {
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -168,7 +184,7 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
     // Combined with the ground kept in shot below, that put the platform across
     // the middle of the screen and gave the lower half of every frame to the
     // stage's underside, while the fighters crowded the top.
-    maxY = Math.max(maxY, y + (scene ? SCENE_FIGHTER_UNITS : FIGHTER_UNITS));
+    maxY = Math.max(maxY, y + (scene ? Math.max(SCENE_FIGHTER_UNITS, tops?.[state.fighters.indexOf(f)] ?? 0) : FIGHTER_UNITS));
     count++;
   }
 
@@ -245,13 +261,15 @@ export function updateCamera(
   state: GameState,
   stage: StageDef,
   events: StepEvents | null,
+  defs?: readonly (FighterDef | null | undefined)[],
+  tops?: DrawnTops,
 ): Camera {
-  const target = cameraTarget(state, stage);
+  const target = cameraTarget(state, stage, tops);
   cam.targetX = target.x;
   cam.targetY = target.y;
   cam.targetZoom = target.zoom;
 
-  if (events) ingestCameraEvents(cam, state, events);
+  if (events) ingestCameraEvents(cam, state, events, defs);
 
   if (cam.koZoom.active) {
     cam.koZoom.frames--;
@@ -262,27 +280,46 @@ export function updateCamera(
       // Punch in on the killing blow and hold, then release.
       const t = cam.koZoom.frames / KO_ZOOM_FRAMES;
       const punch = Math.sin(Math.min(1, t) * Math.PI) ** 0.5;
+      const keep = cam.koZoom.keep;
+      const base = keep === undefined ? target.zoom : Math.max(target.zoom, keep.zoom);
       cam.targetX = lerp(target.x, cam.koZoom.x, punch * 0.85);
       cam.targetY = lerp(target.y, cam.koZoom.y, punch * 0.85);
-      cam.targetZoom = clamp(target.zoom * (1 + (KO_ZOOM_FACTOR - 1) * punch), MIN_ZOOM, MAX_ZOOM * 1.6);
+      cam.targetZoom = clamp(base * (1 + (KO_ZOOM_FACTOR - 1) * punch), MIN_ZOOM, MAX_ZOOM * 1.6);
       cam.timeScale = lerp(1, KO_TIME_SCALE, punch);
+      const kept = keep === undefined ? undefined : state.fighters.find((f) => f.port === keep.port);
+      if (kept !== undefined && kept.action !== "dead") keepWhole(cam, toFloat(kept.y), tops?.[state.fighters.indexOf(kept)] ?? null);
     }
   }
 
   cam.x += (cam.targetX - cam.x) * FOLLOW_POSITION;
   cam.y += (cam.targetY - cam.y) * FOLLOW_POSITION;
-  const zoomRate = cam.targetZoom < cam.zoom ? FOLLOW_ZOOM_OUT : state.cinematic >= 0 ? FOLLOW_ZOOM_IN_SCENE : FOLLOW_ZOOM_IN;
+  const scene = state.cinematic >= 0 || (cam.koZoom.active && cam.koZoom.keep !== undefined);
+  const zoomRate = cam.targetZoom < cam.zoom ? FOLLOW_ZOOM_OUT : scene ? FOLLOW_ZOOM_IN_SCENE : FOLLOW_ZOOM_IN;
   cam.zoom += (cam.targetZoom - cam.zoom) * zoomRate;
 
   updateShake(cam);
   return cam;
 }
 
-function ingestCameraEvents(cam: Camera, state: GameState, events: StepEvents): void {
+function ingestCameraEvents(cam: Camera, state: GameState, events: StepEvents, defs?: readonly (FighterDef | null | undefined)[]): void {
   for (const hit of events.hits) {
     // Knockback rather than damage: a jab that connects should barely register,
     // a kill move should rattle the screen.
     addTrauma(cam, clamp(toFloat(hit.knockback) / 220, 0.04, 0.55));
+    // A Final Smash's end hit gets the KO's punch-in, where it lands (Plan 5,
+    // Task 17 fix round 2, ruling R-T17j; presentation choice): read off the move,
+    // so no fighter is named. Critical Hit's scene is two frames, and this is its
+    // close-up, through the launch's hitlag; the other four keep theirs.
+    const by = state.fighters.find((f) => f.port === hit.attacker);
+    if (cam.koZoom.active || by === undefined || by.action !== "special" || by.move === null) continue;
+    if (defs?.[by.port]?.moves[by.move]?.final?.phase !== "end") continue;
+    cam.koZoom = {
+      active: true,
+      frames: KO_ZOOM_FRAMES,
+      x: toFloat(hit.contactX),
+      y: toFloat(hit.contactY),
+      keep: { port: by.port, zoom: cam.zoom },
+    };
   }
   if (events.shieldHits.length > 0) addTrauma(cam, 0.05 * events.shieldHits.length);
   if (events.clanks.length > 0) addTrauma(cam, 0.08 * events.clanks.length);
@@ -297,6 +334,19 @@ function ingestCameraEvents(cam: Camera, state: GameState, events: StepEvents): 
       cam.koZoom = { active: true, frames: KO_ZOOM_FRAMES, x: toFloat(ko.x), y: toFloat(ko.y) };
     }
   }
+}
+
+/**
+ * Keep a fighter whole in the punch-in's frame, from its feet to its drawn top
+ * (`DrawnTops`), with the scene's margin: the zoom no closer than fits it, and the
+ * centre moved just enough to hold both ends. With no top to go by, a fighter's
+ * standard height.
+ */
+function keepWhole(cam: Camera, feet: number, top: number | null): void {
+  const height = Math.max(top ?? 0, FIGHTER_UNITS) + 2 * SCENE_MARGIN_Y;
+  cam.targetZoom = Math.min(cam.targetZoom, Math.max(MIN_ZOOM, VIEW_HEIGHT / height));
+  const half = VIEW_HEIGHT / (2 * cam.targetZoom);
+  cam.targetY = clamp(cam.targetY, feet + height - SCENE_MARGIN_Y - half, feet - SCENE_MARGIN_Y + half);
 }
 
 /**

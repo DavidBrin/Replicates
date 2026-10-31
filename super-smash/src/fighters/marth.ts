@@ -1213,7 +1213,9 @@ const legacy: FighterDef = {
       intangible: [1, 118],
       momentum: [{ frame: 25, x: fx(6), y: fx(0), hold: 45 }],
       dashEnd: { edge: true, special: true },
-      final: { phase: "start", trap: true, next: "finalEnd", nextAt: 25 },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "start", trap: true, next: "finalEnd", nextAt: 25, sceneGap: fx(13) },
       hitboxes: [finalBox(0, 25, 70, { damage: 0, angle: 361, kbg: 0, radius: 10, x: 8, y: 7, hitlag: 0, transcendent: true, lr: "position" })],
     },
     finalEnd: {
@@ -1222,7 +1224,9 @@ const legacy: FighterDef = {
       totalFrames: 59,
       aerialTotalFrames: 49,
       intangible: [1, 59],
-      final: { phase: "end" },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "end", sceneGap: fx(13) },
       hitboxes: [finalBox(0, 2, 2, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 18, x: 16, y: 8, hitlag: 1, transcendent: true, effect: "slash", forceReaction: true })],
     },
   },

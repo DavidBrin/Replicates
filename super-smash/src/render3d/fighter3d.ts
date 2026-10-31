@@ -178,7 +178,7 @@ export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
       applyLocalPose(bones, pose.local);
       applyRoot(rootGroup, pose.root);
       turner.apply(f.facing);
-      const alpha = intangibleAlpha(f);
+      const alpha = intangibleAlpha(f, opts.def);
       if (alpha !== opacity || fr.hitFlash !== flash) {
         for (let k = 0; k < materials.length; k++) {
           setFade(materials[k], alpha);

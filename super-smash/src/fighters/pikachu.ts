@@ -1077,7 +1077,9 @@ const legacy: FighterDef = {
       totalFrames: 138,
       intangible: [1, 138],
       momentum: [{ frame: 47, x: fx(4.5), y: fx(0), hold: 36 }],
-      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 47 },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 8 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 47, sceneGap: fx(8) },
       hitboxes: [
         // The startup's six sparks, two capsules each.
         ...[10, 16, 22, 28, 34, 40].flatMap((f, i) => [
@@ -1095,7 +1097,9 @@ const legacy: FighterDef = {
       name: "Volt Tackle (dashes)",
       totalFrames: 70,
       intangible: [1, 70],
-      final: { phase: "attack", next: "finalEnd" },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "attack", next: "finalEnd", sceneGap: fx(13) },
       hitboxes: barrage(0, 6, 8, 8, { damage: 1.5, angle: 367, kbg: 90, fkb: 100, radius: 13, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
     },
     finalEnd: {
@@ -1104,7 +1108,9 @@ const legacy: FighterDef = {
       totalFrames: 79,
       aerialTotalFrames: 36,
       intangible: [1, 79],
-      final: { phase: "end" },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 15 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "end", sceneGap: fx(15) },
       hitboxes: [finalBox(0, 10, 10, { damage: 20, angle: 70, kbg: 82, bkb: 70, radius: 32, hitlag: 0.7, transcendent: true, lr: "position", effect: "electric", forceReaction: true })],
     },
   },

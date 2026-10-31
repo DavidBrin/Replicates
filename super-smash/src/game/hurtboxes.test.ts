@@ -179,9 +179,9 @@ describe("Jungle Rush's barrage keeps Donkey Kong's body off the fighter it trap
     }
     return out;
   }
-  // The scene draws Donkey Kong no nearer than `FinalPhase.sceneGap` (12) to the
-  // fighter trapped (`render/renderer.ts` `sceneDrawShift`), so the clips are
-  // held clear from there on out.
+  // The scene draws Donkey Kong no nearer than `FinalPhase.sceneGap` (12 in the
+  // barrage, 13 in the uppercut) to the fighter trapped (`render/renderer.ts`
+  // `sceneDrawShift`), so the clips are held clear from there on out.
   it.each([12, 15, 18, 22, 28])("Mario trapped %i ahead: the barrage, and the uppercut until it launches him (the end's frame 7)", (gap) => {
     expect(into("finalAttack", def("donkeyKong").moves.finalAttack!.totalFrames - 1, gap)).toEqual([]);
     expect(into("finalEnd", 6, gap)).toEqual([]);

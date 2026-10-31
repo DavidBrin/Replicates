@@ -1254,7 +1254,9 @@ const legacy: FighterDef = {
       name: "Ultra Sword",
       totalFrames: 86,
       intangible: [1, 86],
-      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 61 },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 8 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 61, sceneGap: fx(8) },
       hitboxes: [
         finalBox(0, 17, 19, { damage: 3, angle: 22, kbg: 100, fkb: 30, radius: 10, x: 15, y: 8, hitlag: 0, transcendent: true, effect: "paralyze" }),
         finalBox(1, 54, 54, { damage: 5, angle: 361, kbg: 0, bkb: 70, radius: 9, x: 15, y: 0, x2: 15, y2: 35, hitlag: 0.5, transcendent: true, effect: "slash", trap: false }),
@@ -1265,7 +1267,9 @@ const legacy: FighterDef = {
       name: "Ultra Sword (slashes)",
       totalFrames: 110,
       intangible: [1, 110],
-      final: { phase: "attack", next: "finalEnd" },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 8 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "attack", next: "finalEnd", sceneGap: fx(8) },
       hitboxes: [21, 35, 48, 59, 71, 83, 97, 109].map((f, i) => finalBox(i, f, f, { damage: 2.6, angle: 367, kbg: 140, fkb: 20, radius: 12, hitlag: 0.5, transcendent: true, effect: "slash" })),
     },
     finalEnd: {
@@ -1273,7 +1277,9 @@ const legacy: FighterDef = {
       name: "Ultra Sword (last slash)",
       totalFrames: 108,
       intangible: [1, 108],
-      final: { phase: "end" },
+      // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 9 to the
+      // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
+      final: { phase: "end", sceneGap: fx(9) },
       hitboxes: [finalBox(0, 63, 63, { damage: 16, angle: 45, kbg: 95, bkb: 75, radius: 10, hitlag: 0.5, transcendent: true, effect: "slash", forceReaction: true })],
     },
   },

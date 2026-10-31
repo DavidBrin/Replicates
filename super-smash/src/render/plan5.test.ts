@@ -32,7 +32,7 @@ import { createHudState, drawHud, sceneHidesDamage } from "./hud";
 import { assignmentsTo, callsOf, createMockContext } from "./mockContext";
 import { samplePose, type PoseClip, type PoseSample } from "./poses/clip";
 import { poseNameFor, poseTimeFor } from "./poses/timing";
-import { render, sceneDrawShift, type RenderState } from "./renderer";
+import { render, sceneDrawShift, sceneShiftAt, type RenderState } from "./renderer";
 import { resolve, type BoneName, type Rig } from "./skeleton";
 import { STRONG_COUNTER_YELLOW, createVfx, drawParticles, stepVfx } from "./vfx";
 import { WORLD3D_PARTICLES } from "./renderer";
@@ -156,6 +156,77 @@ describe("a Final Smash's scene", () => {
   });
 });
 
+describe("a Final Smash's end hit (ruling R-T17j)", () => {
+  const fd = STAGES.find((st) => st.id === "finalDestination")!;
+  const def = (id: string) => FIGHTERS.find((d) => d.id === id)!;
+  const hit = (attacker: number, x: number, y: number) =>
+    makeEvents({
+      hits: [{ attacker, victim: 1, damage: fx(20), x: fx(x - 1), y: fx(y - 1), contactX: fx(x), contactY: fx(y), knockback: fx(150), angle: fx(40), hitboxId: 0 }],
+    });
+  /** `user` at −30 in `move`, Mario 10 ahead frozen in its launch's hitlag. */
+  function launch(user: string, move: "finalAttack" | "finalEnd" | "fsmash", cinematic = -1) {
+    const state = makeState({
+      stageId: "finalDestination",
+      cinematic,
+      fighters: [
+        makeFighter({ port: 0, defId: user, x: fx(-30), facing: 1, action: move === "fsmash" ? "attack" : "special", move }),
+        makeFighter({ port: 1, x: fx(-20), facing: -1, action: "tumble", hitlag: 30, hitstun: 60 }),
+      ],
+    });
+    state.fighters[1].combat.launchSource = 0;
+    return { state, defs: [def(user), def("mario")] };
+  }
+
+  it("punches in where it lands, from the move's own data: an end part's hit, no fighter named", () => {
+    for (const user of ["donkeyKong", "fox", "kirby", "pikachu", "marth"]) {
+      const { state, defs } = launch(user, "finalEnd");
+      const cam = createCamera(fd);
+      updateCamera(cam, state, fd, hit(0, -21, 9), defs);
+      expect(cam.koZoom.active, user).toBe(true);
+      expect([cam.koZoom.x, cam.koZoom.y], user).toEqual([-21, 9]);
+    }
+    // Not a scene's other hits, nor an ordinary move's, nor without the moves to read.
+    const notThese = [launch("pikachu", "finalAttack"), launch("marth", "fsmash")];
+    for (const { state, defs } of notThese) {
+      const cam = createCamera(fd);
+      updateCamera(cam, state, fd, hit(0, -21, 9), defs);
+      expect(cam.koZoom.active).toBe(false);
+    }
+    const { state } = launch("marth", "finalEnd");
+    const cam = createCamera(fd);
+    updateCamera(cam, state, fd, hit(0, -21, 9));
+    expect(cam.koZoom.active).toBe(false);
+  });
+
+  it("gives Critical Hit's two-frame scene a close-up through Marth's hit freeze: 1.4 times the zoom without it", () => {
+    const { state, defs } = launch("marth", "finalEnd");
+    const cam = createCamera(fd);
+    for (let i = 0; i < 120; i++) updateCamera(cam, state, fd, null, defs);
+    const plain = cam.zoom;
+    updateCamera(cam, state, fd, hit(0, -21, 9), defs);
+    for (let i = 1; i < 30; i++) updateCamera(cam, state, fd, null, defs);
+    expect(cam.zoom).toBeGreaterThanOrEqual(plain * 1.4);
+  });
+
+  it("keeps the other four's close-up through the launch: no zoom out on contact as the scene ends", () => {
+    for (const user of ["donkeyKong", "fox", "kirby", "pikachu"]) {
+      const { state, defs } = launch(user, "finalEnd", 0);
+      Object.assign(state.fighters[1], { action: "finalTrapped", hitlag: 0, hitstun: 0 });
+      state.fighters[1].combat.trappedBy = 0;
+      const cam = createCamera(fd);
+      for (let i = 0; i < 120; i++) updateCamera(cam, state, fd, null, defs);
+      const scene = cam.zoom;
+      // Launched: the scene is over (`GameState.cinematic`), Mario frozen in the hitlag.
+      const after = launch(user, "finalEnd");
+      updateCamera(cam, after.state, fd, hit(0, -21, 9), defs);
+      for (let i = 1; i < 15; i++) {
+        updateCamera(cam, after.state, fd, null, defs);
+        expect(cam.zoom, `${user} ${i}`).toBeGreaterThanOrEqual(scene * 0.97);
+      }
+    }
+  });
+});
+
 describe("Team Star Fox's scene (ruling R-T17e)", () => {
   // SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash), Trivia: "In
   // Ultimate, seven Final Smashes remove the damage percentage, either due to the
@@ -220,6 +291,35 @@ describe("reflections and counters", () => {
     expect(Number(heart![1].slice(heart![1].lastIndexOf(",") + 1, -1))).toBeGreaterThan(0.9);
     // A weak catch has none of it.
     expect(assignmentsTo(flash(STRONG_COUNTER_DAMAGE - 1), "globalCompositeOperation")).not.toContain("lighter");
+  });
+
+  it("thins its rim away instead of fading it through dark gold over the dark stage (the re-review's N3)", () => {
+    const v = createVfx();
+    const state = makeState({ fighters: [makeFighter({ port: 0, x: fx(-30) }), makeFighter({ port: 1, x: fx(40) })] });
+    stepVfx(v, makeEvents({ counters: [{ port: 1, x: fx(34), y: fx(8), damage: STRONG_COUNTER_DAMAGE }] }), state);
+    const rims: { alpha: number; width: number }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const ctx = createMockContext();
+      drawParticles(ctx as unknown as CanvasRenderingContext2D, v, createCamera(stage), WORLD3D_PARTICLES);
+      let width = 0;
+      for (const c of ctx.calls) {
+        if (c.method === "set:lineWidth") width = Number(c.args[0]);
+        if (c.method === "set:strokeStyle" && String(c.args[0]).startsWith("rgba(255, 225, 74, ")) {
+          const colour = String(c.args[0]);
+          rims.push({ alpha: Number(colour.slice(colour.lastIndexOf(",") + 1, -1)), width: NaN });
+        }
+        if (c.method === "stroke" && rims.length > 0 && Number.isNaN(rims.at(-1)!.width)) rims.at(-1)!.width = width;
+      }
+      stepVfx(v, makeEvents(), state);
+    }
+    expect(rims.length).toBeGreaterThan(10);
+    const widest = rims[0].width;
+    // Opaque while it is wide; by the time it fades it is a hairline.
+    for (const rim of rims) {
+      if (rim.width > widest * 0.4) expect(rim.alpha).toBe(1);
+      if (rim.alpha < 1) expect(rim.width).toBeLessThanOrEqual(widest * 0.4);
+    }
+    for (let i = 1; i < rims.length; i++) expect(rims[i].width).toBeLessThanOrEqual(rims[i - 1].width);
   });
 
   it("start where they happened: a reflection's clank and a counter's burst at the event's point", () => {
@@ -462,32 +562,227 @@ describe("Jungle Rush's barrage (ruling R-T17d)", () => {
     // 9 ahead: three units back, the way he faces away; the trapped one stays put.
     expect(shift(9, 1)).toEqual([-3, 0]);
     expect(shift(9, -1)).toEqual([3, 0]);
-    expect(shift(8, 1, 0, "finalEnd")).toEqual([-4, 0]);
-    // At 12 and beyond, or outside the scene, or in a part that names no gap: nowhere.
+    // The uppercut keeps 13 (ruling R-T17i).
+    expect(shift(8, 1, 0, "finalEnd")).toEqual([-5, 0]);
+    // At 12 and beyond: nowhere.
     expect(shift(12, 1)).toEqual([0, 0]);
     expect(shift(18, 1)).toEqual([0, 0]);
-    expect(shift(9, 1, -1)).toEqual([0, 0]);
-    expect(shift(9, 1, 0, "finalSmash")).toEqual([0, 0]);
+    // The start part holds its lunge after the trap: 19 there (ruling R-T17i),
+    // with the scene not yet begun (`GameState.cinematic` is the scene's parts').
+    expect(shift(9, 1, -1, "finalSmash")).toEqual([-10, 0]);
+    expect(shift(9, 1, -1)).toEqual([-3, 0]);
+  });
+
+  describe("every cinematic scene keeps its user off the fighter it holds (ruling R-T17i)", () => {
+    const def = (id: string) => FIGHTERS.find((d) => d.id === id)!;
+    /** Port 0 using `user`'s `move`, facing right at −30; Mario `ahead` of it, set up by `as`. */
+    function shiftOf(
+      user: string,
+      move: "finalSmash" | "finalAttack" | "finalEnd",
+      ahead: number,
+      as: (mario: FighterState) => void,
+      y = 0,
+      tops?: readonly (number | null)[],
+    ) {
+      const state = makeState({
+        cinematic: -1,
+        fighters: [
+          makeFighter({ port: 0, defId: user, x: fx(-30), facing: 1, action: "special", move }),
+          makeFighter({ port: 1, x: fx(-30 + ahead), y: fx(y), facing: -1, action: "tumble" }),
+        ],
+      });
+      as(state.fighters[1]);
+      return sceneDrawShift(state, [def(user), def("mario")], tops)[0];
+    }
+    const trapped = (m: FighterState) => {
+      m.action = "finalTrapped";
+      m.combat.trappedBy = 0;
+    };
+    const frozen = (m: FighterState) => {
+      m.combat.launchSource = 0;
+      m.hitlag = 20;
+      m.hitstun = 40;
+    };
+    const flying = (m: FighterState) => {
+      m.combat.launchSource = 0;
+      m.hitstun = 40;
+    };
+
+    it("gives every one of them a gap, in every part, from the probe of their clips at their real trap distances", () => {
+      const gaps = Object.fromEntries(
+        FIGHTERS.flatMap((d) =>
+          Object.entries(d.moves)
+            .filter(([, m]) => m?.final?.trap !== undefined || m?.final?.phase === "attack" || m?.final?.phase === "end")
+            .map(([slot, m]) => [`${d.id} ${slot}`, m!.final!.sceneGap === undefined ? undefined : m!.final!.sceneGap / 4096]),
+        ),
+      );
+      expect(gaps).toEqual({
+        "donkeyKong finalSmash": 19,
+        "donkeyKong finalAttack": 12,
+        "donkeyKong finalEnd": 13,
+        "fox finalSmash": 6,
+        "fox finalAttack": 10,
+        "fox finalEnd": 9,
+        "kirby finalSmash": 8,
+        "kirby finalAttack": 8,
+        "kirby finalEnd": 9,
+        "pikachu finalSmash": 8,
+        "pikachu finalAttack": 13,
+        "pikachu finalEnd": 15,
+        "marth finalSmash": 13,
+        "marth finalEnd": 13,
+      });
+    });
+
+    it("draws the user on, away from a fighter trapped behind it (Marth's dash can carry him past)", () => {
+      expect(shiftOf("marth", "finalEnd", -4, trapped)).toBe(9);
+      expect(shiftOf("marth", "finalEnd", 4, trapped)).toBe(-9);
+      expect(shiftOf("marth", "finalEnd", -14, trapped)).toBe(0);
+    });
+
+    it("keeps clear of the fighter its scene launched while the launch's hitlag freezes it, and on as it starts to fly, until it is the gap above (no drawn tops to go by)", () => {
+      expect(shiftOf("pikachu", "finalEnd", 8, frozen)).toBe(-7);
+      expect(shiftOf("pikachu", "finalEnd", 8, frozen, 30)).toBe(-7);
+      expect(shiftOf("pikachu", "finalEnd", 8, flying)).toBe(-7);
+      expect(shiftOf("pikachu", "finalEnd", 8, flying, 14)).toBe(-7);
+      expect(shiftOf("pikachu", "finalEnd", 8, flying, 15)).toBe(0);
+      expect(shiftOf("pikachu", "finalEnd", 8, flying, -15)).toBe(0);
+      expect(shiftOf("pikachu", "finalEnd", 16, flying)).toBe(0);
+      // Landed: out of hitstun, it is nobody's to keep clear of.
+      expect(shiftOf("pikachu", "finalEnd", 8, (m) => ((m.combat.launchSource = 0), (m.action = "stand")))).toBe(0);
+    });
+
+    it("keeps clear of it in flight while it is level with the user's drawn body, from the drawn tops the runner hands it: over Donkey Kong's uppercut fist", () => {
+      // Mario flying up 25 above, 2 ahead: under the raised fist (44 up), so held, 13 off.
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, 25, [44, 18])).toBe(-11);
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, 43.5, [44, 18])).toBe(-11);
+      // Above it, clear.
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, 44, [44, 18])).toBe(0);
+      // Below the user: held while the victim's own drawn top reaches its feet.
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, -17.5, [44, 18])).toBe(-11);
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, -18, [44, 18])).toBe(0);
+      // With no tops to go by, the gap above or below.
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, 25)).toBe(0);
+      expect(shiftOf("donkeyKong", "finalEnd", 2, flying, 12.5)).toBe(-11);
+    });
+
+    it("measures between where the two are drawn, between the last step and this one, as this step decides who holds whom", () => {
+      const fox = def("fox");
+      /** Fox in Team Star Fox's end (gap 9) at −30; Mario `before` and now. */
+      const pair = (before: (m: FighterState) => void, now: (m: FighterState) => void) => {
+        const make = (as: (m: FighterState) => void) => {
+          const state = makeState({
+            fighters: [
+              makeFighter({ port: 0, defId: "fox", x: fx(-30), facing: 1, action: "special", move: "finalEnd" }),
+              makeFighter({ port: 1, x: fx(-28), facing: -1 }),
+            ],
+          });
+          as(state.fighters[1]);
+          return state;
+        };
+        return { previous: make(before), current: make(now), fighters: [fox, def("mario")] };
+      };
+      // The launch fires: Mario trapped 2 ahead, then 12.8 ahead and 14.5 up, flying.
+      const launch = pair(trapped, (m) => {
+        flying(m);
+        Object.assign(m, { action: "tumble", x: fx(-30 + 12.8), y: fx(14.5) });
+      });
+      expect(sceneShiftAt(launch, 0)[0]).toBeCloseTo(-7, 9);
+      expect(sceneShiftAt(launch, 0.5)[0]).toBeCloseTo(-(9 - 7.4), 3);
+      expect(sceneShiftAt(launch, 1)[0]).toBe(0);
+      expect(sceneShiftAt({ ...launch, previous: null }, 0)[0]).toBe(0);
+      // The trap lands: Mario standing 2 ahead, then trapped there. This step decides.
+      const trap = pair(() => {}, trapped);
+      expect(sceneShiftAt(trap, 0)[0]).toBe(-7);
+    });
+
+    it("but not one launched by somebody else, nor in a start part, whose hits trap and launch nobody", () => {
+      expect(shiftOf("pikachu", "finalEnd", 8, (m) => (frozen(m), (m.combat.launchSource = 2)))).toBe(0);
+      expect(shiftOf("pikachu", "finalEnd", 8, (m) => (frozen(m), (m.combat.launchSource = 1001)))).toBe(0);
+      expect(shiftOf("pikachu", "finalEnd", 8, (m) => (trapped(m), (m.combat.trappedBy = 2)))).toBe(0);
+      expect(shiftOf("pikachu", "finalSmash", 4, frozen)).toBe(0);
+      expect(shiftOf("pikachu", "finalSmash", 4, trapped)).toBe(-4);
+    });
+
+    it("draws nobody else off, and nothing for a part that names no gap: Mario's, Link's and Samus's single parts", () => {
+      const state = makeState({
+        fighters: [
+          makeFighter({ port: 0, defId: "pikachu", x: fx(-30), facing: 1, action: "special", move: "finalEnd" }),
+          makeFighter({ port: 1, x: fx(-26), action: "finalTrapped" }),
+          makeFighter({ port: 2, defId: "samus", x: fx(40), facing: -1, action: "special", move: "finalSmash" }),
+          makeFighter({ port: 3, x: fx(38), facing: 1, action: "tumble" }),
+        ],
+      });
+      state.fighters[1].combat.trappedBy = 0;
+      Object.assign(state.fighters[3], { hitlag: 10, hitstun: 30 });
+      state.fighters[3].combat.launchSource = 2;
+      expect(sceneDrawShift(state, [def("pikachu"), def("mario"), def("samus"), def("mario")])).toEqual([-11, 0, 0, 0]);
+    });
   });
 
   it("draws the overlay there too: Donkey Kong's tag moves back with him", () => {
     const defs = [FIGHTERS.find((d) => d.id === "donkeyKong")!, FIGHTERS.find((d) => d.id === "mario")!];
-    const tagX = (cinematic: number) => {
+    const tagX = (held: boolean) => {
       const state = makeState({
-        cinematic,
+        cinematic: held ? 0 : -1,
         fighters: [
           makeFighter({ port: 0, defId: "donkeyKong", x: fx(-30), facing: 1, action: "special", move: "finalAttack", actionFrame: 10 }),
-          makeFighter({ port: 1, x: fx(-21), facing: -1, action: "finalTrapped", actionFrame: 10 }),
+          makeFighter({ port: 1, x: fx(-21), facing: -1, action: held ? "finalTrapped" : "stand", actionFrame: 10 }),
         ],
       });
-      state.fighters[1].combat.trappedBy = 0;
+      state.fighters[1].combat.trappedBy = held ? 0 : -1;
       const ctx = createMockContext();
       const cam = createCamera(stage);
       render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), fighters: defs }, null, cam, 0);
       return { x: callsOf(ctx, "fillText").find((c) => c.args[0] === "P1")!.args[1] as number, zoom: cam.zoom };
     };
-    const scene = tagX(0);
-    const plain = tagX(-1);
+    const scene = tagX(true);
+    const plain = tagX(false);
     expect(scene.x - plain.x).toBeCloseTo(-3 * scene.zoom, 6);
+  });
+
+  it("draws the overlay off a flying fighter by the drawn tops it is handed: the tag stays backed off under the uppercut's fist", () => {
+    const defs = [FIGHTERS.find((d) => d.id === "donkeyKong")!, FIGHTERS.find((d) => d.id === "mario")!];
+    const tagX = (tops?: number[]) => {
+      const state = makeState({
+        cinematic: -1,
+        fighters: [
+          makeFighter({ port: 0, defId: "donkeyKong", x: fx(-30), facing: 1, action: "special", move: "finalEnd", actionFrame: 8 }),
+          makeFighter({ port: 1, x: fx(-28), y: fx(25), facing: -1, action: "tumble", hitstun: 40 }),
+        ],
+      });
+      state.fighters[1].combat.launchSource = 0;
+      const ctx = createMockContext();
+      const cam = createCamera(stage);
+      render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), fighters: defs, ...(tops ? { tops } : {}) }, null, cam, 0);
+      return { x: callsOf(ctx, "fillText").find((c) => c.args[0] === "P1")!.args[1] as number, zoom: cam.zoom };
+    };
+    const held = tagX([44, 18]);
+    const plain = tagX();
+    expect(held.x - plain.x).toBeCloseTo(-11 * held.zoom, 6);
+  });
+
+  it("draws the overlay where the shift is measured between the drawn positions: at the start of a launch's step, still backed off", () => {
+    const defs = [FIGHTERS.find((d) => d.id === "fox")!, FIGHTERS.find((d) => d.id === "mario")!];
+    const make = (launched: boolean) => {
+      const state = makeState({
+        fighters: [
+          makeFighter({ port: 0, defId: "fox", x: fx(-30), facing: 1, action: "special", move: "finalEnd", actionFrame: 2 }),
+          makeFighter({ port: 1, x: fx(launched ? -17.2 : -28), y: fx(launched ? 14.5 : 0), facing: -1, action: launched ? "tumble" : "finalTrapped", hitstun: launched ? 40 : 0 }),
+        ],
+      });
+      state.fighters[1].combat.trappedBy = launched ? -1 : 0;
+      state.fighters[1].combat.launchSource = launched ? 0 : -1;
+      return state;
+    };
+    const tagX = (alpha: number) => {
+      const ctx = createMockContext();
+      const cam = createCamera(stage);
+      render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(make(true)), previous: make(false), fighters: defs }, null, cam, alpha);
+      return { x: callsOf(ctx, "fillText").find((c) => c.args[0] === "P1")!.args[1] as number, zoom: cam.zoom };
+    };
+    const start = tagX(0);
+    const end = tagX(1);
+    expect(start.x - end.x).toBeCloseTo(-7 * start.zoom, 6);
   });
 });

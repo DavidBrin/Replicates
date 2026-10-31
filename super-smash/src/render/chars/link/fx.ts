@@ -909,6 +909,9 @@ const OWN = {
   },
 } satisfies Record<string, ProjectilePainter>;
 
+/** The Ancient Arrow's flying box, in world units along its flight (`fighters/link.ts`). */
+const ANCIENT_BOX = { x: 4, radius: 5 };
+
 /**
  * Painters for this fighter's own projectiles, keyed by projectile def id. The
  * smash-thrown Boomerang (Plan 5, Task 13d) is the same article thrown harder, and
@@ -919,10 +922,14 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
   boomerangSmash: OWN.boomerang,
   /**
    * Plan 5, Task 16: the Ancient Arrow of his Final Smash — his arrow at full draw,
-   * glowing Guardian blue.
+   * glowing Guardian blue. The glow is its box, at its size (Task 17 fix round 2,
+   * ruling R-T17g): radius 5, 4 ahead along its flight (`fighters/link.ts`, the
+   * flying box), where it was 3 round the arrow's middle. The colour is a
+   * presentation choice: its effect script names its effect
+   * (`link_final_arrow_flare`), no colour.
    */
   ancientArrow: (c) => {
-    glow(c.ctx, 0, 0, c.u * 3, "rgba(95,230,224,0.55)");
+    glow(c.ctx, Math.cos(c.heading) * ANCIENT_BOX.x * c.u, Math.sin(c.heading) * ANCIENT_BOX.x * c.u, c.u * ANCIENT_BOX.radius, "rgba(95,230,224,0.55)");
     OWN.arrow({ ...c, fraction: 1 });
   },
 };

@@ -449,12 +449,14 @@ export function spawnClank(v: VfxState, x: number, y: number): void {
  * the user flashes. Presentation choice: its size, colour and length, which the
  * page does not give.
  *
- * The flash itself is an additive glow (`glow`, ruling R-T17f, fix round 1): a
- * plain yellow ring fading over the dark stage read mustard, not bright, and the
- * counterattack's intangibility ghosts the body it would light. Light added on
- * the overlay brightens whatever is under it, the faded model included; its rim
- * is added light too, so it fades toward the stage, never through olive. The
- * sparks carry the shape outward.
+ * The flash itself is a `glow` particle (ruling R-T17f, fix round 1): a plain
+ * yellow ring fading over the dark stage read mustard, not bright. It reads bright
+ * because its heart is nearly opaque for its first frames. The overlay is a canvas
+ * of its own over the 3D one, composited normally (`app/play/page.tsx`), so its
+ * `lighter` adds light only where it overlaps the overlay's own particles: it
+ * covers the model as ordinary paint and does not brighten it (the Task 17
+ * re-review's N3). Its rim thins away rather than fading, so it never shows as
+ * dark gold over the stage. The sparks carry the shape outward.
  */
 export function spawnStrongCounterFlash(v: VfxState, x: number, y: number): void {
   push(v, { ...ring(x, y, STRONG_COUNTER_YELLOW, 10, 20), kind: "glow" });
@@ -1062,8 +1064,9 @@ export function drawParticles(
         break;
       }
       case "glow": {
-        // Additive, so it lights what it covers instead of tinting it: bright at
-        // its heart for the first frames, fading out from the edge in.
+        // Bright at its heart for the first frames, fading out from the edge in.
+        // `lighter` adds only to the overlay's own particles under it: over the
+        // 3D canvas it composites as ordinary paint (the re-review's N3).
         const radius = r * (1 + (1 - t) * 0.6);
         const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius);
         glow.addColorStop(0, withAlpha(p.colour, Math.min(1, t * 1.15)));
@@ -1075,9 +1078,11 @@ export function drawParticles(
         ctx.beginPath();
         ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
         ctx.fill();
-        // Its rim, a bright edge as the light spreads.
-        ctx.strokeStyle = withAlpha(p.colour, t);
-        ctx.lineWidth = Math.max(2, r * 0.22 * t);
+        // Its rim, a bright edge as the light spreads. It thins away, opaque
+        // until it is a hairline, rather than fading: a fading yellow over the
+        // dark stage reads dark gold (N3).
+        ctx.strokeStyle = withAlpha(p.colour, Math.min(1, t * 2.5));
+        ctx.lineWidth = r * 0.22 * t;
         ctx.beginPath();
         ctx.arc(s.x, s.y, radius * 0.92, 0, Math.PI * 2);
         ctx.stroke();

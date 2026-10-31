@@ -746,3 +746,32 @@ describe("F.L.U.D.D.'s hands stay on the nozzle while it pumps (Plan 5, Task 6 f
     expect(nozzle(last + 6).shapes).toBe(0);
   });
 });
+
+describe("Mario Finale's flames (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
+  const flame = mario.moves.finalSmash!.projectiles!.find((p) => p.id === "hugeFlame")!;
+  const U = 10;
+  /** The largest circle the painter draws at `age`, in world units, and where. */
+  function biggest(age: number): { x: number; y: number; r: number } {
+    const ctx = createMockContext();
+    projectiles.hugeFlame({ ctx: ctx as unknown as CanvasRenderingContext2D, u: U, age, dir: 1, heading: 0, charge: 1, fraction: 0, returning: false, frame: age });
+    const arcs = ctx.calls.filter((c) => c.method === "arc").map((c) => ({ x: Number(c.args[0]) / U, y: Number(c.args[1]) / U, r: Number(c.args[2]) / U }));
+    return arcs.reduce((a, b) => (b.r > a.r ? b : a), { x: 0, y: 0, r: 0 });
+  }
+
+  it("are Mario's own, not the shared fire's 1.6-unit blob", () => {
+    expect(projectiles.hugeFlame).toBeTypeOf("function");
+  });
+
+  it("burn at their box's size on every frame it is live: radius 16 round the article, 60 to 219", () => {
+    expect(toFloat(flame.hitbox!.radius)).toBe(16);
+    expect([flame.hitbox!.startFrame, flame.hitbox!.endFrame]).toEqual([60, 219]);
+    for (const age of [60, 100, 155, 219]) expect(biggest(age), `age ${age}`).toEqual({ x: 0, y: 0, r: 16 });
+  });
+
+  it("gather to it from the article's birth, before they burn", () => {
+    const sizes = [0, 20, 40, 59].map((age) => biggest(age).r);
+    expect(sizes[0]).toBeGreaterThan(0);
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i]).toBeGreaterThan(sizes[i - 1]);
+    expect(sizes.at(-1)).toBeLessThan(16);
+  });
+});

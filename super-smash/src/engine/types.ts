@@ -641,12 +641,15 @@ export interface FinalPhase {
    */
   readonly hidesHud?: true;
   /**
-   * While this part plays the scene, its user is drawn no nearer than this (Q12,
-   * world units, along the way it faces) to a fighter it trapped, backed off from
-   * where the sim has it (Plan 5, Task 17 fix round 1, ruling R-T17d: Jungle Rush
-   * traps 8 to 28 units ahead and leaves the fighter caught there, inside Donkey
-   * Kong's bulk at the near end). Presentation only: the sim never reads it, and
-   * both fighters stay where they are in it.
+   * While this part plays, its user is drawn no nearer than this (Q12, world
+   * units, along x) to a fighter it holds: one it trapped, and, in the scene's
+   * parts, one it launched, through the launch's hitlag and its flight while the
+   * two are level (`render/renderer.ts` `sceneDrawShift`). It is drawn backed
+   * away from where the sim has it (Plan 5, Task 17 fix rounds 1 and 2, rulings
+   * R-T17d and R-T17i: a cinematic Final Smash traps where the fighter stands, as
+   * near as 2 units, or behind its user after Critical Hit's dash, and leaves the
+   * fighter caught there, inside its user's body). Presentation only: the sim
+   * never reads it, and both fighters stay where they are in it.
    */
   readonly sceneGap?: number;
 }

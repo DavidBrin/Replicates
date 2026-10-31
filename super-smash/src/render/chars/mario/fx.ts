@@ -777,4 +777,37 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
 
     ctx.restore();
   },
+
+  /**
+   * Mario Finale's flames (Plan 5, Task 16), drawn at the sim's size (Task 17 fix
+   * round 2, ruling R-T17g). The article's box is a sphere of radius 16 round it,
+   * live from its frame 60 to 219 (`fighters/mario.ts`; rubendal `mario_hugeflame`
+   * `Regular`), and that radius is the fire's outer edge on every one of those
+   * frames, where the shared "fire" look (`vfx.ts` `paintFire`) drew 1.6. Before it
+   * burns, from its birth, it gathers there from a quarter of it, and it fades over
+   * its last ten frames. Colours and the swirl are presentation choices: its effect
+   * script names its effect (`mario_final_bullet`), no colour.
+   */
+  hugeFlame: ({ ctx, u, age, frame }) => {
+    const grown = age >= FINALE_BURNS ? 1 : 0.25 + (0.75 * age) / FINALE_BURNS;
+    const r = FINALE_RADIUS * u * grown;
+    const flick = 0.5 + 0.5 * Math.sin(frame / 3);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, (FINALE_LAST + 1 - age) / 10));
+    glow(ctx, 0, 0, r, "rgba(255,168,56,0.92)", "rgba(226,72,22,0.6)");
+    // Tongues turning inside it, never past its edge (0.42 + 0.36 of the radius).
+    ctx.fillStyle = "rgba(255,124,36,0.7)";
+    for (let i = 0; i < 5; i++) {
+      const a = frame * 0.12 + (i * Math.PI * 2) / 5;
+      circle(ctx, Math.cos(a) * r * 0.42, Math.sin(a) * r * 0.42, r * (0.28 + 0.08 * flick));
+    }
+    ctx.fillStyle = "rgba(255,246,214,0.9)";
+    circle(ctx, 0, 0, r * 0.34);
+    ctx.restore();
+  },
 };
+
+/** Mario Finale's flame: its box's radius, and the article frames it burns on (`fighters/mario.ts`). */
+const FINALE_RADIUS = 16;
+const FINALE_BURNS = 60;
+const FINALE_LAST = 219;
