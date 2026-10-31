@@ -18,11 +18,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { ONE, fx, mul } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
+import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import { STALE_FRESH_BONUS, computeHitlag, framesAfterHit } from "@/engine/knockback";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
+import type { FighterDef, GameState, Hitbox, InputFrame, MatchRules, StepEvents } from "@/engine/types";
 import { bakedContext } from "@/game/bake";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { STAGES } from "@/stages";
@@ -249,5 +250,159 @@ describe("aerials don't clank with ground attacks or with each other (R-T13c-b)"
   it("but the same ground attacks clank on the ground (the control)", () => {
     const { clank } = firstClank(() => facing("mario", "marth", 0, 22), Btn.Attack, 12, Btn.Left | Btn.Attack);
     expect(clank).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A meeting of several boxes on each side is resolved once (Task 13c fix round 2,
+ * ruling R-T13c-g; the re-review's N1). "Priority": "While the effects of priority
+ * are calculated based on individual hitboxes, the results are applied to the
+ * attacker as a whole"; "if both characters go through rebound they will be
+ * actionable on the same frame". The re-review's probe: two forward tilts at one
+ * point, one with boxes of 10% and 3%, the other of 12% and 4%.
+ */
+describe("a meeting of several boxes is resolved once (R-T13c-g)", () => {
+  /** A forward tilt's box at Mario's (6.4 ahead, 4.4 up, radius 3.8), live on frames 5-7. */
+  const box = (id: number, damage: number): Hitbox => ({
+    id,
+    startFrame: 5,
+    endFrame: 7,
+    x: fx(6.4),
+    y: fx(4.4),
+    radius: fx(3.8),
+    damage: fx(damage),
+    angle: fx(361),
+    baseKnockback: fx(55),
+    knockbackGrowth: fx(70),
+  });
+
+  /** `id`'s fighter with a forward tilt of just these boxes (its legacy table: no script runs it). */
+  function withTilt(id: string, boxes: Hitbox[]): FighterDef {
+    const d = BY_ID.get(id)!;
+    return { ...d, moves: { ...d.moves, ftilt: { ...d.moves.ftilt!, hitboxes: boxes } } };
+  }
+
+  /** Mario's tilt 10% + 3%, Fox's 12% + 4%, listed in that order or the reverse (ids swapped too). */
+  function context(reversed: boolean): SimContext {
+    const order = (a: Hitbox, b: Hitbox): Hitbox[] => (reversed ? [{ ...b, id: a.id }, { ...a, id: b.id }] : [a, b]);
+    const defs = new Map([
+      ["mario", withTilt("mario", order(box(0, 10), box(1, 3)))],
+      ["fox", withTilt("fox", order(box(0, 12), box(1, 4)))],
+    ]);
+    return { fighter: (id) => defs.get(id) ?? BY_ID.get(id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+  }
+
+  const tilt = (dir: Btn): InputFrame => dir | Btn.Attack | Btn.Soft;
+
+  /** The meeting, with `first` at port 0 (x 0, facing right) and the other at port 1 (x 12.8): both boxes of each at x 6.4. */
+  function meeting(first: "mario" | "fox", reversed: boolean) {
+    const ctx = context(reversed);
+    expect(ctx.fighter("mario").scripts?.ftilt).toBeUndefined();
+    expect(ctx.fighter("fox").scripts?.ftilt).toBeUndefined();
+    const second = first === "mario" ? "fox" : "mario";
+    return firstClank(() => facing(first, second, 0, 12.8, ctx), tilt(Btn.Right), 3, tilt(Btn.Left), 90, ctx);
+  }
+
+  it.each([
+    ["mario", false],
+    ["mario", true],
+    ["fox", false],
+    ["fox", true],
+  ] as const)("with %s at port 0 (boxes reversed: %s): one clank, both freeze and rebound by Fox's 12%, actionable together", (first, reversed) => {
+    const { clank, states, events } = meeting(first, reversed);
+    // One meeting, one event, whatever the four box pairs. The sides weigh 10.5 and
+    // 12.6 (fresh ×1.05): within 9%, both rebound, both by the meeting's stronger box,
+    // Fox's 12%: floor((12+4)·15/8) = 30.
+    const at = states[clank];
+    const lag = freezeOf(fresh(12), undefined, false);
+    expect(rebound(fresh(12))).toBe(30);
+    expect({
+      events: events[clank].clanks.length,
+      sides: at.fighters.map((f) => [f.action, f.hitlag, f.combat.rebound]),
+    }).toEqual({
+      events: 1,
+      sides: [
+        ["rebound", lag, 30],
+        ["rebound", lag, 30],
+      ],
+    });
+    expect(stretch(states, clank, 0, "rebound")).toEqual(stretch(states, clank, 1, "rebound"));
+  });
+
+  it("a fighter in two meetings on one frame rebounds by the longer: Mario's 10% tilt meets Samus's 12% tilt and her uncharged Charge Shot (5%) at once", () => {
+    // Against her tilt, 10.5 and 12.6 are within 9%: 30 frames, by her 12.6. Against
+    // the shot, 10.5 and 5 are within 9%: 26, by his own 10.5. The longer stands, and
+    // the longer freeze, whichever meeting comes last.
+    const defs = new Map([
+      ["mario", withTilt("mario", [box(0, 10)])],
+      ["samus", withTilt("samus", [box(0, 12)])],
+    ]);
+    const ctx: SimContext = { fighter: (id) => defs.get(id) ?? BY_ID.get(id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+    const { clank, states, script } = firstClank(() => facing("mario", "samus", 0, 12.8, ctx), tilt(Btn.Right), 3, tilt(Btn.Left), 90, ctx);
+    // The same frame again, with the shot put at the boxes' point just before it.
+    const before = cloneState(states[clank - 1]);
+    const def = findProjectileDef(ctx.fighter("samus"), "chargeShot")!;
+    const shot = spawnProjectile(def, { ...before.fighters[1], charge: 0 }, before.nextProjectileId, "samus", 112);
+    Object.assign(shot, { x: before.fighters[0].x + fx(6.4), y: before.fighters[0].y + fx(4.4), vx: 0, vy: 0, age: def.hitbox.startFrame });
+    before.projectiles.push(shot);
+    before.nextProjectileId += 1;
+    const out = step(before, script(clank), { prevInputs: script(clank - 1), ctx });
+    const mario = out.state.fighters[0];
+    expect({
+      meetings: out.events.clanks.length,
+      shotGone: out.state.projectiles.length,
+      mario: [mario.action, mario.hitlag, mario.combat.rebound],
+    }).toEqual({ meetings: 2, shotGone: 0, mario: ["rebound", freezeOf(fresh(12), undefined, false), rebound(fresh(12))] });
+    expect([rebound(fresh(12)), rebound(fresh(10))]).toEqual([30, 26]);
+  });
+
+  it.each([
+    ["the one that freezes longer (x1.5)", { hitlagMultiplier: fx(1.5) }, fx(1.5), false],
+    ["the electric one", { effect: "electric" as const }, undefined, true],
+  ])("weighs a side by its strongest box, on a tie in damage %s, whichever is listed first (UNVERIFIED tie-break)", (_tie, extra, moveMultiplier, electric) => {
+    // Mario's two 10% boxes against Fox's 4%: 10.5 and 4.2, within 9%, both rebound by
+    // Mario's box. Which of his two it is decides the freeze; the plain one has id 0.
+    for (const reversed of [false, true]) {
+      const marked = { ...box(1, 10), ...extra };
+      const defs = new Map([
+        ["mario", withTilt("mario", reversed ? [marked, box(0, 10)] : [box(0, 10), marked])],
+        ["fox", withTilt("fox", [box(0, 4)])],
+      ]);
+      const ctx: SimContext = { fighter: (id) => defs.get(id) ?? BY_ID.get(id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+      const { clank, states } = firstClank(() => facing("mario", "fox", 0, 12.8, ctx), tilt(Btn.Right), 3, tilt(Btn.Left), 90, ctx);
+      const [mario, fox] = states[clank].fighters;
+      expect([mario.hitlag, fox.hitlag], `reversed ${reversed}`).toEqual([freezeOf(fresh(10), moveMultiplier, electric), freezeOf(fresh(10), moveMultiplier, false)]);
+    }
+  });
+
+  it("spends every box that met for the frame, the winner's too: Fox's 20% + 4% tilt beats Mario's 3%, and no box hits on the clank's frame", () => {
+    // 21 against 3.15: more than 9%, Fox's tilt goes on. His 4% box met Mario's too,
+    // and lies on Mario as well (the boxes at x 3, Mario at 0, Fox at 6), but a clank is
+    // never also a hit.
+    const near = (damage: number, id: number): Hitbox => ({ ...box(id, damage), x: fx(3) });
+    const defs = new Map([
+      ["mario", withTilt("mario", [near(3, 0)])],
+      ["fox", withTilt("fox", [near(20, 0), near(4, 1)])],
+    ]);
+    const ctx: SimContext = { fighter: (id) => defs.get(id) ?? BY_ID.get(id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+    const { clank, states, events } = firstClank(() => facing("mario", "fox", 0, 6, ctx), tilt(Btn.Right), 3, tilt(Btn.Left), 90, ctx);
+    const [mario, fox] = states[clank].fighters;
+    expect({ hits: events[clank].hits.length, mario: mario.action, fox: [fox.action, fox.move] }).toEqual({ hits: 0, mario: "rebound", fox: ["attack", "ftilt"] });
+  });
+
+  it("rolls back across the meeting, hash for hash", () => {
+    const ctx = context(false);
+    const { clank, script } = meeting("mario", false);
+    const { states } = run(facing("mario", "fox", 0, 12.8, ctx), 80, script, ctx);
+    for (const at of [clank - 1, clank, clank + 1, clank + 20, clank + 40]) {
+      let s = cloneState(states[at]);
+      let prev = script(at);
+      for (let i = at + 1; i < 80; i++) {
+        const now = script(i);
+        s = step(s, now, { prevInputs: prev, ctx }).state;
+        prev = now;
+        expect(hashState(s), `snapshot ${at}, step ${i}`).toBe(hashState(states[i]));
+      }
+    }
   });
 });

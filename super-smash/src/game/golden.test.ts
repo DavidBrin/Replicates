@@ -757,6 +757,11 @@ describe("engine golden trace", () => {
   // golden match uses the Stone. The other nine are byte-identical. So now: hits
   // 34/22/18/30, 6, 0, 1, 4, 1 and 0; shield hits 2/1/0/1, 3, 0, 0, 0, 0 and 0; KOs
   // 1/2/1/0, 1, 2, 0, 0, 0 and 0.
+  // Plan 5 Task 13c's fix round 2 (ruling R-T13c-g: a clank is resolved once per
+  // meeting, by each side's strongest box) left all ten traces byte-identical: the
+  // only golden meeting of several boxes is the projectile lab's on frame 240, where
+  // every pair already weighed the shot as the stronger. It is one clank event now,
+  // not three; the counts above stand.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

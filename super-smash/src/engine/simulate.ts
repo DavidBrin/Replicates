@@ -1283,10 +1283,20 @@ function appendProjectileCandidates(
 }
 
 /**
- * Opposing hitboxes that met this frame.
+ * Opposing hitboxes that met this frame, resolved once per meeting (Plan 5, Task
+ * 13c fix round 2, ruling R-T13c-g). A meeting is two sides whose boxes clank:
+ * two fighters, a fighter and a projectile, or two projectiles. SmashWiki
+ * "Priority" (https://www.ssbwiki.com/Priority, revision 2049993): "While the
+ * effects of priority are calculated based on individual hitboxes, the results are
+ * applied to the attacker as a whole"; "if both characters go through rebound they
+ * will be actionable on the same frame". So each side weighs as its strongest box
+ * that met the other side (`strongestBox`), the 9% rule is applied once, both sides
+ * freeze and rebound from the meeting's stronger box, and the meeting is one clank
+ * event, at the midpoint of the two boxes it weighed. Nothing depends on the order
+ * of the boxes, the meetings or the ports.
  *
- * Both are suppressed for the frame whatever the outcome, so a clank is never
- * also a hit.
+ * Every box that met is suppressed for the frame whatever the outcome, so a clank
+ * is never also a hit.
  *
  * The 9% rule weighs each side's damage after its multipliers and before the
  * one-on-one bonus (`clankDamage`; SmashWiki "Priority",
@@ -1317,6 +1327,10 @@ function resolveClanks(
   // frame (`reflectProjectiles`, phase 6a): it neither clanks nor hits until the
   // next (Plan 5). Nothing else suppresses a candidate before the clanks.
   const reflected = new Set(candidates.filter((c) => c.projectile !== null && c.suppressed));
+  // The meetings: every pair of sides with boxes that clank against each other,
+  // found on this frame's boxes before any is resolved (Plan 5, Task 13c fix round
+  // 2, ruling R-T13c-g).
+  const meetings = new Map<string, Meeting>();
   for (let a = 0; a < candidates.length; a++) {
     for (let b = a + 1; b < candidates.length; b++) {
       const ca = candidates[a];
@@ -1326,25 +1340,40 @@ function resolveClanks(
       // A catch-only box (`set_catch_only_all`: a pummel's, a throw's hits on the
       // fighter held) is not a hitbox in the world: nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
-      if (ca.suppressed && cb.suppressed) continue;
       if (ca.projectile === null && cb.projectile === null && (!s.fighters[ca.attacker].grounded || !s.fighters[cb.attacker].grounded)) continue;
       if (!capsulesOverlap(capsuleOf(ca), capsuleOf(cb))) continue;
-      const da = clankDamage(s, ca);
-      const db = clankDamage(s, cb);
-      const outcome = resolveClank(ca.hitbox, cb.hitbox, da, db);
-      if (outcome === "none") continue;
-
-      ca.suppressed = true;
-      cb.suppressed = true;
-      events.clanks.push({
-        x: Math.trunc((ca.x + cb.x) / 2),
-        y: Math.trunc((ca.y + cb.y) / 2),
-      });
-      const stronger = strongerOf(ca, da, cb, db);
-      clankSide(s, ca, cb, outcome === "rebound" || outcome === "bWins", stronger, projectileDef, destroyed);
-      clankSide(s, cb, ca, outcome === "rebound" || outcome === "aWins", stronger, projectileDef, destroyed);
+      // Only the boxes' flags decide whether two boxes clank at all.
+      if (resolveClank(ca.hitbox, cb.hitbox) === "none") continue;
+      const [first, second] = sideOf(ca) < sideOf(cb) ? [ca, cb] : [cb, ca];
+      const key = `${sideOf(first)}|${sideOf(second)}`;
+      const m = meetings.get(key) ?? { a: new Set<Candidate>(), b: new Set<Candidate>() };
+      m.a.add(first);
+      m.b.add(second);
+      meetings.set(key, m);
     }
   }
+  // Each meeting once, by its sides' strongest boxes. Its effects merge
+  // (`freezeFighter` and `startRebound` keep the longer), so the order of the
+  // meetings, of the boxes and of the ports changes nothing.
+  const met = new Set<Candidate>();
+  for (const key of [...meetings.keys()].sort()) {
+    const m = meetings.get(key)!;
+    const a = strongestBox(s, m.a);
+    const b = strongestBox(s, m.b);
+    const outcome = resolveClank(a.candidate.hitbox, b.candidate.hitbox, a.damage, b.damage);
+    for (const c of m.a) met.add(c);
+    for (const c of m.b) met.add(c);
+    events.clanks.push({
+      x: Math.trunc((a.candidate.x + b.candidate.x) / 2),
+      y: Math.trunc((a.candidate.y + b.candidate.y) / 2),
+    });
+    const stronger = strongerOf(a.candidate, a.damage, b.candidate, b.damage);
+    clankSide(s, a.candidate, b.candidate, outcome === "rebound" || outcome === "bWins", stronger, projectileDef, destroyed);
+    clankSide(s, b.candidate, a.candidate, outcome === "rebound" || outcome === "aWins", stronger, projectileDef, destroyed);
+  }
+  // Every box that met is spent for the frame, whatever the outcome: a clank is
+  // never also a hit.
+  for (const c of met) c.suppressed = true;
   // A move cancelled by a clank keeps no live hitboxes for the rest of the frame.
   // (A projectile knocked away clanked, so it is suppressed already.)
   for (const c of candidates) {
@@ -1355,6 +1384,44 @@ function resolveClanks(
     const f = s.fighters[c.attacker];
     if (!hasLiveMove(f.action)) c.suppressed = true;
   }
+}
+
+/** The boxes of the two sides of one meeting (`resolveClanks`), each side's in a set. */
+interface Meeting {
+  readonly a: Set<Candidate>;
+  readonly b: Set<Candidate>;
+}
+
+/** A clank's side: a fighter's own boxes, or one projectile's. */
+function sideOf(c: Candidate): string {
+  return c.projectile === null ? `fighter ${c.attacker}` : `projectile ${c.projectile.instanceId}`;
+}
+
+/**
+ * The box a side of a meeting weighs as (ruling R-T13c-g): its strongest by the 9%
+ * rule's weighing (`clankDamage`); on a tie, the one that freezes longer, then an
+ * electric one, then the lowest id. Each is a property of the box, never of the
+ * order the boxes come in. UNVERIFIED: the tie-break ("Priority" names the stronger
+ * hitbox "by %" and says no more); it decides only the freeze's multiplier and
+ * whether a side's own box is electric.
+ */
+function strongestBox(s: GameState, side: ReadonlySet<Candidate>): { readonly candidate: Candidate; readonly damage: number } {
+  let best: { candidate: Candidate; damage: number } | null = null;
+  for (const c of side) {
+    const damage = clankDamage(s, c);
+    if (best === null || outranks(c, damage, best.candidate, best.damage)) best = { candidate: c, damage };
+  }
+  return best!;
+}
+
+function outranks(c: Candidate, damage: number, than: Candidate, thanDamage: number): boolean {
+  if (damage !== thanDamage) return damage > thanDamage;
+  const lag = c.hitbox.hitlagMultiplier ?? ONE;
+  const thanLag = than.hitbox.hitlagMultiplier ?? ONE;
+  if (lag !== thanLag) return lag > thanLag;
+  const electric = c.hitbox.effect === "electric";
+  if (electric !== (than.hitbox.effect === "electric")) return electric;
+  return c.hitbox.id < than.hitbox.id;
 }
 
 /**
@@ -1398,7 +1465,11 @@ function strongerOf(a: Candidate, da: number, b: Candidate, db: number): Stronge
  * - a fighter on the ground that beat a projectile goes on unfrozen: "the
  *   projectile is destroyed and the ground move continues uninterrupted";
  * - any other fighter freezes, and its boxes with it (no frozen fighter's boxes
- *   are gathered, `gatherHitboxes`): "a rebounding character will suffer freeze
+ *   are gathered, `gatherHitboxes`). UNVERIFIED that its boxes are off: "Priority"
+ *   says both "During these freeze frames, all hitboxes are disabled" and "an
+ *   attack that clanks is still dangerous to bystanders until rebound begins",
+ *   which contradict each other; this takes the first, which matters only with
+ *   three or more fighters. The freeze: "a rebounding character will suffer freeze
  *   frames equal to the hitlag of the stronger attack (by %) ... This takes into
  *   account all hitlag modifiers, with one exception: the electric modifier is
  *   applied based on whether the character's hitbox has the electric effect";
@@ -1459,10 +1530,14 @@ function clankSide(
  * (`STATUS_REBOUND`).
  */
 function startRebound(f: FighterState, frames: number): void {
+  // A second meeting this frame that rebounds it too: the longer stands, as with
+  // the freeze, so the meetings' order does not matter (ruling R-T13c-g). No
+  // fighter already rebounding has a box to meet with.
+  const already = f.action === "rebound" ? f.combat.rebound : 0;
   kineticSetX(f, -f.facing * fx(0.5));
   clearHitRecord(f);
   startAction(f, "rebound");
-  f.combat.rebound = frames;
+  f.combat.rebound = Math.max(already, frames);
 }
 
 function isSmashSlot(slot: MoveSlot): boolean {
