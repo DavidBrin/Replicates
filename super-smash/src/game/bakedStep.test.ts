@@ -5,7 +5,7 @@ import { bakedEcb, fighterHurtboxes, localHurtboxes, restEcb } from "@/engine/ac
 import { LEDGE_GRAB_RANGE_X } from "@/engine/constants";
 import { ONE, fx, mul, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
-import { capsulesOverlap, contactPoint, deepestReach, hurtboxCapsule, moveFrameOf, pointSegmentDistSq, type Capsule } from "@/engine/hitbox";
+import { actionFrameOf, capsulesOverlap, contactPoint, deepestReach, hurtboxCapsule, moveFrameOf, pointSegmentDistSq, type Capsule } from "@/engine/hitbox";
 import { kineticLaunch } from "@/engine/kinetic";
 import { HARD_PLATFORM_DEPTH } from "@/engine/physics";
 import { cloneState, createInitialState, step, type SimContext } from "@/engine/simulate";
@@ -15,6 +15,8 @@ import { FIGHTERS } from "@/fighters";
 import { LIMB_SCRIPT_SLOTS } from "@/fighters/acmd/limb";
 import { bakedContext } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
+import { PARRY_AIM, stageViewFromDef } from "@/ai/behaviours";
+import { cpuWorldFromDef, decideCpu } from "@/ai/cpu";
 
 /**
  * `step()` in the baked world (Plan 4, Task 12): hits meet the bones' per-bone
@@ -454,5 +456,69 @@ describe("a limb-bone script in a real match (Plan 4, Task 13)", () => {
     const { near } = touch();
     const legacy: SimContext = { ...world(true), fighter: (id) => roster(id) };
     expect(tiltAt(near - fx(0.5), legacy)).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------- the CPU's parry, baked -- */
+
+/**
+ * Plan 5, Task 18, ruling R-T18j: a CPU's parry asks the engine's question, and a
+ * box the engine counts first reaches the body, the bones' hurt capsules when the
+ * match runs the bake (`CpuWorld.bake`): Donkey Kong's arms, raised as his shield
+ * drops, reach out where Plan 2's single capsule does not. With the bake his CPU
+ * parries what the baked engine parries; with the single capsule it would not.
+ */
+describe("the CPU's parry reaches the bones' hurt capsules (Plan 5, Task 18, ruling R-T18j)", () => {
+  const GAME = bakedContext({ fighter: roster, stage: () => FLAT }, BAKE);
+  const dk = GAME.fighter("donkeyKong");
+  const mario = GAME.fighter("mario");
+  const F = actionFrameOf(Math.min(...mario.moves.fsmash!.hitboxes.map((h) => h.startFrame)));
+  /** Donkey Kong (port 0) shielding at x 0, past the shield's minimum hold; Mario's forward smash 20 away, its hit two frames after the next. */
+  function swing(): GameState {
+    const s = pair(["donkeyKong", "mario"], 0, fx(20), GAME);
+    Object.assign(s.fighters[0], { action: "shield", actionFrame: 10 });
+    Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: F - 3 });
+    s.fighters[1].combat.smashLetGo = true;
+    return s;
+  }
+
+  it("decides it with the bake, which the baked engine then parries", () => {
+    const world = cpuWorldFromDef(dk, stageViewFromDef(FLAT), [dk, mario], (id) => GAME.fighter(id), BAKE);
+    const plain = cpuWorldFromDef(dk, stageViewFromDef(FLAT), [dk, mario], (id) => GAME.fighter(id));
+    let decided = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      if (decideCpu(swing(), 0, 9, seed, world).behaviour === "parry") decided++;
+      expect(decideCpu(swing(), 0, 9, seed, plain).behaviour, `seed ${seed}: Plan 2's capsule is not reached`).not.toBe("parry");
+    }
+    expect(decided).toBeGreaterThan(0);
+    // Let go on that frame, the engine parries it on the drop's frame 2.
+    const frames = play(swing(), 6, () => [0, 0], GAME);
+    const at = frames.findIndex((f) => f.events.shieldHits.some((h) => h.victim === 0));
+    expect(frames[at].state.fighters[0]).toMatchObject({ action: "shieldRelease", actionFrame: 2 });
+    expect(frames.flatMap((f) => f.events.hits).filter((h) => h.victim === 0)).toEqual([]);
+  });
+
+  it("takes the box the engine takes, the lowest id that reaches the body: Fox's forward smash's tip behind Mario's shield is a hit, in front of it a parry", () => {
+    const fox = GAME.fighter("fox");
+    const at = actionFrameOf(Math.min(...fox.moves.fsmash!.hitboxes.map((h) => h.startFrame))) - 1 - PARRY_AIM;
+    /** Mario (port 0) shielding toward Fox, `d` to his left, whose smash lands on the drop's frame `PARRY_AIM`. */
+    const facing = (d: number): GameState => {
+      const s = pair(["mario", "fox"], 0, -d, GAME);
+      Object.assign(s.fighters[0], { action: "shield", actionFrame: 10, facing: -1 });
+      Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: at, facing: 1 });
+      s.fighters[1].combat.smashLetGo = true;
+      return s;
+    };
+    const world = cpuWorldFromDef(mario, stageViewFromDef(FLAT), [mario, fox], (id) => GAME.fighter(id), BAKE);
+    const decides = (s: GameState) => Array.from({ length: 20 }, (_, i) => decideCpu(s, 0, 9, i + 1, world).behaviour).includes("parry");
+    const outcome = (s: GameState) => {
+      const frames = play(s, 8, () => [0, 0], GAME);
+      if (frames.some((f) => f.events.hits.some((h) => h.victim === 0))) return "hit";
+      return frames.some((f) => f.events.shieldHits.some((h) => h.victim === 0)) ? "parried" : "nothing";
+    };
+    // 7.25 off, its tip (box 0) reaches past his back, ahead of box 1 in front of him.
+    expect([decides(facing(fx(7.25))), outcome(facing(fx(7.25)))]).toEqual([false, "hit"]);
+    // 10.5 off, the tip is in front of him.
+    expect([decides(facing(fx(10.5))), outcome(facing(fx(10.5)))]).toEqual([true, "parried"]);
   });
 });

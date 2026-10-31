@@ -276,6 +276,27 @@ describe("the worlds the game's CPUs see", () => {
     });
   });
 
+  it("carry the bake the match steps with, for the body a parry's swing must reach (Plan 5, Task 18, ruling R-T18j)", () => {
+    const stage = getStageOrThrow("finalDestination");
+    const defs = [getFighterOrThrow("mario"), getFighterOrThrow("fox")];
+    const bake = { digest: "a stand-in" } as unknown as NonNullable<typeof GAME_SIM_CONTEXT.bake>;
+    const worlds = matchCpuWorlds(stage, defs, getFighterOrThrow, bake);
+    defs.forEach((def, i) => {
+      expect(worlds[i].bake, def.id).toBe(bake);
+      expect(worlds[i], def.id).toEqual(cpuWorldFromDef(def, stageViewFromDef(stage), defs, getFighterOrThrow, bake));
+    });
+    // Unless given, the game's own, which every match steps with: none until it is installed.
+    const installed = GAME_SIM_CONTEXT.bake;
+    try {
+      GAME_SIM_CONTEXT.bake = undefined;
+      expect(matchCpuWorlds(stage, defs, getFighterOrThrow).every((w) => w.bake === undefined)).toBe(true);
+      GAME_SIM_CONTEXT.bake = bake;
+      expect(matchCpuWorlds(stage, defs, getFighterOrThrow).every((w) => w.bake === bake)).toBe(true);
+    } finally {
+      GAME_SIM_CONTEXT.bake = installed;
+    }
+  });
+
   it("give a Kirby CPU the neutral special its Copy Ability runs (Plan 5, Task 19)", () => {
     const stage = getStageOrThrow("finalDestination");
     const defs = [getFighterOrThrow("kirby"), getFighterOrThrow("samus")];

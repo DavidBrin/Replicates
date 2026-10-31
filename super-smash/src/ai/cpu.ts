@@ -26,6 +26,7 @@
  * four frames, which is roughly a very good human.
  */
 
+import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
 import { BUFFER_FRAMES } from "@/engine/constants";
 import { nextRandom } from "@/engine/fixed";
@@ -115,6 +116,12 @@ export interface CpuWorld {
    * the match's own definitions (`matchDefs`), where every copy comes from.
    */
   readonly fighter?: (defId: string) => FighterDef | undefined;
+  /**
+   * The bake the match steps with (Plan 4), for the hurt capsules a swing must
+   * reach before it lands on the CPU's shield (`parry`; ruling R-T18j). Defaults to
+   * none: Plan 2's single capsule, as the engine runs without one.
+   */
+  readonly bake?: BakeTables;
 }
 
 /**
@@ -135,13 +142,15 @@ export function cpuDef(self: FighterState, world: CpuWorld): FighterDef | undefi
  * the definitions: the one builder the game (`matchCpuWorlds`), the golden and
  * the CPU sweep share, so none of them can leave a field out (Plan 5, Task 4b
  * fix round 1: one of three left the up special model out). `matchDefs` is every
- * port's definition, by port, as the match runs them.
+ * port's definition, by port, as the match runs them; `bake` the bake it steps
+ * with, if any.
  */
 export function cpuWorldFromDef(
   def: FighterDef,
   stage: StageView,
   matchDefs: readonly (FighterDef | undefined)[] = [],
   fighter?: (defId: string) => FighterDef | undefined,
+  bake?: BakeTables,
 ): CpuWorld {
   return {
     stage,
@@ -158,6 +167,8 @@ export function cpuWorldFromDef(
     matchDefs,
     // The match's fighter lookup, for a Copy Ability's move (Task 19).
     ...(fighter !== undefined ? { fighter } : {}),
+    // The match's bake, for the body a parry's swing must reach (Task 18, ruling R-T18j).
+    ...(bake !== undefined ? { bake } : {}),
   };
 }
 
@@ -302,6 +313,7 @@ export function decideCpu(
     // The moveset it fights with now: a Kirby's Copy Ability's included (Task 19).
     fighterDef: cpuDef(self, world) ?? null,
     matchDefs: world.matchDefs ?? [],
+    ...(world.bake !== undefined ? { bake: world.bake } : {}),
     rolls,
   };
 

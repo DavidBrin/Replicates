@@ -39,6 +39,7 @@ import { createCamera, updateCamera, type Camera } from "@/render/camera";
 import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
 import { render, renderBackground, sceneDrawShift, sceneShiftAt, type RenderState } from "@/render/renderer";
+import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { cpuInput, cpuWorldFromDef, type CpuWorld } from "@/ai/cpu";
 import { stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
@@ -225,16 +226,19 @@ export interface MatchRunner {
  * (`cpuWorldFromDef`): the same builder the golden and the CPU sweep use, given
  * every port's definition so a parry can time a swing off its move data (Plan 5,
  * Task 18, ruling R-T18d), and the match's own fighter lookup, so a Kirby CPU
- * knows the move its Copy Ability gives it (Task 19). A port with no definition
- * gets the stage's view, two jumps and the match's definitions.
+ * knows the move its Copy Ability gives it (Task 19), and the bake the match steps
+ * with, the game's own unless given (installed before `/play` mounts), so a parry's
+ * swing must reach the body the engine hits (Task 18, ruling R-T18j). A port with
+ * no definition gets the stage's view, two jumps and the match's definitions.
  */
 export function matchCpuWorlds(
   stage: StageDef,
   defs: readonly (FighterDef | undefined)[],
   getFighter?: (id: string) => FighterDef | undefined,
+  bake: BakeTables | undefined = GAME_SIM_CONTEXT.bake,
 ): CpuWorld[] {
   const view = stageViewFromDef(stage);
-  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs, getFighter) : { stage: view, jumps: 2, matchDefs: defs }));
+  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs, getFighter, bake) : { stage: view, jumps: 2, matchDefs: defs }));
 }
 
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {

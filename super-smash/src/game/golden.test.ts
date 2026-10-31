@@ -137,8 +137,9 @@ function cpuMatch(name: string, stage: string, fighters: readonly [string, strin
     driver() {
       const view = stageViewFromDef(CTX.stage(stage));
       const defs = fighters.map((id) => CTX.fighter(id));
-      // Plan 5, Task 19: the match's own fighter lookup, so a Kirby CPU's copy is the one it runs.
-      const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs, (id) => CTX.fighter(id)));
+      // Plan 5, Task 19: the match's own fighter lookup, so a Kirby CPU's copy is the one it runs;
+      // Task 18 fix round 2: the bake it steps with, so a parry's swing must reach the body the engine hits.
+      const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs, (id) => CTX.fighter(id), CTX.bake));
       let cpuSeed = seed ^ 0x1f2e3d4c;
       return (state) =>
         fighters.map((_, port) => {
@@ -344,6 +345,12 @@ const MATCHES: readonly Match[] = [
  * and thrown again (a shield held through a swing is grabbed); none gets up from
  * lying down or trumps a ledge any more, which the states lab and the script do.
  * All 59 are visited.
+ * Task 18's fix round 2 (one tech roll a tumble for the floor; the tech holds the
+ * stick before a landing; the parry's reach the engine's hit test) adds no action.
+ * The four CPU matches reach 44 between them, down from 48: they get up from lying
+ * down again (a missed tech's bounce is no longer rolled again), and none crouches,
+ * ledge-jumps, ledge-rolls or is shield-stunned any more, which the script and the
+ * labs reach. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1052,6 +1059,25 @@ describe("engine golden trace", () => {
   // mario-fox lost two stocks that way). The script and the eight labs are
   // byte-identical. So now: hits 29/27/36/39, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield
   // hits 0/0/2/1, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
+  // Plan 5 Task 18's fix round 2 (rulings R-T18h to R-T18k: one tech roll a tumble
+  // for the floor and one for the stage's side; `tech` holds the stick, decided, from
+  // 12 frames out until the landing, so nothing steers a fall off its decision frame,
+  // and its fall model runs that stick; the parry's reach is the engine's hit test,
+  // the bake's body first, the swing where it is now) moved the four CPU matches, each
+  // from the sample where a CPU first holds its stick for a landing where another
+  // behaviour had it before: donkeyKong-pikachu on 129 (the 101-200 sample),
+  // link-samus on 274 (201-300), mario-fox on 618 (601-700) and kirby-marth on 961
+  // (901-1000). They tech 25 times between them (19 before) and lie down 11 times (2):
+  // a missed tech's bounce is no longer rolled again. Hits 39, 42, 34 and 29; shield
+  // hits 0, 1, 0 and 0; KOs 0, 0, 2 and 1 (were 29/27/36/39, 0/0/2/1 and 0/0/0/1): Link
+  // and Samus by hits, tumbling at 127.6% on 2983 and 147.8% on 3436, and Marth in
+  // special fall at 122.9% on 3111. Two parries are decided: Donkey Kong's on 740
+  // lands on 742; Mario's on 2970, against the back of Fox's forward smash, 4 off,
+  // lands nothing: the smash's own momentum carries Fox 3 further off by its first
+  // live frame, and the parry places a swing where it is (ruling R-T18j). The
+  // script and the eight labs are byte-identical. So now: hits 39/42/34/29, 6, 0, 1,
+  // 4, 1, 2, 33, 54 and 0; shield hits 0/1/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs
+  // 0/0/2/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

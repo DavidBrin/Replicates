@@ -17,6 +17,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
 import { emptyCombat } from "@/engine/combat";
 import {
+  AIR_DODGE_TECH_FRAMES,
+  GLANCING_BLOW_DEPTH,
+  TUMBLE_HITSTUN,
   HITSTUN_CANCEL_AIR_DODGE_FRAME,
   HITSTUN_CANCEL_AIR_DODGE_SPEED,
   LAUNCH_SPEED_DECAY,
@@ -25,11 +28,14 @@ import {
   TECH_WINDOW,
 } from "@/engine/constants";
 import { fx, nextRandom } from "@/engine/fixed";
-import { actionFrameOf } from "@/engine/hitbox";
-import { kineticLaunch } from "@/engine/kinetic";
+import { actionFrameOf, capsulesOverlap, deepestReach, hitboxWorldPos, hurtboxCapsule } from "@/engine/hitbox";
+import { shieldBubble } from "@/engine/shield";
+import { kineticLaunch, kineticSum } from "@/engine/kinetic";
+import { fighterParams } from "@/engine/params";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
-import { Btn, held, type FighterDef, type FighterState, type GameState, type InputFrame, type MoveSlot } from "@/engine/types";
+import { platformCentreX } from "@/engine/physics";
+import { Btn, held, type FighterDef, type FighterState, type GameState, type Hitbox, type InputFrame, type MoveSlot } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { makeFighter, makeState } from "@/render/testFixtures";
@@ -43,9 +49,11 @@ import {
   ROLL_SHIELD,
   ROLL_SPECIAL,
   ROLL_TECH,
+  TECH_HOLD,
   TECH_LEAD,
-  THREAT_RANGE,
   escape,
+  floorBounced,
+  floorHold,
   framesToFloor,
   framesToWall,
   observe,
@@ -109,7 +117,9 @@ const RULES = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnO
 /**
  * Mario (port 0) tumbling on `stage` from (x, y), launched along (vx, vy) at a
  * speed under a floor bounce's 0.8, so a missed tech lies him down; Fox stands
- * well away. `hitstun` to go, `actionFrame` into the reel.
+ * well away. `hitstun` to go, `actionFrame` into the reel, its gravity as that
+ * many frames of the reel built it: a tumble's gravity is zeroed only at its
+ * launch (frame 0) or where it meets a floor (`floorBounced`; ruling R-T18h).
  */
 function tumbling(x: number, y: number, o: { stage?: string; vx?: number; vy?: number; hitstun?: number; actionFrame?: number } = {}): GameState {
   const s = createInitialState(o.stage ?? "finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 21);
@@ -117,19 +127,30 @@ function tumbling(x: number, y: number, o: { stage?: string; vx?: number; vy?: n
   const vx = fx(o.vx ?? 0);
   const vy = fx(o.vy ?? -0.5);
   kineticLaunch(s.fighters[0], vx, vy, Math.abs(vx) + Math.abs(vy));
+  const p = fighterParams(defOf("mario"));
+  s.fighters[0].kinetic.gravityY = -Math.min(p.air_speed_y_stable, (o.actionFrame ?? 0) * p.air_accel_y);
+  kineticSum(s.fighters[0]);
   Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: fx(-60), y: stageOf(o.stage ?? "finalDestination").platforms[0].y, intangible: 0 });
   return s;
 }
 
-/** Mario falling from rest after a tumble's hitstun (`tumbleFall`). */
+/**
+ * Mario falling after a tumble's hitstun (`tumbleFall`), at his fall speed: a
+ * tumble's own fall reaches it before its hitstun runs out (`floorBounced`).
+ */
 function fallingAfter(x: number, y: number, stage = "finalDestination"): GameState {
   const s = tumbling(x, y, { stage, hitstun: 0 });
   Object.assign(s.fighters[0], { action: "tumbleFall", actionFrame: 1, hitstun: 0 });
   kineticLaunch(s.fighters[0], 0, 0, 0);
+  s.fighters[0].kinetic.gravityY = -fighterParams(defOf("mario")).air_speed_y_stable;
+  kineticSum(s.fighters[0]);
   return s;
 }
 
 const quiet = (s: GameState): GameState => step(s, [0, 0], { prevInputs: [0, 0] }).state;
+
+/** A press of `tech`'s: its decision, made (a hold is not one; ruling R-T18i). */
+const presses = (r: { readonly score: number; readonly input: InputFrame }): boolean => r.score > 0 && held(r.input, Btn.Shield);
 
 /** Steps, with nothing pressed, until Mario stands on something: the engine's own answer. */
 function landsIn(s: GameState): number {
@@ -140,12 +161,20 @@ function landsIn(s: GameState): number {
   return -1;
 }
 
-/** Every frame of the approach on which `tech` presses, as the engine's frames to the floor then. */
+/**
+ * Every frame of the approach on which `tech` presses, as the engine's frames to
+ * the floor then. The stick it holds is held (ruling R-T18i); its press is not,
+ * so a passing roll's decision is seen and the landing still comes.
+ */
 function decisionsOver(s: GameState, ctx: (s: GameState) => BehaviourContext): number[] {
   const out: number[] = [];
+  let prev: InputFrame = 0;
   while (!s.fighters[0].grounded) {
-    if (tech(ctx(s)).score > 0) out.push(landsIn(s));
-    s = quiet(s);
+    const r = tech(ctx(s));
+    if (presses(r)) out.push(landsIn(s));
+    const stick = r.score > 0 ? r.input & ~Btn.Shield : 0;
+    s = step(s, [stick, 0], { prevInputs: [prev, 0] }).state;
+    prev = stick;
   }
   return out;
 }
@@ -156,7 +185,7 @@ function decisionsPressing(s: GameState, ctx: (s: GameState) => BehaviourContext
   let prev: InputFrame = 0;
   while (!s.fighters[0].grounded) {
     const r = tech(ctx(s));
-    if (r.score > 0 && r.input !== 0) out.push(landsIn(s));
+    if (presses(r)) out.push(landsIn(s));
     const input = r.score > 0 ? r.input : 0;
     s = step(s, [input, 0], { prevInputs: [prev, 0] }).state;
     prev = input;
@@ -188,15 +217,19 @@ describe("tech", () => {
     expect(r.decided).toBe(true);
   });
 
-  it("does not, while the floor is still far off", () => {
-    expect(tech(context(atLandsIn(tumbling(20, 40), TECH_LEAD + 1), L9, undefined, FD)).score).toBe(0);
+  it("does not, while the floor is still far off: it only holds the stick from TECH_HOLD out (ruling R-T18i)", () => {
+    for (let n = TECH_LEAD + 1; n <= TECH_HOLD; n++) {
+      const r = tech(context(atLandsIn(tumbling(20, 40), n), L9, undefined, FD));
+      expect([presses(r), r.decided, r.input], `${n} out`).toEqual([false, true, Btn.Left]);
+    }
+    expect(tech(context(atLandsIn(tumbling(20, 40), TECH_HOLD + 1), L9, undefined, FD)).score).toBe(0);
     expect(tech(context(tumbling(20, 60, { actionFrame: 5 }), L9, undefined, FD)).score).toBe(0);
   });
 
   it("is never done at level 1, and needs the roll at level 9", () => {
     const s = atLandsIn(tumbling(20, 40), TECH_LEAD);
-    expect(tech(context(s, L1, undefined, FD)).score).toBe(0);
-    expect(tech(context(s, L9, rollsWith(ROLL_TECH, 0.99), FD)).score).toBe(0);
+    expect(presses(tech(context(s, L1, undefined, FD)))).toBe(false);
+    expect(presses(tech(context(s, L9, rollsWith(ROLL_TECH, 0.99), FD)))).toBe(false);
   });
 });
 
@@ -265,6 +298,15 @@ describe("tech, once per landing (ruling R-T18e)", () => {
     expect(decisionsOver(s, ctx(L9))).toEqual([n]);
   });
 
+  it("a tumble launched with no freeze (a throw's) decides on its first frame, whose fall has run a frame already", () => {
+    const s = tumbling(20, 4);
+    s.fighters[0].kinetic.gravityY = -fighterParams(defOf("mario")).air_accel_y;
+    kineticSum(s.fighters[0]);
+    const n = landsIn(s);
+    expect(n).toBeLessThan(TECH_LEAD);
+    expect(decisionsOver(s, ctx(L9))).toEqual([n]);
+  });
+
   it("a tumble's fall decides at the same frame, with a neutral press (ruling P5-R20)", () => {
     const s = atLandsIn(fallingAfter(20, 40), TECH_LEAD);
     expect(tech(context(s, L9, undefined, FD)).input).toBe(Btn.Shield);
@@ -281,16 +323,16 @@ describe("tech, once per landing (ruling R-T18e)", () => {
   it("not in a tumble's fall with its air dodge spent", () => {
     const s = atLandsIn(fallingAfter(20, 40), TECH_LEAD);
     s.fighters[0].airDodged = true;
-    expect(tech(context(s, L9, undefined, FD)).score).toBe(0);
+    expect(presses(tech(context(s, L9, undefined, FD)))).toBe(false);
   });
 
   it("does not press again into a window that is open, or locked out", () => {
     const s = atLandsIn(tumbling(20, 40), TECH_LEAD);
     // A press opens both, and they count down together (`updateTechInput`): 8 frames ago.
     s.fighters[0].combat = { ...s.fighters[0].combat, techWindow: TECH_WINDOW - 8, techLockout: TECH_LOCKOUT - 8 };
-    expect(tech(context(s, L9, undefined, FD)).score).toBe(0);
+    expect(presses(tech(context(s, L9, undefined, FD)))).toBe(false);
     s.fighters[0].combat = { ...s.fighters[0].combat, techWindow: 0, techLockout: 12 };
-    expect(tech(context(s, L9, undefined, FD)).score).toBe(0);
+    expect(presses(tech(context(s, L9, undefined, FD)))).toBe(false);
   });
 
   it("takes the frame outright: its roll is the chance, so no jitter or fumble undoes it", () => {
@@ -298,17 +340,16 @@ describe("tech, once per landing (ruling R-T18e)", () => {
     const L5 = tuningForLevel(5);
     const s = atLandsIn(tumbling(20, 40), TECH_LEAD);
     const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("fox")]);
-    let presses = 0;
+    let pressed = 0;
     let rolledIn = 0;
     for (let seed = 1; seed <= 400; seed++) {
       const d = decideCpu(s, 0, 5, seed, world);
-      if (d.behaviour === "tech") {
-        presses++;
-        expect(held(d.input, Btn.Shield)).toBe(true);
-      }
-      if (tech(context(s, L5, rollsOf(seed), FD)).score > 0) rolledIn++;
+      expect(d.behaviour).toBe("tech");
+      if (held(d.input, Btn.Shield)) pressed++;
+      if (presses(tech(context(s, L5, rollsOf(seed), FD)))) rolledIn++;
     }
-    expect(presses).toBe(rolledIn);
+    expect(pressed).toBe(rolledIn);
+    expect(rolledIn).toBeGreaterThan(0);
   });
 });
 
@@ -328,15 +369,14 @@ function rollsOf(seed: number): number[] {
 describe("tech, once per landing, where the approach is not a plain fall", () => {
   const ctx = (s: GameState) => context(s, L9, undefined, FD);
 
-  it("decides again after a floor bounce, for the approach the bounce starts", () => {
+  it("not again after a floor bounce (ruling R-T18h): the bounce's approach is the same tumble's", () => {
     // Launched shallow, over a floor bounce's 0.8, with nothing pressed: the first
     // touch bounces it, low, so the next approach starts inside the reach.
     let s = tumbling(20, 3, { vx: 1, vy: -0.3 });
     while (!(s.fighters[0].vy > 0 && s.fighters[0].y === stageOf("finalDestination").platforms[0].y)) s = quiet(s);
     expect(s.fighters[0].action).toBe("tumble");
-    const n = landsIn(s);
-    expect(n).toBeLessThan(TECH_LEAD);
-    expect(decisionsOver(s, ctx)).toEqual([n]);
+    expect(landsIn(s)).toBeLessThan(TECH_LEAD);
+    expect(decisionsOver(s, ctx)).toEqual([]);
   });
 
   it("waits for a lockout to run out: the window opens only on a press the lockout allows", () => {
@@ -396,6 +436,362 @@ describe("tech, over Battlefield (the floor its fall comes down on)", () => {
 });
 
 /**
+ * The fall model's drift and its edges (the Task 18 fix round 1 re-review's N4):
+ * what each one decides is pinned against what the engine does, so a model that
+ * ran the fall at its starting x, took the stage's ledges as off it, or left a
+ * sweeping platform where it was when it decided, decides elsewhere.
+ */
+describe("tech, the fall model's drift and its edges (the re-review's A1, A3, A5)", () => {
+  it("runs the drift: from 1 inside Battlefield's right platform's end, 4 above it, at vx 0.6, it decides once, for the stage", () => {
+    // A1: a fall placed at its starting x decides twice here, for the platform at
+    // once (the engine 27 from the floor) and for the stage at 9 ([27, 9]).
+    const right = stageOf("battlefield").platforms[3];
+    const s = tumbling((right.x + right.halfWidth) / 4096 - 1, right.y / 4096 + 4, { stage: "battlefield", vx: 0.6, vy: -0.15 });
+    let end = s;
+    while (!end.fighters[0].grounded) end = quiet(end);
+    expect(end.fighters[0].y, "it lands on the stage, past the platform").toBeLessThan(right.y);
+    expect(landsIn(s)).toBe(27);
+    expect(decisionsOver(s, (st) => context(st, L9, undefined, BF))).toEqual([TECH_LEAD]);
+  });
+
+  it("counts the stage's ledges as on it, as the engine lands a body there (A3)", () => {
+    const at = (x: number) => tumbling(x / 4096, 30);
+    let end = at(FD.rightLedge);
+    while (!end.fighters[0].grounded) end = quiet(end);
+    expect(end.fighters[0].y, "the engine lands it on the ledge's x").toBe(stageOf("finalDestination").platforms[0].y);
+    expect(decisionsOver(at(FD.rightLedge), (st) => context(st, L9, undefined, FD))).toEqual([TECH_LEAD]);
+    expect(decisionsOver(at(FD.leftLedge), (st) => context(st, L9, undefined, FD))).toEqual([TECH_LEAD]);
+    // One unit of Q12 past it there is no floor, and no decision.
+    const past = at(FD.rightLedge + 1);
+    expect(tech(context(atLandsIn(tumbling(FD.rightLedge / 4096, 30), TECH_LEAD), L9, undefined, FD)).score).toBeGreaterThan(0);
+    let s = past;
+    for (let i = 0; i < 40; i++, s = quiet(s)) expect(tech(context(s, L9, undefined, FD)).score, `frame ${i}`).toBe(0);
+  });
+
+  it("runs a sweeping platform's clock through the fall: one not under it yet when it decides, but under it when it lands (A5)", () => {
+    const sv = stageOf("smashville");
+    const moving = sv.platforms.find((p) => p.motion !== undefined)!;
+    // Nine past its right end as the stage clock starts, when it sweeps right at its
+    // fastest: at the decision frame its end is still two short of the fall.
+    const s = tumbling((moving.x + moving.halfWidth) / 4096 + 9, moving.y / 4096 + 25, { stage: "smashville" });
+    const at = atLandsIn(s, TECH_LEAD);
+    expect(Math.abs(at.fighters[0].x - platformCentreX(moving, at.stageFrame)), "not under it yet").toBeGreaterThan(moving.halfWidth);
+    let end = s;
+    while (!end.fighters[0].grounded) end = quiet(end);
+    expect(end.fighters[0].y, "it lands on the platform").toBe(moving.y);
+    expect(decisionsOver(s, (st) => context(st, L9, undefined, stageViewFromDef(sv)))).toEqual([TECH_LEAD]);
+  });
+});
+
+/**
+ * Ruling R-T18h: `techSkill` is the chance of teching a tumble's landing, one roll
+ * a tumble for the floor, so a missed tech that bounces is not rolled again and a
+ * hard landing techs at the dial, not at 1 − (1 − p)². The CPU keeps no memory;
+ * what the bounce leaves on the fighter says so (`floorBounced`). UNVERIFIED
+ * (engine): whether the landing after a missed tech's bounce can be teched at all.
+ */
+describe("tech, one roll a tumble for the floor (ruling R-T18h)", () => {
+  const ctx = (s: GameState) => context(s, L9, undefined, FD);
+  /** Steps until the floor bounces it (nothing pressed: the tech is missed), and the frames to its next touch. */
+  function bounced(s: GameState): { s: GameState; gap: number } {
+    for (let i = 0; i < 120; i++) {
+      const next = quiet(s);
+      if (next.fighters[0].action === "tumble" && next.fighters[0].kinetic.gravityY === 0 && s.fighters[0].kinetic.gravityY !== 0) return { s: next, gap: landsIn(next) };
+      s = next;
+    }
+    throw new Error("no bounce");
+  }
+
+  it("a missed tech that bounces gets no second roll, past the decision's reach and the hold's", () => {
+    const gaps: number[] = [];
+    for (const [y, vy] of [[3, -0.8], [3, -1.2], [10, -1.2], [10, -1.6]] as const) {
+      const s = tumbling(20, y, { vx: 0.5, vy, hitstun: 80 });
+      expect(decisionsOver(s, ctx), `y ${y}, vy ${vy}`).toHaveLength(1);
+      const { s: after, gap } = bounced(s);
+      gaps.push(gap);
+      expect(floorBounced(defOf("mario"), after.fighters[0]), `y ${y}, vy ${vy}: the bounce is seen`).toBe(true);
+      expect(decisionsOver(after, ctx), `y ${y}, vy ${vy}: after the bounce, ${gap} from the floor`).toEqual([]);
+    }
+    // The next touch past the decision's reach, and past the hold's too, where only
+    // what the bounce left on the fighter says it was the same tumble.
+    expect(Math.min(...gaps)).toBeGreaterThan(TECH_LEAD);
+    expect(Math.max(...gaps)).toBeGreaterThan(TECH_HOLD);
+  });
+
+  it("sees the bounce after the hitstun runs out, a balloon reel's too", () => {
+    for (const balloon of [false, true]) {
+      const s = tumbling(20, 3, { vx: 0.5, vy: -1.2, hitstun: 14 });
+      s.fighters[0].balloon = balloon;
+      const { s: after } = bounced(s);
+      let t = after;
+      while (t.fighters[0].action === "tumble") t = quiet(t);
+      expect(t.fighters[0].action, `balloon ${balloon}`).toBe("tumbleFall");
+      for (; !t.fighters[0].grounded; t = quiet(t)) expect(floorBounced(defOf("mario"), t.fighters[0]), `balloon ${balloon}, fall frame ${t.fighters[0].actionFrame}`).toBe(true);
+    }
+  });
+
+  it("sees a tumble's own launch as no bounce, on every frame of its fall, sped up or not", () => {
+    for (const s0 of [tumbling(20, 40), tumbling(20, 60, { vx: 1, vy: 1.5 }), tumbling(-20, 30, { actionFrame: 12 })]) {
+      for (let s = s0; !s.fighters[0].grounded; s = quiet(s)) expect(floorBounced(defOf("mario"), s.fighters[0])).toBe(false);
+    }
+    // A launch with the speed-up (`speedUpFaf`), as a tumbling hit makes one.
+    const sped = tumbling(20, 60);
+    kineticLaunch(sped.fighters[0], fx(0.5), fx(2), fx(2.1), 40);
+    for (let s = sped; !s.fighters[0].grounded; s = quiet(s)) expect(floorBounced(defOf("mario"), s.fighters[0])).toBe(false);
+    // One launched by a hit with no freeze into a tumble already under way (its frame
+    // count kept, its gravity one frame from zero): its speed-up says it is a launch,
+    // which a bounce would have disarmed.
+    const again = tumbling(20, 60, { actionFrame: 4 });
+    kineticLaunch(again.fighters[0], fx(0.5), fx(2), fx(2.1), 40);
+    again.fighters[0].kinetic.gravityY = -fighterParams(defOf("mario")).air_accel_y;
+    kineticSum(again.fighters[0]);
+    expect(floorBounced(defOf("mario"), again.fighters[0])).toBe(false);
+  });
+
+  it("reads no floor met in a tumble's own fall when its hitstun runs out, for every fighter on the roster (what tumbleFall reads)", () => {
+    // The slowest a tumble's fall builds: no speed-up, from TUMBLE_HITSTUN frames of
+    // hitstun up, at the fighter's own gravity, its balloon gravity, or set weight's.
+    // Its gravity is at the fall speed then, or (a balloon reel that stops short of
+    // it, Fox's) no whole number of the fall's own frames.
+    for (const def of FIGHTERS) {
+      const p = fighterParams(def);
+      for (const how of ["own", "balloon", "setWeight"] as const) {
+        for (let hitstun = TUMBLE_HITSTUN; hitstun <= TUMBLE_HITSTUN + 15; hitstun++) {
+          const s = createInitialState("finalDestination", [{ defId: def.id }, { defId: "fox" }], RULES, 21);
+          const f = s.fighters[0];
+          Object.assign(f, { action: "tumble", actionFrame: 0, grounded: false, platform: -1, x: 0, y: fx(120), hitstun, intangible: 0, invincible: 0, balloon: how === "balloon" });
+          kineticLaunch(f, 0, fx(0.5), fx(0.5), 0, how === "setWeight");
+          Object.assign(s.fighters[1], { x: fx(-60), intangible: 0 });
+          let t = s;
+          while (t.fighters[0].action === "tumble") t = quiet(t);
+          const at = `${def.id} ${how} ${hitstun}`;
+          expect(t.fighters[0].action, at).toBe("tumbleFall");
+          const g = -t.fighters[0].kinetic.gravityY;
+          if (how !== "balloon") expect(g, at).toBe(p.air_speed_y_stable);
+          expect(floorBounced(def, t.fighters[0]), at).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("so a hard landing techs at each level's techSkill, within 0.08, not twice the chance", () => {
+    // Launched down over a floor bounce's 0.8: a missed first touch bounces.
+    const hard = () => tumbling(20, 12, { vx: 1.2, vy: -1 });
+    let s = hard();
+    while (!s.fighters[0].grounded && !(s.fighters[0].kinetic.gravityY === 0 && s.fighters[0].actionFrame > 0)) s = quiet(s);
+    expect(s.fighters[0].grounded, "the first touch bounces").toBe(false);
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("fox")]);
+    const seeds = 400;
+    for (let level = 1; level <= MAX_LEVEL; level++) {
+      let n = 0;
+      for (let seed = 1; seed <= seeds; seed++) {
+        let t = hard();
+        let cs = seed;
+        let prev: InputFrame[] = [0, 0];
+        for (let i = 0; i < 160 && !t.fighters[0].grounded; i++) {
+          const c = cpuInput(t, 0, level, cs, world);
+          cs = c.seed;
+          t = step(t, [c.input, 0], { prevInputs: prev }).state;
+          prev = [c.input, 0];
+          if (t.fighters[0].grounded && t.fighters[0].action !== "tech" && t.fighters[0].action !== "techRoll" && t.fighters[0].action !== "downed") t = quiet(t);
+        }
+        if (t.fighters[0].action === "tech" || t.fighters[0].action === "techRoll") n++;
+      }
+      expect(Math.abs(n / seeds - tuningForLevel(level).techSkill), `level ${level}: ${n}/${seeds}`).toBeLessThanOrEqual(0.08);
+    }
+  });
+});
+
+/**
+ * Ruling R-T18k: R-T18h's one roll is per kind of contact. The stage's side, met in
+ * the hitstun, is its own roll (`framesToWall`; Plan 5, Task 19): a wall's bounce
+ * keeps the gravity energy, so it is no floor met, and a floor after it in the same
+ * tumble is rolled for.
+ */
+describe("tech, a wall and a floor in one tumble: one roll each (ruling R-T18k)", () => {
+  /** Frames on which `tech`'s answer turns on its roll: its decisions, passed or failed. */
+  const rolled = (s: GameState, stage: StageView) => {
+    const pass = tech(context(s, L9, rollsWith(ROLL_TECH, 0), stage));
+    const fail = tech(context(s, L9, rollsWith(ROLL_TECH, 0.99), stage));
+    return pass.input !== fail.input || pass.score !== fail.score;
+  };
+
+  it("a wall decision, missed, then the floor its fall comes down on: one roll for each", () => {
+    // Into Final Destination's left wall under the ledge, at a tumble's least
+    // hitstun: the wall's decision, its roll failed (nothing pressed), the bounce.
+    let s = tumbling(-100, -25, { vx: 2.5, vy: 0.2, hitstun: TUMBLE_HITSTUN });
+    let wall = 0;
+    let bounced = false;
+    while (s.fighters[0].action === "tumble") {
+      if (rolled(s, FD)) wall++;
+      const next = quiet(s);
+      if (Math.sign(next.fighters[0].kinetic.damageX) < 0 && Math.sign(s.fighters[0].kinetic.damageX) > 0) bounced = true;
+      s = next;
+    }
+    expect([wall, bounced]).toEqual([1, true]);
+    expect(s.fighters[0].action).toBe("tumbleFall");
+    expect(floorBounced(defOf("mario"), s.fighters[0]), "a wall's bounce is no floor met").toBe(false);
+    // On these stages only the hitstun's end lets the fall drift back over the
+    // stage; its fall, its gravity and launch as the wall left them, is put over it.
+    const over: GameState = { ...s, fighters: [{ ...s.fighters[0], x: 0, y: fx(30) }, s.fighters[1]] };
+    let floor = 0;
+    for (let t = over; !t.fighters[0].grounded; t = quiet(t)) if (rolled(t, FD)) floor++;
+    expect(floor).toBe(1);
+    expect(decisionsOver(over, (st) => context(st, L9, undefined, FD))).toEqual([TECH_LEAD]);
+  });
+});
+
+/**
+ * Ruling R-T18i: from `TECH_HOLD` frames out, under any stick it could hold, `tech`
+ * owns the stick, decided, until it lands, pass or fail, and its fall model runs
+ * that stick. So nothing else (an approach's drift, a fast fall, a shield's air
+ * dodge, the Task 19 behaviours that steer a falling fighter) carries it past its
+ * decision frame or onto a floor it never decided for: the sweep's lie-downs with
+ * no decision (5 / 5 / 2) were an approach drifting it onto a platform.
+ */
+describe("tech owns the stick before a landing (ruling R-T18i)", () => {
+  const bf = stageOf("battlefield");
+  const left = bf.platforms[1];
+  /** Mario's tumble's fall 4 right of Battlefield's left platform's end, 20 over it; Fox on that platform, so `approach` drifts him onto it. */
+  const drifting = (): GameState => {
+    const s = fallingAfter((left.x + left.halfWidth) / 4096 + 4, left.y / 4096 + 20, "battlefield");
+    Object.assign(s.fighters[1], { platform: 1, x: left.x - fx(10), y: left.y });
+    return s;
+  };
+
+  it("takes the stick under a drift that brings the floor near, and decides that landing once", () => {
+    const world = cpuWorldFromDef(defOf("mario"), BF, [defOf("mario"), defOf("fox")]);
+    for (let seed = 1; seed <= 20; seed++) {
+      let s = drifting();
+      let prev: InputFrame[] = [0, 0];
+      let decided = 0;
+      let held0 = -1;
+      for (let i = 0; i < 120 && !s.fighters[0].grounded && s.fighters[0].action === "tumbleFall"; i++) {
+        if (presses(tech(context(s, L9, undefined, BF)))) decided++;
+        const d = decideCpu(s, 0, 9, seed * 1000 + i, world);
+        const hold = floorHold(defOf("mario"), s.fighters[0], BF, s.frame, s.stageFrame);
+        if (hold !== null) {
+          if (held0 < 0) held0 = hold.frames;
+          expect(d.behaviour, `seed ${seed}, frame ${i}`).toBe("tech");
+          expect(d.input & (Btn.Down | Btn.Up | Btn.Jump | Btn.Attack | Btn.Special | Btn.Grab), `seed ${seed}, frame ${i}`).toBe(0);
+        }
+        s = step(s, [d.input, 0], { prevInputs: prev }).state;
+        prev = [d.input, 0];
+      }
+      expect(held0, `seed ${seed}: taken from TECH_HOLD out`).toBe(TECH_HOLD);
+      expect(decided, `seed ${seed}: one decision for the landing`).toBe(1);
+    }
+  });
+
+  it("holds through the swing a shield would air-dodge at, and a down aerial's fast fall", () => {
+    const s = atLandsIn(fallingAfter(10, 40), TECH_LEAD + 2);
+    // Fox swinging his forward smash at him, seen and in range: `shield` decides an air dodge.
+    const swing: GameState = { ...s, fighters: [s.fighters[0], { ...s.fighters[1], x: fx(30), y: s.fighters[0].y, grounded: false, facing: -1, action: "attack", move: "fsmash", actionFrame: L9.reactionFrames }] };
+    expect(shield(context(swing, L9)).decided, "shield would decide").toBe(true);
+    // Fox right under him, in reach: `attack` asks for a down aerial, Down a fast fall.
+    const under: GameState = { ...s, fighters: [s.fighters[0], { ...s.fighters[1], x: fx(10), y: 0 }] };
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("fox")]);
+    for (const [name, st] of [["swing", swing], ["under", under]] as const) {
+      for (let seed = 1; seed <= 100; seed++) {
+        const d = decideCpu(st, 0, 9, seed, world);
+        expect([d.behaviour, d.input], `${name}, seed ${seed}`).toEqual(["tech", 0]);
+      }
+    }
+  });
+
+  it("holds off a fast fall that would bring the floor within its reach", () => {
+    // Its fall 16 frames from Final Destination's floor at the fall speed; Fox right
+    // under it, so `attack` asks for a down aerial, whose Down is a fast fall.
+    const s = atLandsIn(fallingAfter(10, 60), 16);
+    const under: GameState = { ...s, fighters: [s.fighters[0], { ...s.fighters[1], x: fx(10), y: 0 }] };
+    expect(framesToFloor(defOf("mario"), s.fighters[0], FD, s.frame, TECH_HOLD), "no floor near at its fall").toBeNull();
+    expect(framesToFloor(defOf("mario"), s.fighters[0], FD, s.frame, TECH_HOLD, 0, Btn.Down, true), "near with a fast fall").not.toBeNull();
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("fox")]);
+    for (let seed = 1; seed <= 100; seed++) {
+      const d = decideCpu(under, 0, 9, seed, world);
+      expect([d.behaviour, d.input], `seed ${seed}`).toEqual(["tech", 0]);
+    }
+  });
+
+  it("finds a platform it rises past from under, and comes down on: the decision is not lost to its rise", () => {
+    // Battlefield's left platform, 24 up: from 2 under it, rising at 1 a frame, it
+    // comes down on it 11 frames on. Under it, a model that looked only below would
+    // not see it until the decision frame had gone.
+    const s = tumbling(left.x / 4096, left.y / 4096 - 2, { stage: "battlefield", vy: 1 });
+    expect(landsIn(s)).toBe(11);
+    let end = s;
+    while (!end.fighters[0].grounded) end = quiet(end);
+    expect(end.fighters[0].y, "it lands on the platform").toBe(left.y);
+    expect(decisionsOver(s, (st) => context(st, L9, undefined, BF))).toEqual([TECH_LEAD]);
+  });
+
+  it("holds through its dodge's tech frames and no further: a floor met after the 15th is no tech", () => {
+    // Its tumble's dodge one step from Final Destination's floor, at each of the dodge's frames.
+    const at = (actionFrame: number): GameState => {
+      const s = atLandsIn(fallingAfter(20, 40), 1);
+      Object.assign(s.fighters[0], { action: "airDodge", actionFrame, airDodged: true, combat: { ...s.fighters[0].combat, tumbleDodge: true } });
+      return s;
+    };
+    // The step that meets the floor counts the dodge one frame on: the 15th (frame 14) techs, the 16th not.
+    const met = (s: GameState) => quiet(s).fighters[0].action;
+    expect(met(at(AIR_DODGE_TECH_FRAMES - 2))).toBe("tech");
+    expect(met(at(AIR_DODGE_TECH_FRAMES - 1))).not.toBe("tech");
+    expect(tech(context(at(AIR_DODGE_TECH_FRAMES - 2), L9, undefined, FD))).toMatchObject({ input: 0, decided: true });
+    expect(tech(context(at(AIR_DODGE_TECH_FRAMES - 1), L9, undefined, FD)).score).toBe(0);
+  });
+
+  it("holds its press's air dodge neutral while it waits, whatever stick it held for the landing", () => {
+    // 1 past Battlefield's left platform's end, 14 over it: the hitstun runs out as it
+    // decides, and only a drift left brings the platform under it, so it holds left.
+    let s = tumbling((left.x + left.halfWidth) / 4096 + 1, left.y / 4096 + 14, { stage: "battlefield", hitstun: 8 });
+    let prev: InputFrame = 0;
+    let r = tech(context(s, L9, undefined, BF));
+    for (let i = 0; i < 40 && !presses(r); i++) {
+      const stick = r.score > 0 ? r.input & ~Btn.Shield : 0;
+      s = step(s, [stick, 0], { prevInputs: [prev, 0] }).state;
+      prev = stick;
+      r = tech(context(s, L9, undefined, BF));
+    }
+    expect([s.fighters[0].hitstun, floorHold(defOf("mario"), s.fighters[0], BF, s.frame, s.stageFrame)?.stick, r.input]).toEqual([1, Btn.Left, Btn.Shield]);
+    const next = step(s, [r.input, 0], { prevInputs: [prev, 0] }).state;
+    expect([next.fighters[0].action, next.fighters[0].bufferedAction?.kind]).toEqual(["tumbleFall", "shield"]);
+    const hold = tech(context(next, L9, undefined, BF));
+    expect([hold.input, hold.decided]).toEqual([0, true]);
+    const dodged = step(next, [hold.input, 0], { prevInputs: [r.input, 0] }).state.fighters[0];
+    expect([dodged.action, dodged.charge]).toEqual(["airDodge", 0]);
+  });
+
+  it("is first in the table, so its decided hold takes the frame before any other decided behaviour", () => {
+    expect(BEHAVIOURS[0].name).toBe("tech");
+  });
+
+  it("holds the stick through its own air dodge's tech frames, toward the floor it decided for", () => {
+    // Over Battlefield's top platform's left end, the stage's middle to its right:
+    // only a drift right brings a floor near, so it holds right, and on through the dodge.
+    const top = bf.platforms[2];
+    const s = fallingAfter((left.x + left.halfWidth) / 4096 + 4, left.y / 4096 + 40, "battlefield");
+    Object.assign(s.fighters[1], { platform: 1, x: left.x - fx(10), y: left.y });
+    const world = cpuWorldFromDef(defOf("mario"), BF, [defOf("mario"), defOf("fox")]);
+    let t = s;
+    let prev: InputFrame[] = [0, 0];
+    const dodge: InputFrame[] = [];
+    for (let i = 0; i < 120 && !t.fighters[0].grounded; i++) {
+      const d = decideCpu(t, 0, 9, 7 + i, world);
+      if (t.fighters[0].action === "airDodge" && t.fighters[0].actionFrame < 14) {
+        expect(d.behaviour, `dodge frame ${t.fighters[0].actionFrame}`).toBe("tech");
+        dodge.push(d.input);
+      }
+      t = step(t, [d.input, 0], { prevInputs: prev }).state;
+      prev = [d.input, 0];
+    }
+    expect(dodge.length).toBeGreaterThan(0);
+    expect(dodge.some((i) => held(i, Btn.Right))).toBe(true);
+    expect(t.fighters[0].y, "on the top platform").toBe(top.y);
+    expect(t.fighters[0].action).toBe("tech");
+  });
+});
+
+/**
  * Ruling R-T18f: the engine counts hitstun down before the status runs
  * (`simulate.ts`), so a press read at hitstun 1 is not the cancel's: the reel
  * ends into `tumbleFall` and the press waits in the buffer, to come out on the
@@ -445,8 +841,11 @@ describe("the hitstun cancel, read in the engine's order (ruling R-T18f)", () =>
 
   it("and a press the engine reads as the cancel's is neutral", () => {
     // The approach's decision frame falls one frame before the reel shows frame 41.
-    let s = tumbling(20, 40, { actionFrame: HITSTUN_CANCEL_AIR_DODGE_FRAME - 1 - (landsIn(tumbling(20, 40)) - TECH_LEAD) });
-    s = atLandsIn(s, TECH_LEAD);
+    let s = tumbling(20, 40);
+    for (let a = 0; a < HITSTUN_CANCEL_AIR_DODGE_FRAME; a++) {
+      s = atLandsIn(tumbling(20, 40, { actionFrame: a }), TECH_LEAD);
+      if (s.fighters[0].actionFrame + 1 >= HITSTUN_CANCEL_AIR_DODGE_FRAME) break;
+    }
     expect(s.fighters[0].actionFrame + 1).toBe(HITSTUN_CANCEL_AIR_DODGE_FRAME);
     const r = tech(context(s, L9, undefined, FD));
     expect(r.input).toBe(Btn.Shield);
@@ -498,10 +897,14 @@ describe("escape, once per opening (ruling R-T18e)", () => {
     expect(escape(context(opening(), L9, rollsWith(ROLL_TECH, 0.99))).score).toBe(0);
   });
 
-  it("leaves a landing within a tech's reach to tech: one roll for it", () => {
-    const s = atLandsIn(tumbling(20, 40, { actionFrame: HITSTUN_CANCEL_AIR_DODGE_FRAME - 1 - 30 }), TECH_LEAD);
-    const near = { ...s, fighters: s.fighters.map((f, i) => (i === 0 ? { ...f, actionFrame: HITSTUN_CANCEL_AIR_DODGE_FRAME - 1 } : f)) };
-    expect(escape(context(near, L9, undefined, FD)).score).toBe(0);
+  it("leaves a landing within a tech's reach to tech, from where the tech holds the stick: one roll for it", () => {
+    const opensAt = (n: number) => {
+      const s = atLandsIn(tumbling(20, 40, { actionFrame: HITSTUN_CANCEL_AIR_DODGE_FRAME - 1 - 30 }), n);
+      return { ...s, fighters: s.fighters.map((f, i) => (i === 0 ? { ...f, actionFrame: HITSTUN_CANCEL_AIR_DODGE_FRAME - 1 } : f)) };
+    };
+    expect(escape(context(opensAt(TECH_LEAD), L9, undefined, FD)).score).toBe(0);
+    expect(escape(context(opensAt(TECH_HOLD), L9, undefined, FD)).score).toBe(0);
+    expect(escape(context(opensAt(TECH_HOLD + 1), L9, undefined, FD)).input).toBe(Btn.Shield);
   });
 });
 
@@ -611,11 +1014,12 @@ describe("parry (ruling R-T18d)", () => {
     for (let a = at + 1; a <= firstLive("mario", "fsmash") - 1; a++) expect(parry(context(swingAt("mario", "fsmash", a), L9)).score, `frame ${a}`).toBe(0);
   });
 
-  it("only at a swing within THREAT_RANGE", () => {
-    // Marth's Dancing Blade reaches 21.5 in front of him, a shield 10 more: the range is what stops it.
+  it("only at a swing seen within THREAT_RANGE", () => {
+    // Marth's Dancing Blade 22 away: its box lands on the shield. Seen where it was
+    // 4 frames ago (level 9's reaction), closing at 2.5 a frame, it was 32 away; at 1, 26.
     const at = firstLive("marth", "sideB") - 1 - PARRY_AIM;
-    expect(parry(context(swingAt("marth", "sideB", at, {}, { action: "special", x: THREAT_RANGE }), L9)).score).toBeGreaterThan(0);
-    expect(parry(context(swingAt("marth", "sideB", at, {}, { action: "special", x: THREAT_RANGE + 1 }), L9)).score).toBe(0);
+    expect(parry(context(swingAt("marth", "sideB", at, {}, { action: "special", x: fx(22), vx: -fx(1) }), L9)).score).toBeGreaterThan(0);
+    expect(parry(context(swingAt("marth", "sideB", at, {}, { action: "special", x: fx(22), vx: -fx(2.5) }), L9)).score).toBe(0);
     expect(parry(context(swingAt("mario", "fsmash", firstLive("mario", "fsmash") - 1 - PARRY_AIM, {}, { action: "stand", move: null }), L9)).score).toBe(0);
   });
 
@@ -636,6 +1040,208 @@ describe("parry (ruling R-T18d)", () => {
     const at = firstLive("donkeyKong", "fsmash") - 1 - PARRY_AIM;
     expect(parry(context(swingAt("donkeyKong", "fsmash", Math.max(at, L1.reactionFrames)), L1)).score).toBe(0);
     expect(parry(context(swingAt("mario", "fsmash", firstLive("mario", "fsmash") - 1 - PARRY_AIM), L9, rollsWith(ROLL_PARRY, 0.6))).score).toBe(0);
+  });
+});
+
+/**
+ * Ruling R-T18j: the parry's reach is the engine's hit test (`resolveHits`). A box
+ * the engine counts at all first reaches the body (`reachesBody`), and lands on a
+ * shield only from the side it covers at the box's nearest point
+ * (`hitReachesShield`); nothing lands on a body intangible or invincible then. The
+ * swing is placed where it is now, not where the view saw it. The fix round 1
+ * sweeps' wasted drops were boxes that met the bubble and never the body, a
+ * defender intangible, and a Kirby dash attack that crossed the shield up.
+ */
+describe("parry, where the engine lands the hit on the shield (ruling R-T18j)", () => {
+  const atF = (attacker: string, move: MoveSlot) => Math.max(firstLive(attacker, move) - 1 - PARRY_AIM, L9.reactionFrames);
+  /** Steps the swing with the CPU's shield let go on this frame: what the engine does with its first box. */
+  function dropped(s: GameState): "parried" | "hit" | "nothing" {
+    let prev: InputFrame[] = [Btn.Shield, 0];
+    for (let i = 0; i < 12; i++) {
+      const out = step(s, [0, 0], { prevInputs: prev });
+      prev = [0, 0];
+      if (out.events.shieldHits.some((h) => h.victim === 0)) return out.state.fighters[0].action === "shieldRelease" ? "parried" : "hit";
+      if (out.events.hits.some((h) => h.victim === 0)) return "hit";
+      s = out.state;
+    }
+    return "nothing";
+  }
+
+  it("needs the box to reach the body first: Mario's forward smash meets the bubble out to 23, the body only to 15", () => {
+    const at = atF("mario", "fsmash");
+    const swing = (x: number) => swingAt("mario", "fsmash", at, { x: 0, y: 0, grounded: true, platform: 0 }, { x: fx(x), y: 0, grounded: true, platform: 0 });
+    expect(parry(context(swing(15), L9)).score).toBeGreaterThan(0);
+    expect(dropped(swing(15)), "the engine parries it").toBe("parried");
+    for (const x of [16, 20, 23]) {
+      const s = swing(x);
+      const hb = defOf("mario").moves.fsmash!.hitboxes.filter((h) => h.startFrame === Math.min(...defOf("mario").moves.fsmash!.hitboxes.map((b) => b.startFrame)));
+      const bubble = shieldBubble(s.fighters[0], defOf("mario"));
+      const box = (h: (typeof hb)[number]) => {
+        const n = hitboxWorldPos(s.fighters[1].x, s.fighters[1].y, -1, h);
+        return { x1: n.x, y1: n.y, x2: n.x, y2: n.y, r: h.radius };
+      };
+      expect(hb.some((h) => capsulesOverlap(box(h), bubble)), `${x}: it meets the bubble`).toBe(true);
+      expect(parry(context(s, L9)).score, `${x} away`).toBe(0);
+      expect(dropped(s), `${x} away: the engine lands nothing`).toBe("nothing");
+    }
+  });
+
+  it("reaches with a capsule box's far end: Pikachu's down tilt, 5 to 11 in front of him, from 14 away (the re-review's H3)", () => {
+    const at = atF("pikachu", "dtilt");
+    const s = swingAt("pikachu", "dtilt", at, {}, { x: fx(14) });
+    const hb = defOf("pikachu").moves.dtilt!.hitboxes[0];
+    expect([hb.x2 !== undefined, hb.y2 !== undefined]).toEqual([true, true]);
+    const near = hitboxWorldPos(fx(14), 0, -1, hb);
+    expect(capsulesOverlap({ x1: near.x, y1: near.y, x2: near.x, y2: near.y, r: hb.radius }, hurtboxCapsule(s.fighters[0], defOf("mario").attributes)), "its near end alone misses the body").toBe(false);
+    expect(parry(context(s, L9)).score).toBeGreaterThan(0);
+    expect(dropped(s)).toBe("parried");
+  });
+
+  it("judges the side from where the swing is now: a dash attack seen in front that has crossed it up is behind it", () => {
+    const at = atF("kirby", "dashAttack");
+    // Seen 4 frames back 5 in front, crossing at 2 a frame: 3 behind now.
+    const crossed = swingAt("kirby", "dashAttack", at, {}, { x: -fx(3), vx: -fx(2) });
+    expect(observe(crossed, 0, L9.reactionFrames).facingTarget, "the view has it in front").toBe(true);
+    expect(parry(context(crossed, L9)).score).toBe(0);
+    // Seen behind, 5 in front now.
+    const ahead = swingAt("kirby", "dashAttack", at, {}, { x: fx(5), vx: fx(2) });
+    expect(observe(ahead, 0, L9.reactionFrames).facingTarget, "the view has it behind").toBe(false);
+    expect(parry(context(ahead, L9)).score).toBeGreaterThan(0);
+  });
+
+  it("takes the lowest-id box that reaches the body, as the engine does: Fox's forward smash's tip, past the shield's back", () => {
+    // Mario faces Fox, 7.2 to his left; the smash's box 0 reaches 10.3 in front of
+    // Fox, past Mario's back, and the engine picks it over box 1 in front of him.
+    // Its first frame its timing is known: its hold frame, let go, the hit next.
+    const at = firstLive("fox", "fsmash") - 1;
+    const s = swingAt("fox", "fsmash", at, { facing: -1 }, { x: -fx(7.2), facing: 1 });
+    expect(swingHitFrame(defOf("fox"), s.fighters[1])).toBe(at + 1);
+    const tip = defOf("fox").moves.fsmash!.hitboxes.find((h) => h.id === 0)!;
+    expect(hitboxWorldPos(-fx(7.2), 0, 1, tip).x, "box 0 is behind him").toBeGreaterThan(0);
+    expect(parry(context(s, L9)).score).toBe(0);
+    expect(dropped(s), "the engine lands it on his body").toBe("hit");
+    // From 10 off the tip is in front of him: it parries, as the engine does.
+    const off = swingAt("fox", "fsmash", at, { facing: -1 }, { x: -fx(10), facing: 1 });
+    expect(parry(context(off, L9)).score).toBeGreaterThan(0);
+    expect(dropped(off)).toBe("parried");
+  });
+
+  it("passes a box that only grazes the body on to the next, and lands each part's pick, as the engine does", () => {
+    // Mario's forward smash, its first boxes replaced: Mario (port 0) faces it, 10 to his left.
+    const at = atF("mario", "fsmash");
+    const s = swingAt("mario", "fsmash", at, { facing: -1 }, { x: -fx(10), facing: 1 });
+    const attrs = defOf("mario").attributes;
+    const body = hurtboxCapsule(s.fighters[0], attrs);
+    const m = defOf("mario").moves.fsmash!;
+    const first = Math.min(...m.hitboxes.map((h) => h.startFrame));
+    const mid = Math.trunc(attrs.height / 2);
+    const box = (id: number, x: number, radius: number, part = 0): Hitbox => ({ ...m.hitboxes[0], id, startFrame: first, x: x + fx(10), y: mid, radius, part, x2: undefined, y2: undefined });
+    const swinging = (boxes: Hitbox[]) => ({ ...context(s, L9), matchDefs: [defOf("mario"), { ...defOf("mario"), moves: { ...defOf("mario").moves, fsmash: { ...m, hitboxes: boxes } } }] });
+    const front = box(1, -fx(2), fx(2));
+    // Behind his back, 0.05 into the body: a graze, under GLANCING_BLOW_DEPTH.
+    const graze = box(0, body.r + fx(2) - fx(0.05), fx(2));
+    expect(deepestReach(graze.x - fx(10), mid, graze.x - fx(10), mid, 0, 0, graze.radius, [body]).depth).toBeLessThan(GLANCING_BLOW_DEPTH);
+    expect(parry(swinging([graze, front])).score, "the graze is passed on").toBeGreaterThan(0);
+    // Behind his back, deep: the pick, and a hit on his body.
+    const deep = box(0, body.r, fx(2));
+    expect(parry(swinging([deep, front])).score).toBe(0);
+    // A box of another part lands too: one on his body behind spoils the parry of the part on his shield.
+    expect(parry(swinging([{ ...front, id: 0, part: 0 }, { ...deep, id: 1, part: 1 }])).score).toBe(0);
+    expect(parry(swinging([{ ...front, id: 0, part: 0 }, { ...front, id: 1, part: 1 }])).score).toBeGreaterThan(0);
+  });
+
+  it("not a Final Smash's box, which no shield takes", () => {
+    const final = defOf("donkeyKong").moves.finalSmash!;
+    expect(final.final).toBeDefined();
+    const at = atF("donkeyKong", "finalSmash");
+    expect(parry(context(swingAt("donkeyKong", "finalSmash", at, {}, { action: "special", x: fx(10) }), L9)).score).toBe(0);
+  });
+
+  it("not on a worn shield the box misses: the body is poked through it", () => {
+    // Link's down tilt from 18 away: its low box reaches Mario's shins, inside a whole
+    // shield and under a worn one, shrunk to 15% of it.
+    const at = atF("link", "dtilt");
+    const worn = swingAt("link", "dtilt", at, { shieldHealth: fx(1) }, { x: fx(18) });
+    expect(parry(context(worn, L9)).score).toBe(0);
+    expect(dropped(worn), "the engine pokes it").toBe("hit");
+    const whole = swingAt("link", "dtilt", at, {}, { x: fx(18) });
+    expect(parry(context(whole, L9)).score).toBeGreaterThan(0);
+    expect(dropped(whole)).toBe("parried");
+  });
+
+  it("decides on the first frame its box would land, for a swing coming into reach: not the frame before, out of reach then", () => {
+    // Mario's forward smash, its hit two frames on: 15 away now, closing at 2 a frame, so
+    // 17 away the frame before, where its box reaches only the bubble.
+    const at = firstLive("mario", "fsmash") - 2;
+    const closing = swingAt("mario", "fsmash", at, {}, { x: fx(15), vx: -fx(2) });
+    expect(parry(context(closing, L9)).score).toBeGreaterThan(0);
+    expect(parry(context(swingAt("mario", "fsmash", at - 1, {}, { x: fx(17), vx: -fx(2) }), L9)).score).toBe(0);
+  });
+
+  it("counts a box only where it is live: the air's alone on a shield on the ground, and one of its owner's other footing", () => {
+    const at = atF("mario", "fsmash");
+    const s = swingAt("mario", "fsmash", at, {}, { x: fx(12) });
+    const with_ = (patch: Partial<Hitbox>) => {
+      const m = defOf("mario").moves.fsmash!;
+      const def = { ...defOf("mario"), moves: { ...defOf("mario").moves, fsmash: { ...m, hitboxes: m.hitboxes.map((h) => ({ ...h, ...patch })) } } };
+      return { ...context(s, L9), matchDefs: [defOf("mario"), def] };
+    };
+    expect(parry(with_({})).score).toBeGreaterThan(0);
+    expect(parry(with_({ situation: "air" })).score).toBe(0);
+    expect(parry(with_({ situation: "ground" })).score).toBeGreaterThan(0);
+    expect(parry(with_({ whileGrounded: false })).score).toBe(0);
+    expect(parry(with_({ whileGrounded: true })).score).toBeGreaterThan(0);
+  });
+
+  it("not while intangible or invincible when the hit lands: no shield meets it then", () => {
+    const at = atF("mario", "fsmash");
+    const lands = firstLive("mario", "fsmash") - (at + 1);
+    // Each counts down once a step, and the hit lands `lands + 1` steps on.
+    for (const key of ["intangible", "invincible"] as const) {
+      expect(parry(context(swingAt("mario", "fsmash", at, { [key]: lands + 2 }, { x: fx(12) }), L9)).score, `${key} through the hit`).toBe(0);
+      expect(parry(context(swingAt("mario", "fsmash", at, { [key]: lands + 1 }, { x: fx(12) }), L9)).score, `${key} running out as it lands`).toBeGreaterThan(0);
+    }
+  });
+
+  it("with Task 19's shield: the shield it raised and holds through the swing is let go on the parry's frame, and parries", () => {
+    // Donkey Kong's forward smash at a standing level-9 Mario 14 away, from the frame
+    // the level first sees it: the shield decides once and holds (ruling R-T18g), the
+    // parry drops it once (decided, before `shield` in the table).
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("donkeyKong")]);
+    const F = firstLive("donkeyKong", "fsmash");
+    let parried = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "donkeyKong" }], RULES, 21);
+      Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: 0, intangible: 0, facing: 1 });
+      Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: L9.reactionFrames, grounded: true, platform: 0, x: fx(14), y: 0, intangible: 0, facing: -1 });
+      s.fighters[1].combat.smashLetGo = true;
+      let cs = seed;
+      let prev: InputFrame[] = [0, 0];
+      let decided = -1;
+      for (let i = 0; i < 40; i++) {
+        const d = decideCpu(s, 0, 9, cs, world);
+        cs = d.seed;
+        if (d.behaviour === "parry") {
+          expect(decided, `seed ${seed}: once a swing`).toBe(-1);
+          expect(d.input, `seed ${seed}`).toBe(0);
+          decided = s.fighters[1].actionFrame;
+        }
+        const out = step(s, [d.input, 0], { prevInputs: prev });
+        prev = [d.input, 0];
+        const hit = out.events.hits.some((h) => h.victim === 0);
+        expect(hit && s.fighters[0].action === "shieldRelease", `seed ${seed}: hit in a drop`).toBe(false);
+        if (out.events.shieldHits.some((h) => h.victim === 0)) {
+          if (decided >= 0) {
+            expect([out.state.fighters[0].action, out.state.fighters[1].actionFrame], `seed ${seed}`).toEqual(["shieldRelease", F]);
+            parried++;
+          }
+          break;
+        }
+        if (hit) break;
+        s = out.state;
+      }
+    }
+    expect(parried).toBeGreaterThan(10);
   });
 });
 
