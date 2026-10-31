@@ -35,6 +35,7 @@ import {
   counter,
   finalSmash,
   framesToMeet,
+  free,
   holding,
   mash,
   mashPeriod,
@@ -108,6 +109,22 @@ describe("the Final Smash", () => {
     expect(finalSmash(context(offstage, mario)).score).toBe(0);
   });
 
+  it("fires one along the stage at a target on a floor or committed, not at one free in the air", () => {
+    const air = (action: "jump" | "attack") =>
+      makeState({ fighters: [makeFighter({ port: 0, finalSmashReady: FINAL_SMASH_READY, facing: 1 }), makeFighter({ port: 1, x: fx(60), y: fx(10), grounded: false, action, actionFrame: 20 })] });
+    expect(finalSmash(context(air("jump"), samus)).score).toBe(0);
+    expect(finalSmash(context(air("attack"), samus)).score).toBeGreaterThan(0);
+  });
+
+  it("does not start Volt Tackle on the run: its speed slides Pikachu past a point-blank target in the windup", () => {
+    const run = landing(20);
+    run.fighters[0] = makeFighter({ port: 0, finalSmashReady: FINAL_SMASH_READY, facing: 1, action: "run", actionFrame: 10, vx: fx(1.8) });
+    expect(finalSmash(context(run, pikachu)).score).toBe(0);
+    // Nor standing while a dash's speed still slides it (the sweep's last Volt Tackle self-destruct).
+    run.fighters[0] = makeFighter({ port: 0, finalSmashReady: FINAL_SMASH_READY, facing: 1, action: "stand", actionFrame: 3, vx: fx(1.8) });
+    expect(finalSmash(context(run, pikachu)).score).toBe(0);
+  });
+
   it("turns to face the target first, and then fires", () => {
     const away = ready(60, { facing: -1 });
     const r = finalSmash(context(away, samus));
@@ -135,8 +152,14 @@ describe("the Final Smash", () => {
   it("waits while another Final Smash is out", () => {
     const s = landing(12);
     expect(finalSmash(context(s, kirby)).score).toBeGreaterThan(0);
-    s.fighters[1] = makeFighter({ port: 1, x: fx(12), action: "special", move: "finalSmash" });
+    // The opponent in a Final Smash of its own, seen (committed, so otherwise a target).
+    s.fighters[1] = makeFighter({ port: 1, x: fx(12), action: "special", move: "finalSmash", actionFrame: 20 });
     expect(finalSmash(context(s, kirby)).score).toBe(0);
+    // Or a projectile one launched still out (Mario Finale's flames).
+    const flames = landing(12);
+    flames.fighters[1] = makeFighter({ port: 1, x: fx(12), action: "landingLag", actionFrame: 20 });
+    flames.projectiles = [{ ...spawnProjectile(findProjectileDef(mario, "hugeFlame")!, flames.fighters[1], 1), x: fx(60) }];
+    expect(finalSmash(context(flames, kirby)).score).toBe(0);
   });
 });
 
@@ -163,6 +186,23 @@ describe("the Smash Ball", () => {
     expect(smashBall(context(s, mario)).score).toBe(0);
     s.smashBall.y = fx(80);
     expect(smashBall(context(s, mario)).score).toBeGreaterThan(0);
+  });
+
+  it("aims where the ball's drift will take it", () => {
+    const at = (x: number, vx: number) => {
+      const s = makeState({ fighters: [makeFighter({ port: 0, x: 0, facing: 1 }), makeFighter({ port: 1, x: fx(-80) })] });
+      s.smashBall = { active: true, x: fx(x), y: fx(6), vx: fx(vx), vy: 0, health: fx(40), driftTimer: 10 };
+      return [0, 1, 2, 3].some((f) => held(smashBall(context({ ...s, frame: f }, mario)).input, Btn.Attack));
+    };
+    // 24 away and still: out of a 20 reach. Drifting in at 1.4, it is 15.6 away when a swing is out.
+    expect(at(24, 0)).toBe(false);
+    expect(at(24, -1.4)).toBe(true);
+  });
+
+  it("does not follow it out past the ledge", () => {
+    const s = makeState({ fighters: [makeFighter({ port: 0, x: fx(78), y: fx(20), grounded: false, action: "fall" }), makeFighter({ port: 1, x: fx(-60) })] });
+    s.smashBall = { active: true, x: fx(79.9), y: fx(60), vx: 0, vy: 0, health: fx(40), driftTimer: 10 };
+    expect(held(smashBall(context(s, mario)).input, Btn.Right)).toBe(false);
   });
 
   it("jumps for it when it floats above", () => {
@@ -206,6 +246,36 @@ describe("reflect and counter", () => {
       if (reflect(context(s, fox)).score > 0) decided++;
     }
     expect(decided).toBe(1);
+  });
+
+  it("raises it for a projectile that appears already closer than its aim, as soon as it is seen, if the reflector can still be up for it", () => {
+    const s = makeState({ fighters: [makeFighter({ port: 0, x: 0, facing: 1, defId: "fox" }), makeFighter({ port: 1, x: fx(80), defId: "mario" })] });
+    const ball = findProjectileDef(mario, "fireball")!;
+    const r = fox.moves.downB!.reflector!;
+    // It meets the bubble in active[0] + 1 steps: past the aim, inside the reflector's frames.
+    const gap = r.radius + ball.hitbox.radius + fx(2) * r.active[0] + fx(1);
+    s.projectiles = [shot(mario, "fireball", s, gap, -fx(2), 1)];
+    expect(reflect(context(s, fox)).score).toBeGreaterThan(0);
+    s.projectiles = [shot(mario, "fireball", s, gap, -fx(2), 6)];
+    expect(reflect(context(s, fox)).score).toBe(0);
+  });
+
+  it("keeps a looping reflector up while a projectile still comes at it, and lets it go after", () => {
+    const up = makeState({ fighters: [makeFighter({ port: 0, x: 0, facing: 1, defId: "fox", action: "special", move: "downB", actionFrame: 10 }), makeFighter({ port: 1, x: fx(80), defId: "mario" })] });
+    up.projectiles = [shot(mario, "fireball", up, fx(30), -fx(2))];
+    expect(reflect(context(up, fox)).input).toBe(Btn.Down | Btn.Special);
+    up.projectiles = [];
+    expect(reflect(context(up, fox)).score).toBe(0);
+  });
+
+  it("does not reflect from off the stage, where the reflector spends its fall", () => {
+    const s = makeState({ fighters: [makeFighter({ port: 0, x: fx(100), y: 0, grounded: false, action: "fall", facing: -1, defId: "fox" }), makeFighter({ port: 1, x: fx(0), defId: "mario" })] });
+    let any = 0;
+    for (let k = 0; k < 40; k++) {
+      s.projectiles = [shot(mario, "fireball", s, fx(30) + fx(2) * k, fx(2))];
+      any += reflect(context(s, fox)).score;
+    }
+    expect(any).toBe(0);
   });
 
   it("does not raise it when its roll fails, and a level-1 Fox never does", () => {
@@ -372,6 +442,20 @@ describe("carries, mouthfuls and grabs", () => {
     expect(decideCpu(s, 0, 9, 1, world).scores.holding ?? 0).toBe(0);
   });
 
+  it("Kirby spits his mouthful toward the nearer edge, and swallows it facing in", () => {
+    const k = (facing: number) => makeState({ fighters: [makeFighter({ port: 0, action: "inhaleHold", x: fx(40), facing }), makeFighter({ port: 1, action: "swallowed" })] });
+    const press = (facing: number) => [0, 1].map((f) => holding(context({ ...k(facing), frame: f }, kirby)).input).reduce((a, b) => a | b, 0);
+    expect(press(1) & (Btn.Attack | Btn.Special)).toBe(Btn.Attack);
+    expect(press(-1) & (Btn.Attack | Btn.Special)).toBe(Btn.Special);
+  });
+
+  it("does not inhale a target it cannot catch: intangible, or held already", () => {
+    const s = makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, actionFrame: 0 }), makeFighter({ port: 1, x: fx(8), intangible: 10 })] });
+    expect(holding(context(s, kirby)).score).toBe(0);
+    s.fighters[1] = makeFighter({ port: 1, x: fx(8), grabbedBy: 2 });
+    expect(holding(context(s, kirby)).score).toBe(0);
+  });
+
   it("Kirby swallows or spits", () => {
     const k = makeState({ fighters: [makeFighter({ port: 0, action: "inhaleHold" }), makeFighter({ port: 1, action: "swallowed" })] });
     const kIn = [0, 1, 2, 3, 4, 5, 6, 7].map((f) => holding(context({ ...k, frame: f }, kirby)).input);
@@ -529,6 +613,16 @@ describe("a Kirby CPU with a Copy Ability (Plan 5 review)", () => {
     const world = cpuWorldFromDef(kirby, DEFAULT_STAGE_VIEW, [kirby, samus]);
     const d = decideCpu(s, 0, 9, 1, world);
     expect(d.scores.storeCharge ?? 0).toBeGreaterThan(0);
+  });
+});
+
+describe("a state free to act (`free`)", () => {
+  it("is one the engine reads a press in at once, out of hitstun and hitlag", () => {
+    expect(free(makeFighter({ action: "stand" }))).toBe(true);
+    expect(free(makeFighter({ action: "fall", grounded: false }))).toBe(true);
+    expect(free(makeFighter({ action: "fall", grounded: false, hitlag: 3 }))).toBe(false);
+    expect(free(makeFighter({ action: "turnaround" }))).toBe(false);
+    expect(free(makeFighter({ action: "attack", move: "jab1" }))).toBe(false);
   });
 });
 

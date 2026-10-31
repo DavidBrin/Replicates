@@ -30,16 +30,18 @@ import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
 import { BUFFER_FRAMES } from "@/engine/constants";
 import { nextRandom } from "@/engine/fixed";
 import { withCopyAbility } from "@/engine/inhale";
-import type { AirDodgeAttributes, FighterDef, FighterState, GameState, InputFrame } from "@/engine/types";
+import { Btn, type AirDodgeAttributes, type FighterDef, type FighterState, type GameState, type InputFrame } from "@/engine/types";
 import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
   MELEE_RANGE,
   ROLL_FUMBLE,
+  aerialStrands,
   airBrakeFromDef,
   airDodgeFromDef,
   approach,
   attack,
+  centre,
   edgeguard,
   escape,
   idle,
@@ -59,6 +61,7 @@ import {
   type RecoveryMove,
   type StageView,
   observe,
+  towardX,
   upBHold,
 } from "./behaviours";
 import { counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, storeCharge } from "./specials";
@@ -234,6 +237,7 @@ export const BEHAVIOURS: readonly { readonly name: BehaviourName; readonly run: 
   { name: "platformMove", run: platformMove },
   { name: "approach", run: approach },
   { name: "retreat", run: retreat },
+  { name: "centre", run: centre },
   { name: "idle", run: idle },
 ];
 
@@ -331,6 +335,14 @@ export function decideCpu(
   // the dial is the chance, so neither the jitter nor the fumble may undo it.
   if (decided !== null) {
     return { input: specialPending(self, state.frame) ? upBHold(decided.input) : decided.input, seed, behaviour: decided.name, scores };
+  }
+
+  // An aerial near or off the stage that would leave the fighter no way back is
+  // not pressed (Plan 5, Task 19: `aerialStrands`): whatever asked for it, the
+  // fighter drifts home instead. Judgement, not a roll.
+  if (aerialStrands(ctx, bestInput)) {
+    const home = ctx.view.self.x < 0 ? ctx.stage.leftLedge : ctx.stage.rightLedge;
+    bestInput = (bestInput & ~(Btn.Attack | Btn.Left | Btn.Right)) | towardX(ctx.view.self.x, home);
   }
 
   // The fumble: a dropped frame of input. It is what a low-level CPU's hands

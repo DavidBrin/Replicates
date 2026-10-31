@@ -337,6 +337,13 @@ const MATCHES: readonly Match[] = [
  * golden's grab was kirby-marth's), which the script and the states lab reach.
  * No golden CPU match has the Smash Ball on, so no Final Smash there; the Final
  * Smash and beams labs play them. All 59 are visited.
+ * Its second part (the CPU's quality: a shield one decision a threat, held through
+ * the swing; loops broken; back to the middle while the opponent respawns; the
+ * recovery strategy; a wall tech) adds no action. The four CPU matches reach 48
+ * between them, up from 44: kirby-marth grabs, pummels and throws and is grabbed
+ * and thrown again (a shield held through a swing is grabbed); none gets up from
+ * lying down or trumps a ledge any more, which the states lab and the script do.
+ * All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1028,6 +1035,23 @@ describe("engine golden trace", () => {
   // every frame), and neither touches the ball. The eight labs are byte-identical. So
   // now: hits 24/35/24/26, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield hits 1/0/3/1, 3, 0, 0,
   // 0, 0, 0, 0, 0 and 0; KOs 1/1/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
+  // Its second part (the CPU's quality: `shield` decides once a threat and holds a
+  // shield through the swing, ruling R-T18g; `attack` swings at nothing it cannot hit
+  // and grabs a shield it has poked three times running; `centre` walks back to the
+  // middle while the opponent respawns; `recover` jumps before an up special that would
+  // not get it back, waits for its jump's top, plans no grab of a ledge held in a ledge
+  // option and no line into the stage's wall, re-presses after a tap jump and steers its
+  // up special through a fumble; no aerial near the edge that would leave no way back,
+  // `aerialStrands`; a tech for a tumble into the stage's side; one more jitter roll
+  // a frame, `centre`'s) moved the four CPU matches from their first sample, on the
+  // frame a CPU first decides otherwise: mario-fox on 2, kirby-marth on 3, donkeyKong-
+  // pikachu on 19 and link-samus on 22. Hits 29, 27, 36 and 39; shield hits 0, 0, 2 and
+  // 1; KOs 0, 0, 0 and 1 (were 24/35/24/26, 1/0/3/1 and 1/1/0/1): Marth in special
+  // fall at 105.1% on 2892. Nobody else is KO'd in 3,600 frames: no golden CPU
+  // self-destructs out of an aerial at the edge any more (the Task 13b fix round 1's
+  // mario-fox lost two stocks that way). The script and the eight labs are
+  // byte-identical. So now: hits 29/27/36/39, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield
+  // hits 0/0/2/1, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

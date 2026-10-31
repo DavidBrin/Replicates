@@ -483,12 +483,18 @@ describe("recover, now that the up special leaves the fighter helpless (Plan 5, 
 
 /* --------------------------------------------------------------- defence -- */
 
+// Plan 5, Task 19 (ruling R-T18g): the shield decides once a threat, on the first
+// frame it sees the swing or grab in range, so these are staged on that frame: the
+// attacker `seen` frames into its move, the level's reaction time (Plan 4's tests
+// put it 8 or 40 frames in, which is now a threat already decided on).
+const seen = (t: LevelTuning) => t.reactionFrames;
+
 describe("shield", () => {
   const swinging = (actionFrame: number) =>
     gameState([fighter(0), fighter(1, { x: fx(20), action: "attack", actionFrame })]);
 
   it("shields an attack it has had time to see", () => {
-    const result = shield(context(swinging(8), L9));
+    const result = shield(context(swinging(seen(L9)), L9));
     expect(held(result.input, Btn.Shield)).toBe(true);
   });
 
@@ -509,7 +515,7 @@ describe("shield", () => {
   it("spot-dodges a grab rather than shielding it", () => {
     const grabbed = gameState([
       fighter(0),
-      fighter(1, { x: fx(14), action: "grab", actionFrame: 8 }),
+      fighter(1, { x: fx(14), action: "grab", actionFrame: seen(L9) }),
     ]);
     const result = shield(context(grabbed, L9));
     expect(held(result.input, Btn.Down)).toBe(true);
@@ -519,7 +525,7 @@ describe("shield", () => {
   it("backs off instead of holding a shield that is about to break", () => {
     const state = gameState([
       fighter(0, { shieldHealth: fx(5) }),
-      fighter(1, { x: fx(20), action: "attack", actionFrame: 8 }),
+      fighter(1, { x: fx(20), action: "attack", actionFrame: seen(L9) }),
     ]);
     expect(held(shield(context(state, L9)).input, Btn.Left)).toBe(true);
   });
@@ -531,7 +537,7 @@ describe("shield", () => {
     const airborne = (x: number, vx: number) =>
       gameState([
         fighter(0, { x: fx(x), y: fx(15), vx: fx(vx), grounded: false, platform: -1, action: "fall" }),
-        fighter(1, { x: fx(x + 20), y: fx(15), action: "attack", actionFrame: 8 }),
+        fighter(1, { x: fx(x + 20), y: fx(15), action: "attack", actionFrame: seen(L9) }),
       ]);
     expect(shield(context(airborne(-66, -1.2), L9)).score).toBe(0);
     expect(held(shield(context(airborne(-66, 1.2), L9)).input, Btn.Shield)).toBe(true);
@@ -549,7 +555,7 @@ describe("shield", () => {
   it("judges the dodge's drift by the fighter's own length", () => {
     const airborne = gameState([
       fighter(0, { x: fx(-30), y: fx(15), vx: -fx(1.2), grounded: false, platform: -1, action: "fall" }),
-      fighter(1, { x: fx(-10), y: fx(15), action: "attack", actionFrame: 8 }),
+      fighter(1, { x: fx(-10), y: fx(15), action: "attack", actionFrame: seen(L9) }),
     ]);
     expect(shield(context(airborne, L9)).score).toBe(0);
     const fox = { ...context(airborne, L9), airDodge: { ...DEFAULT_AIR_DODGE, neutralFrames: 38 } };
@@ -564,12 +570,12 @@ describe("shield", () => {
   // instead; from the middle it is not.
   describe("a spent shield in the air", () => {
     const FOX = { ...DEFAULT_AIR_DODGE, neutralFrames: 38, sideFrames: 63 };
-    const spent = (x: number) =>
+    const spent = (x: number, tuning: LevelTuning) =>
       gameState([
         fighter(0, { x: fx(x), y: fx(20), grounded: false, platform: -1, action: "fall", shieldHealth: fx(10) }),
-        fighter(1, { x: fx(x - 20), y: fx(20), action: "attack", actionFrame: 40 }),
+        fighter(1, { x: fx(x - 20), y: fx(20), action: "attack", actionFrame: seen(tuning) }),
       ]);
-    const fox = (x: number, tuning = L9, rolls?: number[]) => ({ ...context(spent(x), tuning, rolls), airDodge: FOX, airBrake: fx(0.015) });
+    const fox = (x: number, tuning = L9, rolls?: number[]) => ({ ...context(spent(x, tuning), tuning, rolls), airDodge: FOX, airBrake: fx(0.015) });
 
     it("is how far the engine's sideways dodge goes", () => {
       expect(sideDodgeTravel(1, fx(0.015), FOX)).toBe(fx(20) - fx(7) + dodgeDrift(fx(1.3), fx(0.015), 63 - 11));
@@ -588,7 +594,7 @@ describe("shield", () => {
     });
 
     it("still rolls on the ground, where a roll is no air dodge", () => {
-      const grounded = { ...fox(72), state: gameState([fighter(0, { x: fx(72), shieldHealth: fx(10) }), fighter(1, { x: fx(52), action: "attack", actionFrame: 40 })]) };
+      const grounded = { ...fox(72), state: gameState([fighter(0, { x: fx(72), shieldHealth: fx(10) }), fighter(1, { x: fx(52), action: "attack", actionFrame: seen(L9) })]) };
       const result = shield({ ...grounded, view: observe(grounded.state, 0, L9.reactionFrames) });
       expect(held(result.input, Btn.Right)).toBe(true);
     });
@@ -602,16 +608,17 @@ describe("shield", () => {
   // Knowing the dodge drifts it off is recovery judgement: a CPU whose recovery
   // roll fails forgets it, as `recover` has it forget the jump back (Task 20c, M5).
   it("forgets the guard when its recovery roll fails, as a low level does", () => {
-    const airborne = gameState([
-      fighter(0, { x: fx(-66), y: fx(15), vx: -fx(1.2), grounded: false, platform: -1, action: "fall" }),
-      fighter(1, { x: fx(-46), y: fx(15), action: "attack", actionFrame: 40 }),
-    ]);
+    const airborne = (t: LevelTuning) =>
+      gameState([
+        fighter(0, { x: fx(-66), y: fx(15), vx: -fx(1.2), grounded: false, platform: -1, action: "fall" }),
+        fighter(1, { x: fx(-46), y: fx(15), action: "attack", actionFrame: seen(t) }),
+      ]);
     const rolls = (recovery: number) => [0, 0, 0, recovery, 0, 0];
     expect(rolls(0)[ROLL_RECOVER]).toBe(0);
-    expect(shield(context(airborne, L1, rolls(0))).score).toBe(0);
-    expect(held(shield(context(airborne, L1, rolls(0.5))).input, Btn.Shield)).toBe(true);
+    expect(shield(context(airborne(L1), L1, rolls(0))).score).toBe(0);
+    expect(held(shield(context(airborne(L1), L1, rolls(0.5))).input, Btn.Shield)).toBe(true);
     // Level 9 never fails the roll (recoverySkill 1).
-    expect(shield(context(airborne, L9, rolls(0.99))).score).toBe(0);
+    expect(shield(context(airborne(L9), L9, rolls(0.99))).score).toBe(0);
   });
 });
 
@@ -816,6 +823,8 @@ describe("the behaviour set", () => {
       "platformMove",
       "approach",
       "retreat",
+      // Plan 5, Task 19: back to the middle with nobody to fight.
+      "centre",
       "idle",
     ]);
   });
@@ -882,5 +891,42 @@ describe("the approach/attack threshold", () => {
     const back = { hitboxes: [{ x: fx(10), x2: fx(7), radius: fx(2) }] } as unknown as Parameters<typeof moveReach>[0];
     expect(toFloat(moveReach(out))).toBeCloseTo(12, 6);
     expect(toFloat(moveReach(back))).toBeCloseTo(12, 6);
+  });
+});
+
+/* ------------------------------------------- loops and the edge (Plan 5, Task 19) -- */
+
+describe("breaking a loop against the same defence (Plan 5, Task 19)", () => {
+  it("does not swing at a target it cannot hit: rolling, dodging or hanging intangible, or invincible", () => {
+    for (const over of [{ action: "roll", intangible: 10 }, { action: "spotDodge", intangible: 6 }, { action: "ledgeHang", intangible: 30 }, { action: "stand", invincible: 60 }] as const) {
+      const state = gameState([fighter(0), fighter(1, { x: fx(10), actionFrame: 20, ...over })]);
+      expect(attack(context(state, L9)).score, over.action).toBe(0);
+    }
+  });
+
+  it("after the same move has met the shield three times running, grabs it in grab range or walks in, rather than poke it again", () => {
+    const poked = (gap: number) => {
+      const self = fighter(0, { staleQueue: ["jab1", "jab1", "jab1"] });
+      self.combat.staleShield = [true, true, true];
+      return gameState([self, fighter(1, { x: fx(gap), action: "shield", actionFrame: 30 })]);
+    };
+    const near = attack(context(poked(9), L9));
+    expect(held(near.input, Btn.Grab) || near.input === 0).toBe(true);
+    expect(held(near.input, Btn.Attack)).toBe(false);
+    const far = attack(context(poked(16), L9));
+    expect([far.score > 0, held(far.input, Btn.Attack), held(far.input, Btn.Right)]).toEqual([true, false, true]);
+    // A mix of moves, or one that landed off the shield, is no loop.
+    const mixed = poked(16);
+    mixed.fighters[0].staleQueue = ["jab1", "ftilt", "jab1"];
+    expect(attack(context(mixed, L9)).input).not.toBe(Btn.Right);
+  });
+});
+
+describe("leaving the edge while the opponent respawns (Plan 5, Task 19)", () => {
+  it("walks back toward the middle with nobody to fight, and stops there", () => {
+    const away = gameState([fighter(0, { x: fx(76) }), fighter(1, { action: "respawnPlatform", x: fx(-20), y: fx(60) })]);
+    expect(BEHAVIOURS.map((b) => b.run(context(away, L9))).some((r) => r.score > 1 && held(r.input, Btn.Left))).toBe(true);
+    const home = gameState([fighter(0, { x: fx(3) }), fighter(1, { action: "respawnPlatform", x: fx(-20), y: fx(60) })]);
+    expect(BEHAVIOURS.map((b) => b.run(context(home, L9))).every((r) => r.score <= 1)).toBe(true);
   });
 });

@@ -1,7 +1,9 @@
 /**
- * The CPU's repertoire: eleven small behaviours, each of which looks at one
- * delayed view of the world and answers two questions — "does this apply right
- * now, and how much?" and "what would I press?".
+ * The CPU's repertoire: small behaviours, each of which looks at one delayed
+ * view of the world and answers two questions — "does this apply right now, and
+ * how much?" and "what would I press?". Plan 5's specials are in `specials.ts`,
+ * and the table of all of them, in the order ties break, is `cpu.ts`'s
+ * `BEHAVIOURS`.
  *
  * Nothing here knows what level the CPU is. A behaviour reads its weights off
  * the `LevelTuning` it is handed and is otherwise identical at level 1 and
@@ -395,6 +397,7 @@ export type BehaviourName =
   | "platformMove"
   | "approach"
   | "retreat"
+  | "centre"
   | "idle";
 
 const NOTHING: BehaviourResult = { score: 0, input: 0 };
@@ -935,7 +938,12 @@ export const tech: Behaviour = (ctx) => {
   // with whatever stick is held then (`airMain`): held neutral, it is the neutral one.
   if (fall && shieldWaiting(self, ctx.view.frame)) return { score: 1100, input: 0, decided: true };
   if (ctx.fighterDef === null) return NOTHING;
-  const frames = framesToFloor(ctx.fighterDef, self, ctx.stage, ctx.view.frame, TECH_LEAD, ctx.state.stageFrame);
+  // The surface it meets first: the floor, or in its hitstun the stage's side,
+  // which a window press techs too (`techWall`; Plan 5, Task 19). Out of hitstun
+  // a wall is a plain stop (`techOrBounce`).
+  const floor = framesToFloor(ctx.fighterDef, self, ctx.stage, ctx.view.frame, TECH_LEAD, ctx.state.stageFrame);
+  const wall = fall ? null : framesToWall(ctx.fighterDef, self, ctx.stage, ctx.view.frame, TECH_LEAD);
+  const frames = floor === null ? wall : wall === null ? floor : Math.min(floor, wall);
   if (frames === null) return NOTHING;
   const window = !fall && self.hitstun > 1 && !cancelOpen(self);
   if (!pressTechs(self, window)) return NOTHING;
@@ -1020,9 +1028,36 @@ export function framesToFloor(def: FighterDef, self: FighterState, stage: StageV
     const reach = horizon * Math.max(0, -self.vy) + (accel * horizon * (horizon + 1)) / 2;
     if (self.y - surface > reach) return null;
   }
+  return ghostFall(def, self, frame0, horizon, (prevX, prevY, f, k) => f.y < prevY && landsOn(f.x, prevY, f.y, stage, stageFrame0 + k));
+}
+
+/**
+ * How many steps from now this fighter's fall, run as `framesToFloor` runs it,
+ * meets the main stage's side, under its top (Plan 5, Task 19: a wall tech, the
+ * Task 18 review's carry), if it does within `horizon`, or null. The side is the
+ * ledge's x, from the top down `HARD_PLATFORM_DEPTH`; met from outside it. Not
+ * modelled, as there: the ECB's half-width (the origin meets it).
+ */
+export function framesToWall(def: FighterDef, self: FighterState, stage: StageView, frame0: number, horizon: number): number | null {
+  const under = (y: number) => y < stage.groundY && y > stage.groundY - HARD_PLATFORM_DEPTH;
+  if (!isOffstage(self, stage) || self.y >= stage.groundY) return null;
+  return ghostFall(def, self, frame0, horizon, (prevX, _prevY, f) => {
+    const left = prevX < stage.leftLedge && f.x >= stage.leftLedge;
+    const right = prevX > stage.rightLedge && f.x <= stage.rightLedge;
+    return (left || right) && under(f.y);
+  });
+}
+
+/**
+ * A copy of the fighter run through `step()`'s per-frame rules for one fighter
+ * alone in the air with nothing pressed (as `upBPath` runs an up special), until
+ * `meets` accepts a frame, `k` steps on: that `k`, or null within `horizon`.
+ */
+function ghostFall(def: FighterDef, self: FighterState, frame0: number, horizon: number, meets: (prevX: number, prevY: number, f: FighterState, k: number) => boolean): number | null {
   const f = cloneFighter(self);
   const ctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def, stage: GHOST_STAGE, frame: frame0, fighters: [f] };
   for (let k = 1; k <= horizon; k++) {
+    const prevX = f.x;
     const prevY = f.y;
     ctx.frame = frame0 + k;
     updateInputTracking(f, 0, 0);
@@ -1032,7 +1067,7 @@ export function framesToFloor(def: FighterDef, self: FighterState, stage: StageV
     advanceFighter(f, intent, ctx);
     applyMovement(f, intent, ctx);
     integrate(f);
-    if (f.y < prevY && landsOn(f.x, prevY, f.y, stage, stageFrame0 + k)) return k;
+    if (meets(prevX, prevY, f, k)) return k;
   }
   return null;
 }
@@ -1263,18 +1298,22 @@ export const recover: Behaviour = (ctx) => {
   // that does the first of them, toward the stage; over the stage, none, so the
   // move flies as authored and nothing aims it off (a second leg pressed away by
   // another behaviour once took a Pikachu off Battlefield). At every level: like
-  // the helpless drift above, it is steering, not the button.
+  // the helpless drift above, it is steering, not the button. Decided (Task 19):
+  // the up special's stick was chosen when it was pressed, and a level's fumble
+  // dropping it on an aim frame threw the move away (the Task 13b sweep's level-7
+  // self-destruct).
+  const nearer = self.x < 0 ? stage.leftLedge : stage.rightLedge;
+  const ledgeFree = !ledgeHeldInOption(ctx, nearer);
   if (r !== null && inUpB(self, r)) {
-    if (self.grounded || (!offstage && !belowStage)) return { score: 950, input: 0 };
-    const nearer = self.x < 0 ? stage.leftLedge : stage.rightLedge;
+    if (self.grounded || (!offstage && !belowStage)) return { score: 950, input: 0, decided: true };
     const toward = nearer > self.x ? 1 : -1;
-    const plan = upBPlan(self, nearer, stage, r, ctx.view.frame) ?? upBSticks(r, toward)[0];
-    return { score: 950, input: upBStickNow(plan, self, r) };
+    const plan = upBPlan(self, nearer, stage, r, ctx.view.frame, ledgeFree) ?? upBSticks(r, toward)[0];
+    return { score: 950, input: upBStickNow(plan, self, r), decided: true };
   }
 
   if (self.grounded || (!offstage && !belowStage)) return NOTHING;
 
-  const nearerLedge = self.x < 0 ? stage.leftLedge : stage.rightLedge;
+  const nearerLedge = nearer;
   const drift = towardX(self.x, nearerLedge);
 
   // The level-1 self-destruct, made explicit rather than emergent: it drifts
@@ -1289,15 +1328,19 @@ export const recover: Behaviour = (ctx) => {
   // Task 10 review). It gains height and costs no jump, and special fall refuses
   // one (SmashWiki "Helpless", https://www.ssbwiki.com/Helpless: "unable to take
   // any action"), so it has to come before the up special.
+  // Only from a jump or a fall, where the engine tries one (`airMain`; Task 19: in
+  // an aerial the press away did nothing and held off the up special's, which
+  // then ran out of the buffer).
   const side = self.combat.wallSide;
-  if (r !== null && r.wallJump && side !== 0 && self.combat.wallFrames <= WALL_JUMP_WINDOW && self.vy <= 0 && self.y < stage.groundY) {
+  const canKick = self.action === "jump" || self.action === "fall";
+  if (r !== null && r.wallJump && canKick && side !== 0 && self.combat.wallFrames <= WALL_JUMP_WINDOW && self.vy <= 0 && self.y < stage.groundY) {
     return { score: 950, input: side < 0 ? Btn.Right : Btn.Left };
   }
 
   // ...and close to the wall under the ledge, it drifts into it to kick off it
   // rather than spend the up special, unless waiting is no longer safe.
   const underLedge = self.y < stage.groundY - fx(4) && self.y > stage.groundY - HARD_PLATFORM_DEPTH;
-  if (r !== null && r.wallJump && underLedge && abs(self.x - nearerLedge) <= WALL_SEEK_RANGE && !upBNowOrNever(self, stage, r, ctx.view.frame)) {
+  if (r !== null && r.wallJump && canKick && underLedge && abs(self.x - nearerLedge) <= WALL_SEEK_RANGE && !upBNowOrNever(self, stage, r, ctx.view.frame)) {
     return { score: 950, input: drift };
   }
 
@@ -1313,21 +1356,130 @@ export const recover: Behaviour = (ctx) => {
   // out of it; until then the fighter drifts closer, and jumps if it can.
   if (outOfJumps || deep) {
     // The stick it would hold through the up special, read off the move's own path
-    // (Plan 5, Task 13b: `upBPlan`), and pressed with it as the move starts.
-    const plan = r === null ? null : upBPlan(self, nearerLedge, stage, r, ctx.view.frame);
-    if (r !== null && plan === null && !upBNowOrNever(self, stage, r, ctx.view.frame)) {
-      return { score: 950, input: drift | (!outOfJumps && jumping ? Btn.Jump : 0) };
+    // (Plan 5, Task 13b: `upBPlan`), and pressed with it as the move starts. A
+    // ledge held in a ledge option is no grab (Task 19: `ledgeHeldInOption`).
+    const plan = r === null ? null : upBPlan(self, nearerLedge, stage, r, ctx.view.frame, ledgeFree);
+    if (r !== null && plan === null) {
+      // No stick gets it back yet. Waiting is safe until it is now or never; and
+      // with its midair jump still there, it jumps first, whatever (Task 19, the
+      // Task 13b review's M-11: up specials spent now or never with the jump unused).
+      if (!outOfJumps) {
+        const now = upBNowOrNever(self, stage, r, ctx.view.frame) ? pulse(ctx.view.frame, self.port, 2, 1) : jumping;
+        return { score: 950, input: drift | (now ? Btn.Jump : 0) };
+      }
+      // Still rising (a jump just spent): every frame up is height the up special
+      // starts from, and it sets its own launch when it comes out, so it waits for
+      // the top (Task 19: the sweep's up specials spent three frames into the jump
+      // before them, the jump's rise thrown away).
+      if (self.vy > 0 || !upBNowOrNever(self, stage, r, ctx.view.frame)) return { score: 950, input: drift };
     }
     // Decided: every frame up to the one the special comes out holds Up and never
     // Down (ruling R-T13b-c), so whichever frame the press lands on, or a buffered
-    // one fires on, reads as the up special and not a side or neutral one.
-    const firing = pulse(ctx.view.frame, self.port, 6, 3);
+    // one fires on, reads as the up special and not a side or neutral one. A held
+    // Up turns into a tap jump five frames on, which takes the buffer from a
+    // Special pressed during an aerial (Task 19, the Task 13b fix round 1's
+    // concern): it presses again on the first frame Special is up after that.
+    const b = self.bufferedAction;
+    const displaced = b !== null && b.kind === "jump" && ctx.view.frame + 1 - b.frame <= BUFFER_FRAMES;
+    const firing = displaced ? !pulse(ctx.view.frame - 1, self.port, 6, 3) : pulse(ctx.view.frame, self.port, 6, 3);
     const stick = plan === null ? drift : upBStickNow(plan, self, r!);
     return { score: 950, input: firing ? upBPress(stick) : upBHold(stick) };
   }
 
   return { score: 900, input: drift | (jumping ? Btn.Jump : 0) };
 };
+
+/**
+ * UNVERIFIED (CPU judgement): within this of a ledge, or past one, an aerial is
+ * checked for a way back before it is pressed (`aerialStrands`). The Task 13b
+ * re-review counted the self-destructs out of aerials begun within 30 of the ledge.
+ */
+const EDGE_AERIAL_RANGE = fx(30);
+
+/** The actions an Attack press starts or buffers an aerial from, in the air. */
+const AERIAL_FROM: readonly ActionState[] = ["jump", "fall", "attack"];
+
+/**
+ * Would `input`, pressed now, start an aerial (or buffer one in an aerial under
+ * way) that leaves the fighter no way back (Plan 5, Task 19: the Task 13b
+ * re-review's offstage aerials from the edge, the main lever on its
+ * self-destructs; M-11's long offstage aerials with no plan back)? Only near a
+ * ledge or past one. The aerial is run by the engine's own rules on a copy, as
+ * `upBPath` runs an up special: the press, then the same stick held, until the
+ * aerial is over. It is safe if the copy comes down on the stage on the way, or
+ * after it is back over the stage above its top, or can still get back: its up
+ * special has a plan from there (`upBPlan`), or its midair jump does and the up
+ * special has one from the jump's top.
+ */
+export function aerialStrands(ctx: BehaviourContext, input: InputFrame): boolean {
+  const { self } = ctx.view;
+  const { stage } = ctx;
+  if ((input & Btn.Attack) === 0 || self.grounded || !AERIAL_FROM.includes(self.action)) return false;
+  if (ctx.recovery === null || ctx.fighterDef === null) return false;
+  const nearEdge = isOffstage(self, stage) || abs(self.x - stage.leftLedge) <= EDGE_AERIAL_RANGE || abs(self.x - stage.rightLedge) <= EDGE_AERIAL_RANGE;
+  if (!nearEdge) return false;
+  const def = ctx.fighterDef;
+  const r = ctx.recovery;
+  const f = cloneFighter(self);
+  const gctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def, stage: GHOST_STAGE, frame: ctx.view.frame, fighters: [f] };
+  const stick = input & (Btn.Left | Btn.Right | Btn.Up | Btn.Down);
+  let prev: InputFrame = 0;
+  let begun = false;
+  for (let k = 1; k <= AERIAL_LOOKAHEAD_FRAMES; k++) {
+    const prevY = f.y;
+    const now = k === 1 ? input : stick;
+    gctx.frame = ctx.view.frame + k;
+    updateInputTracking(f, now, prev);
+    const intent = interpretInput(f, now, prev);
+    if (!f.grounded && f.ledge === null) f.airTime += 1;
+    advanceFighter(f, intent, gctx);
+    applyMovement(f, intent, gctx);
+    integrate(f);
+    prev = now;
+    if (f.y < prevY && prevY >= stage.groundY && f.y <= stage.groundY && f.x >= stage.leftLedge && f.x <= stage.rightLedge) return false;
+    if (f.action === "attack") begun = true;
+    else if (begun) break;
+  }
+  if (!isOffstage(f, stage) && f.y >= stage.groundY) return false;
+  const ledge = f.x < 0 ? stage.leftLedge : stage.rightLedge;
+  if (upBPlan(f, ledge, stage, r, gctx.frame) !== null) return false;
+  if (f.jumpsUsed >= ctx.jumps) return true;
+  // Its midair jump, then the up special from the jump's top.
+  const j = cloneFighter(f);
+  const jctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { ...gctx, fighters: [j] };
+  const home = towardX(j.x, ledge);
+  let jprev: InputFrame = 0;
+  for (let k = 1; k <= AERIAL_LOOKAHEAD_FRAMES; k++) {
+    const now = (k === 1 ? Btn.Jump : 0) | home;
+    jctx.frame = gctx.frame + k;
+    updateInputTracking(j, now, jprev);
+    const intent = interpretInput(j, now, jprev);
+    if (!j.grounded && j.ledge === null) j.airTime += 1;
+    advanceFighter(j, intent, jctx);
+    applyMovement(j, intent, jctx);
+    integrate(j);
+    jprev = now;
+    if (k > 1 && j.vy <= 0) break;
+  }
+  return upBPlan(j, ledge, stage, r, jctx.frame) === null && !(j.y >= stage.groundY && !isOffstage(j, stage));
+}
+
+/** UNVERIFIED (CPU judgement): the most frames an aerial, or a jump's rise, is run for (`aerialStrands`). */
+const AERIAL_LOOKAHEAD_FRAMES = 120;
+
+/** The ledge options: a fighter in one keeps its ledge until the option has left it (`findLedgeGrab`). */
+const LEDGE_OPTIONS: readonly ActionState[] = ["ledgeGetUp", "ledgeAttack", "ledgeRoll", "ledgeJump"];
+
+/**
+ * Whether the opponent holds the ledge at `ledgeX` in a ledge option, as the CPU
+ * sees it (Plan 5, Task 19): `findLedgeGrab` refuses that ledge to anybody else
+ * until the option has left it. One hanging there is trumped off by a grab, so a
+ * hang is no hold.
+ */
+function ledgeHeldInOption(ctx: BehaviourContext, ledgeX: number): boolean {
+  const t = ctx.view.target;
+  return t !== null && t.ledge !== null && LEDGE_OPTIONS.includes(ctx.view.targetAction) && t.x < 0 === ledgeX < 0;
+}
 
 /**
  * UNVERIFIED (CPU judgement, no source): frames of falling the CPU allows for
@@ -1358,11 +1510,27 @@ const UPB_LOOKAHEAD_FRAMES = 120;
  * `findLedgeGrab` measures; the body's own half-width, which only adds reach,
  * is left out). A path through a blast line does not, nor a helpless fall
  * already below grabbing height, which can only go on down.
+ *
+ * Task 19: `ledgeFree` false is a ledge somebody holds in a ledge option, which
+ * `findLedgeGrab` refuses: then only coming down on the stage gets it back. And
+ * whether the path on the way passes through the main stage's solid body, under
+ * its top (`throughWall`): the engine's stage stops a body there, so a line that
+ * does is one the model cannot vouch for (`upBPlan` takes another where one gets
+ * back; the Task 13b re-review's Fox at f2681 re-planned into one).
  */
-export function upBInReach(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, stick: UpBStick | InputFrame = 0, frame0 = 0): boolean {
+export function upBReach(
+  self: FighterState,
+  ledge: number,
+  stage: StageView,
+  r: RecoveryMove,
+  stick: UpBStick | InputFrame = 0,
+  frame0 = 0,
+  ledgeFree = true,
+): { readonly reached: boolean; readonly throughWall: boolean } {
   const toward = ledge > self.x ? 1 : -1;
   let prevY = self.y;
   let reached = false;
+  let throughWall = false;
   upBPath(r, self, stick, r.totalFrames + UPB_LOOKAHEAD_FRAMES, frame0, (p) => {
     const x = self.x + p.x;
     const y = self.y + p.y;
@@ -1374,22 +1542,37 @@ export function upBInReach(self: FighterState, ledge: number, stage: StageView, 
     const drop = stage.groundY - y;
     // Facing the ledge as the path faces it then (the move may have turned it).
     const range = p.facing === toward ? LEDGE_GRAB_RANGE_X : mul(LEDGE_GRAB_RANGE_X, LEDGE_GRAB_BACK_PENALTY);
-    if (p.vy <= 0 && past <= 0 && -past <= range && drop >= 0 && drop <= LEDGE_GRAB_RANGE_Y) return (reached = true);
+    if (ledgeFree && p.vy <= 0 && past <= 0 && -past <= range && drop >= 0 && drop <= LEDGE_GRAB_RANGE_Y) return (reached = true);
+    if (onStage && y < stage.groundY && y > stage.groundY - HARD_PLATFORM_DEPTH) throughWall = true;
     prevY = y;
     return p.helpless && drop > LEDGE_GRAB_RANGE_Y;
   });
-  return reached;
+  return { reached, throughWall };
+}
+
+/** Whether the up special with `stick` gets the fighter back (`upBReach`). */
+export function upBInReach(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, stick: UpBStick | InputFrame = 0, frame0 = 0, ledgeFree = true): boolean {
+  return upBReach(self, ledge, stage, r, stick, frame0, ledgeFree).reached;
 }
 
 /**
  * The first stick, in `upBSticks`' order, with which the up special gets the
  * fighter back from here, or null. Used before the move, to decide to spend it,
- * and during it, to hold the stick that keeps it on course.
+ * and during it, to hold the stick that keeps it on course. A line the stage's
+ * wall does not block comes before one it does (`upBReach`'s `throughWall`; Plan
+ * 5, Task 19), so the plan in the move is the plan it was pressed with, not a
+ * diagonal into the wall.
  */
-export function upBPlan(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, frame0 = 0): UpBStick | null {
+export function upBPlan(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, frame0 = 0, ledgeFree = true): UpBStick | null {
   const toward = ledge > self.x ? 1 : -1;
-  for (const plan of upBSticks(r, toward)) if (upBInReach(self, ledge, stage, r, plan, frame0)) return plan;
-  return null;
+  let blocked: UpBStick | null = null;
+  for (const plan of upBSticks(r, toward)) {
+    const reach = upBReach(self, ledge, stage, r, plan, frame0, ledgeFree);
+    if (!reach.reached) continue;
+    if (!reach.throughWall) return plan;
+    blocked ??= plan;
+  }
+  return blocked;
 }
 
 /**
@@ -1413,24 +1596,42 @@ export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryM
  * only "attack" once the swing has been visible for the level's reaction time,
  * so a level-9 CPU (4 frames) sees almost every startup and a level-1 CPU
  * (30 frames) sees essentially none of them.
+ *
+ * One decision a threat (Plan 5, Task 19; ruling R-T18g, as R-T18e made the tech
+ * one a landing): the shield rolls its dial on the first frame it sees a swing or
+ * a grab in range (`threatBefore` rebuilds the frame before), and on no other. A
+ * shield it raised it holds while the swing it saw goes on, whatever the roll:
+ * rolling every frame let go of a held shield mid-swing (against Donkey Kong's
+ * smash, levels 6-8 were hit in that drop 283, 294 and 107 times in 300). The
+ * parry (`parry`, decided) is the one deliberate drop.
  */
 export const shield: Behaviour = (ctx) => {
-  const { self, targetAction, distance } = ctx.view;
+  const { self, targetAction } = ctx.view;
   const { tuning } = ctx;
   if (!canAct(self) || !ctx.view.target) return NOTHING;
-  if (distance > THREAT_RANGE) return NOTHING;
 
   const incomingAttack = isAttacking(targetAction);
   const incomingGrab = isGrabbing(targetAction);
-  if (!incomingAttack && !incomingGrab) return NOTHING;
+  if (!threatNow(ctx)) return NOTHING;
+
+  // Decided over the stage (the dial is the chance: no jitter or fumble undoes
+  // it, the up special's steering and the tech's press likewise); off it or below
+  // it, recovering comes first and the shield is only scored.
+  const decided = !isOffstage(self, ctx.stage) && self.y >= ctx.stage.groundY - fx(4);
+
+  // Up already, against the swing it was raised for: held through it.
+  if (incomingAttack && (self.action === "shieldStart" || self.action === "shield" || self.action === "shieldStun")) {
+    return { score: 600, input: Btn.Shield, decided };
+  }
+  if (threatBefore(ctx)) return NOTHING;
 
   // A grab beats a shield, so the answer to a grab is to leave the ground for a
   // few frames instead. Only levels that dodge at all attempt it.
   if (incomingGrab && ctx.rolls[ROLL_DODGE] < tuning.dodgeRate) {
-    return { score: 620, input: Btn.Down | Btn.Shield };
+    return { score: 620, input: Btn.Down | Btn.Shield, decided };
   }
 
-  if (ctx.rolls[ROLL_SHIELD] >= tuning.shieldRate) return NOTHING;
+  if (!incomingAttack || ctx.rolls[ROLL_SHIELD] >= tuning.shieldRate) return NOTHING;
 
   // Whether an air dodge would carry the fighter off the stage is recovery
   // judgement, so a CPU whose recovery roll fails forgets it, as it forgets the
@@ -1446,15 +1647,35 @@ export const shield: Behaviour = (ctx) => {
     const away = towardX(ctx.view.dx, 0);
     const dir = away === Btn.Right ? 1 : away === Btn.Left ? -1 : 0;
     const offstage = minded && sideDodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, ctx.airDodge, dir);
-    if (dir !== 0 && !offstage) return { score: 600, input: away | Btn.Shield };
+    if (dir !== 0 && !offstage) return { score: 600, input: away | Btn.Shield, decided };
   }
 
   // In the air the shield is a neutral air dodge, and it keeps the drift over
   // the fighter's own dodge length (Task 20c): not one that carries the fighter
   // off the stage.
   if (minded && dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, airDodgeFrames(ctx.airDodge, 0))) return NOTHING;
-  return { score: 600, input: Btn.Shield };
+  return { score: 600, input: Btn.Shield, decided };
 };
+
+/** A swing or a grab seen within `THREAT_RANGE`: what the shield decides on. */
+function threatNow(ctx: BehaviourContext): boolean {
+  const { targetAction, distance } = ctx.view;
+  return (isAttacking(targetAction) || isGrabbing(targetAction)) && distance <= THREAT_RANGE;
+}
+
+/**
+ * Was the same threat already there the frame before (one frame younger)? Seen
+ * then (it had been visible a frame already) and in range then: the target one
+ * frame further back on its velocity (`rewind`, as `observe` sees it), this
+ * fighter one frame back on its own.
+ */
+function threatBefore(ctx: BehaviourContext): boolean {
+  const { self, target, targetActionAge } = ctx.view;
+  if (target === null || targetActionAge < 1) return false;
+  const dx = target.x - target.vx - (self.x - self.vx);
+  const dy = target.y - target.vy - (self.y - self.vy);
+  return magnitude(dx, dy) <= THREAT_RANGE;
+}
 
 /**
  * Take the stage's edge away while the opponent is offstage.
@@ -1511,6 +1732,11 @@ export const attack: Behaviour = (ctx) => {
   const { tuning } = ctx;
   if (!canAct(self) || !target) return NOTHING;
   if (distance > ctx.meleeReach) return NOTHING;
+  // Nothing lands on a body that cannot be hit (Plan 5, Task 19): a roll, a dodge,
+  // a ledge's intangibility, a respawn's invincibility, all visible on screen.
+  // Swinging into one again and again was the sweep's commonest loop (dash
+  // attacks into a roll; a jab at an edge at a fighter hanging there).
+  if (target.intangible > 0 || target.invincible > 0) return NOTHING;
 
   const toward = towardX(0, dx);
   if (!facingTarget && self.grounded && toward !== 0) {
@@ -1519,6 +1745,16 @@ export const attack: Behaviour = (ctx) => {
   }
 
   const swinging = pulse(ctx.view.frame, self.port, 10, 3);
+
+  // The same move on the same shield, time after time (Plan 5, Task 19: the jab
+  // loops): its own last swings that connected are in its stale queue, marked when
+  // they met a shield (`CombatState.staleShield`). After `SHIELD_LOOP` in a row it
+  // stops poking: a grab goes through the shield, from further out it walks in to
+  // grab range.
+  if (SHIELDS_AND_DROPS.includes(targetAction) && pokingShield(self)) {
+    if (distance <= GRAB_RANGE) return { score: 460, input: swinging ? Btn.Grab : 0 };
+    return { score: 410, input: toward };
+  }
   const smart = ctx.rolls[ROLL_MOVE] < tuning.moveChoiceSkill;
 
   if (smart) {
@@ -1555,6 +1791,20 @@ export const attack: Behaviour = (ctx) => {
     input: (stale ? toward : 0) | (swinging ? Btn.Attack : 0),
   };
 };
+
+/** UNVERIFIED (CPU judgement): the swings in a row on a shield, one move, that make a loop to break. */
+export const SHIELD_LOOP = 3;
+
+/** A shield up, coming up, stunned or just let go: the defence a poke loop meets. */
+const SHIELDS_AND_DROPS: readonly ActionState[] = [...SHIELD_ACTIONS, "shieldRelease"];
+
+/** Its last `SHIELD_LOOP` swings that connected were one move, every one on a shield. */
+function pokingShield(f: FighterState): boolean {
+  const q = f.staleQueue;
+  if (q.length < SHIELD_LOOP) return false;
+  for (let i = 0; i < SHIELD_LOOP; i++) if (q[i] !== q[0] || f.combat.staleShield[i] !== true) return false;
+  return true;
+}
 
 /**
  * Flick-and-hit: the two-frame pattern that reads as a smash.
@@ -1639,6 +1889,23 @@ export const retreat: Behaviour = (ctx) => {
   if (nextX < stage.leftLedge || nextX > stage.rightLedge) return NOTHING;
 
   return { score: 190 * (1 - ctx.tuning.aggression), input: away };
+};
+
+/** UNVERIFIED (CPU judgement): how near the middle of the stage counts as there, for `centre`. */
+export const CENTRE_BAND = fx(20);
+
+/**
+ * With nobody to fight (the opponent between stocks, on the respawn platform or
+ * entering), walk back toward the middle of the stage rather than stand where the
+ * last exchange left it (Plan 5, Task 19: the sweep's long runs at an edge, most
+ * of them while the opponent respawned). Scored only above `idle`.
+ */
+export const centre: Behaviour = (ctx) => {
+  const { self, target } = ctx.view;
+  if (target !== null || !canAct(self) || !self.grounded) return NOTHING;
+  const mid = Math.trunc((ctx.stage.leftLedge + ctx.stage.rightLedge) / 2);
+  if (abs(self.x - mid) <= CENTRE_BAND) return NOTHING;
+  return { score: 50, input: towardX(self.x, mid) };
 };
 
 /** The floor: always available, so `cpuInput` always has an answer. */

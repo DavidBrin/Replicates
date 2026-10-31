@@ -221,8 +221,9 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    a target held where it stands, on the ground and unable to act soon
  *    (`CANNOT_ACT_SOON`): never toward an open blast line on a chance. (In the
  *    sweep a target merely committed was not enough: Volt Tackle's startup sparks
- *    knocked an aerial one behind Pikachu; nor was a run: its speed slid Pikachu past
- *    the target in the windup, and the dash went on alone.)
+ *    knocked an aerial one behind Pikachu; nor was a run, or a stand still sliding
+ *    from one: its speed slid Pikachu past the target in the windup, and the dash
+ *    went on alone.)
  *
  * It turns to face the target first (a grounded turn is an input). No roll: the
  * power is a sure thing, kept until the moment comes.
@@ -238,7 +239,7 @@ export const finalSmash: Behaviour = (ctx) => {
     if (!self.grounded || abs(dy) > VERTICAL_REACH || ahead > Math.min(travel, FINAL_SMASH_DASH_RANGE)) return NOTHING;
     const room = dx >= 0 ? ctx.stage.rightLedge - self.x : self.x - ctx.stage.leftLedge;
     if (room < FINAL_SMASH_EDGE_ROOM) return NOTHING;
-    const still = self.action === "stand" || self.action === "crouch";
+    const still = (self.action === "stand" || self.action === "crouch") && self.vx === 0;
     const held = still && target.grounded && CANNOT_ACT_SOON.includes(targetAction);
     const safe = fs.dashEnd?.edge === true || room >= travel || (ahead <= FINAL_SMASH_RANGE && held);
     if (!safe) return NOTHING;
@@ -337,8 +338,9 @@ export function framesToMeet(p: ProjectileState, pdef: ProjectileDef, bx: number
 }
 
 /**
- * Reflect a projectile about to arrive (Fox's Reflector, Mario's Cape): a
- * reflectable one, not a Final Smash's (unblockable). Decided once a projectile
+ * Reflect a projectile about to arrive (Fox's Reflector, Mario's Cape): one its
+ * data calls reflectable (`ProjectileDef.reflectable`; no Final Smash's is, being
+ * unblockable). Decided once a projectile
  * (ruling R-T18e): on the one frame that brings the reflector up `REFLECT_AIM`
  * frames before it meets the bubble, or on the frame it first appears when it
  * is already closer than that but not too close. The Cape, a side special, is
@@ -364,9 +366,9 @@ export const reflect: Behaviour = (ctx) => {
   if (!free(self) || isOffstage(self, ctx.stage)) return NOTHING;
   for (const p of ctx.state.projectiles) {
     if (p.owner === self.port) continue;
+    // Reflectable by its own data (a Final Smash's are not: SmashWiki "Unblockable attack").
     const pdef = projectileDefOf(ctx, p);
-    const source = ctx.matchDefs.find((d) => d?.id === p.source);
-    if (pdef?.reflectable !== true || (source !== undefined && isFinalProjectile(source, p.defId))) continue;
+    if (pdef?.reflectable !== true) continue;
     const face = pick.slot === "sideB" ? (p.x >= self.x ? 1 : -1) : self.facing;
     const meets = framesToMeet(p, pdef, self.x + face * r.x, self.y + r.y, r.radius);
     if (meets === null) continue;

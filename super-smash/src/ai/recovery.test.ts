@@ -26,7 +26,7 @@ import { battlefield } from "@/stages/battlefield";
 import { finalDestination } from "@/stages/finalDestination";
 import { townAndCity } from "@/stages/townAndCity";
 import { cpuWorldFromDef } from "./cpu";
-import { recoveryFromDef, stageViewFromDef, upBHold, upBInReach, upBNowOrNever, upBPath, upBPlan, upBPress, upBStickNow, upBSticks, type UpBStick } from "./behaviours";
+import { recoveryFromDef, stageViewFromDef, upBHold, upBInReach, upBNowOrNever, upBPath, upBPlan, upBPress, upBReach, upBStickNow, upBSticks, type UpBStick } from "./behaviours";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
@@ -481,5 +481,193 @@ describe("the CPU's up special model in the game's form of each fighter (Plan 5,
     // (measured; pinned, the Task 13b review's M-3).
     expect(firstPress).toBe(30);
     expect(back).toBe(true);
+  });
+});
+
+/* ------------------------------------------- recovery strategy (Plan 5, Task 19) -- */
+
+describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
+  const fd = stageViewFromDef(finalDestination);
+  const def = (id: string) => FIGHTERS.find((d) => d.id === id)!;
+
+  it("spends its midair jump before an up special that would not get it back (M-11)", () => {
+    // Mario 20 off the ledge and 50 under it, a jump left: no stick gets the up
+    // special back from here, and waiting longer is no better (now or never).
+    const mario = def("mario");
+    const r = recoveryFromDef(mario)!;
+    const start = () => airborne("finalDestination", "mario", { x: fx(-100), y: fx(-50), vy: -fx(1), jumpsUsed: 1, facing: 1 }, fx(40));
+    expect([upBPlan(start().fighters[0], fd.leftLedge, fd, r), upBNowOrNever(start().fighters[0], fd, r)]).toEqual([null, true]);
+    const world = cpuWorldFromDef(mario, fd);
+    const inputs = [0, 1, 2, 3, 4, 5].map((phase) => {
+      const s = start();
+      s.frame = phase;
+      return decideCpu(s, 0, 9, 7, world).input;
+    });
+    expect(inputs.some((i) => (i & Btn.Special) !== 0)).toBe(false);
+    expect(inputs.some((i) => (i & Btn.Jump) !== 0)).toBe(true);
+    // And the jump, then the up special, gets him back.
+    const run = cpuRun(start(), world, 300);
+    expect(recovered(run[run.length - 1])).toBe(true);
+  });
+
+  it("does not plan its up special into a grab of a ledge somebody holds in a ledge option", () => {
+    // A ledge held by a fighter in a ledge option is refused (`findLedgeGrab`), so
+    // a path that ends there only gets back where it comes down on the stage.
+    const mario = def("mario");
+    const r = recoveryFromDef(mario)!;
+    let found = 0;
+    for (let x = -84; x >= -110; x -= 2)
+      for (let y = -60; y <= 0; y += 3) {
+        const f = airborne("finalDestination", "mario", { x: fx(x), y: fx(y), facing: 1 }).fighters[0];
+        const grabOnly = upBPlan(f, fd.leftLedge, fd, r) !== null && upBPlan(f, fd.leftLedge, fd, r, 0, false) === null;
+        if (grabOnly) found++;
+      }
+    expect(found).toBeGreaterThan(0);
+  });
+
+  it("waits for a ledge held in a ledge option rather than spending its up special into it, where waiting is safe", () => {
+    const mario = def("mario");
+    const r = recoveryFromDef(mario)!;
+    const world = cpuWorldFromDef(mario, fd, [mario, def("fox")]);
+    // The first place off the left ledge where only a grab gets Mario back and he can still wait.
+    let at: { x: number; y: number } | null = null;
+    for (let x = -84; x >= -110 && at === null; x -= 2)
+      for (let y = -45; y <= 0 && at === null; y += 3) {
+        const f = airborne("finalDestination", "mario", { x: fx(x), y: fx(y), facing: 1 }).fighters[0];
+        if (upBPlan(f, fd.leftLedge, fd, r) !== null && upBPlan(f, fd.leftLedge, fd, r, 0, false) === null && !upBNowOrNever(f, fd, r)) at = { x, y };
+      }
+    expect(at).not.toBeNull();
+    const held = (option: "ledgeGetUp" | null) => {
+      const s = airborne("finalDestination", "mario", { x: fx(at!.x), y: fx(at!.y), facing: 1 }, fd.leftLedge);
+      if (option !== null) Object.assign(s.fighters[1], { action: option, actionFrame: 10, ledge: { platform: 0, side: -1 }, x: fd.leftLedge, y: 0 });
+      return [0, 1, 2, 3, 4, 5].some((phase) => {
+        s.frame = phase;
+        return (decideCpu(s, 0, 9, 7, world).input & Btn.Special) !== 0;
+      });
+    };
+    expect(held(null)).toBe(true);
+    expect(held("ledgeGetUp")).toBe(false);
+    // One merely hanging there is trumped off by the grab: no hold.
+    expect(held("ledgeHang" as "ledgeGetUp")).toBe(true);
+  });
+
+  it("prefers a line the stage's wall does not block, in its plan and in its up special (the Task 13b re-review's walls)", () => {
+    // Fox under Final Destination's left ledge: both up and up-toward get him back
+    // in the model, and up-toward runs into the stage's wall on the way. A line into
+    // the wall is the one the engine stops (Fox at f2681 re-planned into one).
+    const fox = def("fox");
+    const r = recoveryFromDef(fox)!;
+    let checked = 0;
+    for (let x = -80.5; x >= -84; x -= 0.5)
+      for (let y = -50; y <= -10; y += 5) {
+        const f = airborne("finalDestination", "fox", { x: fx(x), y: fx(y), facing: 1 }).fighters[0];
+        const up = upBReach(f, fd.leftLedge, fd, r, Btn.Up);
+        const toward = upBReach(f, fd.leftLedge, fd, r, Btn.Up | Btn.Right);
+        if (!up.reached || !toward.reached || !toward.throughWall || up.throughWall) continue;
+        checked++;
+        expect(upBPlan(f, fd.leftLedge, fd, r)?.first, `${x}, ${y}`).toBe(Btn.Up);
+      }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("does not spend its up special on the way up from its last jump, but at the jump's top", () => {
+    // Mario out of jumps 20 off the ledge and 60 under it, no stick in reach rising
+    // or falling: rising from the jump just spent, he drifts; falling, it is now or never.
+    const mario = def("mario");
+    const r = recoveryFromDef(mario)!;
+    const world = cpuWorldFromDef(mario, fd);
+    const at = (vy: number) => {
+      const s = airborne("finalDestination", "mario", { x: fx(-100), y: fx(-60), vy: fx(vy), jumpsUsed: 2, facing: 1, action: vy > 0 ? "jump" : "fall" }, fx(40));
+      expect(upBPlan(s.fighters[0], fd.leftLedge, fd, r), `vy ${vy}`).toBeNull();
+      return [0, 1, 2, 3, 4, 5].some((phase) => {
+        s.frame = phase;
+        return (decideCpu(s, 0, 9, 7, world).input & Btn.Special) !== 0;
+      });
+    };
+    const falling = airborne("finalDestination", "mario", { x: fx(-100), y: fx(-60), vy: -fx(1), jumpsUsed: 2, facing: 1 }).fighters[0];
+    expect(upBNowOrNever(falling, fd, r)).toBe(true);
+    expect(at(2)).toBe(false);
+    expect(at(-1)).toBe(true);
+  });
+
+  it("re-presses its up special the frame after a tap jump takes the buffer, and only once Special is up", () => {
+    // Mario in a forward air 25 off the ledge, decided on his up special: a held Up
+    // turned into a tap jump, which took the buffer from the up special.
+    const mario = def("mario");
+    const world = cpuWorldFromDef(mario, fd);
+    for (let frame = 10; frame < 22; frame++) {
+      const s = airborne("finalDestination", "mario", { x: fx(-105), y: fx(-20), action: "attack", move: "fair", actionFrame: 20, facing: 1 }, fx(40));
+      s.frame = frame;
+      s.fighters[0].bufferedAction = { kind: "jump", frame };
+      const d = decideCpu(s, 0, 9, 7, world);
+      const heldBefore = ((frame - 1) % 6 + 6) % 6 < 3;
+      expect((d.input & Btn.Special) !== 0, `frame ${frame}`).toBe(!heldBefore);
+    }
+  });
+
+  it("an up special pressed during an offstage aerial comes out on the aerial's first free frame", () => {
+    // Mario in a neutral air under Final Destination's left ledge, out of jumps, from
+    // every frame of the aerial and every phase of the press pulse: once the CPU has
+    // pressed for its up special in the aerial, it keeps pressing, so the up special
+    // comes out on the first frame the aerial lets it. Two things held the press off:
+    // a press away from the wall it touched, for a wall jump the engine only tries
+    // from a jump or a fall (`airMain`), which let the buffered press run out; and the
+    // held Up's tap jump, five frames on, taking the buffer (re-pressed at once now).
+    const mario = def("mario");
+    const world = cpuWorldFromDef(mario, fd);
+    let checked = 0;
+    for (let into = 0; into <= 40; into += 2)
+      for (let phase = 0; phase < 6; phase++) {
+        let s = airborne("finalDestination", "mario", { x: fx(-100), y: fx(-12), action: "attack", move: "nair", actionFrame: into, facing: 1 }, fx(40));
+        s.frame = phase;
+        // Run the CPU through the aerial, noting whether it pressed Special in it.
+        let prev: readonly InputFrame[] = [0, 0];
+        let seed = 7;
+        let pressed = false;
+        for (let i = 0; i < 80 && s.fighters[0].action === "attack"; i++) {
+          const d = decideCpu(s, 0, 9, seed, world);
+          seed = d.seed;
+          if ((d.input & Btn.Special) !== 0) pressed = true;
+          s = step(s, [d.input, 0], { prevInputs: prev }).state;
+          prev = [d.input, 0];
+        }
+        if (!pressed) continue;
+        checked++;
+        expect([s.fighters[0].action, s.fighters[0].move], `${into} frames in, phase ${phase}`).toEqual(["special", "upB"]);
+      }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("steers its up special on every frame at every level: no fumble drops the plan's stick (the level-7 SD on an aim frame)", () => {
+    const fox = def("fox");
+    const r = recoveryFromDef(fox)!;
+    const mid = upB(airborne("finalDestination", "fox", { x: fx(-110), y: fx(10), facing: 1 }, fx(40)), one(Btn.Right), 20)[19];
+    const plan = upBPlan(mid.fighters[0], fd.leftLedge, fd, r) ?? upBSticks(r, 1)[0];
+    const want = upBStickNow(plan, mid.fighters[0], r);
+    expect(want).not.toBe(0);
+    for (let seed = 1; seed <= 200; seed++) expect(decideCpu(mid, 0, 1, seed, cpuWorldFromDef(fox, fd)).input, `seed ${seed}`).toBe(want);
+  });
+
+  it("does not start an aerial off the stage that would leave it no way back (the Task 13b re-review's edge aerials)", () => {
+    // Mario in the air at Final Destination's left edge, his midair jump left,
+    // edgeguarding an opponent tumbling off the stage beside him: the forward air he
+    // chased with ran 60 frames and left him deeper than his jump and up special
+    // reach (the re-review: 15 of its 19 such self-destructs were `edgeguard`'s).
+    const mario = def("mario");
+    const world = cpuWorldFromDef(mario, fd, [mario, def("fox")]);
+    const off = airborne("finalDestination", "mario", { x: fx(-76), y: fx(18), vy: 0, facing: -1, jumpsUsed: 1 }, fx(-100));
+    Object.assign(off.fighters[1], { action: "tumble", grounded: false, y: fx(10), hitstun: 30, damage: fx(60) });
+    for (let phase = 0; phase < 12; phase++) {
+      off.frame = phase;
+      expect(decideCpu(off, 0, 9, 7, world).input & Btn.Attack, `phase ${phase}`).toBe(0);
+    }
+    // Over the stage, high up, the same swing is safe and comes out.
+    const over = airborne("finalDestination", "mario", { x: 0, y: fx(40), vy: 0, facing: 1, jumpsUsed: 2 }, fx(-6));
+    Object.assign(over.fighters[1], { action: "tumble", grounded: false, y: fx(33), hitstun: 30, damage: fx(120) });
+    const swings = Array.from({ length: 10 }, (_, phase) => {
+      over.frame = phase;
+      return decideCpu(over, 0, 9, 7, world).input & Btn.Attack;
+    });
+    expect(swings.some((a) => a !== 0)).toBe(true);
   });
 });

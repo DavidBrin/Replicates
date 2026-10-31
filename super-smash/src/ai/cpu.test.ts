@@ -215,15 +215,19 @@ function sample(
 
 describe("level 9 versus level 1", () => {
   // Well inside threat range and outside melee range, so shielding is the
-  // question on the table and nothing else is.
-  const underAttack = gameState([
-    fighter(0),
-    fighter(1, { x: fx(25), action: "attack", actionFrame: 26 }),
-  ]);
+  // question on the table and nothing else is. Plan 5, Task 19 (ruling R-T18g):
+  // the shield decides once a threat, on the first frame it sees the swing, so
+  // each level is sampled on that frame (its reaction time into the swing), up to
+  // the 26th, where level 1 still has not seen it.
+  const underAttack = (level: number) =>
+    gameState([
+      fighter(0),
+      fighter(1, { x: fx(25), action: "attack", actionFrame: Math.min(tuningForLevel(level).reactionFrames, 26) }),
+    ]);
 
   it("shields an incoming attack far more often at level 9 than at level 1", () => {
-    const nine = sample(underAttack, 9).inputs.filter((i) => held(i, Btn.Shield)).length;
-    const one = sample(underAttack, 1).inputs.filter((i) => held(i, Btn.Shield)).length;
+    const nine = sample(underAttack(9), 9).inputs.filter((i) => held(i, Btn.Shield)).length;
+    const one = sample(underAttack(1), 1).inputs.filter((i) => held(i, Btn.Shield)).length;
 
     expect(nine).toBeGreaterThan(one);
     expect(nine).toBeGreaterThan(200);
@@ -233,7 +237,7 @@ describe("level 9 versus level 1", () => {
 
   it("shields more at every step up the ladder", () => {
     const counts = [1, 3, 5, 7, 9].map(
-      (level) => sample(underAttack, level).inputs.filter((i) => held(i, Btn.Shield)).length,
+      (level) => sample(underAttack(level), level).inputs.filter((i) => held(i, Btn.Shield)).length,
     );
     for (let i = 1; i < counts.length; i++) {
       expect(counts[i], `level ${[1, 3, 5, 7, 9][i]}`).toBeGreaterThan(counts[i - 1]);
@@ -303,17 +307,19 @@ describe("recovery", () => {
 describe("it cannot read inputs", () => {
   it("behaves identically whether or not the opponent has started a move it cannot see", () => {
     const still = gameState([fighter(0), fighter(1, { x: fx(25) })]);
-    const swinging = gameState([
-      fighter(0),
-      fighter(1, { x: fx(25), action: "attack", actionFrame: 8 }),
-    ]);
+    const swinging = (actionFrame: number) =>
+      gameState([
+        fighter(0),
+        fighter(1, { x: fx(25), action: "attack", actionFrame }),
+      ]);
 
     // Eight frames into the startup, a level-1 CPU (30 frames of delay) has
     // no way to know. Its inputs must be indistinguishable.
-    expect(sample(swinging, 1).inputs).toEqual(sample(still, 1).inputs);
+    expect(sample(swinging(8), 1).inputs).toEqual(sample(still, 1).inputs);
 
-    // A level-9 CPU is past its four frames and reacts.
-    expect(sample(swinging, 9).inputs).not.toEqual(sample(still, 9).inputs);
+    // A level-9 CPU sees it after its four frames and reacts (on that frame: its
+    // shield decides once a threat, Plan 5 Task 19).
+    expect(sample(swinging(4), 9).inputs).not.toEqual(sample(still, 9).inputs);
   });
 
   it("aims at where a moving opponent was, not where it is", () => {

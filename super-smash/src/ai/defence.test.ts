@@ -40,15 +40,18 @@ import {
   PARRY_AIM,
   ROLL_PARRY,
   ROLL_RECOVER,
+  ROLL_SHIELD,
   ROLL_SPECIAL,
   ROLL_TECH,
   TECH_LEAD,
   THREAT_RANGE,
   escape,
   framesToFloor,
+  framesToWall,
   observe,
   parry,
   recover,
+  shield,
   stageViewFromDef,
   swingHitFrame,
   tech,
@@ -774,7 +777,7 @@ describe("the level table's defence dials", () => {
   it("keeps the roll layout fixed: nine decision rolls, then one jitter per behaviour", () => {
     // Plan 5, Task 19: the specials' roll is the ninth (`ROLL_SPECIAL`), and nine behaviours joined.
     expect([DECISION_ROLLS, ROLL_TECH, ROLL_PARRY, ROLL_SPECIAL]).toEqual([9, 6, 7, 8]);
-    expect(BEHAVIOURS.length).toBe(21);
+    expect(BEHAVIOURS.length).toBe(22);
   });
 });
 
@@ -935,5 +938,139 @@ describe("a level-9 CPU in a real match, beyond the plan's text", () => {
     }, 30);
     expect(actions).toContain("techWall");
     expect(wallTechJumps).toBe(1);
+  });
+});
+
+/* ------------------------------------------- the shield, one decision a threat -- */
+
+/**
+ * Ruling R-T18g (Task 18's fix round 1 carry, Task 19's item 11): `shield` rolled its
+ * dial every frame and let go of a held shield mid-swing, so against Donkey Kong's
+ * smash levels 6-8 were hit in that drop 283, 294 and 107 times in 300. Now it decides
+ * once a threat, on the first frame it sees the swing or grab in range, and holds a
+ * shield it raised until the swing is over.
+ */
+describe("shield, once a threat (ruling R-T18g)", () => {
+  /** Mario standing (or shielding) with Donkey Kong 20 away in his forward smash at `actionFrame`. */
+  const threat = (actionFrame: number, self: Partial<FighterState> = {}) =>
+    makeState({
+      fighters: [
+        makeFighter({ port: 0, actionFrame: 30, ...self }),
+        makeFighter({ port: 1, defId: "donkeyKong", x: fx(20), facing: -1, action: "attack", move: "fsmash", actionFrame }),
+      ],
+    });
+
+  it("decides on the first frame it sees the swing in range, and on no frame after", () => {
+    const decidedOn: number[] = [];
+    for (let a = 0; a < 40; a++) if (shield(context(threat(a), L9)).score > 0) decidedOn.push(a);
+    expect(decidedOn).toEqual([L9.reactionFrames]);
+  });
+
+  it("a failed roll leaves the shield down for that swing", () => {
+    for (let a = 0; a < 40; a++) expect(shield(context(threat(a), L9, rollsWith(ROLL_SHIELD, 0.99))).score, `frame ${a}`).toBe(0);
+  });
+
+  it("holds a shield it raised through the swing, whatever its roll, and lets go once the swing is over", () => {
+    for (const a of [10, 20, 30]) {
+      const r = shield(context(threat(a, { action: "shield", actionFrame: 6 }), L9, rollsWith(ROLL_SHIELD, 0.99)));
+      expect([r.score > 0, r.input], `frame ${a}`).toEqual([true, Btn.Shield]);
+    }
+    const over = makeState({ fighters: [makeFighter({ port: 0, action: "shield", actionFrame: 30 }), makeFighter({ port: 1, defId: "donkeyKong", x: fx(20), facing: -1, action: "stand", actionFrame: 10 })] });
+    expect(shield(context(over, L9)).score).toBe(0);
+  });
+
+  it("decides once as a swing first comes into range, for one already seen further off", () => {
+    // A dash attack closing at 1.5 a frame, seen where it was 4 frames ago (the
+    // level's reaction): 30 away now, 31.5 the frame before, in range for the first
+    // time; a frame later, in range already.
+    const at = (x: number, vx: number) =>
+      makeState({
+        fighters: [makeFighter({ port: 0, actionFrame: 30 }), makeFighter({ port: 1, defId: "donkeyKong", x: fx(x), vx: fx(vx), facing: -1, action: "attack", move: "dashAttack", actionFrame: 12 })],
+      });
+    expect(shield(context(at(24, -1.5), L9)).score).toBeGreaterThan(0);
+    expect(shield(context(at(22.5, -1.5), L9)).score).toBe(0);
+  });
+
+  /**
+   * Donkey Kong's forward smash at a standing Mario 14 away, as the engine runs it,
+   * from the frame the level first sees it (its reaction time into the swing): a
+   * level's shield is one roll a swing, held through it, so the share of swings it
+   * blocks is the dial (within 0.1, a parry being a block too), and it is never hit
+   * in a drop of a shield it raised (Task 18's measure: levels 6-8, 283, 294 and 107
+   * times in 300).
+   */
+  it("against Donkey Kong's forward smash, blocks at its shieldRate and is never hit in the drop", () => {
+    const SEEDS = 120;
+    for (const level of [5, 6, 7, 8, 9]) {
+      const t = tuningForLevel(level);
+      let blocked = 0;
+      let hitInDrop = 0;
+      const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("donkeyKong")]);
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "donkeyKong" }], RULES, 21);
+        Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: 0, intangible: 0, facing: 1 });
+        Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: t.reactionFrames, grounded: true, platform: 0, x: fx(14), y: 0, intangible: 0, facing: -1 });
+        s.fighters[1].combat.smashLetGo = true;
+        let cs = seed;
+        let prev: InputFrame[] = [0, 0];
+        for (let i = 0; i < 70; i++) {
+          const c = cpuInput(s, 0, level, cs, world);
+          cs = c.seed;
+          const dk = 0;
+          const now = [c.input, dk];
+          const out = step(s, now, { prevInputs: prev });
+          prev = now;
+          if (out.events.shieldHits.some((h) => h.victim === 0)) blocked++;
+          if (out.events.hits.some((h) => h.victim === 0) && s.fighters[0].action === "shieldRelease") hitInDrop++;
+          s = out.state;
+          if (out.events.shieldHits.some((h) => h.victim === 0) || out.events.hits.some((h) => h.victim === 0)) break;
+        }
+      }
+      expect(hitInDrop, `level ${level}: hit in a drop`).toBe(0);
+      expect(Math.abs(blocked / SEEDS - t.shieldRate), `level ${level}: ${blocked}/${SEEDS} blocked`).toBeLessThanOrEqual(0.1);
+    }
+  });
+});
+
+/* --------------------------------------------------- a deliberate wall tech -- */
+
+describe("a wall tech (the Task 18 review's carry, item 10)", () => {
+  it("decides a tech for a tumble into the stage's wall, as for a floor", () => {
+    // Mario tumbling right into Final Destination's left wall, under its ledge.
+    const s = tumbling(-100, -25, { vx: 2.5, vy: 0.2 });
+    const decided: number[] = [];
+    let state = s;
+    for (let k = 0; k < 40 && state.fighters[0].action === "tumble"; k++) {
+      if (tech(context(state, L9, undefined, FD)).score > 0) decided.push(k);
+      state = quiet(state);
+    }
+    expect(decided.length).toBe(1);
+  });
+
+  it("meets the stage's side only between its top and its bottom, from outside it", () => {
+    const below = tumbling(-100, -90, { vx: 2.5, vy: 0 });
+    expect(framesToWall(defOf("mario"), below.fighters[0], FD, below.frame, TECH_LEAD * 3)).toBeNull();
+    const beside = tumbling(-100, -25, { vx: 2.5, vy: 0.2 });
+    expect(framesToWall(defOf("mario"), beside.fighters[0], FD, beside.frame, TECH_LEAD * 3)).not.toBeNull();
+  });
+
+  it("a level-9 CPU tumbling into the wall techs it, and wall-tech-jumps below the ledge", () => {
+    let s = tumbling(-100, -25, { vx: 2.5, vy: 0.2 });
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("fox")]);
+    let seed = 3;
+    let prev: InputFrame[] = [0, 0];
+    const seen = new Set<string>();
+    let wallJumps = 0;
+    for (let i = 0; i < 60; i++) {
+      const c = cpuInput(s, 0, 9, seed, world);
+      seed = c.seed;
+      const out = step(s, [c.input, 0], { prevInputs: prev });
+      prev = [c.input, 0];
+      s = out.state;
+      seen.add(s.fighters[0].action);
+      wallJumps += out.events.jumps.filter((j) => j.port === 0 && j.from === "wall").length;
+    }
+    expect(seen.has("techWall")).toBe(true);
+    expect(wallJumps).toBe(1);
   });
 });
