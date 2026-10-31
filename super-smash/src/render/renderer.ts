@@ -114,7 +114,10 @@ export interface OverlayAnchor {
 
 /** What the overlay learned while drawing that the 3D layer needs this frame. */
 export interface OverlayResult {
-  /** `hidden[port]`: a move effect replaces the fighter (Kirby's Stone). */
+  /**
+   * `hidden[port]`: not drawn this frame, because a move effect replaces the
+   * fighter (Kirby's Stone) or the fighter is inside Kirby (`swallowed`, Plan 5).
+   */
   readonly hidden: boolean[];
 }
 
@@ -271,6 +274,12 @@ export function drawScene(
   // so two idle fighters do not swap depth every time one of them twitches.
   for (const d of [...drawn].sort((a, b) => drawDepth(a.fighter) - drawDepth(b.fighter))) {
     if (d.fighter.action === "dead") continue;
+    // Inside Kirby (Plan 5): not drawn, here or by the 3D presenter, and with it
+    // go its tag, aura and move effects.
+    if (d.fighter.action === "swallowed") {
+      hidden[d.fighter.port] = true;
+      continue;
+    }
     hidden[d.fighter.port] = drawOneFighter(ctx, state, camera, d);
   }
 

@@ -378,6 +378,21 @@ describe("the 3D presenter", () => {
     }
   });
 
+  it("casts none for a fighter inside Kirby, grounded in a grounded Kirby's mouth, and keeps the Stone's, hidden as it is (Plan 5, Task 17)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    // Fox inside a grounded Kirby: `grounded` as his captor is (Task 9 carry).
+    state.fighters[1] = { ...state.fighters[1], action: "swallowed" };
+    // Kirby's Stone: the overlay hides the fighter, the stone is drawn, and it stands on the floor.
+    state.fighters[2] = { ...state.fighters[2], action: "special", move: "downB", actionFrame: 20 };
+    presenter.paint(rs, createCamera(stage), 1, [false, true, true, false]);
+    const scene = gl().scene!;
+    expect(instanceAt(scene, "shadows", 0).count).toBe(3);
+    const xs = [0, 1, 2].map((i) => instanceAt(scene, "shadows", i).position.x);
+    expect(xs).toEqual([0, 2, 3].map((port) => expect.closeTo(toFloat(state.fighters[port].x), 9)));
+  });
+
   it("lights the scene with the look's values, tone mapping off and sRGB out (UNVERIFIED by eye: pinned so any change is deliberate)", () => {
     const { presenter, rs, stage, gl } = setup();
     presenter.paint(rs, createCamera(stage), 1, []);

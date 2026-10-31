@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { STRONG_COUNTER_DAMAGE } from "@/engine/counter";
 import { fx } from "@/engine/fixed";
 import { emptyEvents, type StepEvents } from "@/engine/types";
-import { AudioEngine } from "./index";
+import { AudioEngine, STRONG_COUNTER_WINDOW } from "./index";
 import { MockAudioContext, asAudioContext } from "./mockContext";
 
 function makeEngine(options: { muted?: boolean } = {}) {
@@ -236,6 +237,67 @@ describe("driven by events, never by state", () => {
 
     expect(mock.created.length).toBeGreaterThan(1000);
     expect(mock.liveNodes.map((n) => n.kind)).toEqual(["gain", "gain"]);
+  });
+});
+
+describe("a counter's catch and its counterattack (Plan 5, Task 17)", () => {
+  /** The counterattack ring's signature: a triangle struck at 1568 Hz (`criticalHit`). */
+  const rings = (mock: MockAudioContext) => mock.oscillators.filter((o) => o.type === "triangle" && o.frequency.valuePath[0] === 1568).length;
+  const caught = (port: number, damage: number): StepEvents => {
+    const events = emptyEvents();
+    events.counters.push({ port, x: 0, y: 0, damage });
+    return events;
+  };
+
+  /** A catch, `gap` empty frames, then a hit by `attacker`; the counterattack rings counted. */
+  async function ringsAfter(damage: number, gap: number, attacker = 1): Promise<number> {
+    const { mock, engine } = await running();
+    engine.handleEvents(caught(1, damage));
+    for (let i = 0; i < gap; i++) engine.handleEvents(emptyEvents());
+    engine.handleEvents(hit({ attacker, victim: 1 - attacker, damage: fx(20), knockback: fx(120) }));
+    return rings(mock);
+  }
+
+  it("rings over the counterattack's hit when the catch was strong: 13% or more (SmashWiki \"Marth (SSBU)/Down special\")", async () => {
+    // Marth freezes 21 frames with the opponent, and strikes on the counterattack's frames 5-7.
+    expect(await ringsAfter(STRONG_COUNTER_DAMAGE, 24)).toBe(1);
+    expect(await ringsAfter(STRONG_COUNTER_DAMAGE - 1, 24)).toBe(0);
+  });
+
+  it("rings once, for its user's hit alone, and only inside the counterattack's window", async () => {
+    expect(await ringsAfter(STRONG_COUNTER_DAMAGE, 24, 0)).toBe(0);
+    expect(await ringsAfter(STRONG_COUNTER_DAMAGE, STRONG_COUNTER_WINDOW - 1)).toBe(1);
+    expect(await ringsAfter(STRONG_COUNTER_DAMAGE, STRONG_COUNTER_WINDOW)).toBe(0);
+    const { mock, engine } = await running();
+    engine.handleEvents(caught(1, STRONG_COUNTER_DAMAGE));
+    engine.handleEvents(hit({ attacker: 1, victim: 0 }));
+    engine.handleEvents(hit({ attacker: 1, victim: 0 }));
+    expect(rings(mock)).toBe(1);
+  });
+
+  it("makes no sound of its own on the catch", async () => {
+    const { mock, engine } = await running();
+    const before = mock.created.length;
+    engine.handleEvents(caught(1, fx(30)));
+    expect(mock.created.length).toBe(before);
+  });
+});
+
+describe("jumps that push off a wall or a head (Plan 5, Task 17)", () => {
+  it("play the jump's sound, as one off the ground does", async () => {
+    const signature = (from?: "wall" | "head") => {
+      const { mock, engine } = makeEngine();
+      return engine.resume().then(() => {
+        const events = emptyEvents();
+        events.jumps.push({ port: 0, x: 0, y: 0, ...(from ? { from } : {}) });
+        engine.handleEvents(events);
+        return mock.oscillators.map((o) => [o.type, ...o.frequency.valuePath]);
+      });
+    };
+    const ground = await signature();
+    expect(ground.length).toBeGreaterThan(0);
+    expect(await signature("wall")).toEqual(ground);
+    expect(await signature("head")).toEqual(ground);
   });
 });
 

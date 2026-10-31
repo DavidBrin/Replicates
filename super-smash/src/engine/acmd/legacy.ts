@@ -82,8 +82,8 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // (`MoveDef.motionOf`).
   sideBSmash: "special_s_smash",
   // Fix round 1: a throw with its article already out, the replica's name (Link's in
-  // the game is `special_s1_blank`, on his throw's animation; he plays his throw's
-  // motion here, `MoveDef.motionOf`).
+  // the game is `special_s1_blank`, on his throw's animation); its own motion since
+  // Task 17, the throw's clip across its own length.
   sideBFailed: "special_s_blank",
   // Plan 5, Task 14: a cinematic Final Smash's scene and its finishing blow, after
   // its start (`final`); the motions of its `game_finalattack` and `game_finalend`

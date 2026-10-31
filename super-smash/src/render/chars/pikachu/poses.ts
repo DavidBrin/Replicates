@@ -209,6 +209,80 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   },
 
   /**
+   * The crawl (Plan 5, Task 17; the action is Task 12's): down on all fours out of
+   * the crouch, the forepaws reaching out and planting in turn, the hind legs
+   * shuffling under the belly, the head up to look where he goes. Until Task 17
+   * he crawled in the shared crouch, its loop restarting on every switch.
+   *
+   * SmashWiki "Crawling" (https://www.ssbwiki.com/Crawling) puts Pikachu in
+   * Ultimate's crawlers and says his tail "lies low to the ground" crawling
+   * forward and "is held over its body" crawling backwards. Not drawn: the tail
+   * is no bone of the 2D rig (it rides `hip`, this file's header), the crawl's
+   * direction is no part of the motion the sim picks (`statusMotion` reads no
+   * velocity), and the page's point is a hurtbox the replica's hurt bones do not
+   * carry. So one clip plays both ways, the forward crawl's, tail low.
+   *
+   * A loop on the state's own frame, not paced by the ground covered as the walk
+   * is: the back crawl's 0.5 against the forward 0.7 would jump the cycle's phase
+   * whenever the stick changed sides mid-crawl. Presentation choice, every number:
+   * no source publishes the animation. Two paw strokes a cycle of 32 frames.
+   */
+  crawl: {
+    loop: true,
+    period: 32,
+    keys: [
+      // The near paw out in front, the far one back under the chest; the far hind
+      // leg forward under the belly.
+      {
+        t: 0,
+        pose: P({
+          hip: -8, torso: 50, head: -46,
+          thighR: 128, shinR: 98, footR: -132,
+          thighL: 150, shinL: 80, footL: -132,
+          upperArmR: 78, forearmR: 4, handR: -26,
+          upperArmL: 116, forearmL: -18, handL: -12,
+        }),
+        offsetY: -0.7, scaleX: 1.14, scaleY: 0.8,
+      },
+      // Passing: the paws level, the body lifted a hair as it rides over them.
+      {
+        t: 0.25,
+        pose: P({
+          hip: -7, torso: 48, head: -43,
+          thighR: 139, shinR: 89, footR: -132,
+          thighL: 139, shinL: 89, footL: -132,
+          upperArmR: 97, forearmR: -7, handR: -19,
+          upperArmL: 97, forearmL: -7, handL: -19,
+        }),
+        offsetY: -0.64, scaleX: 1.12, scaleY: 0.81,
+      },
+      // The other stroke: the far paw out, the near one back.
+      {
+        t: 0.5,
+        pose: P({
+          hip: -8, torso: 50, head: -46,
+          thighR: 150, shinR: 80, footR: -132,
+          thighL: 128, shinL: 98, footL: -132,
+          upperArmR: 116, forearmR: -18, handR: -12,
+          upperArmL: 78, forearmL: 4, handL: -26,
+        }),
+        offsetY: -0.7, scaleX: 1.14, scaleY: 0.8,
+      },
+      {
+        t: 0.75,
+        pose: P({
+          hip: -7, torso: 48, head: -43,
+          thighR: 139, shinR: 89, footR: -132,
+          thighL: 139, shinL: 89, footL: -132,
+          upperArmR: 97, forearmR: -7, handR: -19,
+          upperArmL: 97, forearmL: -7, handL: -19,
+        }),
+        offsetY: -0.64, scaleX: 1.12, scaleY: 0.81,
+      },
+    ],
+  },
+
+  /**
    * Headbutt. Not a punch — SmashWiki's name for the move is literally
    * `Headbutt`, and on a fighter who is four fifths head that is the entire
    * animation: rear the skull back, then drive it forward. Frame 2, so the

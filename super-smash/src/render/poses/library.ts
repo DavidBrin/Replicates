@@ -38,6 +38,7 @@ import { hitstun } from "./hitstun";
 import { tumble } from "./tumble";
 import { downed, getUp } from "./downed";
 import { grabbed, thrown } from "./grabbed";
+import { footstooled } from "./footstooled";
 import { ledgeHang, ledgeGetUp } from "./ledgeHang";
 import * as attacks from "./attacks";
 
@@ -52,6 +53,8 @@ export type PoseName =
   | "crouchStart"
   | "crouch"
   | "crouchEnd"
+  // Plan 5, Task 17: crawling out of a crouch (Pikachu's own; Task 12's action)
+  | "crawl"
   | "jumpSquat"
   | "rise"
   | "doubleJump"
@@ -73,6 +76,8 @@ export type PoseName =
   | "getUp"
   | "grabbed"
   | "thrown"
+  // Plan 5, Task 17: stood on by a footstool jump, on the ground (Task 11's action)
+  | "footstooled"
   | "ledgeHang"
   | "ledgeGetUp"
   // offence
@@ -114,6 +119,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   crouchStart,
   crouch,
   crouchEnd,
+  /**
+   * A crawl (Plan 5, Task 17). Only Pikachu crawls in this roster (SmashWiki
+   * "Crawling", `FighterAttributes.canCrawl`), and he authors his own; the
+   * shared default is the crouch the crawl moves in, which no other fighter can
+   * be in (and the bake bakes the crawl for a crawler alone, `statusSamplers`).
+   */
+  crawl: crouch,
   jumpSquat,
   rise,
   doubleJump,
@@ -135,6 +147,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   getUp,
   grabbed,
   thrown,
+  footstooled,
   ledgeHang,
   ledgeGetUp,
 

@@ -29,7 +29,7 @@
  * attacker's hitlag) only, so it rolls back with them.
  */
 
-import { clamp, mul } from "./fixed";
+import { clamp, fx, mul } from "./fixed";
 import { circle, moveFrameOf } from "./hitbox";
 import type { Capsule } from "./hitbox";
 import { framesAfterHit } from "./knockback";
@@ -56,6 +56,20 @@ export function activeCounter(f: FighterState, def: FighterDef): CounterDef | nu
 export function counterBubble(f: FighterState, c: CounterDef): Capsule {
   return circle(f.x + (f.facing >= 0 ? c.x : -c.x), f.y + c.y, c.radius);
 }
+
+/**
+ * A catch of at least this much damage (Q12, the caught box's own, as
+ * `StepEvents.counters` reports it) is a strong one, for the presentation alone:
+ * the sim never reads it (Plan 5, Task 17). SmashWiki "Marth (SSBU)/Down special"
+ * (https://www.ssbwiki.com/Marth_(SSBU)/Down_special): the counterattack's boxes
+ * "play an additional sound effect on hit if an attack that deals at least 13% is
+ * countered, which is shared with Marth's Final Smash". SmashWiki "Counterattack"
+ * (https://www.ssbwiki.com/Counterattack): "In Super Smash Bros. Ultimate, an
+ * additional visual effect occurs if a strong enough attack is countered, with
+ * the user emitting a large, bright yellow flash"; UNVERIFIED that "strong
+ * enough" is the same 13% (the page names no number).
+ */
+export const STRONG_COUNTER_DAMAGE = fx(13);
 
 /** The counterattack's damage for a caught hit of `damage` (Q12). */
 export function counterDamage(c: CounterDef, damage: number): number {

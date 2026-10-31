@@ -188,6 +188,9 @@ function kickArc(
  * and the symptom — a muzzle flash on the first frame of the wind-up — reads as
  * a timing bug in the *animation* rather than in the helper.
  */
+/** The Homing Missile's launch frame, for a painter called with no move (the animation lab). */
+const MISSILE_LAUNCH = 18;
+
 function decay(frame: number, from: number, span: number): number {
   if (frame < from) return 0;
   const k = 1 - (frame - from) / span;
@@ -685,21 +688,28 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * Missile: the exhaust.
    *
    * The missile itself is a projectile and is drawn by its own painter; what
-   * belongs to the *move* is the launch — the flash off the rail on frame 18
+   * belongs to the *move* is the launch — the flash off the rail as it leaves
    * and the smoke that hangs at the muzzle afterwards. The smoke is the part
    * that makes the launch read at a distance, and it is the reason this is not
    * just Charge Shot in orange.
+   *
+   * Timed off the move's own launch frame, so the Super Missile (`sideBSmash`,
+   * which paints this) flashes as it leaves on 21 and not as the Homing Missile
+   * would on 18 (Plan 5, Task 17: the Task 13d review's Minor 5; SmashWiki
+   * "Samus (SSBU)/Side special": "Missile 18-137", "Super Missile 21-96"). The
+   * flash leads the launch by a frame.
    */
-  sideB: ({ ctx, x, y, u, dir, frame }) => {
+  sideB: ({ ctx, f, def, x, y, u, dir, frame }) => {
+    const launch = (f.move === null ? undefined : def.moves[f.move]?.projectiles?.[0]?.spawnFrame) ?? MISSILE_LAUNCH;
     const mx = x + u * 7.0 * dir;
     const my = y - u * 6.5;
-    const k = decay(frame, 17, 6);
+    const k = decay(frame, launch - 1, 6);
     if (k > 0) {
       muzzleCone(ctx, mx, my, dir, u * 4.6 * k, u * 2.0 * k, k, FIRE_PALE);
       blast(ctx, mx, my, u * 1.8, k, HOT, FIRE);
     }
     // Smoke: four puffs drifting back and up, thinning out over twenty frames.
-    const s = decay(frame, 18, 22);
+    const s = decay(frame, launch, 22);
     if (s > 0) {
       for (let i = 0; i < 4; i++) {
         const age = (1 - s) * 22 - i * 3;

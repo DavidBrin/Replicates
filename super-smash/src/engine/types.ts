@@ -939,8 +939,8 @@ export interface MoveDef {
    * The move plays `motionOf`'s motion: the same clip on the same clock, so the bake
    * gives it nothing of its own, and a longer move holds that motion's last frame
    * (`poseIndexOf` clamps). Plan 5, Task 13d: Link's smash throw plays his throw's,
-   * `special_s1` for both in the game; fix round 1: his failed throw, `special_s1_blank`
-   * on the same animation.
+   * `special_s1` for both in the game. (His failed throw played it too, holding its
+   * last frame for 14; Task 17 gave it a motion of its own.)
    */
   readonly motionOf?: MoveSlot;
   /**
@@ -1679,15 +1679,27 @@ export interface StepEvents {
   shieldHits: { victim: number; x: number; y: number }[];
   clanks: { x: number; y: number }[];
   kos: { port: number; x: number; y: number; kind: "blast" | "star" | "screen" }[];
-  jumps: { port: number; x: number; y: number }[];
+  /**
+   * Jumps that pushed off something this frame: the ground, out of a jump squat;
+   * a wall (`from: "wall"`: a wall jump or a wall tech jump, Plan 5 Task 10); or a
+   * head (`from: "head"`: a footstool's jump, Task 11, a phantom one's too). Not a
+   * midair jump, which pushes off nothing. Presentation only (Task 17): the jump's
+   * sound, and its puff where it pushed off.
+   */
+  jumps: { port: number; x: number; y: number; from?: "wall" | "head" }[];
   lands: { port: number; x: number; y: number }[];
   shieldBreaks: number[];
   smashBallBroken: number | null;
   finalSmashes: number[];
   /** Projectiles sent back this frame, by whom and where (Plan 5). */
   reflects: { port: number; x: number; y: number }[];
-  /** Counters that caught something this frame: whose, and where it met the bubble (Plan 5, Task 5). */
-  counters: { port: number; x: number; y: number }[];
+  /**
+   * Counters that caught something this frame: whose, and where it met the bubble
+   * (Plan 5, Task 5); and the damage caught, the box's own before staleness, as the
+   * counter multiplies it. Presentation only (Task 17): a strong enough catch
+   * flashes yellow, and its counterattack's hit plays an extra sound.
+   */
+  counters: { port: number; x: number; y: number; damage: number }[];
   /**
    * Windbox pushes that reached a body this frame, who pushed whom (Plan 5,
    * Task 6 fix round 1). A push reports no hit (F.L.U.D.D.'s row is `nogfx=t`),

@@ -23,6 +23,7 @@
 import { DEFAULT_AIR_DODGE, airDodgeFrames, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
 import { DEFAULT_GROUND_DODGE, dodgeIntangible, groundDodgeOf, rollOf } from "@/engine/groundDodge";
 import { toFloat } from "@/engine/fixed";
+import { FOOTSTOOL_GROUND_FRAMES } from "@/engine/footstool";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { actionFrameOf } from "@/engine/hitbox";
@@ -261,9 +262,12 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "crouchStart":
       return "crouchStart";
     case "crouch":
-    // Plan 5, Task 12: a crawl is a crouch on the move.
-    case "crawl":
       return "crouch";
+    // Plan 5, Task 12's crawl, on a clip of its own since Task 17: a switch to or
+    // from the crouch is a change of clip that fades (`blend.ts`), where the one
+    // shared loop restarted at its first frame on each.
+    case "crawl":
+      return "crawl";
     case "crouchEnd":
       return "crouchEnd";
     case "getUp":
@@ -320,21 +324,22 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "techCeiling":
       return "tumble";
     case "grabbed":
-    // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held. Task 11:
-    // stood on, held still under the jumper's feet. Task 14: trapped in a Final
-    // Smash, held still for its scene.
+    // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held. Task 14:
+    // trapped in a Final Smash, held still for its scene.
     case "cargoHeld":
-    case "footstooled":
     case "finalTrapped":
       return "grabbed";
+    // Plan 5, Task 11: stood on, under the jumper's feet; its own clip since Task 17.
+    case "footstooled":
+      return "footstooled";
     // ...and Donkey Kong carrying: no clip has the carry's raised arms, and his
     // walk reads as the carry (it walks). Plan 5, Task 9: Kirby walking with a
     // mouthful, likewise.
     case "cargoCarry":
     case "inhaleHold":
       return "walk";
-    // Plan 5, Task 9: inside Kirby, or flying as his star (until Task 17 hides the
-    // swallowed), the fighter tumbles.
+    // Plan 5, Task 9: inside Kirby, or flying as his star, the fighter tumbles.
+    // Inside, nobody sees it: Task 17 hides the swallowed (`drawScene`).
     case "swallowed":
     case "spatStar":
       return "tumble";
@@ -435,6 +440,9 @@ export function actionDurationFor(
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":
       return LEDGE_JUMP_FRAMES;
+    // Stood on: the freeze (Plan 5, Task 11), which its clip spans (Task 17).
+    case "footstooled":
+      return FOOTSTOOL_GROUND_FRAMES;
     // The fighter's own pummel, as its status runs it (ruling P5-R10). Without
     // the fighter's timing, the engine's fallback.
     case "pummel":

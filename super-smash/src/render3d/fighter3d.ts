@@ -55,7 +55,7 @@ export interface FighterFrame {
   readonly frame: number;
   readonly blends: PoseBlend[] | null;
   readonly hitFlash: number;
-  /** A move effect replaces the fighter this frame (Kirby's Stone). */
+  /** Not drawn this frame: a move effect replaces the fighter (Kirby's Stone), or it is inside Kirby (Plan 5). */
   readonly hidden: boolean;
 }
 

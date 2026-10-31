@@ -254,10 +254,9 @@ export interface MotionSampler {
 
 /**
  * The sampler for each slot's active script motion. A move that plays another's
- * motion (`MoveDef.motionOf`; Plan 5, Task 13d: Link's smash throw, and fix round 1
- * his failed throw) bakes none of its own: it runs that motion's clock, and a longer
- * one holds its last frame (`poseIndexOf` clamps). The other move must be there and
- * run the same motion.
+ * motion (`MoveDef.motionOf`; Plan 5, Task 13d: Link's smash throw) bakes none of
+ * its own: it runs that motion's clock, and a longer one holds its last frame
+ * (`poseIndexOf` clamps). The other move must be there and run the same motion.
  */
 export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & { slot: MoveSlot }> {
   const out = new Map<MotionKind, MotionSampler & { slot: MoveSlot }>();
@@ -318,10 +317,21 @@ function dodgeTiming(spec: StatusMotionSpec, poseName: PoseName, def: FighterDef
   return null;
 }
 
-/** The sampler for each status motion. */
+/**
+ * Whether a fighter's bake carries a status motion: every one, but the crawl's
+ * for a fighter that cannot crawl (`FighterAttributes.canCrawl`), which never
+ * plays it. Plan 5, Task 17 gave the crawl a clip and a motion of its own
+ * (Pikachu's); the other seven would each bake a copy of their crouch.
+ */
+export function bakesStatus(def: FighterDef, spec: Pick<StatusMotionSpec, "action">): boolean {
+  return spec.action !== "crawl" || def.attributes.canCrawl === true;
+}
+
+/** The sampler for each status motion the fighter's bake carries (`bakesStatus`). */
 export function statusSamplers(def: FighterDef): Map<MotionKind, MotionSampler> {
   const out = new Map<MotionKind, MotionSampler>();
   for (const spec of statusMotionSpecs()) {
+    if (!bakesStatus(def, spec)) continue;
     const poseName = poseNameFor({ action: spec.action, move: null, jumpsUsed: spec.jumpsUsed, fastFalling: spec.fastFalling });
     const clip = clipFor(def.id, poseName);
     const clock = statusClock(clip, poseName, spec, def);

@@ -403,6 +403,40 @@ export function finalSmash(sc: SynthContext, when?: number): void {
   });
 }
 
+/**
+ * The ring a counterattack lands with when it caught a strong attack (Plan 5,
+ * Task 17): SmashWiki "Marth (SSBU)/Down special" gives its boxes "an additional
+ * sound effect on hit if an attack that deals at least 13% is countered, which
+ * is shared with Marth's Final Smash" (Critical Hit's). Played over the hit's own
+ * sound, so it is the bright part alone: a struck blade ringing up a fifth, and a
+ * hiss that opens over it. Presentation choice, every number: the game's sound is
+ * a recording, and no source describes it.
+ */
+export function criticalHit(sc: SynthContext, when?: number): void {
+  const at = when ?? sc.ctx.currentTime;
+  for (const [i, frequency] of [1568, 2349.3].entries()) {
+    tone(sc, {
+      wave: "triangle",
+      freqStart: frequency,
+      freqEnd: frequency * 1.5,
+      duration: 0.32,
+      attack: 0.002,
+      decay: 0.32,
+      gain: 0.16 - i * 0.04,
+      when: at + i * 0.03,
+    });
+  }
+  noise(sc, {
+    duration: 0.3,
+    gain: 0.16,
+    attack: 0.01,
+    decay: 0.29,
+    band: { type: "highpass", frequency: 2500 },
+    sweep: { type: "highpass", from: 2500, to: 8000 },
+    when: at,
+  });
+}
+
 /* -------------------------------------------------------------------- menu -- */
 
 /** Moving between menu items. Short enough to survive being spammed. */

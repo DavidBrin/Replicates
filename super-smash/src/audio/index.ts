@@ -37,12 +37,14 @@
  * free-for-all where everybody connects at once should get louder, not muddier.
  */
 
+import { STRONG_COUNTER_DAMAGE } from "@/engine/counter";
 import { fx } from "@/engine/fixed";
 import type { StepEvents } from "@/engine/types";
 import type { SynthContext, Voice } from "./synth";
 import {
   clank,
   countdownBeep,
+  criticalHit,
   dodge,
   finalSmash,
   goStinger,
@@ -79,6 +81,15 @@ export interface HitThresholds {
   readonly damage: number;
 }
 
+/**
+ * Frames after a strong catch (`STRONG_COUNTER_DAMAGE`) within which its user's
+ * next hit is the counterattack's, whose extra sound it then plays (Plan 5, Task
+ * 17). SmashWiki "Marth (SSBU)/Down special": he "freezes for 21 frames alongside
+ * the opponent before the counterattack proceeds", whose "Hitboxes 5-7" strike
+ * by the 27th frame after the catch. A hit after the window is another move's.
+ */
+export const STRONG_COUNTER_WINDOW = 28;
+
 /** 80 units of knockback, or 10%. Either one is a hit that mattered. */
 export const DEFAULT_HIT_THRESHOLDS: HitThresholds = {
   knockback: fx(80),
@@ -109,6 +120,8 @@ export class AudioEngine {
   private disposed = false;
 
   private readonly shields = new Map<number, Voice>();
+  /** Per port, frames left in which a hit is a strong counter's (`STRONG_COUNTER_WINDOW`). */
+  private readonly strongCounters = new Map<number, number>();
 
   constructor(options: AudioEngineOptions = {}) {
     this.contextFactory =
@@ -257,8 +270,29 @@ export class AudioEngine {
 
     if (events.shieldHits.length > 0) shieldHit(sc);
     if (events.clanks.length > 0) clank(sc);
+    // Every jump that pushed off something: the ground's, a wall's and a head's
+    // (a footstool), Plan 5 Task 17.
     if (events.jumps.length > 0) jump(sc);
     if (events.lands.length > 0) land(sc);
+    this.counterattackRings(sc, events);
+  }
+
+  /**
+   * A strong catch's counterattack rings as it lands (`criticalHit`, over the
+   * hit's own sound): the catch arms its user's port for `STRONG_COUNTER_WINDOW`
+   * frames, and that port's next hit inside them is the counterattack's.
+   */
+  private counterattackRings(sc: SynthContext, events: StepEvents): void {
+    let rings = false;
+    for (const [port, left] of this.strongCounters) {
+      if (events.hits.some((h) => h.attacker === port)) {
+        rings = true;
+        this.strongCounters.delete(port);
+      } else if (left <= 1) this.strongCounters.delete(port);
+      else this.strongCounters.set(port, left - 1);
+    }
+    if (rings) criticalHit(sc);
+    for (const c of events.counters) if (c.damage >= STRONG_COUNTER_DAMAGE) this.strongCounters.set(c.port, STRONG_COUNTER_WINDOW);
   }
 
   /**

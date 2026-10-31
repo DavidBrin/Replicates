@@ -23,6 +23,7 @@ import { samplePose, type PoseClip } from "../../poses/clip";
 import { resolve, type Skeleton } from "../../skeleton";
 import { poses } from "./poses";
 import { fx, projectiles } from "./fx";
+import { fxFor } from "../index";
 
 const rig = getCharacterRig("samus");
 
@@ -968,5 +969,40 @@ describe("the Morph Ball", () => {
     // 12.2 units tall; the game's ball measures around 0.35 of that across.
     expect(body * 2).toBeLessThan(5.6);
     expect(body * 2).toBeGreaterThan(3.4);
+  });
+});
+
+describe("the missiles' launch (Plan 5, Task 17: the Task 13d review's Minor 5)", () => {
+  /** What the side special's painter draws for `move` on its frame `frame`, as the renderer finds it (`fxFor`). */
+  function launchAt(move: "sideB" | "sideBSmash", frame: number): number {
+    const { ctx, drawn } = recordingContext();
+    fxFor("samus", move)!({
+      ctx,
+      f: { facing: 1, charge: 0, move } as never,
+      def: samus,
+      cam: { zoom: 10 } as never,
+      height: 12.2,
+      x: 400,
+      y: 400,
+      u: 10,
+      frame,
+      total: samus.moves[move]!.totalFrames,
+      t: 0,
+      dir: 1,
+      over: (paint: () => void) => paint(),
+    });
+    return drawn();
+  }
+
+  it("flashes off the rail as each missile leaves, from the frame before its launch: the Homing Missile's 18, the Super Missile's 21", () => {
+    // SmashWiki "Samus (SSBU)/Side special": "Missile 18-137", "Super Missile 21-96".
+    expect(launchAt("sideB", 16)).toBe(0);
+    expect(launchAt("sideB", 17)).toBeGreaterThan(0);
+    expect(launchAt("sideBSmash", 17)).toBe(0);
+    expect(launchAt("sideBSmash", 19)).toBe(0);
+    expect(launchAt("sideBSmash", 20)).toBeGreaterThan(0);
+    // The smoke hangs on after each, for as long.
+    expect(launchAt("sideBSmash", 21 + 21)).toBe(launchAt("sideB", 18 + 21));
+    expect(launchAt("sideBSmash", 21 + 22)).toBe(0);
   });
 });

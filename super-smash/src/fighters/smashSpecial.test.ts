@@ -434,7 +434,9 @@ describe("Link's failed throw: one Boomerang out at a time", () => {
     expect(link.moves.sideB!.whenOut).toBe("sideBFailed");
     expect(link.moves.sideBSmash!.whenOut).toBe("sideBFailed");
     for (const id of ["boomerang", "boomerangSmash"]) expect(projectileDef("link", id), id).toMatchObject({ article: "boomerang", maxOut: 1 });
-    expect(link.moves.sideBFailed).toMatchObject({ slot: "sideBFailed", totalFrames: 59, aerialTotalFrames: 45, motionOf: "sideB" });
+    expect(link.moves.sideBFailed).toMatchObject({ slot: "sideBFailed", totalFrames: 59, aerialTotalFrames: 45 });
+    // A motion of its own since Plan 5, Task 17: the throw's clip across its own length.
+    expect(link.moves.sideBFailed!.motionOf).toBeUndefined();
     expect(link.moves.sideBFailed!.projectiles).toBeUndefined();
     // Samus's two missiles keep a count each (ruling R-T13d-a): no shared article.
     expect([projectileDef("samus", "missile").article, projectileDef("samus", "superMissile").article]).toEqual([undefined, undefined]);

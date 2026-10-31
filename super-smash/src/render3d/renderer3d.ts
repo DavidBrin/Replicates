@@ -392,7 +392,10 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
           s.colour = look.colour;
           shields[f.port] = s;
         }
-        if (f.grounded && f.action !== "dead" && shadowCount < shadows.instanceMatrix.count) {
+        // None for a fighter inside Kirby (Plan 5, Task 17), who can be `grounded`
+        // in a grounded Kirby's mouth; not for `hidden` in general, which Kirby's
+        // Stone is, and the stone casts its shadow.
+        if (f.grounded && f.action !== "dead" && f.action !== "swallowed" && shadowCount < shadows.instanceMatrix.count) {
           const w = toFloat(def.attributes.width);
           m.compose(at.set(pos.x, pos.y + SHADOW_LIFT, 0), flat, size.set(w * SHADOW_ACROSS, 1, w * SHADOW_DEEP));
           shadows.setMatrixAt(shadowCount++, m);

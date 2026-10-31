@@ -16,6 +16,7 @@ import { SKELETONS } from "../skeletons";
 import {
   attackClipTime,
   bakeFighter,
+  bakesStatus,
   fighterPoser,
   motionSamplers,
   moveSamplers,
@@ -68,7 +69,7 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 57 over the 59 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 59 over the 59 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
@@ -87,8 +88,9 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
     // more, the crawl, and no motion more: it plays the crouch's. Task 13c's fix
     // round 1: one more, the rebound, and no motion more: it plays the stand's.
     // Task 14: one more, the trapped, and no motion more: it plays the grab's.
+    // Task 17: two motions more, the footstooled's and the crawl's, their own clips.
     expect(ACTIONS).toHaveLength(59);
-    expect(named.size).toBe(57);
+    expect(named.size).toBe(59);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
     // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their
     // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`), as
@@ -140,12 +142,26 @@ describe("the status clocks are each fighter's own (DISPATCH-NOTES 10.1)", () =>
     for (const def of FIGHTERS) {
       const samplers = statusSamplers(def);
       for (const spec of statusMotionSpecs()) {
+        if (!bakesStatus(def, spec)) continue;
         const { clock } = samplers.get(spec.motion)!;
         if (clock.kind !== "once") continue;
         const twoD = actionDurationFor(posedAt(def.id, spec, 0), jumpTimingFor(def)) ?? OPEN_ENDED_FRAMES;
         expect(clock.frames, `${def.id} ${spec.motion}`).toBe(twoD);
       }
     }
+  });
+
+  it("bake the crawl for the one fighter who crawls (Plan 5, Task 17): its own clip, a loop; the others would bake a copy of their crouch", () => {
+    for (const def of FIGHTERS) {
+      const crawl = statusSamplers(def).get("status_crawl");
+      if (def.attributes.canCrawl === true) {
+        expect(crawl?.clip, def.id).not.toBe(statusSamplers(def).get("status_crouch")!.clip);
+        expect(crawl?.clock, def.id).toEqual({ kind: "loop", frames: 32 });
+      } else expect(crawl, def.id).toBeUndefined();
+    }
+    expect(FIGHTERS.filter((d) => d.attributes.canCrawl === true).map((d) => d.id)).toEqual(["pikachu"]);
+    // The stood-on fighter's, every fighter's, once across the footstool's freeze.
+    for (const def of FIGHTERS) expect(statusSamplers(def).get("status_footstooled")?.clock, def.id).toEqual({ kind: "once", frames: 30 });
   });
 
   it("give the dodges each fighter's own lengths (UltimateFrameData via groundDodge.ts / airDodge.ts)", () => {
@@ -271,19 +287,24 @@ describe("the move motions the bake plays (Plan 5, Task 13d)", () => {
     expect(linkMoves.get(gameScriptFor(link, "sideB")!.motion)).toMatchObject({ slot: "sideB", clock: { kind: "script", frames: 45 } });
   });
 
-  it("bake Link's failed throw on none either: it plays his throw's 45 frames and holds the last past them (fix round 1)", () => {
+  it("bake Link's failed throw on a motion of its own: his throw's clip across its 59 frames, never holding a last pose (Plan 5, Task 17)", () => {
+    // The Task 13d fix round played it on the throw's 45 frames and held the last
+    // for 46-59; in the game both play one animation, the failed throw's running
+    // to its "Animation length 63" (SmashWiki "Link (SSBU)/Side special").
     const link = fighterOf("link");
-    const motion = gameScriptFor(link, "sideB")!.motion;
-    expect(gameScriptFor(link, "sideBFailed")!.motion).toBe(motion);
-    expect([...moveSamplers(link).values()].map((m) => m.slot)).not.toContain("sideBFailed");
-    const clock = moveSamplers(link).get(motion)!.clock;
+    const motion = gameScriptFor(link, "sideBFailed")!.motion;
+    expect(motion).not.toBe(gameScriptFor(link, "sideB")!.motion);
+    const sampler = moveSamplers(link).get(motion)!;
+    expect(sampler).toMatchObject({ slot: "sideBFailed", clock: { kind: "script", frames: 59 } });
+    // The throw's own clip, played slower, still moving on its last frames.
+    expect(sampler.clip).toBe(moveSamplers(link).get(gameScriptFor(link, "sideB")!.motion)!.clip);
     const at = (actionFrame: number) => {
       const f: ClockedFighter = { defId: "link", action: "special", move: "sideBFailed", actionFrame, port: 0, charge: 0, hitstun: 0, jumpsUsed: 0, fastFalling: false, vx: 0, vy: 0, shortHop: false };
-      return poseIndexOf(link, f, 0, () => clock);
+      return poseIndexOf(link, f, 0, () => sampler.clock);
     };
-    expect(at(30)).toEqual({ motion, frame: 31 });
     expect(at(44)).toEqual({ motion, frame: 45 });
-    expect(at(58)).toEqual({ motion, frame: 45 });
+    expect(at(58)).toEqual({ motion, frame: 59 });
+    for (let k = 46; k <= 59; k++) expect(sampler.time(k)).toBeGreaterThan(sampler.time(k - 1));
   });
 
   it("refuses a move that plays the motion of a move it does not have", () => {

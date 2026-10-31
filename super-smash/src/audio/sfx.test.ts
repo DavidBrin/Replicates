@@ -265,3 +265,18 @@ describe("every recipe", () => {
 function countInboundToDestination(mock: ReturnType<typeof mockSynthContext>["mock"]): number {
   return mock.created.filter((node) => node.outputs.includes(mock.destination)).length;
 }
+
+describe("the counterattack's ring (Plan 5, Task 17)", () => {
+  it("is bright and rising, over the hit's own body: two struck triangles a fifth apart and an opening hiss", () => {
+    const { mock, sc } = mockSynthContext();
+    sfx.criticalHit(sc);
+    const [low, high] = oscillators(mock);
+    expect([low.type, high.type]).toEqual(["triangle", "triangle"]);
+    expect(low.frequency.valuePath[0]).toBe(1568);
+    expect(high.frequency.valuePath[0] / low.frequency.valuePath[0]).toBeCloseTo(1.5, 2);
+    expect(low.frequency.valuePath[1]).toBeGreaterThan(low.frequency.valuePath[0]);
+    // Nothing under the light hit's 150 Hz floor: the hit's own recipe carries the weight.
+    expect(Math.min(...oscillators(mock).flatMap((o) => o.frequency.valuePath))).toBeGreaterThan(1000);
+    expect(mock.filters.some((f) => f.type === "highpass")).toBe(true);
+  });
+});

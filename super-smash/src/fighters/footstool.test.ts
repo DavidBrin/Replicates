@@ -330,6 +330,23 @@ describe("footstool jumps", () => {
   });
 });
 
+describe("the bounce's report (Plan 5, Task 17: its sound and puff, presentation only)", () => {
+  it("reports a footstool as a jump off a head, where the jumper's feet were on it", () => {
+    const s = overHead();
+    const { x, y } = s.fighters[0];
+    const out = step(s, [Btn.Jump, 0], { prevInputs: [0, 0] });
+    expect(out.events.jumps).toEqual([{ port: 0, x, y, from: "head" }]);
+  });
+
+  it("reports a phantom footstool's jump too, which reaches nobody", () => {
+    const s = overHead();
+    Object.assign(s.fighters[1], { action: "attack", move: "jab1", actionFrame: 3 });
+    const out = step(s, [Btn.Jump, 0], { prevInputs: [0, 0] });
+    expect(out.events.footstools).toEqual([]);
+    expect(out.events.jumps).toMatchObject([{ port: 0, from: "head" }]);
+  });
+});
+
 describe("one footstool after another", () => {
   /** Mario's bounce off Fox's head with `footstools` already made since he left the ground. */
   function bounce(footstools: number): FighterState {

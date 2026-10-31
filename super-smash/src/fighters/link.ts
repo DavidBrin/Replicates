@@ -781,13 +781,17 @@ const legacy: FighterDef = {
       // (failed)": "Interruptible (grounded) 60", "Interruptible (aerial) 46",
       // "Animation length 63"; rubendal 13.0.1 Motions: `special_s1_blank` CancelFrame
       // 60 and `special_air_s1_blank` CancelFrame 46, both on the throw's animation
-      // `d01specials1`, so it plays the throw's motion (`motionOf`), holding its last
-      // frame past the throw's 45. Nothing is launched. UNVERIFIED: its landing, which
-      // no source gives; it lands plainly, as the throw does (UltimateFrameData gives
-      // the throw no landing lag, https://ultimateframedata.com/link).
+      // `d01specials1`. Nothing is launched. UNVERIFIED: its landing, which no source
+      // gives; it lands plainly, as the throw does (UltimateFrameData gives the throw
+      // no landing lag, https://ultimateframedata.com/link).
+      //
+      // A motion of its own (Plan 5, Task 17): the throw's clip (`SLOT_POSE`) across
+      // the failed throw's 59 frames, where playing the throw's 45-frame motion held
+      // its last pose for 46-59. The game plays the one animation for both and the
+      // failed throw runs further into it; the replica's throw clip finishes the
+      // throw on the throw's own 45 frames, so the failed throw plays it slower.
       totalFrames: 59,
       aerialTotalFrames: 45,
-      motionOf: "sideB",
       hitboxes: [],
     },
 

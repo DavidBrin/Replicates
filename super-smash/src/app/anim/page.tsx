@@ -49,10 +49,12 @@ const Lab3D = dynamic(() => import("./Lab3D").then((m) => m.Lab3D), {
 /** Every action worth looking at, grouped the way an animator would think of them. */
 const GROUPS: ReadonlyArray<readonly [string, readonly ActionState[]]> = [
   ["ground", ["stand", "walk", "dashStart", "run", "runBrake", "turnaround"]],
-  ["crouch", ["crouchStart", "crouch", "crouchEnd"]],
+  // Plan 5, Task 17: the crawl (Pikachu's; a fighter who cannot crawl has no motion for it).
+  ["crouch", ["crouchStart", "crouch", "crouchEnd", "crawl"]],
   ["air", ["jumpSquat", "jump", "fall", "land", "landingLag"]],
   ["defence", ["shieldStart", "shield", "shieldRelease", "shieldBroken", "roll", "spotDodge", "airDodge"]],
-  ["reeling", ["hitstun", "tumble", "tumbleFall", "downed", "getUp", "grabbed", "thrown"]],
+  // Plan 5, Task 17: stood on by a footstool jump.
+  ["reeling", ["hitstun", "tumble", "tumbleFall", "downed", "getUp", "grabbed", "thrown", "footstooled"]],
   ["tech", ["tech", "techRoll", "techWall", "techCeiling"]],
   ["ledge", ["ledgeHang", "ledgeGetUp", "ledgeJump", "ledgeTrumped"]],
   ["offence", ["attack", "special", "grab", "throw"]],

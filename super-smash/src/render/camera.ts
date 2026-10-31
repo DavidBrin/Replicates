@@ -14,6 +14,7 @@
  * which is fine, and is the same trade the real game makes.
  */
 
+import { inCinematic } from "@/engine/final";
 import { toFloat } from "@/engine/fixed";
 import type { GameState, StageDef, StepEvents } from "@/engine/types";
 
@@ -134,8 +135,11 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
   let maxY = -Infinity;
   let count = 0;
 
+  // A Final Smash's scene frames its user and whoever it trapped (Plan 5).
+  const scene = state.cinematic >= 0;
   for (const f of state.fighters) {
     if (f.action === "dead") continue;
+    if (scene && !inCinematic(state, f)) continue;
     const x = toFloat(f.x);
     const y = toFloat(f.y);
     minX = Math.min(minX, x);
@@ -164,7 +168,8 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
   // do in the real game; `MIN_ZOOM` and the blast-zone clamp below are what
   // stop the view running off the stage entirely.
   const main = stage.platforms.find((p) => p.ledges) ?? stage.platforms[0];
-  if (main) {
+  // ...but not during a Final Smash's scene, which is a close-up (Plan 5).
+  if (main && !scene) {
     minX = Math.min(minX, toFloat(main.x) - toFloat(main.halfWidth) * 0.32);
     maxX = Math.max(maxX, toFloat(main.x) + toFloat(main.halfWidth) * 0.32);
     minY = Math.min(minY, toFloat(main.y) - 6);
@@ -403,7 +408,13 @@ export function offscreenIndicators(
   const bb = toFloat(b.bottom);
 
   for (const f of state.fighters) {
-    if (f.action === "dead" || f.stocks <= 0) continue;
+    // Inside Kirby, a fighter is not drawn (Plan 5, Task 17); Kirby's glass shows where.
+    if (f.action === "dead" || f.stocks <= 0 || f.action === "swallowed") continue;
+    // A Final Smash's scene is a close-up of its user and the trapped (Plan 5,
+    // Task 17): the bystanders stand frozen outside it and get no glass, which
+    // would put them back on a screen the scene has cleared of them.
+    // Presentation choice: no source publishes the scene's HUD.
+    if (state.cinematic >= 0 && !inCinematic(state, f)) continue;
     const x = toFloat(f.x);
     const y = toFloat(f.y);
     const inside = x >= v.left && x <= v.right && y >= v.bottom && y <= v.top;

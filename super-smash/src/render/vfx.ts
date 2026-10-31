@@ -19,12 +19,13 @@
 
 import { toFloat } from "@/engine/fixed";
 import { PERFECT_SHIELD_WINDOW, SMASH_CHARGE_MAX } from "@/engine/constants";
+import { STRONG_COUNTER_DAMAGE } from "@/engine/counter";
 import type { FighterDef, FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
 import { moveTimingFor, poseTimeFor, type PosedFighter } from "./poses";
 import { PORT_COLOURS, mixHex, withAlpha } from "./rigKit";
 import type { ProjectilePainter } from "./fxKit";
-import { worldToScreen, type Camera } from "./camera";
+import { FIGHTER_UNITS, worldToScreen, type Camera } from "./camera";
 
 export type ParticleKind =
   | "spark"
@@ -222,7 +223,7 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
   }
 
   for (const c of events.clanks) spawnClank(v, toFloat(c.x), toFloat(c.y));
-  for (const j of events.jumps) spawnDust(v, toFloat(j.x), toFloat(j.y), 6, 0.6);
+  for (const j of events.jumps) spawnJumpPush(v, j, state);
   for (const l of events.lands) spawnDust(v, toFloat(l.x), toFloat(l.y), 9, 0.9);
 
   for (const port of events.shieldBreaks) {
@@ -246,6 +247,14 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
 
   if (events.smashBallBroken !== null) {
     spawnBurst(v, toFloat(state.smashBall.x), toFloat(state.smashBall.y), 46, "#FFE873", 3.6);
+  }
+  // A reflection flashes like a clank; a counter bursts white where it caught
+  // (Plan 5, Task 17), and a strong catch lights its user up yellow.
+  for (const r of events.reflects) spawnClank(v, toFloat(r.x), toFloat(r.y));
+  for (const c of events.counters) {
+    spawnBurst(v, toFloat(c.x), toFloat(c.y), 24, "#FFFFFF", 2.4);
+    const user = c.damage >= STRONG_COUNTER_DAMAGE ? state.fighters.find((f) => f.port === c.port) : undefined;
+    if (user) spawnStrongCounterFlash(v, toFloat(user.x), toFloat(user.y) + FIGHTER_UNITS / 2);
   }
   for (const port of events.finalSmashes) {
     const f = state.fighters.find((x) => x.port === port);
@@ -431,6 +440,84 @@ export function spawnClank(v: VfxState, x: number, y: number): void {
   }
 }
 
+/**
+ * A strong catch (`STRONG_COUNTER_DAMAGE`): SmashWiki "Counterattack"
+ * (https://www.ssbwiki.com/Counterattack), in Ultimate "the user emitting a large,
+ * bright yellow flash". Round the user's body, not at the bubble: the page says
+ * the user flashes. Presentation choice: its size, colour and length, which the
+ * page does not give.
+ */
+export function spawnStrongCounterFlash(v: VfxState, x: number, y: number): void {
+  push(v, ring(x, y, STRONG_COUNTER_YELLOW, 7, 24));
+  push(v, {
+    kind: "burst",
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    life: 14,
+    maxLife: 14,
+    size: 6,
+    colour: "#FFF6B8",
+    rotation: rand(v) * Math.PI,
+    spin: 0,
+    gravity: 0,
+    drag: 1,
+  });
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2 + spread(v, 0.15);
+    const s = 1.6 + rand(v) * 1.4;
+    push(v, {
+      kind: "spark",
+      x,
+      y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: 14 + Math.round(rand(v) * 8),
+      maxLife: 22,
+      size: 1.1 + rand(v) * 0.8,
+      colour: STRONG_COUNTER_YELLOW,
+      rotation: a,
+      spin: 0,
+      gravity: 0,
+      drag: 0.9,
+    });
+  }
+}
+
+/** The strong counter's yellow (presentation choice: "bright yellow"). */
+export const STRONG_COUNTER_YELLOW = "#FFE14A";
+
+/**
+ * How far behind a wall jumper's origin its wall is, for the kick's puff: about
+ * half a body. Presentation choice (the event carries the fighter's position).
+ */
+const WALL_KICK_REACH = 2;
+
+/**
+ * Where a jump pushed off (`StepEvents.jumps`): the ground's puff under the
+ * feet; a wall jump's kick, a puff and a ring on the wall behind the fighter,
+ * who faces away from it once launched (`launchOffWall`), thrown away from it;
+ * a footstool's stamp, a ring and a puff on the head under its feet (Plan 5,
+ * Task 17). Presentation choice, the wall's and the head's: no source
+ * publishes the game's effects for either.
+ */
+export function spawnJumpPush(v: VfxState, j: StepEvents["jumps"][number], state: GameState): void {
+  const x = toFloat(j.x);
+  const y = toFloat(j.y);
+  if (j.from === "wall") {
+    const away = state.fighters.find((f) => f.port === j.port)?.facing ?? 1;
+    const wall = x - away * WALL_KICK_REACH;
+    push(v, ring(wall, y + 4, "#FFFFFF", 1.6, 12));
+    spawnDust(v, wall, y + 3, 7, 0.7, away * 0.6);
+  } else if (j.from === "head") {
+    push(v, ring(x, y, "#FFFFFF", 2, 12));
+    spawnDust(v, x, y, 6, 0.8);
+  } else {
+    spawnDust(v, x, y, 6, 0.6);
+  }
+}
+
 export function spawnShieldHit(
   v: VfxState,
   x: number,
@@ -575,9 +662,12 @@ export function footPlanted(f: PosedFighter): boolean {
  * What a fighter does to the floor.
  *
  * The simulation emits an event for exactly two of these — a grounded jump and
- * a landing — because those are the two the *engine* cares about. Every other
+ * a landing — because those are the two the *engine* cares about (and, since
+ * Plan 5 Task 17, a jump off a wall or a head, `spawnJumpPush`). Every other
  * moment a fighter shoves against the ground is a span of an action state and
- * nothing announces it, so it is derived here from the fighters' states.
+ * nothing announces it, so it is derived here from the fighters' states; the
+ * frame's jump reports come along only so a midair ring is not drawn for a
+ * jump that already pushed off something.
  *
  * Which mattered more than it sounds. Ultimate's ground effects are how you
  * read weight and commitment at a glance: the midair jump has a white puff that
@@ -586,17 +676,19 @@ export function footPlanted(f: PosedFighter): boolean {
  * Without them a fighter moves like a cursor — correct positions, no contact
  * with the floor they are supposedly pushing off.
  */
-export function trackGroundFx(v: VfxState, state: GameState): void {
+export function trackGroundFx(v: VfxState, state: GameState, events: Pick<StepEvents, "jumps"> | null = null): void {
   for (const f of state.fighters) {
     const x = toFloat(f.x);
     const y = toFloat(f.y);
     const back = -f.facing;
 
     switch (f.action) {
-      // The midair jump. `events.jumps` fires only for the grounded one,
-      // because that is the only jump that leaves a floor.
+      // The midair jump. `events.jumps` reports the jumps that push off
+      // something (a floor, a wall, a head), each with its own puff; a wall jump
+      // or a footstool made once the midair jump is spent is one of those, and
+      // not a midair jump (Plan 5, Task 17).
       case "jump":
-        if (f.actionFrame === 0 && f.jumpsUsed >= 2) {
+        if (f.actionFrame === 0 && f.jumpsUsed >= 2 && !(events?.jumps.some((j) => j.port === f.port) ?? false)) {
           push(v, ring(x, y + 3, "#FFFFFF", 2.4, 14));
           spawnDust(v, x, y + 2, 7, 0.7);
         }
@@ -624,7 +716,12 @@ export function trackGroundFx(v: VfxState, state: GameState): void {
       // star replaced. The dive in `fastFall.ts` carries the silhouette, but the
       // spark is what the real game gives the opponent, and it is the part that
       // is legible when the fighter is small on screen.
+      // A helpless fall fast-falls too (SmashWiki "Helpless",
+      // https://www.ssbwiki.com/Helpless: "unable to take any action, with the
+      // exception of grabbing a ledge, maneuvering left/right, fastfalling"), and
+      // shows the same star (Plan 5, Task 17: the Task 4b review's polish item).
       case "fall":
+      case "specialFall":
         if (f.fastFalling && f.actionFrame % 4 === 0) {
           push(v, {
             kind: "spark",
@@ -886,7 +983,7 @@ export function trackSwings(v: VfxState, state: GameState): void {
 export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState, defs?: ChargeDefs): void {
   trackSwings(v, state);
   if (events) ingestEvents(v, events, state);
-  trackGroundFx(v, state);
+  trackGroundFx(v, state, events);
   trackLaunchTrails(v, state);
   trackChargeGlow(v, state, defs);
   trackDamageSmoke(v, state);

@@ -343,10 +343,11 @@ describe("state to pose", () => {
     expect(poseNameFor({ action: "specialLanding", move: null, jumpsUsed: 1, fastFalling: false })).toBe("landingLag");
   });
 
-  // Plan 5, Task 12: no crawl clip is authored, so a crawl is drawn as the crouch
-  // it moves in (the bake plays the crouch's motion, `MOTION_OF_ACTION`).
-  it("draws a crawling fighter crouched", () => {
-    expect(poseNameFor({ action: "crawl", move: null, jumpsUsed: 0, fastFalling: false })).toBe("crouch");
+  // Plan 5, Task 12 drew a crawl as the crouch it moves in; Task 17 gives it a clip
+  // of its own (Pikachu's; a fighter without one crouches), and a motion.
+  it("draws a crawling fighter on the crawl's own clip", () => {
+    expect(poseNameFor({ action: "crawl", move: null, jumpsUsed: 0, fastFalling: false })).toBe("crawl");
+    expect(POSE_LIBRARY.crawl).toBe(POSE_LIBRARY.crouch);
   });
 
   const SLOTS: MoveSlot[] = [

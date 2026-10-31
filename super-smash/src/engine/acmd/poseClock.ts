@@ -33,6 +33,7 @@
  */
 
 import { airDodgeDirection, airDodgeFrames, airDodgeOf } from "../airDodge";
+import { FOOTSTOOL_GROUND_FRAMES } from "../footstool";
 import {
   DASH_INTERRUPT_FRAME,
   JUMP_SQUAT_FRAMES,
@@ -113,23 +114,19 @@ function airDodgeSuffix(charge: number): string {
  * fighter carried plays the grab's; their own motions baked byte for byte the
  * same frames. An authored carry clip will be a motion of its own. Task 9:
  * Kirby's mouthful plays the walk's, and the fighter swallowed and the one spat
- * the tumble's (`poseNameFor` gives them those clips). Task 11: the fighter
- * footstooled plays the grab's (`poseNameFor`'s clip; its own motion would bake
- * the grab's frames byte for byte). Task 12: Pikachu's crawl plays the crouch's
- * (`poseNameFor`'s clip, a loop on the same clock; its own motion would bake the
- * crouch's frames byte for byte). Task 13c fix round 1: a rebound plays the stand's
- * (UNVERIFIED stand-in: no rebound clip is authored; the presentation's to add).
- * Task 14: the fighter trapped in a Final Smash plays the grab's (`poseNameFor`'s
- * clip; its own motion would bake the grab's frames byte for byte, ruling R-T8c).
+ * the tumble's (`poseNameFor` gives them those clips). Task 13c fix round 1: a
+ * rebound plays the stand's (UNVERIFIED stand-in: no rebound clip is authored;
+ * the presentation's to add). Task 14: the fighter trapped in a Final Smash plays
+ * the grab's (`poseNameFor`'s clip; its own motion would bake the grab's frames
+ * byte for byte, ruling R-T8c). Task 17: the fighter footstooled (Task 11) and
+ * Pikachu's crawl (Task 12) left this table for clips and motions of their own.
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
-  crawl: "crouch",
   rebound: "stand",
   specialFall: "fall",
   specialLanding: "landingLag",
   cargoCarry: "walk",
   cargoHeld: "grabbed",
-  footstooled: "grabbed",
   finalTrapped: "grabbed",
   inhaleHold: "walk",
   swallowed: "tumble",
@@ -278,6 +275,10 @@ export function statusDuration(
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":
       return LEDGE_JUMP_FRAMES;
+    // Stood on: the footstool's freeze (Plan 5, Task 11), which its own clip spans
+    // since Task 17 (30 frames, as the open-ended fallback it replaced).
+    case "footstooled":
+      return FOOTSTOOL_GROUND_FRAMES;
     // The fighter's own pummel, as its status runs it (ruling P5-R10).
     case "pummel":
       return def.moves.pummel?.totalFrames ?? PUMMEL_FRAMES;

@@ -19,7 +19,7 @@ import { kineticLaunch, kineticSetY } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, MoveDef } from "@/engine/types";
+import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, MoveDef, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
 import { FIGHTERS } from "./index";
 
@@ -434,5 +434,47 @@ describe("wall tech jumps", () => {
     };
     expect(rise("fox")).toBeCloseTo(WALL_JUMP_HEIGHT.fox, 1);
     expect(rise("donkeyKong")).toBeCloseTo(fighterParams(BY_ID.get("donkeyKong")!).jump_aerial_y / 4096, 1);
+  });
+});
+
+/** Port 0 presses `inputs`; each step's jump reports (`StepEvents.jumps`). */
+function jumpsOf(s0: GameState, inputs: readonly InputFrame[]): { states: GameState[]; jumps: StepEvents["jumps"][] } {
+  let s = s0;
+  let prev: InputFrame = 0;
+  const states: GameState[] = [];
+  const jumps: StepEvents["jumps"][] = [];
+  for (const i of inputs) {
+    const out = step(s, [i], { prevInputs: [prev] });
+    s = out.state;
+    prev = i;
+    states.push(s);
+    jumps.push(out.events.jumps);
+  }
+  return { states, jumps };
+}
+
+describe("the kick's report (Plan 5, Task 17: its sound and puff, presentation only)", () => {
+  it("reports a wall jump as a jump off the wall, on the kick's frame and no other", () => {
+    const { states, jumps } = jumpsOf(besideTheWall("mario"), KICK_OFF);
+    const kick = states.findIndex((s) => s.fighters[0].action === "jump");
+    expect(kick).toBeGreaterThan(0);
+    // Where it pushed off: where it was as the kick began, before the frame's move.
+    const f = states[kick - 1].fighters[0];
+    expect(jumps[kick]).toEqual([{ port: 0, x: f.x, y: f.y, from: "wall" }]);
+    expect(jumps.filter((j) => j.length > 0)).toHaveLength(1);
+  });
+
+  it("reports a wall tech jump the same way", () => {
+    const s = besideTheWall("donkeyKong", { action: "techWall", actionFrame: 0 });
+    s.fighters[0].combat.wallSide = -1;
+    const { jumps } = jumpsOf(s, [Btn.Jump, 0, 0]);
+    expect(jumps[0]).toMatchObject([{ port: 0, from: "wall" }]);
+    expect(jumps[1]).toEqual([]);
+  });
+
+  it("does not report a midair jump, which pushes off nothing", () => {
+    const { states, jumps } = jumpsOf(besideTheWall("mario", { x: fx(-200), y: fx(100), jumpsUsed: 1 }), [Btn.Jump, 0, 0]);
+    expect(states[0].fighters[0].jumpsUsed).toBe(2);
+    expect(jumps.flat()).toEqual([]);
   });
 });

@@ -844,10 +844,14 @@ export function step(
 
     const before = f.action;
     const copyBefore = f.combat.copy;
+    const wallJumpsBefore = f.combat.wallJumps;
     advanceFighter(f, intent, stateCtx(i));
     if (before === "jumpSquat" && f.action === "jump") {
       events.jumps.push({ port: f.port, x: f.x, y: f.y });
     }
+    // A wall jump or a wall tech jump this frame (`launchOffWall` counts each), for
+    // its sound and puff (Plan 5, Task 17). Presentation only.
+    if (f.combat.wallJumps > wallJumpsBefore) events.jumps.push({ port: f.port, x: f.x, y: f.y, from: "wall" });
     // A Final Smash started this frame (Plan 5, Task 14), for its sound and burst.
     if (f.action === "special" && f.move === "finalSmash" && f.actionFrame === 0) events.finalSmashes.push(f.port);
     // A copy whose loss waited for its special landed as that special ended
@@ -860,6 +864,13 @@ export function step(
   // Whoever was stood on this frame feels it now, after every state machine, so
   // the outcome is the same whichever port is which (Plan 5, Task 11).
   applyFootstools(s.fighters, defs, footstools, events);
+  // Every footstool's jump, a phantom one's too, for its sound and puff (Plan 5,
+  // Task 17). Presentation only: `events.footstools` keeps the ones that reached
+  // their victim, for the kill credit.
+  for (const stool of footstools) {
+    const jumper = s.fighters[stool.jumper];
+    events.jumps.push({ port: jumper.port, x: jumper.x, y: jumper.y, from: "head" });
+  }
 
   // A fighter whose status is not a holding one has let go, whatever its link
   // says: a clank cancels a pummel and leaves `grabbing` set, and carrying the
@@ -1870,11 +1881,12 @@ function resolveHits(
         const counterNow = activeCounter(victim, defs[v]);
         if (counterNow !== null) {
           recordHit(c, attacker, victim.port);
-          const freeze = triggerCounter(victim, defs[v], counterNow, mul(c.hitbox.damage, c.chargeScale));
+          const caughtDamage = mul(c.hitbox.damage, c.chargeScale);
+          const freeze = triggerCounter(victim, defs[v], counterNow, caughtDamage);
           if (c.projectile === null) freezeFighter(attacker, freeze);
           else destroyed.add(c.projectile.instanceId);
           const at = contactPoint(capsuleOf(c), bubble);
-          events.counters.push({ port: victim.port, x: at.x, y: at.y });
+          events.counters.push({ port: victim.port, x: at.x, y: at.y, damage: caughtDamage });
           continue;
         }
         // Another source set the counter off earlier this frame: what reached

@@ -33,7 +33,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ATTACK, clearAll, frame, script, wait } from "@/engine/acmd/dsl";
-import { activeCounter, counterBubble, counterDamage } from "@/engine/counter";
+import { STRONG_COUNTER_DAMAGE, activeCounter, counterBubble, counterDamage } from "@/engine/counter";
 import { fx, mul, ONE, toFloat } from "@/engine/fixed";
 import { circle, contactPoint } from "@/engine/hitbox";
 import { hashState } from "@/engine/hash";
@@ -173,6 +173,24 @@ describe("Marth's Counter", () => {
     expect(events.filter((e) => e.counters.length > 0)).toHaveLength(1);
     expect(states.every((s) => s.fighters[1].damage === 0)).toBe(true);
     expect(states[states.length - 1].fighters[0].damage).toBeGreaterThan(0);
+  });
+
+  it("reports the damage it caught, the box's own, for the presentation's strong catch (Task 17)", () => {
+    // Mario's forward smash sweetspot, 17.8 (`game_attacks4`): over the 13% a strong catch needs.
+    const smash = run(duel("mario", 16), 30, FSMASH).events;
+    expect(toFloat(smash[caughtAt(smash)].counters[0].damage)).toBeCloseTo(17.8, 3);
+    expect(smash[caughtAt(smash)].counters[0].damage).toBeGreaterThanOrEqual(STRONG_COUNTER_DAMAGE);
+    // A jab is under it.
+    const jab = run(duel("mario", 12), 30, (i) => [i === 7 ? Btn.Attack : 0, i === 0 ? COUNTER : 0]).events;
+    expect(jab[caughtAt(jab)].counters[0].damage).toBeLessThan(STRONG_COUNTER_DAMAGE);
+    // A charged smash's, with its charge, as the counter multiplies it: the
+    // counterattack's damage is the counter's own of what the report says.
+    const charged = run(duel("mario", 16), 80, (i) => [i === 0 ? Btn.Right : i >= 1 && i <= 21 ? Btn.Right | Btn.Attack : 0, i === 24 ? COUNTER : 0]);
+    const at = caughtAt(charged.events);
+    expect(at).toBeGreaterThan(0);
+    const caught = charged.events[at].counters[0].damage;
+    expect(caught).toBeGreaterThan(fx(17.8));
+    expect(charged.states[at].fighters[1].combat.counterDamage).toBe(counterDamage(COUNTER_DEF, caught));
   });
 
   it("is beaten by a grab", () => {
@@ -890,7 +908,7 @@ describe("fix round 1: the branches no test pinned", () => {
     const lancer = states[at].fighters[0];
     const box = { x1: lancer.x + fx(4), y1: lancer.y + fx(8), x2: lancer.x + fx(16), y2: lancer.y + fx(8), r: fx(1) };
     const point = contactPoint(box, counterBubble(states[at - 1].fighters[1], COUNTER_DEF));
-    expect(events[at].counters).toEqual([{ port: 1, ...point }]);
+    expect(events[at].counters).toEqual([{ port: 1, ...point, damage: fx(10) }]);
     // The far end, not the box's own first point.
     expect(point).toEqual({ x: box.x2, y: box.y2 });
   });
