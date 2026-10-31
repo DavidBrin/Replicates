@@ -32,30 +32,40 @@ import {
   type FighterDef,
   type FighterState,
   type GameState,
+  type Hitbox,
   type InputFrame,
   type MoveAim,
   type MoveDef,
   type MoveSlot,
+  type Platform,
   type StageDef,
 } from "@/engine/types";
 import { cloneFighter } from "@/engine/simulate";
 import { advanceFighter, applyMovement, interpretInput, updateInputTracking, type StateContext } from "@/engine/states";
-import { HARD_PLATFORM_DEPTH, integrate } from "@/engine/physics";
+import { HARD_PLATFORM_DEPTH, integrate, platformCentreX } from "@/engine/physics";
 import { WALL_JUMP_WINDOW, WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
+import { smashHoldFrame } from "@/engine/acmd/run";
+import { actionFrameOf, capsulesOverlap, hitboxWorldPos, type Capsule } from "@/engine/hitbox";
+import { shieldBubble } from "@/engine/shield";
 import {
   AIR_DODGE_SLIDE_DISTANCE,
   AIR_DODGE_SLIDE_END_SPEED,
   AIR_DODGE_SLINGSHOT_DISTANCE,
   AIR_DODGE_SLINGSHOT_FRAMES,
   AIR_DODGE_TECH_FRAMES,
+  BUFFER_FRAMES,
   HITSTUN_CANCEL_AIR_DODGE_FRAME,
   HITSTUN_CANCEL_AIR_DODGE_SPEED,
+  LAUNCH_SPEED_DECAY,
   LEDGE_GRAB_BACK_PENALTY,
   LEDGE_GRAB_RANGE_X,
   LEDGE_GRAB_RANGE_Y,
+  PERFECT_SHIELD_WINDOW,
   SDI_INPUT_INTERVAL,
+  SHIELD_MIN_HOLD,
   SMASH_INPUT_WINDOW,
+  TECH_LOCKOUT,
   TECH_WINDOW,
 } from "@/engine/constants";
 import { ONE, abs, fx, magnitude, mul } from "@/engine/fixed";
@@ -81,8 +91,12 @@ export interface StageView {
   readonly blastRight: number;
   readonly blastTop: number;
   readonly blastBottom: number;
-  /** Soft platforms, for `platformMove`. */
-  readonly platforms: readonly { readonly x: number; readonly y: number; readonly halfWidth: number }[];
+  /**
+   * Soft platforms, for `platformMove` and a tech's fall. `x` is where one rests;
+   * one that sweeps carries its `motion`, placed on the stage's clock
+   * (`platformCentreX`, `GameState.stageFrame`).
+   */
+  readonly platforms: readonly { readonly x: number; readonly y: number; readonly halfWidth: number; readonly motion?: Platform["motion"] }[];
 }
 
 /**
@@ -120,7 +134,7 @@ export function stageViewFromDef(def: StageDef): StageView {
     blastRight: def.blastZone.right,
     blastTop: def.blastZone.top,
     blastBottom: def.blastZone.bottom,
-    platforms: soft.map((p) => ({ x: p.x, y: p.y, halfWidth: p.halfWidth })),
+    platforms: soft.map((p) => ({ x: p.x, y: p.y, halfWidth: p.halfWidth, ...(p.motion !== undefined ? { motion: p.motion } : {}) })),
   };
 }
 
@@ -151,9 +165,12 @@ export interface LevelTuning {
   readonly noise: number;
   /** Chance of dropping a frame's input entirely. The low-level fumble. */
   readonly fumbleChance: number;
-  /** Plan 5: how reliably it techs a landing and air-dodges out of hitstun. */
+  /**
+   * Plan 5: the chance it techs one landing, and air-dodges out of hitstun when
+   * the cancel opens: one roll per landing, one per opening (ruling R-T18e).
+   */
   readonly techSkill: number;
-  /** Plan 5: how often it lets go of its shield to parry a swing it sees coming. */
+  /** Plan 5: the chance it parries a swing it can time: one roll per swing (rulings R-T18d, R-T18e). */
   readonly parrySkill: number;
 }
 
@@ -289,7 +306,11 @@ export const ROLL_EDGEGUARD = 2;
 export const ROLL_RECOVER = 3;
 export const ROLL_MOVE = 4;
 export const ROLL_FUMBLE = 5;
-/** Plan 5: teching and hitstun cancels share one roll; parrying has its own. */
+/**
+ * Plan 5: teching and hitstun cancels share one roll; parrying has its own. The
+ * layout is fixed: these eight, then one jitter per behaviour in `BEHAVIOURS`
+ * order (`cpu.ts`), twenty a frame, drawn whatever is decided.
+ */
 export const ROLL_TECH = 6;
 export const ROLL_PARRY = 7;
 export const DECISION_ROLLS = 8;
@@ -313,6 +334,16 @@ export interface BehaviourContext {
    * 4b). See `recoveryFromDef`. Null: spend it as soon as it is needed.
    */
   readonly recovery: RecoveryMove | null;
+  /**
+   * This fighter's own definition, to run its fall by the engine's own rules
+   * (`framesToFloor`; ruling R-T18e). Null: it does not tech.
+   */
+  readonly fighterDef: FighterDef | null;
+  /**
+   * Every port's definition, as the match runs it: the parry times a swing off
+   * its attacker's move data (ruling R-T18d). Empty: it does not parry.
+   */
+  readonly matchDefs: readonly (FighterDef | undefined)[];
   /** Pre-drawn randoms in [0,1), one per `ROLL_*` slot. */
   readonly rolls: readonly number[];
 }
@@ -320,6 +351,13 @@ export interface BehaviourContext {
 export interface BehaviourResult {
   readonly score: number;
   readonly input: InputFrame;
+  /**
+   * A decision the level's own dial has already made (Plan 5, rulings R-T18d and
+   * R-T18e: a tech, an escape, a parry, one roll each). It takes the frame
+   * outright (`decideCpu`): the dial is the chance, and the score jitter and the
+   * fumble would count the level's unreliability twice.
+   */
+  readonly decided?: boolean;
 }
 
 export type Behaviour = (ctx: BehaviourContext) => BehaviourResult;
@@ -808,88 +846,182 @@ export const survive: Behaviour = (ctx) => {
 };
 
 /**
- * Tech the landing (Plan 5). A tumbling fighter about to hit the stage presses
- * shield in time for the floor to come inside the tech its press makes:
+ * Tech the landing (Plan 5). A tumbling fighter decides once per landing
+ * (ruling R-T18e), with one roll of `techSkill`, on the first frame of the
+ * landing's approach that has the floor within `TECH_LEAD` frames and a press
+ * that would tech it (`pressTechs`): `TECH_LEAD` frames out on a plain fall, its
+ * first frame on one that starts closer (a launch or a floor bounce), or where a
+ * lockout runs out. The fall is run by the engine's own per-frame rules
+ * (`framesToFloor`), onto the floor it actually comes down on, a soft platform
+ * (a sweeping one where it will be) or the stage, its momentum's drift included.
+ * A failed roll is a missed tech. The press is read on the next step:
  *
- *  - In the hitstun (`tumble`) the press opens Plan 3's tech window,
- *    `TECH_WINDOW` frames (SmashWiki "Tech": 11 in Ultimate). It is pressed
- *    toward the middle, which rolls the tech inward when the body meets the
- *    floor on the press's own step; a later landing rolls whichever way the
- *    stick is held then (`techOrBounce` reads the stick at contact).
- *  - After it (`tumbleFall`; ruling P5-R20) the press is an air dodge, which
- *    techs a floor it meets in its first `AIR_DODGE_TECH_FRAMES` frames
- *    (SmashWiki "Lucario (SSBU)/Techs"). A neutral one, because it keeps the
- *    fall and comes down into the floor, where a direction held would make it
- *    the directional dodge, which can carry the fighter clear of it (Plan 3,
- *    Task 20c). Whatever is held when it lands picks the roll (`techOrBounce`).
+ *  - in the hitstun (`tumble`) it opens Plan 3's tech window, `TECH_WINDOW`
+ *    frames (SmashWiki "Tech": 11 in Ultimate). It is pressed toward the middle,
+ *    which rolls the tech inward when the body meets the floor on the press's
+ *    own step; a later landing rolls whichever way the stick is held then
+ *    (`techOrBounce` reads the stick at contact);
+ *  - out of it (`tumbleFall`; ruling P5-R20), or where the engine will read it as
+ *    the hitstun cancel's or at the hitstun's last frame (ruling R-T18f), it is an
+ *    air dodge, which techs a floor it meets in its first `AIR_DODGE_TECH_FRAMES`
+ *    frames (SmashWiki "Lucario (SSBU)/Techs"). A neutral one, because it keeps the
+ *    fall and comes down into the floor, where a direction held would make it the
+ *    directional dodge, which can carry the fighter clear of it (Plan 3, Task 20c).
+ *    A press that waits in the buffer to come out on a later step is held neutral
+ *    until it does.
  *
- * Scored above `survive`: the DI has done its work by now, and a missed tech is
- * the punish. The scores here and below only order the behaviours.
+ * Scored above `survive`, and decided: the DI has done its work by now, and a
+ * missed tech is the punish. The scores here and below only order behaviours.
  */
 export const tech: Behaviour = (ctx) => {
   const { self } = ctx.view;
   const fall = self.action === "tumbleFall";
-  if ((self.action !== "tumble" && !fall) || self.grounded || self.vy >= 0) return NOTHING;
-  if (fall) {
-    // With its air dodge spent, a press is no dodge (`startAirDodge`).
-    if (self.airDodged) return NOTHING;
-  } else {
-    if (self.combat.techLockout > 0 || self.combat.techWindow > 0) return NOTHING;
-    // Once the hitstun cancel is open a shield press is an air dodge, not a
-    // tech: that is `escape`'s.
-    if (cancelOpen(self)) return NOTHING;
-  }
-  const floor = floorUnder(self, ctx.stage);
-  if (floor === null) return NOTHING;
-  const height = self.y - floor;
-  // Frames until the floor at this speed; the window has to still be open then.
-  const open = (fall ? AIR_DODGE_TECH_FRAMES : TECH_WINDOW) - TECH_MARGIN;
-  if (height > open * -self.vy) return NOTHING;
+  if ((self.action !== "tumble" && !fall) || self.grounded || self.hitlag > 0) return NOTHING;
+  // Its press, waiting in the buffer, comes out on the next step as an air dodge
+  // with whatever stick is held then (`airMain`): held neutral, it is the neutral one.
+  if (fall && shieldWaiting(self, ctx.view.frame)) return { score: 1100, input: 0, decided: true };
+  if (ctx.fighterDef === null) return NOTHING;
+  const frames = framesToFloor(ctx.fighterDef, self, ctx.stage, ctx.view.frame, TECH_LEAD, ctx.state.stageFrame);
+  if (frames === null) return NOTHING;
+  const window = !fall && self.hitstun > 1 && !cancelOpen(self);
+  if (!pressTechs(self, window)) return NOTHING;
+  // One decision a landing: on the first frame of its approach with the floor
+  // within `TECH_LEAD` and a press that would tech it. The approach starts where
+  // a launch or a floor bounce resets the gravity energy (`kineticLaunch`,
+  // `kineticReflect`); on any later frame, the frame before was one further from
+  // the floor, and is asked the same.
+  const starts = !fall && self.kinetic.gravityY === 0;
+  if (!starts && frames + 1 <= TECH_LEAD && pressTechedBefore(self, fall)) return NOTHING;
   if (ctx.rolls[ROLL_TECH] >= ctx.tuning.techSkill) return NOTHING;
-  return { score: 1100, input: fall ? Btn.Shield : Btn.Shield | towardX(self.x, 0) };
+  return { score: 1100, input: window ? Btn.Shield | towardX(self.x, 0) : Btn.Shield, decided: true };
 };
 
 /**
- * The height of what a fighter falling from here comes down on: the highest soft
- * platform under it, or the stage between its ledges; null over neither. A tumble
- * lands on a soft platform (ruling R-T13b-g), and in the CPU sweep every lie-down
- * the stage-only measure left was on one. A platform it drops through is a press
- * spent early: the dodge then ends on its feet, or the window runs out, as with no
- * press at all. The view's platforms do not move (`StageView`).
+ * UNVERIFIED (CPU judgement, no source): the frames short of the shorter of a
+ * tech's two windows (the press's `TECH_WINDOW`, the dodge's
+ * `AIR_DODGE_TECH_FRAMES`) the CPU wants the floor by when it decides. Its fall
+ * model leaves out the stick it holds on the way and the ECB's bottom.
  */
-function floorUnder(f: FighterState, stage: StageView): number | null {
-  let floor = !isOffstage(f, stage) && f.y >= stage.groundY ? stage.groundY : null;
-  for (const p of stage.platforms) {
-    if (abs(f.x - p.x) <= p.halfWidth && f.y >= p.y && (floor === null || p.y > floor)) floor = p.y;
-  }
-  return floor;
+const TECH_MARGIN = 2;
+
+/** The frames from the floor a tech is decided on: inside both windows, by `TECH_MARGIN`. */
+export const TECH_LEAD = Math.min(TECH_WINDOW, AIR_DODGE_TECH_FRAMES) - TECH_MARGIN;
+
+/**
+ * Whether a press now would tech the floor where nothing else will: not while a
+ * window is open, which techs the landing itself (`techOrBounce`); in the
+ * window's case, a press the lockout allows (it counts down once more on the step
+ * that reads the press, `updateTechInput`); otherwise an air dodge out of a
+ * tumble, which ignores the lockout, its dodge not yet spent (ruling P5-R20:
+ * `startAirDodge`).
+ */
+function pressTechs(f: FighterState, window: boolean): boolean {
+  if (f.combat.techWindow > 0) return false;
+  return window ? f.combat.techLockout <= 1 : !f.airDodged;
 }
 
 /**
- * UNVERIFIED (CPU judgement, no source): the frames short of a tech's window the
- * CPU wants the floor by, at its speed when it presses. The press is read on the
- * next step, and the fall speeds up on the way down.
+ * The same, asked of the frame before (one frame younger). A press opens a window
+ * and a lockout together and they count down together (`updateTechInput`), so a
+ * window that was open then and is shut now leaves the lockout at exactly
+ * `TECH_LOCKOUT − TECH_WINDOW`. A tumble's fall was a fall then, or the tumble's
+ * last frame, an air dodge either way; a tumble had a hitstun more, so its press
+ * was the window's unless the cancel was open (`cancelOpenBefore`), and its
+ * lockout one more (so at most 1 only if 0 now).
  */
-const TECH_MARGIN = 2;
+function pressTechedBefore(f: FighterState, fall: boolean): boolean {
+  if (f.combat.techLockout === TECH_LOCKOUT - TECH_WINDOW) return false;
+  if (fall || cancelOpenBefore(f)) return !f.airDodged;
+  return f.combat.techLockout === 0;
+}
+
+/** A shield press of its own still waiting in the buffer for the next step (`peekBuffer`). */
+function shieldWaiting(f: FighterState, frame: number): boolean {
+  const b = f.bufferedAction;
+  return b !== null && b.kind === "shield" && frame + 1 - b.frame <= BUFFER_FRAMES;
+}
+
+/**
+ * How many steps from now this fighter's fall meets a floor, if it does within
+ * `horizon`, or null. The fall is the engine's own: a copy of the fighter run
+ * through `step()`'s per-frame rules for one fighter alone in the air, with
+ * nothing pressed (as `upBPath` runs an up special), so the count goes down by
+ * exactly one a frame. A floor is the stage between its ledges or a soft
+ * platform, met coming down on its span, ends included, as the engine lands a
+ * body (`resolveCollision`), a sweeping platform where the stage's clock will have
+ * it. Not modelled: what the CPU will press on the way (a drift its stick adds
+ * onto or off a platform can skip the decision frame) and the ECB's bottom (the
+ * origin lands).
+ */
+export function framesToFloor(def: FighterDef, self: FighterState, stage: StageView, frame0: number, horizon: number, stageFrame0 = 0): number | null {
+  // The nearest surface below, anywhere: out of reach of the fastest fall the
+  // next `horizon` frames allow, there is nothing to run. Gravity and a launch's
+  // decay each speed a fall by at most their own whole rate a frame, so the bound
+  // needs no rounding room (a launch's speed-up runs faster, so then the fall is run).
+  let surface: number | null = self.y >= stage.groundY ? stage.groundY : null;
+  for (const p of stage.platforms) if (p.y <= self.y && (surface === null || p.y > surface)) surface = p.y;
+  if (surface === null) return null;
+  if (self.kinetic.speedUpMax <= 0) {
+    const accel = fighterParams(def).air_accel_y + LAUNCH_SPEED_DECAY;
+    const reach = horizon * Math.max(0, -self.vy) + (accel * horizon * (horizon + 1)) / 2;
+    if (self.y - surface > reach) return null;
+  }
+  const f = cloneFighter(self);
+  const ctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def, stage: GHOST_STAGE, frame: frame0, fighters: [f] };
+  for (let k = 1; k <= horizon; k++) {
+    const prevY = f.y;
+    ctx.frame = frame0 + k;
+    updateInputTracking(f, 0, 0);
+    const intent = interpretInput(f, 0, 0);
+    if (f.hitstun > 0) f.hitstun -= 1;
+    if (!f.grounded && f.ledge === null) f.airTime += 1;
+    advanceFighter(f, intent, ctx);
+    applyMovement(f, intent, ctx);
+    integrate(f);
+    if (f.y < prevY && landsOn(f.x, prevY, f.y, stage, stageFrame0 + k)) return k;
+  }
+  return null;
+}
+
+/**
+ * Whether a body moving down from `prevY` to `y` at `x` meets the stage or a soft
+ * platform, a sweeping one where the stage's clock has it (`platformCentreX`).
+ */
+function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFrame: number): boolean {
+  const crosses = (surface: number) => prevY >= surface && y <= surface;
+  if (x >= stage.leftLedge && x <= stage.rightLedge && crosses(stage.groundY)) return true;
+  return stage.platforms.some((p) => abs(x - platformCentreX(p, stageFrame)) <= p.halfWidth && crosses(p.y));
+}
 
 /**
  * Plan 3's hitstun cancel will be open when this frame's press is read: frame 41
  * of the reel, launch speed under 2.5 (`HITSTUN_CANCEL_AIR_DODGE_*`, SmashWiki
- * "Hitstun canceling"). The engine reads the press on the next step, one frame
- * further into the reel (`advanceFighter` counts the frame before the status
- * runs), and with the launch speed as it is now (it decays later in that step,
- * with the movement); so the cancel is open for the CPU one frame before the
- * reel shows frame 41.
+ * "Hitstun canceling"), still in hitstun. The engine reads the press on the next
+ * step, in its own order (ruling R-T18f): hitstun counted down first
+ * (`simulate.ts`), so at hitstun 1 the reel ends and the press waits in the
+ * buffer; then the frame, one further into the reel (`advanceFighter` counts it
+ * before the status runs); and the launch speed as it is now (it decays later in
+ * that step, with the movement).
  */
 function cancelOpen(f: FighterState): boolean {
-  return f.hitstun > 0 && f.actionFrame + 1 >= HITSTUN_CANCEL_AIR_DODGE_FRAME && f.launchSpeed < HITSTUN_CANCEL_AIR_DODGE_SPEED;
+  return f.hitstun > 1 && f.actionFrame + 1 >= HITSTUN_CANCEL_AIR_DODGE_FRAME && f.launchSpeed < HITSTUN_CANCEL_AIR_DODGE_SPEED;
 }
 
 /**
- * Air-dodge out of hitstun once Plan 3's hitstun cancel allows it — up high
- * to drift free, near the floor because a dodge lands on its feet where a
- * missed tech lands on its back. A neutral press (Plan 3, Task 20b), on one
- * frame in four (UNVERIFIED: tuning, a mash rate) so a fresh press exists.
+ * Whether the cancel was already open for the frame before this one: a frame
+ * earlier in the reel and a hitstun more, with the launch an airborne decay
+ * faster (`LAUNCH_SPEED_DECAY`; a launch's speed-up, over by frame 41, would
+ * bleed more).
+ */
+function cancelOpenBefore(f: FighterState): boolean {
+  return f.actionFrame >= HITSTUN_CANCEL_AIR_DODGE_FRAME && f.launchSpeed + LAUNCH_SPEED_DECAY < HITSTUN_CANCEL_AIR_DODGE_SPEED;
+}
+
+/**
+ * Air-dodge out of hitstun when Plan 3's hitstun cancel opens: up high to drift
+ * free. Decided once, on the frame the cancel opens, with the roll a landing's
+ * tech uses (ruling R-T18e), and pressed neutral (Plan 3, Task 20b). A landing
+ * already within `TECH_LEAD` is the tech's: one roll for it.
  *
  * Not one that carries it off the stage (ruling P5-R21): the dodge keeps the
  * fighter's drift, so `escape` minds the ledge as `shield` does, over its own
@@ -898,36 +1030,123 @@ function cancelOpen(f: FighterState): boolean {
  */
 export const escape: Behaviour = (ctx) => {
   const { self } = ctx.view;
-  if (self.grounded || self.airDodged || !cancelOpen(self)) return NOTHING;
+  if (self.grounded || self.airDodged || self.hitlag > 0 || !cancelOpen(self) || cancelOpenBefore(self)) return NOTHING;
+  if (ctx.fighterDef !== null && framesToFloor(ctx.fighterDef, self, ctx.stage, ctx.view.frame, TECH_LEAD, ctx.state.stageFrame) !== null) return NOTHING;
   if (ctx.rolls[ROLL_TECH] >= ctx.tuning.techSkill) return NOTHING;
   const minded = ctx.rolls[ROLL_RECOVER] < ctx.tuning.recoverySkill;
   if (minded && dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, airDodgeFrames(ctx.airDodge, 0))) return NOTHING;
-  return { score: 1050, input: pulse(ctx.view.frame, self.port, 4, 1) ? Btn.Shield : 0 };
+  return { score: 1050, input: Btn.Shield, decided: true };
 };
 
 /**
- * Frames after a swing is seen that a parrying CPU lets go. The drop parries
- * for its first `PERFECT_SHIELD_WINDOW` frames (5; Plan 3, `isParrying`), so a
- * swing whose hit comes out within that many frames of the release is parried,
- * and a slower one lands in the rest of the drop. UNVERIFIED (CPU judgement,
- * no source): the CPU reads no frame data, so the lead is a guess at how soon
- * a swing it has just seen arrives.
+ * The drop frame a parrying CPU wants a swing's first box to land on: the middle
+ * of the drop's parrying frames, `PERFECT_SHIELD_WINDOW` of them (5; Plan 3,
+ * `isParrying`), or sooner when the swing is first seen closer than that.
+ * UNVERIFIED (CPU judgement, no source).
  */
-export const PARRY_LEAD = 1;
+export const PARRY_AIM = Math.trunc((PERFECT_SHIELD_WINDOW - 1) / 2);
 
 /**
- * Parry (Plan 5): already shielding, it sees a swing start within reach and
- * lets go of the shield — the perfect shield is on release, so the drop is the
- * parry (SmashWiki "Perfect shield"). Scored over `shield`, which would
- * otherwise keep holding.
+ * The `actionFrame` a fighter's swing lands its first box on, from its move data
+ * (`MoveDef.hitboxes`: for a move its script runs, the script's own frames,
+ * `scriptHitboxTable`), or null where that cannot be told: no data, no box of its
+ * own that strikes (`strikes`: a projectile's flight the CPU does not time, and a
+ * catch or a windbox lands no hit to parry), or a smash whose
+ * charge is still to come or under way (its hold frame waits on the button;
+ * `smashHoldFrame`, `CombatState.smashLetGo`). Knowing a move's startup is a
+ * player's knowledge, not an input read; the reaction delay still decides when
+ * the swing is seen.
+ */
+export function swingHitFrame(def: FighterDef | undefined, f: Pick<FighterState, "move" | "actionFrame" | "combat">): number | null {
+  if (def === undefined || f.move === null) return null;
+  const move = def.moves[f.move];
+  if (move === undefined) return null;
+  let first = -1;
+  for (const hb of move.hitboxes) if (strikes(hb) && (first < 0 || hb.startFrame < first)) first = hb.startFrame;
+  if (first < 0) return null;
+  if (move.chargeable === true) {
+    const hold = smashHoldFrame(def, f);
+    if (f.actionFrame < hold || (f.actionFrame === hold && !f.combat.smashLetGo)) return null;
+  }
+  return actionFrameOf(first);
+}
+
+/** A box that lands a hit on a shield: not a catch (a grab goes through one) or a windbox (a push). */
+function strikes(hb: Hitbox): boolean {
+  return hb.grabbing !== true && hb.windbox !== true;
+}
+
+/** A shield the engine will drop on the next step: up, out of shieldstun and past `SHIELD_MIN_HOLD` (`STATUS_GUARD`). */
+function canDropShield(f: FighterState): boolean {
+  return f.action === "shield" && f.hitstun === 0 && f.actionFrame + 1 >= SHIELD_MIN_HOLD;
+}
+
+/**
+ * Whether the swing's first live boxes, placed where the attacker stands
+ * (`hitboxWorldPos`, far ends included), meet this fighter's shield
+ * (`shieldBubble`): a swing that cannot reach lands nothing to parry.
+ */
+function firstBoxesReach(def: FighterDef, swing: FighterState, self: FighterState, selfDef: FighterDef): boolean {
+  const move = swing.move === null ? undefined : def.moves[swing.move];
+  if (move === undefined) return false;
+  const live = move.hitboxes.filter(strikes);
+  if (live.length === 0) return false;
+  const first = Math.min(...live.map((hb) => hb.startFrame));
+  const bubble = shieldBubble(self, selfDef);
+  return live.some((hb) => hb.startFrame === first && capsulesOverlap(boxCapsule(swing, hb), bubble));
+}
+
+/** A hitbox as the capsule it sweeps where its fighter stands, facing its way. */
+function boxCapsule(f: Pick<FighterState, "x" | "y" | "facing">, hb: Hitbox): Capsule {
+  const near = hitboxWorldPos(f.x, f.y, f.facing, hb);
+  const far = hb.x2 === undefined ? near : hitboxWorldPos(f.x, f.y, f.facing, { x: hb.x2, y: hb.y2 ?? hb.y });
+  return { x1: near.x, y1: near.y, x2: far.x, y2: far.y, r: hb.radius };
+}
+
+/**
+ * Could the parry have been decided the frame before (one frame younger)? A
+ * droppable shield then (its frame one less), the swing seen, a frame into it,
+ * its hit a frame further on and inside `PARRY_AIM`, and its timing known then: a
+ * smash's charge decided (`swingHitFrame`). One let go uncharged showed at its
+ * hold frame let go; one released from a charge (it keeps its `charge`) was still
+ * charging there.
+ */
+function couldParryBefore(def: FighterDef, self: FighterState, swing: FighterState, age: number, lands: number): boolean {
+  if (self.actionFrame < SHIELD_MIN_HOLD || age < 1 || swing.actionFrame < 1 || lands + 1 > PARRY_AIM) return false;
+  const move = swing.move === null ? undefined : def.moves[swing.move];
+  if (move?.chargeable === true) {
+    const hold = smashHoldFrame(def, swing);
+    const before = swing.actionFrame - 1;
+    if (before < hold || (before === hold && (swing.charge > 0 || !swing.combat.smashLetGo))) return false;
+  }
+  return true;
+}
+
+/**
+ * Parry (Plan 5; ruling R-T18d): shielding, it sees a swing within reach and
+ * lets go so the swing's first box lands inside the drop's parrying frames —
+ * the perfect shield is on release (SmashWiki "Perfect shield": "a shield drop
+ * ... as the hit lands"). Timed off the swing's move data (`swingHitFrame`):
+ * the release is read on the next step, which is the drop's frame 0, so the hit
+ * lands on drop frame `first − (actionFrame + 1)`. It decides once a swing, on
+ * the first frame that lands it on `PARRY_AIM` or sooner, from a shield the
+ * engine can drop, at a swing in front of it (a shield covers the side it faces,
+ * `shieldCovers`) whose first boxes reach it (`firstBoxesReach`); a failed roll
+ * keeps the shield up. Not a projectile.
  */
 export const parry: Behaviour = (ctx) => {
-  const { self, targetAction, targetActionAge, distance } = ctx.view;
-  if (!ctx.view.target || !isShielding(self.action) || self.hitstun > 0) return NOTHING;
-  if (!isAttacking(targetAction) || distance > THREAT_RANGE) return NOTHING;
-  if (targetActionAge !== PARRY_LEAD) return NOTHING;
+  const { self, target, targetAction, targetActionAge, distance, facingTarget } = ctx.view;
+  if (target === null || !isAttacking(targetAction) || targetActionAge < 0 || distance > THREAT_RANGE || !facingTarget) return NOTHING;
+  if (!canDropShield(self) || ctx.fighterDef === null) return NOTHING;
+  const def = ctx.matchDefs[target.port];
+  const hit = swingHitFrame(def, target);
+  if (hit === null || def === undefined) return NOTHING;
+  const lands = hit - (target.actionFrame + 1);
+  if (lands < 0 || lands > PARRY_AIM) return NOTHING;
+  if (!firstBoxesReach(def, target, self, ctx.fighterDef)) return NOTHING;
+  if (couldParryBefore(def, self, target, targetActionAge, lands)) return NOTHING;
   if (ctx.rolls[ROLL_PARRY] >= ctx.tuning.parrySkill) return NOTHING;
-  return { score: 650, input: 0 };
+  return { score: 650, input: 0, decided: true };
 };
 
 /**

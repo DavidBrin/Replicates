@@ -221,13 +221,15 @@ export interface MatchRunner {
 }
 
 /**
- * What each port's CPU knows of its own fighter and the stage
- * (`cpuWorldFromDef`): the same builder the golden and the CPU sweep use. A
- * port with no definition gets Battlefield's view and two jumps.
+ * What each port's CPU knows of its own fighter, the stage and the match
+ * (`cpuWorldFromDef`): the same builder the golden and the CPU sweep use, given
+ * every port's definition so a parry can time a swing off its move data (Plan 5,
+ * Task 18, ruling R-T18d). A port with no definition gets the stage's view, two
+ * jumps and the match's definitions.
  */
 export function matchCpuWorlds(stage: StageDef, defs: readonly (FighterDef | undefined)[]): CpuWorld[] {
   const view = stageViewFromDef(stage);
-  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view) : { stage: view, jumps: 2 }));
+  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs) : { stage: view, jumps: 2, matchDefs: defs }));
 }
 
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {

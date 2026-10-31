@@ -170,7 +170,7 @@ export function airDrift(vx: number, stickX: number, attrs: FighterAttributes): 
 /* -------------------------------------------------------------- platforms -- */
 
 /** Where a platform's centre is this frame. Only Smashville's actually moves. */
-export function platformCentreX(p: Platform, frame: number): number {
+export function platformCentreX(p: Pick<Platform, "x" | "motion">, frame: number): number {
   if (!p.motion) return p.x;
   const period = p.motion.periodFrames;
   const phase = Math.trunc((TURN * (((frame % period) + period) % period)) / period);

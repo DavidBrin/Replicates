@@ -267,7 +267,10 @@ describe("the worlds the game's CPUs see", () => {
     defs.forEach((def, i) => {
       expect(worlds[i].recovery, def.id).not.toBeNull();
       expect(worlds[i].recovery, def.id).toEqual(recoveryFromDef(def));
-      expect(worlds[i], def.id).toEqual(cpuWorldFromDef(def, stageViewFromDef(stage)));
+      expect(worlds[i], def.id).toEqual(cpuWorldFromDef(def, stageViewFromDef(stage), defs));
+      // Plan 5, Task 18 (ruling R-T18d): every port's definition, for the parry's timing.
+      expect(worlds[i].matchDefs, def.id).toEqual(defs);
+      expect(worlds[i].fighterDef, def.id).toBe(def);
     });
   });
 });

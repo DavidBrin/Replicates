@@ -38,7 +38,8 @@ function sweep(ctx: SimContext, a: string, b: string, stageId: string, smashBall
   let state = createInitialState(stageId, [{ defId: a }, { defId: b }], { ...RULES, smashBall }, seed, ctx);
   const stage = ctx.stage(stageId);
   const view = stageViewFromDef(stage);
-  const worlds: CpuWorld[] = [a, b].map((id) => cpuWorldFromDef(ctx.fighter(id), view));
+  const defs = [a, b].map((id) => ctx.fighter(id));
+  const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs));
   let cpuSeed = seed ^ 0x1f2e3d4c;
   let prev: readonly InputFrame[] = [0, 0];
   const breaks: string[] = [];

@@ -82,15 +82,26 @@ export interface CpuWorld {
    * Defaults to none: the CPU spends it as soon as it is needed.
    */
   readonly recovery?: RecoveryMove | null;
+  /**
+   * This fighter's own definition, to run its own fall when it techs (Plan 5,
+   * ruling R-T18e). Defaults to none: it does not tech.
+   */
+  readonly fighterDef?: FighterDef;
+  /**
+   * Every port's definition, as the match runs it, to time a parry off the
+   * swing's move data (ruling R-T18d). Defaults to none: it does not parry.
+   */
+  readonly matchDefs?: readonly (FighterDef | undefined)[];
 }
 
 /**
- * Everything a CPU knows about its own fighter and the stage, from the
- * fighter's definition: the one builder the game (`matchCpuWorlds`), the golden
- * and the CPU sweep share, so none of them can leave a field out (Plan 5, Task
- * 4b fix round 1: one of three left the up special model out).
+ * Everything a CPU knows about its own fighter, the stage and the match, from
+ * the definitions: the one builder the game (`matchCpuWorlds`), the golden and
+ * the CPU sweep share, so none of them can leave a field out (Plan 5, Task 4b
+ * fix round 1: one of three left the up special model out). `matchDefs` is every
+ * port's definition, by port, as the match runs them.
  */
-export function cpuWorldFromDef(def: FighterDef, stage: StageView): CpuWorld {
+export function cpuWorldFromDef(def: FighterDef, stage: StageView, matchDefs: readonly (FighterDef | undefined)[] = []): CpuWorld {
   return {
     stage,
     jumps: def.attributes.jumps,
@@ -101,6 +112,9 @@ export function cpuWorldFromDef(def: FighterDef, stage: StageView): CpuWorld {
     airDodge: airDodgeFromDef(def),
     // Where its up special goes: it leaves the fighter helpless (Plan 5, Task 4b).
     recovery: recoveryFromDef(def),
+    // Its own fall, for a tech; the match's moves, for a parry (Plan 5, Task 18).
+    fighterDef: def,
+    matchDefs,
   };
 }
 
@@ -123,11 +137,14 @@ export function cpuWorldFromDef(def: FighterDef, stage: StageView): CpuWorld {
  * stocks; and `noise` falls from 0.9 to 0.1, which is what turns visible
  * dithering into visible intent.
  *
- * Plan 5 adds two: `techSkill` (teching landings, air-dodging out of hitstun)
- * climbs with `recoverySkill` because both are survival; `parrySkill` stays
- * at zero until level 4 and reaches only 0.5, because a parry is a read and a
- * CPU that parried everything would be reading inputs. UNVERIFIED: the values
- * are tuning, not data — Ultimate's CPU is not published.
+ * Plan 5 adds two, each the chance of one decision (rulings R-T18d, R-T18e), and
+ * tested as that against what the CPU does (`defence.test.ts`): `techSkill`,
+ * the chance it techs a landing, and air-dodges out of hitstun when the cancel
+ * opens, climbs with `recoverySkill` because both are survival; `parrySkill`,
+ * the chance it parries a swing it can time, stays at zero until level 4 and
+ * reaches only 0.5, because a parry is a read and a CPU that parried everything
+ * would be reading inputs. UNVERIFIED: the values are tuning, not data —
+ * Ultimate's CPU is not published.
  */
 const TUNING: readonly LevelTuning[] = [
   { level: 1, reactionFrames: 30, aggression: 0.15, shieldRate: 0.02, dodgeRate: 0.0, diSkill: 0.0, sdiSkill: 0.0, recoverySkill: 0.15, edgeguardSkill: 0.0, moveChoiceSkill: 0.15, noise: 0.9, fumbleChance: 0.3, techSkill: 0.0, parrySkill: 0.0 },
@@ -204,12 +221,15 @@ export function decideCpu(
     airBrake: world.airBrake ?? 0,
     airDodge: world.airDodge ?? DEFAULT_AIR_DODGE,
     recovery: world.recovery ?? null,
+    fighterDef: world.fighterDef ?? null,
+    matchDefs: world.matchDefs ?? [],
     rolls,
   };
 
   let bestScore = -1;
   let bestInput: InputFrame = 0;
   let bestName: BehaviourName = "idle";
+  let decided: { readonly name: BehaviourName; readonly input: InputFrame } | null = null;
   const scores: Record<string, number> = {};
 
   for (let i = 0; i < BEHAVIOURS.length; i++) {
@@ -220,6 +240,7 @@ export function decideCpu(
     const jitter = 1 + (rolls[DECISION_ROLLS + i] - 0.5) * 2 * tuning.noise;
     const score = result.score * jitter;
     scores[name] = score;
+    if (result.decided === true && decided === null) decided = { name, input: result.input };
 
     // Strictly-greater keeps the earlier behaviour on a tie, and `BEHAVIOURS`
     // is ordered so that the survival ones come first.
@@ -228,6 +249,13 @@ export function decideCpu(
       bestInput = result.input;
       bestName = name;
     }
+  }
+
+  // A decision its own dial has made (a tech, an escape, a parry; Plan 5, rulings
+  // R-T18d and R-T18e) takes the frame outright, the first in `BEHAVIOURS` order:
+  // the dial is the chance, so neither the jitter nor the fumble may undo it.
+  if (decided !== null) {
+    return { input: specialPending(self, state.frame) ? upBHold(decided.input) : decided.input, seed, behaviour: decided.name, scores };
   }
 
   // The fumble: a dropped frame of input. It is what a low-level CPU's hands

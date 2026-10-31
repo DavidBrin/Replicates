@@ -134,6 +134,8 @@ function context(
     airBrake: 0,
     airDodge: DEFAULT_AIR_DODGE,
     recovery: null,
+    fighterDef: null,
+    matchDefs: [],
     rolls,
   };
 }
