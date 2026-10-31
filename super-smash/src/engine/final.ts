@@ -79,6 +79,11 @@ export const FINAL_SMASH_READY = 1;
 /** The slots a Final Smash's parts are in: only a Final Smash is ever in them. */
 const FINAL_SLOTS: ReadonlySet<MoveSlot> = new Set<MoveSlot>(["finalSmash", "finalAttack", "finalEnd"]);
 
+/** Is `slot` one of a Final Smash's parts (`FINAL_SLOTS`)? The one list, for the CPU too (Plan 5, Task 19 fix round 1). */
+export function isFinalSlot(slot: MoveSlot | null): boolean {
+  return slot !== null && FINAL_SLOTS.has(slot);
+}
+
 /**
  * Is anybody's Final Smash out? While one is, everybody else in standby is out of
  * it, and has the power back once it is over (Plan 5, Task 14 fix round 1, ruling
@@ -94,7 +99,7 @@ const FINAL_SLOTS: ReadonlySet<MoveSlot> = new Set<MoveSlot>(["finalSmash", "fin
  * their move has ended, and are as much the Final Smash as the move was.
  */
 export function finalSmashActive(s: { readonly fighters: readonly FighterState[] }, projectileOut: boolean): boolean {
-  return projectileOut || s.fighters.some((f) => f.action === "special" && f.move !== null && FINAL_SLOTS.has(f.move));
+  return projectileOut || s.fighters.some((f) => f.action === "special" && isFinalSlot(f.move));
 }
 
 /**

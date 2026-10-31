@@ -1243,6 +1243,39 @@ describe("parry, where the engine lands the hit on the shield (ruling R-T18j)", 
     }
     expect(parried).toBeGreaterThan(10);
   });
+
+  it("with Task 19's shield: after the parry's drop the shield does not come back for that swing (controller, Task 19 fix round 1)", () => {
+    // The same scene, run on to the swing's end: after the one drop, no frame of the
+    // swing is the shield's, and the fighter never shields again in it.
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("donkeyKong")]);
+    let dropped = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "donkeyKong" }], RULES, 21);
+      Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: 0, intangible: 0, facing: 1 });
+      Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: L9.reactionFrames, grounded: true, platform: 0, x: fx(14), y: 0, intangible: 0, facing: -1 });
+      s.fighters[1].combat.smashLetGo = true;
+      let cs = seed;
+      let prev: InputFrame[] = [0, 0];
+      let parryAt = -1;
+      for (let i = 0; i < 120 && s.fighters[1].action === "attack"; i++) {
+        const d = decideCpu(s, 0, 9, cs, world);
+        cs = d.seed;
+        if (d.behaviour === "parry") {
+          expect(parryAt, `seed ${seed}: one drop`).toBe(-1);
+          parryAt = i;
+        } else if (parryAt >= 0) {
+          expect(d.behaviour, `seed ${seed}, ${i - parryAt} after the drop`).not.toBe("shield");
+          expect(["shieldStart", "shield"].includes(s.fighters[0].action) && i > parryAt + 1, `seed ${seed}: shielding again ${i - parryAt} after the drop`).toBe(false);
+        }
+        const out = step(s, [d.input, 0], { prevInputs: prev });
+        prev = [d.input, 0];
+        s = out.state;
+        if (out.events.hits.some((h) => h.victim === 0)) break;
+      }
+      if (parryAt >= 0) dropped++;
+    }
+    expect(dropped).toBeGreaterThan(10);
+  });
 });
 
 /* ------------------------------------------------------------ the wall tech -- */
@@ -1384,6 +1417,8 @@ describe("the level table's defence dials", () => {
     // Plan 5, Task 19: the specials' roll is the ninth (`ROLL_SPECIAL`), and nine behaviours joined.
     expect([DECISION_ROLLS, ROLL_TECH, ROLL_PARRY, ROLL_SPECIAL]).toEqual([9, 6, 7, 8]);
     expect(BEHAVIOURS.length).toBe(22);
+    // So every playing frame draws 31 (the Task 19 review's M12: 9 + 22).
+    expect(DECISION_ROLLS + BEHAVIOURS.length).toBe(31);
   });
 });
 
@@ -1595,6 +1630,62 @@ describe("shield, once a threat (ruling R-T18g)", () => {
       });
     expect(shield(context(at(24, -1.5), L9)).score).toBeGreaterThan(0);
     expect(shield(context(at(22.5, -1.5), L9)).score).toBe(0);
+  });
+
+  /**
+   * Ruling R-T19g (the Task 19 review's I2): a swing first seen while the CPU cannot
+   * act (a landing's lag, a reel) is decided on the last frame of that action, where
+   * a press is read as it comes free, and on no other frame: not at first sight, when
+   * the press could only wait, and not on the free frames after.
+   */
+  it("decides a swing first seen in landing lag on the lag's last frame, and on no other", () => {
+    const LAG = 14;
+    // The lag and the swing's sight begin together: the swing seen on lag frame 0.
+    const at = (k: number) =>
+      k < LAG
+        ? threat(L9.reactionFrames + k, { action: "landingLag", actionFrame: k, charge: LAG })
+        : threat(L9.reactionFrames + k, { action: "stand", actionFrame: k - LAG });
+    const decidedOn: number[] = [];
+    for (let k = 0; k < LAG + 6; k++) if (shield(context(at(k), L9)).score > 0) decidedOn.push(k);
+    expect(decidedOn).toEqual([LAG - 1]);
+    expect(shield(context(at(LAG - 1), L9)).input).toBe(Btn.Shield);
+    for (let k = 0; k < LAG + 6; k++) expect(shield(context(at(k), L9, rollsWith(ROLL_SHIELD, 0.99))).score, `failed roll, frame ${k}`).toBe(0);
+  });
+
+  it("not on a lag's last frame while frozen in a hit's freeze: the step after runs no status, so it is not the last", () => {
+    const LAG = 14;
+    const frozen = threat(L9.reactionFrames + LAG - 1, { action: "landingLag", actionFrame: LAG - 1, charge: LAG, hitlag: 2 });
+    expect(shield(context(frozen, L9)).score).toBe(0);
+  });
+
+  it("decides a swing first seen in a reel on its last frame, and its press raises the shield on the first free frame", () => {
+    // Mario reeling on the ground, his hitstun running out, Donkey Kong's smash seen as the reel began.
+    const H = 12;
+    const at = (k: number) => threat(L9.reactionFrames + k, { action: "hitstun", actionFrame: k, hitstun: H - k });
+    const decidedOn: number[] = [];
+    for (let k = 0; k < H; k++) if (shield(context(at(k), L9)).score > 0) decidedOn.push(k);
+    expect(decidedOn).toEqual([H - 1]);
+    // As the engine runs it: the press on the reel's last frame waits in the buffer and comes out.
+    let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "donkeyKong" }], RULES, 21);
+    Object.assign(s.fighters[0], { action: "hitstun", actionFrame: H - 1, hitstun: 1, grounded: true, platform: 0, x: 0, y: 0, intangible: 0, facing: 1 });
+    Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: L9.reactionFrames + H - 1, grounded: true, platform: 0, x: fx(20), y: 0, intangible: 0, facing: -1 });
+    s.fighters[1].combat.smashLetGo = true;
+    let prev: InputFrame[] = [0, 0];
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const input = i === 0 ? shield(context(s, L9, undefined, FD)).input : 0;
+      s = step(s, [input, 0], { prevInputs: prev }).state;
+      prev = [input, 0];
+      seen.push(s.fighters[0].action);
+    }
+    expect(seen.slice(0, 2)).toEqual(["stand", "shieldStart"]);
+  });
+
+  it("a swing it could act on at first sight it never decides again: not after its own move, nor after a failed roll's walk", () => {
+    // Seen standing (decided then), then a jab of its own, then standing again: no second decision.
+    const jab = (k: number) => threat(L9.reactionFrames + 1 + k, { action: "attack", move: "jab1", actionFrame: k });
+    for (let k = 0; k < 20; k++) expect(shield(context(jab(k), L9)).score, `jab frame ${k}`).toBe(0);
+    for (const action of ["stand", "walk"] as const) expect(shield(context(threat(L9.reactionFrames + 21, { action, actionFrame: 0 }), L9)).score, action).toBe(0);
   });
 
   /**

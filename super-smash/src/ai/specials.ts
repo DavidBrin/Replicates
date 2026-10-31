@@ -12,10 +12,11 @@
  *
  * One roll a decision (ruling R-T18e, R-T18g): a reaction to a threat (a
  * projectile to reflect, a swing to counter) rolls once, on the one frame the
- * threat is timed for; a special used on the CPU's own initiative (a charge, a
+ * threat is timed for, or on the frame it is first seen when that is already
+ * later (ruling R-T19f); a special used on the CPU's own initiative (a charge, a
  * smash-input special) rolls once an opening (`opening`), on the first frame the
- * opponent's new action is seen or the CPU's own begins. Nothing rolls a rate
- * per frame. A behaviour carrying on with something already begun (holding a
+ * opponent's new action is seen or the CPU's own begins; a sideways recovery
+ * rolls once an offstage episode (ruling R-T19i). Nothing rolls a rate per frame. A behaviour carrying on with something already begun (holding a
  * charge, a reflector, a throw already chosen) reads the fighter's own state and
  * rolls nothing.
  *
@@ -25,7 +26,9 @@
  */
 
 import { SMASH_CHARGE_MAX } from "@/engine/constants";
+import { finalSmashActive, isFinalSlot } from "@/engine/final";
 import { abs, fx } from "@/engine/fixed";
+import { platformCentreX } from "@/engine/physics";
 import { smashHoldFrame } from "@/engine/acmd/run";
 import { fighterParams } from "@/engine/params";
 import { articleOf, findProjectileDef, isFinalProjectile } from "@/engine/projectile";
@@ -41,10 +44,13 @@ import {
   type ProjectileState,
 } from "@/engine/types";
 import {
+  HELD_ACTIONS,
   ROLL_SPECIAL,
   THREAT_RANGE,
   VERTICAL_REACH,
   canAct,
+  dodgeDrift,
+  free,
   fullHopPulse,
   isAttacking,
   isOffstage,
@@ -57,23 +63,14 @@ import {
   type Behaviour,
   type BehaviourContext,
   type BehaviourResult,
+  type StageView,
 } from "./behaviours";
 
 const NOTHING: BehaviourResult = { score: 0, input: 0 };
 
 /* -------------------------------------------------------------- shared -- */
 
-/**
- * States the engine reads a press in on the next step (`handleActionable`):
- * standing, walking, dashing, running, braking, crouching, jumping, falling. A
- * Special pressed anywhere else waits in the buffer, which only `recover`'s up
- * special may use (`cpu.ts`, `specialPending`).
- */
-const FREE: readonly ActionState[] = ["stand", "walk", "dashStart", "run", "runBrake", "crouch", "jump", "fall"];
-
-export function free(f: FighterState): boolean {
-  return canAct(f) && FREE.includes(f.action);
-}
+/* A state free to act is `behaviours.ts`'s `free`, which the shield shares (ruling R-T19g). */
 
 /**
  * An opening (ruling R-T18e): the first frame the opponent's new action is seen,
@@ -117,6 +114,61 @@ function inMove(f: FighterState, slot: MoveSlot): boolean {
   return f.action === "special" && f.move === slot;
 }
 
+/**
+ * The ends of the floor `f` stands on: a soft platform's, where the stage's clock has
+ * it (`platformCentreX`), or the main stage's ledges. Null in the air.
+ */
+function floorEnds(f: FighterState, stage: StageView, stageFrame: number): { readonly left: number; readonly right: number } | null {
+  if (!f.grounded) return null;
+  for (const p of stage.platforms) {
+    const centre = platformCentreX(p, stageFrame);
+    if (abs(f.y - p.y) <= fx(1) && abs(f.x - centre) <= p.halfWidth) return { left: centre - p.halfWidth, right: centre + p.halfWidth };
+  }
+  return { left: stage.leftLedge, right: stage.rightLedge };
+}
+
+/**
+ * How far the fighter's own momentum slides it toward `dir` (−1, 1) on the ground: its
+ * speed braked by its traction a frame (`ground_brake`: a special's FALL kinetic
+ * grounded, `kineticExec`), 0 when it moves the other way or not at all.
+ */
+function slideToward(ctx: BehaviourContext, dir: number): number {
+  const { self } = ctx.view;
+  if (self.vx === 0 || self.vx > 0 !== dir > 0 || ctx.fighterDef === null) return 0;
+  return abs(dodgeDrift(self.vx, fighterParams(ctx.fighterDef).ground_brake, Number.MAX_SAFE_INTEGER));
+}
+
+/**
+ * The edge-room check (Plan 5, Task 19; the review's M6 shares it): whether, on the
+ * ground, there is room on the floor the fighter stands on (`floorEnds`: a soft
+ * platform's ends, or the main stage's ledges) toward `dir` (−1 left, 1 right) for the
+ * slide of its own momentum (`slideToward`) and `extra` more. A Final Smash's dash
+ * wants `FINAL_SMASH_EDGE_ROOM` more toward its target; a counter or a reflector,
+ * standing where it is pressed, the slide alone (`slideStaysOn`). (Task 19 fix round
+ * 1's sweep: Critical Hit begun from a run on Battlefield's side platform, 15 from its
+ * end, slid off it in its windup, and its dash flew on through the air to the blast
+ * line: measured to the main stage's ledge, 36 away, the check had passed.)
+ */
+export function roomAhead(ctx: BehaviourContext, dir: number, extra: number): boolean {
+  const { self } = ctx.view;
+  const floor = floorEnds(self, ctx.stage, ctx.state.stageFrame);
+  if (floor === null) return false;
+  const room = dir >= 0 ? floor.right - self.x : self.x - floor.left;
+  return room >= slideToward(ctx, dir) + extra;
+}
+
+/**
+ * Whether a move that stands the fighter where it is (a counter, a reflector) keeps it
+ * on its floor when pressed now (the Task 19 review's M6: Marth's counter pressed from
+ * a run 3.6 from the ledge slid him off it): its momentum's slide fits the floor ahead
+ * (`roomAhead`). In the air there is no slide (each one is kept off the stage's
+ * outside by its own check).
+ */
+function slideStaysOn(ctx: BehaviourContext): boolean {
+  const { self } = ctx.view;
+  return !self.grounded || self.vx === 0 || roomAhead(ctx, self.vx > 0 ? 1 : -1, 0);
+}
+
 /* ---------------------------------------------------------- Final Smash -- */
 
 /**
@@ -141,9 +193,10 @@ export const FINAL_SMASH_RANGE = fx(30);
 export const FINAL_SMASH_DASH_RANGE = fx(120);
 
 /**
- * UNVERIFIED (tuning): how much stage a dashing Final Smash needs ahead of its
- * user to be started: one begun at the edge slides off it during its windup and
- * dashes from the air (seen in the Task 19 sweep: Critical Hit off Smashville).
+ * UNVERIFIED (tuning): how much floor a dashing Final Smash needs ahead of its
+ * user to be started, past its own momentum's slide (`roomAhead`): one begun at the
+ * edge slides off it during its windup and dashes from the air (seen in the Task 19
+ * sweep: Critical Hit off Smashville).
  */
 export const FINAL_SMASH_EDGE_ROOM = fx(10);
 
@@ -156,23 +209,7 @@ const CANNOT_ACT_SOON: readonly ActionState[] = ["downed", "shieldBroken", "land
  * a shield or a grab of their own. A Final Smash is unblockable (SmashWiki
  * "Unblockable attack"), so a shield is no escape.
  */
-const COMMITTED: readonly ActionState[] = [
-  "downed",
-  "shieldBroken",
-  "landingLag",
-  "specialLanding",
-  "specialFall",
-  "tumble",
-  "tumbleFall",
-  "hitstun",
-  "attack",
-  "special",
-  "shieldStart",
-  "shield",
-  "shieldStun",
-  "grab",
-  "grabHold",
-];
+const COMMITTED: readonly ActionState[] = [...CANNOT_ACT_SOON, "attack", "special", "shieldStart", "shield", "shieldStun", "grab", "grabHold"];
 
 /** How far the move's own dash windows carry it (`MoveDef.momentum`): the sum of each window's speed over its frames. */
 export function dashTravel(move: MoveDef): number {
@@ -187,14 +224,17 @@ export function finalReach(move: MoveDef): number {
   return reach > 0 ? reach : FINAL_SMASH_RANGE;
 }
 
-/** Is anybody's Final Smash out: a fighter in one, or a projectile one launched (`final.ts` `finalSmashActive`)? */
+/**
+ * Is anybody's Final Smash out: a fighter in one, or a projectile one launched? The
+ * engine's own rule (`final.ts`'s `finalSmashActive`), its projectiles told by the
+ * match's definitions as `step()` tells them (`isFinalProjectile`).
+ */
 function finalSmashOut(ctx: BehaviourContext): boolean {
-  const inOne = ctx.state.fighters.some((f) => f.action === "special" && (f.move === "finalSmash" || f.move === "finalAttack" || f.move === "finalEnd"));
-  if (inOne) return true;
-  return ctx.state.projectiles.some((p) => {
+  const projectileOut = ctx.state.projectiles.some((p) => {
     const def = ctx.matchDefs.find((d) => d?.id === p.source);
     return def !== undefined && isFinalProjectile(def, p.defId);
   });
+  return finalSmashActive(ctx.state, projectileOut);
 }
 
 /**
@@ -210,20 +250,24 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    is long (Jungle Rush's trap comes out on 29, Team Star Fox's on 28), and a
  *    target free to move walks out of it;
  *  - one that dashes (Critical Hit, Volt Tackle; `MoveDef.momentum`) only from the
- *    ground, with stage ahead (`FINAL_SMASH_EDGE_ROOM`) and the target in its path,
+ *    ground, with floor ahead for its momentum's slide and `FINAL_SMASH_EDGE_ROOM`
+ *    more (`roomAhead`: the floor it stands on, a soft platform's end included), and
+ *    the target in its path,
  *    level and in front, within its travel (`dashTravel`). One whose grounded dash
  *    stops at the edge (`MoveDef.dashEnd.edge`, Critical Hit) is safe to whiff; one
  *    that ignores the edge (Volt Tackle) whiffed carries on past its window and falls
  *    off the side blast line (SmashWiki "Volt Tackle": "it is fairly easy to
  *    self-destruct off the side blast line if the player misses"; the Task 19 sweep:
- *    a 166-unit dash ended 273 units on), so it is used only where its whole dash
- *    ends over the stage, or point-blank (`FINAL_SMASH_RANGE`) from a standstill on
- *    a target held where it stands, on the ground and unable to act soon
- *    (`CANNOT_ACT_SOON`): never toward an open blast line on a chance. (In the
- *    sweep a target merely committed was not enough: Volt Tackle's startup sparks
- *    knocked an aerial one behind Pikachu; nor was a run, or a stand still sliding
- *    from one: its speed slid Pikachu past the target in the windup, and the dash
- *    went on alone.)
+ *    a 166-unit dash ended 273 units on), so it is used only point-blank
+ *    (`FINAL_SMASH_RANGE`) from a standstill on a target held where it stands, on the
+ *    ground and unable to act soon (`CANNOT_ACT_SOON`; ruling R-T19d): never toward
+ *    an open blast line on a chance. Not where its dash (`dashTravel`) would end over
+ *    the stage either (ruling R-T19h): a whiff carries on past its dash windows, about
+ *    255 units (the Task 19 review's M2), and Pokémon Stadium 2, wider than the dash,
+ *    let one fire at a free target from near a ledge. (In the sweep a target merely
+ *    committed was not enough: Volt Tackle's startup sparks knocked an aerial one
+ *    behind Pikachu; nor was a run, or a stand still sliding from one: its speed slid
+ *    Pikachu past the target in the windup, and the dash went on alone.)
  *
  * It turns to face the target first (a grounded turn is an input). No roll: the
  * power is a sure thing, kept until the moment comes.
@@ -237,11 +281,10 @@ export const finalSmash: Behaviour = (ctx) => {
   const travel = dashTravel(fs);
   if (travel > 0) {
     if (!self.grounded || abs(dy) > VERTICAL_REACH || ahead > Math.min(travel, FINAL_SMASH_DASH_RANGE)) return NOTHING;
-    const room = dx >= 0 ? ctx.stage.rightLedge - self.x : self.x - ctx.stage.leftLedge;
-    if (room < FINAL_SMASH_EDGE_ROOM) return NOTHING;
+    if (!roomAhead(ctx, dx >= 0 ? 1 : -1, FINAL_SMASH_EDGE_ROOM)) return NOTHING;
     const still = (self.action === "stand" || self.action === "crouch") && self.vx === 0;
     const held = still && target.grounded && CANNOT_ACT_SOON.includes(targetAction);
-    const safe = fs.dashEnd?.edge === true || room >= travel || (ahead <= FINAL_SMASH_RANGE && held);
+    const safe = fs.dashEnd?.edge === true || (ahead <= FINAL_SMASH_RANGE && held);
     if (!safe) return NOTHING;
   } else if (fs.final?.trap === true) {
     if (abs(dy) > VERTICAL_REACH || ahead > finalReach(fs) || !committed) return NOTHING;
@@ -264,6 +307,23 @@ export const BALL_REACH_HEIGHT = fx(45);
 /** UNVERIFIED (tuning): the frames ahead on its drift the CPU aims at the Smash Ball, about an aerial's startup. */
 export const BALL_LEAD = 6;
 
+/**
+ * UNVERIFIED (CPU judgement): how near counts as there in the chase (the Task 19
+ * review's M11): under the stage's top, at a ledge, at the ball's height, and under
+ * it, where it stops walking.
+ */
+const BALL_NEAR = fx(4);
+
+/**
+ * UNVERIFIED (CPU judgement): the body's middle, above its feet, where a swing at the
+ * ball is aimed from, and how far above or below it the ball has to be for an up or
+ * a down aerial.
+ */
+const BALL_BODY = fx(6);
+
+/** UNVERIFIED (CPU judgement): within this many of its pokes' reach (`meleeReach`) of the ball's x it jumps for it. */
+const BALL_JUMP_REACHES = 2;
+
 /** How high above the stage this fighter reaches: its full hop and its midair jump, and an attack's reach above that. */
 export function ballReach(def: FighterDef | null): number {
   if (def === null) return BALL_REACH_HEIGHT;
@@ -284,14 +344,14 @@ export const smashBall: Behaviour = (ctx) => {
   const { self } = ctx.view;
   const ball = ctx.state.smashBall;
   if (!ball.active || !canAct(self) || ctx.state.fighters.some((f) => f.finalSmashReady > 0)) return NOTHING;
-  if (isOffstage(self, ctx.stage) || self.y < ctx.stage.groundY - fx(4)) return NOTHING;
+  if (isOffstage(self, ctx.stage) || self.y < ctx.stage.groundY - BALL_NEAR) return NOTHING;
   if (ball.x < ctx.stage.leftLedge || ball.x > ctx.stage.rightLedge || ball.y > ctx.stage.groundY + ballReach(ctx.fighterDef)) return NOTHING;
   // Where it will be when a swing comes out (`BALL_LEAD`), on its own drift: in
   // plain view. Measured from the middle of the body, where the swings are aimed.
   const bx = ball.x + ball.vx * BALL_LEAD - self.x;
-  const by = ball.y + ball.vy * BALL_LEAD - (self.y + fx(6));
+  const by = ball.y + ball.vy * BALL_LEAD - (self.y + BALL_BODY);
   // Toward it, but never out past the ledge after it: the ball turns back there.
-  const outward = (bx > 0 && self.x >= ctx.stage.rightLedge - fx(4)) || (bx < 0 && self.x <= ctx.stage.leftLedge + fx(4));
+  const outward = (bx > 0 && self.x >= ctx.stage.rightLedge - BALL_NEAR) || (bx < 0 && self.x <= ctx.stage.leftLedge + BALL_NEAR);
   const toward = outward ? 0 : towardX(0, bx);
   const swinging = pulse(ctx.view.frame, self.port, 10, 3);
   const inReach = abs(bx) <= ctx.meleeReach && abs(by) <= VERTICAL_REACH;
@@ -300,18 +360,19 @@ export const smashBall: Behaviour = (ctx) => {
   const score = 420 + 60 * ctx.tuning.aggression;
   if (!self.grounded) {
     // The aerial that covers where it is: up, down, or all round the body.
-    const aim = by > fx(6) ? Btn.Up : by < -fx(6) ? Btn.Down : 0;
+    const aim = by > BALL_BODY ? Btn.Up : by < -BALL_BODY ? Btn.Down : 0;
     if (inReach) return { score: 490, input: aim | (swinging ? Btn.Attack : 0) };
+    // UNVERIFIED (CPU judgement): its midair jump pressed two frames in eight, past its top.
     const again = by > VERTICAL_REACH && self.jumpsUsed < ctx.jumps && self.vy <= 0 && pulse(ctx.view.frame, self.port, 8, 2);
     return { score, input: toward | (again ? Btn.Jump : 0) };
   }
-  if (inReach && by <= fx(4)) {
+  if (inReach && by <= BALL_NEAR) {
     // Facing it first: a grounded turn is an input.
     if (bx * self.facing < 0) return { score: 490, input: toward };
     return { score: 490, input: swinging ? Btn.Attack : 0 };
   }
-  const jump = by > fx(4) && abs(bx) <= ctx.meleeReach * 2 && fullHopPulse(ctx.view.frame, self.port);
-  return { score, input: (abs(bx) > fx(4) ? toward : 0) | (jump ? Btn.Jump : 0) };
+  const jump = by > BALL_NEAR && abs(bx) <= ctx.meleeReach * BALL_JUMP_REACHES && fullHopPulse(ctx.view.frame, self.port);
+  return { score, input: (abs(bx) > BALL_NEAR ? toward : 0) | (jump ? Btn.Jump : 0) };
 };
 
 /* ----------------------------------------------------- reflect, counter -- */
@@ -338,13 +399,20 @@ export function framesToMeet(p: ProjectileState, pdef: ProjectileDef, bx: number
 }
 
 /**
+ * UNVERIFIED (CPU judgement): how much wider than its bubble a looping reflector
+ * (Fox's) reads a projectile still coming at it, to keep holding it up.
+ */
+const REFLECT_HOLD_MARGIN = fx(4);
+
+/**
  * Reflect a projectile about to arrive (Fox's Reflector, Mario's Cape): one its
  * data calls reflectable (`ProjectileDef.reflectable`; no Final Smash's is, being
- * unblockable). Decided once a projectile
- * (ruling R-T18e): on the one frame that brings the reflector up `REFLECT_AIM`
- * frames before it meets the bubble, or on the frame it first appears when it
- * is already closer than that but not too close. The Cape, a side special, is
- * pressed toward the projectile, which turns Mario to it (`beginSpecial`).
+ * unblockable). Decided once a projectile (rulings R-T18e, R-T19f): on the one frame
+ * that brings the reflector up `REFLECT_AIM` frames before it meets the bubble, or,
+ * one first seen already closer than that but not too close, on the frame it first
+ * appears (age 0: a projectile is in the state from its first frame). The Cape, a
+ * side special, is pressed toward the projectile, which turns Mario to it
+ * (`beginSpecial`). Not from a run whose slide would carry it off (`slideStaysOn`).
  * Holding B keeps a reflector that loops up (Fox's), while a projectile still
  * comes.
  */
@@ -358,12 +426,12 @@ export const reflect: Behaviour = (ctx) => {
     if (r.loop === undefined) return NOTHING;
     const coming = ctx.state.projectiles.some((p) => {
       const pdef = p.owner === self.port ? undefined : projectileDefOf(ctx, p);
-      return pdef?.reflectable === true && framesToMeet(p, pdef, self.x, self.y + r.y, r.radius + fx(4)) !== null;
+      return pdef?.reflectable === true && framesToMeet(p, pdef, self.x, self.y + r.y, r.radius + REFLECT_HOLD_MARGIN) !== null;
     });
     return coming ? { score: 640, input: pick.dir | Btn.Special } : NOTHING;
   }
   // Not off the stage: a reflector there spends the fall it has left.
-  if (!free(self) || isOffstage(self, ctx.stage)) return NOTHING;
+  if (!free(self) || isOffstage(self, ctx.stage) || !slideStaysOn(ctx)) return NOTHING;
   for (const p of ctx.state.projectiles) {
     if (p.owner === self.port) continue;
     // Reflectable by its own data (a Final Smash's are not: SmashWiki "Unblockable attack").
@@ -373,7 +441,7 @@ export const reflect: Behaviour = (ctx) => {
     const meets = framesToMeet(p, pdef, self.x + face * r.x, self.y + r.y, r.radius);
     if (meets === null) continue;
     const aim = r.active[0] + REFLECT_AIM;
-    const timed = meets === aim || (p.age <= 1 && meets >= r.active[0] && meets < aim);
+    const timed = meets === aim || (p.age === 0 && meets >= r.active[0] && meets < aim);
     if (!timed) continue;
     if (!skilled(ctx)) return NOTHING;
     const stick = pick.slot === "sideB" ? towardX(self.x, p.x) : pick.dir;
@@ -388,16 +456,15 @@ export const reflect: Behaviour = (ctx) => {
  */
 export const COUNTER_AIM = 2;
 
-const FINAL_SLOTS: readonly MoveSlot[] = ["finalSmash", "finalAttack", "finalEnd"];
-
 /**
  * Counter a swing it sees coming (Marth's Counter), timed off the swing's move
- * data as the parry is (`swingHitFrame`): decided once a swing (ruling R-T18e),
- * on the frame that puts its first hit `COUNTER_AIM` frames into the counter's
- * live frames, or on the frame it is first seen when that is already later but
- * still inside them. Not a grab (it goes through a counter) and not a Final
- * Smash (SmashWiki "Unblockable attack": "cannot be defended against with a
- * shield or a counterattack").
+ * data as the parry is (`swingHitFrame`): decided once a swing (rulings R-T18e,
+ * R-T19f), on the frame that puts its first hit `COUNTER_AIM` frames into the
+ * counter's live frames, or, for a swing first seen with its hit already sooner
+ * than that but still inside them, on the frame it is first seen. Not a grab (it
+ * goes through a counter) and not a Final Smash (SmashWiki "Unblockable attack":
+ * "cannot be defended against with a shield or a counterattack"). Not from a run
+ * whose slide would carry it off (`slideStaysOn`).
  */
 export const counter: Behaviour = (ctx) => {
   const { self, target, targetAction, targetActionAge, distance, facingTarget } = ctx.view;
@@ -405,7 +472,7 @@ export const counter: Behaviour = (ctx) => {
   // Not off the stage: a counter there spends the fall it has left.
   if (pick === null || target === null || !free(self) || isOffstage(self, ctx.stage)) return NOTHING;
   if (!isAttacking(targetAction) || targetActionAge < 0 || distance > THREAT_RANGE || !facingTarget) return NOTHING;
-  if (target.move !== null && FINAL_SLOTS.includes(target.move)) return NOTHING;
+  if (isFinalSlot(target.move)) return NOTHING;
   const hit = swingHitFrame(ctx.matchDefs[target.port], target);
   if (hit === null) return NOTHING;
   const c = pick.move.counter!;
@@ -413,8 +480,8 @@ export const counter: Behaviour = (ctx) => {
   // is live on step `hit − actionFrame`.
   const lands = hit - target.actionFrame;
   const aim = c.active[0] + COUNTER_AIM;
-  const timed = lands === aim || (targetActionAge === 0 && lands > aim && lands <= c.active[1]);
-  if (!timed || !skilled(ctx)) return NOTHING;
+  const timed = lands === aim || (targetActionAge === 0 && lands >= c.active[0] && lands < aim);
+  if (!timed || !slideStaysOn(ctx) || !skilled(ctx)) return NOTHING;
   return { score: 630, input: pick.dir | Btn.Special, decided: true };
 };
 
@@ -468,8 +535,8 @@ function linedUp(ctx: BehaviourContext, range: number): boolean {
  *  - **Held smashes**: from the smash's own hold frame (`smashHoldFrame`) to the
  *    published most (`SMASH_CHARGE_MAX`), the attack button stays down while the
  *    opponent cannot act soon (`CANNOT_ACT_SOON`): a charge times itself on the
- *    move's own data. Decided on the swing's first frame, by what the opponent is
- *    doing then; no roll.
+ *    move's own data. Read every frame of the charge, from the opponent as the CPU
+ *    sees them then and its own charge; no roll.
  */
 export const storeCharge: Behaviour = (ctx) => {
   const { self, target, targetAction, distance } = ctx.view;
@@ -595,8 +662,8 @@ export const holding: Behaviour = (ctx) => {
   return NOTHING;
 };
 
-/** Held, carried, in a mouth, on a star, or stunned with the shield broken: what a mash shortens. */
-const MASHED: readonly ActionState[] = ["grabbed", "cargoHeld", "swallowed", "spatStar", "shieldBroken"];
+/** Held, carried, in a mouth, on a star (`HELD_ACTIONS`, where `survive` is silent), or stunned with the shield broken: what a mash shortens. */
+const MASHED: readonly ActionState[] = [...HELD_ACTIONS, "shieldBroken"];
 
 /**
  * The frames between mash presses at this level. UNVERIFIED (tuning): a mash is
@@ -608,7 +675,7 @@ export function mashPeriod(sdiSkill: number): number {
 }
 
 /**
- * Mash out (SmashWiki "Grab": a grab "can be escaped ... by mashing buttons";
+ * Mash out (SmashWiki "Grab": the grab period "can be decreased by button mashing";
  * "Shield break" for the stun): a shield press and a fresh direction, left and
  * right in turn, every `mashPeriod` frames. Shield rather than an attack, so a
  * press still in the buffer when it comes free is a shield, not a swing.
@@ -640,20 +707,48 @@ export const SIDE_RECOVER_ABOVE = fx(40);
  * Recover sideways with a special that carries the fighter (Fox Illusion, Skull
  * Bash; `sideRecoveryFromDef`): off the stage, level with it, once the jumps are
  * gone, and only where the move's own path, run by the engine's rules as the up
- * special's is (`upBPath`, `upBInReach`), comes down on the stage or within a
- * ledge grab: a side special spent offstage that does not get the fighter back
- * was a self-destruct (Task 13b's classification). Before the up special, so the
- * up special is still there after it where the side special leaves the fighter
- * free. Steering, like the up special's path: no roll.
+ * special's is (`upBPath`, `upBInReach`), comes down on the stage or within a ledge
+ * grab: a side special spent offstage that does not get the fighter back was a
+ * self-destruct (Task 13b's classification). Before the up special, so the up
+ * special is still there after it where the side special leaves the fighter free.
+ *
+ * One `recoverySkill` roll an offstage episode (ruling R-T19i, R-T18e's one-roll
+ * rule; the Task 19 review's M3): on the first frame of its window, the first its
+ * path gets it back, decided, so no jitter or fumble undoes it; a failed roll leaves
+ * the episode to the up special. The frame before is rebuilt one frame back on the
+ * fighter's own velocity, as `threatBefore` rebuilds a threat (`sideBefore`).
  */
 export const sideRecover: Behaviour = (ctx) => {
   const { self } = ctx.view;
   const side = ctx.fighterDef === null ? null : sideRecoveryFromDef(ctx.fighterDef);
-  if (side === null || !free(self) || self.grounded || !isOffstage(self, ctx.stage)) return NOTHING;
-  if (self.jumpsUsed < ctx.jumps) return NOTHING;
-  if (self.y < ctx.stage.groundY - SIDE_RECOVER_BELOW || self.y > ctx.stage.groundY + SIDE_RECOVER_ABOVE) return NOTHING;
+  if (side === null || !sideWindow(ctx, self)) return NOTHING;
   const ledge = self.x < 0 ? ctx.stage.leftLedge : ctx.stage.rightLedge;
   const toward = towardX(self.x, ledge);
   if (!upBInReach(self, ledge, ctx.stage, side, toward, ctx.view.frame)) return NOTHING;
-  return { score: 960, input: side.press!(toward) };
+  const before = sideBefore(ctx, self);
+  if (before !== null && sideWindow(ctx, before) && upBInReach(before, ledge, ctx.stage, side, toward, ctx.view.frame - 1)) return NOTHING;
+  if (ctx.rolls[ROLL_SPECIAL] >= ctx.tuning.recoverySkill) return NOTHING;
+  return { score: 960, input: side.press!(toward), decided: true };
 };
+
+/** The side special's window, but for its path: free, in the air, off the stage, its jumps gone, level with the stage's top (`SIDE_RECOVER_BELOW`, `SIDE_RECOVER_ABOVE`). */
+function sideWindow(ctx: BehaviourContext, f: FighterState): boolean {
+  if (!free(f) || f.grounded || !isOffstage(f, ctx.stage) || f.jumpsUsed < ctx.jumps) return false;
+  return f.y >= ctx.stage.groundY - SIDE_RECOVER_BELOW && f.y <= ctx.stage.groundY + SIDE_RECOVER_ABOVE;
+}
+
+/**
+ * The fighter the frame before, one frame back on its own velocity, where it can be
+ * told it was in the same window: the same action, a frame younger; or, on a fall's
+ * first frame, the jump it came over the top of (`airMain` turns a jump into a fall
+ * at the top: the fall's speed is then one to two frames of gravity), with no jump of
+ * its own spent since. Null where it was in another action (a jump's first frame
+ * spends one; a fall begun out of a move, a dodge or a reel): the window opens now.
+ */
+function sideBefore(ctx: BehaviourContext, f: FighterState): FighterState | null {
+  const back = { ...f, x: f.x - f.vx, y: f.y - f.vy, airTime: Math.max(0, f.airTime - 1) };
+  if (f.actionFrame > 0) return { ...back, actionFrame: f.actionFrame - 1 };
+  if (f.action !== "fall" || ctx.fighterDef === null) return null;
+  const g = fighterParams(ctx.fighterDef).air_accel_y;
+  return f.vy <= -g && f.vy > -2 * g ? { ...back, action: "jump" } : null;
+}

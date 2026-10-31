@@ -648,18 +648,35 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
     for (let seed = 1; seed <= 200; seed++) expect(decideCpu(mid, 0, 1, seed, cpuWorldFromDef(fox, fd)).input, `seed ${seed}`).toBe(want);
   });
 
-  it("does not start an aerial off the stage that would leave it no way back (the Task 13b re-review's edge aerials)", () => {
-    // Mario in the air at Final Destination's left edge, his midair jump left,
+  it("does not start an aerial off the stage that would leave it no way back, and lives (the Task 13b re-review's edge aerials)", () => {
+    // Mario in the air at Final Destination's left edge, his midair jump spent,
     // edgeguarding an opponent tumbling off the stage beside him: the forward air he
-    // chased with ran 60 frames and left him deeper than his jump and up special
-    // reach (the re-review: 15 of its 19 such self-destructs were `edgeguard`'s).
+    // chased with ran on and left him deeper than his up special reaches (the
+    // re-review: 15 of its 19 such self-destructs were `edgeguard`'s). Played out, at
+    // every phase of the swing's pulse: he swings nothing off the stage and lives. With
+    // the guard off he swings and dies at every phase (the Task 19 review's M5:
+    // re-staged with the jump spent, where the guard is what saves him).
     const mario = def("mario");
     const world = cpuWorldFromDef(mario, fd, [mario, def("fox")]);
-    const off = airborne("finalDestination", "mario", { x: fx(-76), y: fx(18), vy: 0, facing: -1, jumpsUsed: 1 }, fx(-100));
-    Object.assign(off.fighters[1], { action: "tumble", grounded: false, y: fx(10), hitstun: 30, damage: fx(60) });
-    for (let phase = 0; phase < 12; phase++) {
-      off.frame = phase;
-      expect(decideCpu(off, 0, 9, 7, world).input & Btn.Attack, `phase ${phase}`).toBe(0);
+    for (let phase = 0; phase < 6; phase++) {
+      let s = airborne("finalDestination", "mario", { x: fx(-76), y: fx(18), vy: 0, facing: -1, jumpsUsed: 2 }, fx(-96));
+      Object.assign(s.fighters[1], { action: "tumble", grounded: false, platform: -1, y: fx(10), hitstun: 30, damage: fx(60) });
+      s.frame = phase;
+      let prev: readonly InputFrame[] = [0, 0];
+      let seed = 7 + phase;
+      let swung = false;
+      let died = false;
+      for (let i = 0; i < 400; i++) {
+        const d = decideCpu(s, 0, 9, seed, world);
+        seed = d.seed;
+        if (!s.fighters[0].grounded && s.fighters[0].action !== "attack" && (d.input & Btn.Attack) !== 0) swung = true;
+        const out = step(s, [d.input, 0], { prevInputs: prev });
+        prev = [d.input, 0];
+        s = out.state;
+        if (out.events.kos.some((k) => k.port === 0)) died = true;
+        if (died || s.fighters[0].grounded || s.fighters[0].ledge !== null) break;
+      }
+      expect([swung, died], `phase ${phase}`).toEqual([false, false]);
     }
     // Over the stage, high up, the same swing is safe and comes out.
     const over = airborne("finalDestination", "mario", { x: 0, y: fx(40), vy: 0, facing: 1, jumpsUsed: 2 }, fx(-6));
@@ -669,5 +686,22 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
       return decideCpu(over, 0, 9, 7, world).input & Btn.Attack;
     });
     expect(swings.some((a) => a !== 0)).toBe(true);
+  });
+
+  it("a stranding aerial held off sends the stick home, Up and Down let go with the swing (the Task 19 review's M4)", () => {
+    // Link just past Final Destination's left ledge, out of jumps, a tumbling opponent
+    // right under him (a down air) or over him (an up air): either would strand him,
+    // and a Down left held fast-falls him (`air.ts`).
+    const link = def("link");
+    const world = cpuWorldFromDef(link, fd, [link, def("fox")]);
+    for (const [oy, vx] of [[-13.2, 0], [13.2, -0.8]] as const) {
+      const s = airborne("finalDestination", "link", { x: fd.leftLedge - fx(0.5), y: fx(24), vx: fx(vx), vy: 0, facing: -1, jumpsUsed: 2 }, fd.leftLedge - fx(0.5));
+      Object.assign(s.fighters[1], { action: "tumble", grounded: false, platform: -1, y: fx(24 + oy), hitstun: 30, damage: fx(60) });
+      for (let phase = 0; phase < 3; phase++) {
+        s.frame = phase;
+        const d = decideCpu(s, 0, 9, 7, world);
+        expect([d.behaviour, d.input], `${oy} phase ${phase}`).toEqual(["attack", Btn.Right]);
+      }
+    }
   });
 });

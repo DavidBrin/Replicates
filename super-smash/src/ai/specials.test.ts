@@ -22,11 +22,25 @@ import { actionFrameOf } from "@/engine/hitbox";
 import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { smashHoldFrame } from "@/engine/acmd/run";
-import { Btn, held, type FighterDef, type GameState, type InputFrame, type ProjectileState } from "@/engine/types";
+import { Btn, held, type FighterDef, type GameState, type InputFrame, type MoveSlot, type ProjectileState } from "@/engine/types";
 import { FIGHTERS, donkeyKong, fox, kirby, link, mario, marth, pikachu, samus } from "@/fighters";
 import { STAGES } from "@/stages";
 import { makeFighter, makeState } from "@/render/testFixtures";
-import { DECISION_ROLLS, DEFAULT_STAGE_VIEW, MELEE_RANGE, ROLL_SPECIAL, observe, recoveryFromDef, stageViewFromDef, type BehaviourContext } from "./behaviours";
+import { fighterParams } from "@/engine/params";
+import {
+  DECISION_ROLLS,
+  DEFAULT_STAGE_VIEW,
+  MELEE_RANGE,
+  ROLL_SPECIAL,
+  free,
+  observe,
+  recoveryFromDef,
+  stageViewFromDef,
+  swingHitFrame,
+  towardX,
+  type BehaviourContext,
+  type StageView,
+} from "./behaviours";
 import { BEHAVIOURS, cpuDef, cpuInput, cpuWorldFromDef, decideCpu, tuningForLevel } from "./cpu";
 import {
   CARGO_CARRY_FRAMES,
@@ -35,7 +49,6 @@ import {
   counter,
   finalSmash,
   framesToMeet,
-  free,
   holding,
   mash,
   mashPeriod,
@@ -54,13 +67,13 @@ beforeAll(() => {
 const defOf = (id: string): FighterDef => FIGHTERS.find((f) => f.id === id)!;
 const FD = stageViewFromDef(STAGES.find((x) => x.id === "finalDestination")!);
 
-function context(state: GameState, def: FighterDef, level = 9, rolls: number[] = new Array(DECISION_ROLLS).fill(0)): BehaviourContext {
+function context(state: GameState, def: FighterDef, level = 9, rolls: number[] = new Array(DECISION_ROLLS).fill(0), stage: StageView = DEFAULT_STAGE_VIEW): BehaviourContext {
   const tuning = tuningForLevel(level);
   const defs = state.fighters.map((f, i) => (i === 0 ? def : defOf(f.defId)));
   return {
     state,
     view: observe(state, 0, tuning.reactionFrames),
-    stage: DEFAULT_STAGE_VIEW,
+    stage,
     tuning,
     jumps: def.attributes.jumps,
     meleeReach: MELEE_RANGE,
@@ -138,6 +151,39 @@ describe("the Final Smash", () => {
     expect(finalSmash(context(ready(20, { x: 0 }), pikachu)).score).toBe(0);
     expect(finalSmash(context(landing(20), pikachu)).score).toBeGreaterThan(0);
     expect(finalSmash(context(landing(40), pikachu)).score).toBe(0);
+  });
+
+  it("never starts Volt Tackle at a free target however much stage is ahead: point-blank on a held one only (ruling R-T19h)", () => {
+    // The Task 19 review's M2: Pokémon Stadium 2 is 187.6 wide, more than the dash's
+    // own 166.5 (`dashTravel`), but a whiff carries on past its dash windows (about
+    // 255) and falls; 15 inside its left ledge, at a free standing target 108 ahead.
+    const ps2 = stageViewFromDef(STAGES.find((x) => x.id === "pokemonStadium2")!);
+    const at = ps2.leftLedge + fx(15);
+    const s = makeState({ fighters: [makeFighter({ port: 0, x: at, finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "pikachu" }), makeFighter({ port: 1, x: at + fx(108) })] });
+    expect(ps2.rightLedge - at).toBeGreaterThan(fx(166.5));
+    expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBe(0);
+    // Point-blank on a target that cannot act soon, from a standstill, it still is.
+    s.fighters[1] = makeFighter({ port: 1, x: at + fx(20), action: "landingLag", actionFrame: 20 });
+    expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBeGreaterThan(0);
+  });
+
+  it("does not start a dash from a run whose slide would carry it off the floor it stands on, a side platform's end included (Task 19 fix round 1's sweep)", () => {
+    // Marth dashing right on Battlefield's right platform (38.2 ± 19.4, 27.2 up), 15.1
+    // from its end: its windup slid it off, and Critical Hit flew on through the air.
+    const plat = DEFAULT_STAGE_VIEW.platforms[1];
+    const end = (plat.x + plat.halfWidth) / 4096;
+    const on = (x: number, y: number, vx: number) =>
+      makeState({
+        fighters: [
+          makeFighter({ port: 0, x: fx(x), y: fx(y), vx: fx(vx), action: vx === 0 ? "stand" : "dashStart", actionFrame: 2, finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "marth" }),
+          makeFighter({ port: 1, x: fx(x + 12), y: fx(y) }),
+        ],
+      });
+    const y = plat.y / 4096;
+    expect(finalSmash(context(on(end - 15.1, y, 2.3), marth)).score).toBe(0);
+    // From a standstill there it fits; on the main stage from a run, too.
+    expect(finalSmash(context(on(end - 15.1, y, 0), marth)).score).toBeGreaterThan(0);
+    expect(finalSmash(context(on(0, 0, 2.3), marth)).score).toBeGreaterThan(0);
   });
 
   it("uses Critical Hit on the ground whatever its travel, since its grounded dash stops at the edge, but not in the air or from the edge", () => {
@@ -254,10 +300,38 @@ describe("reflect and counter", () => {
     const r = fox.moves.downB!.reflector!;
     // It meets the bubble in active[0] + 1 steps: past the aim, inside the reflector's frames.
     const gap = r.radius + ball.hitbox.radius + fx(2) * r.active[0] + fx(1);
-    s.projectiles = [shot(mario, "fireball", s, gap, -fx(2), 1)];
+    // A projectile is first in the state at age 0 (ruling R-T19f): that is its first sight.
+    s.projectiles = [shot(mario, "fireball", s, gap, -fx(2), 0)];
     expect(reflect(context(s, fox)).score).toBeGreaterThan(0);
-    s.projectiles = [shot(mario, "fireball", s, gap, -fx(2), 6)];
-    expect(reflect(context(s, fox)).score).toBe(0);
+    for (const age of [1, 6]) {
+      s.projectiles = [shot(mario, "fireball", s, gap, -fx(2), age)];
+      expect(reflect(context(s, fox)).score, `age ${age}`).toBe(0);
+    }
+  });
+
+  it("decides once over a fireball's whole flight from where it appears, wherever that is (ruling R-T19f)", () => {
+    // From age 0, 2 a frame: one decision where the Reflector can still be up for it
+    // when it is first seen (it meets the bubble on the reflector's frames or later),
+    // none where it is already too close.
+    const ball = findProjectileDef(mario, "fireball")!;
+    const r = fox.moves.downB!.reflector!;
+    let late = 0;
+    for (let start = 14; start <= 70; start += 0.5) {
+      const s = makeState({ fighters: [makeFighter({ port: 0, x: 0, facing: 1, defId: "fox" }), makeFighter({ port: 1, x: fx(80), defId: "mario" })] });
+      const first = framesToMeet(shot(mario, "fireball", s, fx(start), -fx(2), 0), ball, 0, fx(6.5), r.radius)!;
+      const decided: number[] = [];
+      for (let age = 0; age < 40; age++) {
+        s.projectiles = [shot(mario, "fireball", s, fx(start) - fx(2) * age, -fx(2), age)];
+        const res = reflect(context(s, fox));
+        if (res.score > 0 && res.decided === true) decided.push(age);
+      }
+      expect(decided.length, `from ${start} (meets in ${first})`).toBe(first >= r.active[0] ? 1 : 0);
+      if (first >= r.active[0] && first < r.active[0] + REFLECT_AIM) {
+        late++;
+        expect(decided, `from ${start}: first sight`).toEqual([0]);
+      }
+    }
+    expect(late).toBeGreaterThan(0);
   });
 
   it("keeps a looping reflector up while a projectile still comes at it, and lets it go after", () => {
@@ -314,6 +388,116 @@ describe("reflect and counter", () => {
     expect(held(r.input, Btn.Down) && held(r.input, Btn.Special) && r.decided === true).toBe(true);
     const rolls = new Array(DECISION_ROLLS).fill(0.5);
     for (let a = 0; a < first; a++) expect(counter(context(swingAt(a), marth, 1, rolls)).score).toBe(0);
+  });
+
+  it("decides once over a whole swing: Mario's forward air, seen early, on the frame that puts its hit on the aim (ruling R-T19f)", () => {
+    const hit = swingHitFrame(mario, { move: "fair", actionFrame: 0, combat: makeFighter().combat })!;
+    const c = marth.moves.downB!.counter!;
+    const swingAt = (actionFrame: number) =>
+      makeState({ fighters: [makeFighter({ port: 0, facing: 1, defId: "marth" }), makeFighter({ port: 1, x: fx(14), y: fx(6), grounded: false, action: "attack", move: "fair", actionFrame, facing: -1 })] });
+    const decidedOn: number[] = [];
+    for (let a = 0; a <= hit; a++) if (counter(context(swingAt(a), marth)).score > 0) decidedOn.push(a);
+    expect(decidedOn).toEqual([hit - (c.active[0] + COUNTER_AIM)]);
+  });
+
+  const SWINGS = ["jab1", "jab2", "jab3", "rapidJab", "ftilt", "utilt", "dtilt", "dashAttack", "nair", "fair", "bair", "uair", "dair"];
+
+  it("decides once a swing, for every swing of every fighter seen at levels 5, 7 and 9: a swing first seen late on its first frame, one seen too late on none (ruling R-T19f)", () => {
+    // The Task 19 review's sweep of 183 moves × 3 levels found 50 decided twice.
+    const c = marth.moves.downB!.counter!;
+    const aim = c.active[0] + COUNTER_AIM;
+    let late = 0;
+    let cases = 0;
+    for (const level of [5, 7, 9]) {
+      const t = tuningForLevel(level);
+      for (const def of FIGHTERS) {
+        for (const [slot, move] of Object.entries(def.moves)) {
+          // A swing at a free opponent: an attack's or a special's (not a throw, a grab or a
+          // ledge's), and not a smash, whose timing waits on its charge (`swingHitFrame`).
+          const action = SWINGS.includes(slot) ? "attack" : /^(neutral|side|up|down)B/.test(slot) ? "special" : null;
+          if (move === undefined || action === null || move.chargeable === true) continue;
+          const hit = swingHitFrame(def, { move: slot as MoveSlot, actionFrame: 0, combat: makeFighter().combat });
+          if (hit === null) continue;
+          cases++;
+          const swingAt = (actionFrame: number) =>
+            makeState({ fighters: [makeFighter({ port: 0, facing: 1, defId: "marth" }), makeFighter({ port: 1, defId: def.id, x: fx(14), action, move: slot as MoveSlot, actionFrame, facing: -1 })] });
+          const decidedOn: number[] = [];
+          for (let a = 0; a <= hit + 2; a++) if (counter(context(swingAt(a), marth, level)).score > 0) decidedOn.push(a);
+          // First seen at its reaction time into the swing: the hit is then this far off.
+          const firstLands = hit - t.reactionFrames;
+          const want = firstLands >= aim ? [hit - aim] : firstLands >= c.active[0] ? [t.reactionFrames] : [];
+          if (want.length === 1 && want[0] === t.reactionFrames && firstLands < aim) late++;
+          expect(decidedOn, `level ${level} ${def.id} ${slot} (hit ${hit})`).toEqual(want);
+        }
+      }
+    }
+    expect(cases).toBeGreaterThan(100);
+    expect(late).toBeGreaterThan(0);
+  });
+
+  it("a level-9 Marth CPU counters a real swing, and the engine's counter catches it", () => {
+    // Marth's own dash attack, 14 away, from the frame a level 9 sees it: its hit is
+    // then inside the counter's live frames and short of its aim, so the counter decides
+    // at first sight (ruling R-T19f), before the shield's first-sight decision.
+    const world = cpuWorldFromDef(marth, FD, [marth, marth]);
+    let decided = 0;
+    let caught = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const rules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true } as const;
+      let s = createInitialState("finalDestination", [{ defId: "marth" }, { defId: "marth" }], rules, 21);
+      Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: 0, intangible: 0, facing: 1 });
+      Object.assign(s.fighters[1], { action: "attack", move: "dashAttack", actionFrame: tuningForLevel(9).reactionFrames, grounded: true, platform: 0, x: fx(14), y: 0, intangible: 0, facing: -1 });
+      let cs = seed;
+      let prev: InputFrame[] = [0, 0];
+      let mine = false;
+      for (let i = 0; i < 60; i++) {
+        const d = decideCpu(s, 0, 9, cs, world);
+        cs = d.seed;
+        if (d.behaviour === "counter") mine = true;
+        const out = step(s, [d.input, 0], { prevInputs: prev });
+        prev = [d.input, 0];
+        s = out.state;
+        if (out.events.counters.some((c) => c.port === 0)) {
+          caught++;
+          break;
+        }
+        if (out.events.hits.some((h) => h.victim === 0)) break;
+      }
+      if (mine) decided++;
+    }
+    expect(decided).toBeGreaterThan(10);
+    expect(caught).toBe(decided);
+  });
+
+  it("does not counter or reflect from a run whose slide would carry it off the ledge (the Task 19 review's M6)", () => {
+    // Marth running at the right ledge, 3.6 from it (the sweep's marth-pikachu, seed
+    // 9055), a forward air timed for the counter just past it.
+    const p = fighterParams(marth);
+    const c = marth.moves.downB!.counter!;
+    const hit = swingHitFrame(mario, { move: "fair", actionFrame: 0, combat: makeFighter().combat })!;
+    const at = (x: number, action: "run" | "stand", vx: number) =>
+      makeState({
+        fighters: [
+          makeFighter({ port: 0, x: fx(x), facing: 1, defId: "marth", action, actionFrame: 10, vx }),
+          makeFighter({ port: 1, x: fx(x + 14), y: fx(6), grounded: false, action: "attack", move: "fair", actionFrame: hit - (c.active[0] + COUNTER_AIM), facing: -1 }),
+        ],
+      });
+    const ledge = DEFAULT_STAGE_VIEW.rightLedge / 4096;
+    expect(counter(context(at(ledge - 3.6, "run", p.run_speed_max), marth)).score).toBe(0);
+    expect(counter(context(at(ledge - 3.6, "stand", 0), marth)).score).toBeGreaterThan(0);
+    expect(counter(context(at(0, "run", p.run_speed_max), marth)).score).toBeGreaterThan(0);
+    // Fox's Reflector likewise, a fireball timed for it.
+    const r = fox.moves.downB!.reflector!;
+    const ball = findProjectileDef(mario, "fireball")!;
+    const gap = r.radius + ball.hitbox.radius + fx(2) * (r.active[0] + REFLECT_AIM - 1) + fx(1);
+    const fp = fighterParams(fox);
+    const run = (x: number, vx: number) => {
+      const s = makeState({ fighters: [makeFighter({ port: 0, x: fx(x), facing: 1, defId: "fox", action: vx === 0 ? "stand" : "run", actionFrame: 10, vx }), makeFighter({ port: 1, x: fx(x - 60), defId: "mario" })] });
+      s.projectiles = [shot(mario, "fireball", s, fx(x) + gap, -fx(2))];
+      return s;
+    };
+    expect(reflect(context(run(ledge - 3.6, fp.run_speed_max), fox)).score).toBe(0);
+    expect(reflect(context(run(ledge - 3.6, 0), fox)).score).toBeGreaterThan(0);
   });
 
   it("does not counter a grab or a Final Smash", () => {
@@ -450,7 +634,9 @@ describe("carries, mouthfuls and grabs", () => {
   });
 
   it("does not inhale a target it cannot catch: intangible, or held already", () => {
-    const s = makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, actionFrame: 0 }), makeFighter({ port: 1, x: fx(8), intangible: 10 })] });
+    // Seen intangible: its action noticed (ruling R-T19k: the CPU sees what goes with
+    // the action it has seen, `observe`).
+    const s = makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, actionFrame: 0 }), makeFighter({ port: 1, x: fx(8), intangible: 10, actionFrame: 30 })] });
     expect(holding(context(s, kirby)).score).toBe(0);
     s.fighters[1] = makeFighter({ port: 1, x: fx(8), grabbedBy: 2 });
     expect(holding(context(s, kirby)).score).toBe(0);
@@ -526,6 +712,11 @@ describe("carries, mouthfuls and grabs", () => {
     // Not a Final Smash's trap.
     const trapped = makeState({ fighters: [makeFighter({ port: 0, action: "finalTrapped" }), makeFighter({ port: 1 })] });
     expect(mash(context(trapped, mario)).score).toBe(0);
+    // A broken shield's stun on the ground is mashed too (`MASHED`); in the air it is not.
+    const broken = makeState({ fighters: [makeFighter({ port: 0, action: "shieldBroken" }), makeFighter({ port: 1, x: fx(30) })] });
+    expect(mash(context(broken, mario)).score).toBeGreaterThan(0);
+    broken.fighters[0] = makeFighter({ port: 0, action: "shieldBroken", grounded: false });
+    expect(mash(context(broken, mario)).score).toBe(0);
   });
 
   it("a level-9 CPU held in a grab gets out sooner than one that does nothing", () => {
@@ -584,6 +775,50 @@ describe("side recovery", () => {
     expect(sideRecover(context(jumpLeft, fox)).score).toBe(0);
   });
 
+  it("rolls once an offstage episode: on the first frame its path gets it back, and a failed roll leaves the episode to the up special (ruling R-T19i)", () => {
+    // Fox out of jumps, falling at Battlefield's right side from high above, drifting
+    // home as `recover` holds it; the side special evaluated with its roll passed and
+    // failed on every frame of the fall, the fall run on by the engine.
+    // The last scene spends its midair jump on the first frame, inside the window: it
+    // decides in the rise, and the fall after the top is the same window (`sideBefore`).
+    for (const [x0, y0, jump] of [[150, 70, false], [140, 90, false], [160, 60, false], [130, -5, true]] as const) {
+      let s = createInitialState("battlefield", [{ defId: "fox" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true } as const, 5);
+      Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(x0), y: fx(y0), jumpsUsed: jump ? 1 : 2, facing: -1, intangible: 0, invincible: 0 });
+      Object.assign(s.fighters[1], { x: 0, intangible: 0, invincible: 0 });
+      const bf = stageViewFromDef(STAGES.find((x) => x.id === "battlefield")!);
+      let prev: InputFrame[] = [0, 0];
+      const decided: number[] = [];
+      let rose = false;
+      let decidedIn = "";
+      for (let k = 0; k < 120 && (s.fighters[0].action === "fall" || s.fighters[0].action === "jump"); k++) {
+        if (s.fighters[0].action === "jump") rose = true;
+        // Level 7 (recoverySkill 0.88): level 9's 1.0 never fails.
+        const pass = sideRecover(context(s, fox, 7, rollsWith(ROLL_SPECIAL, 0), bf));
+        const fail = sideRecover(context(s, fox, 7, rollsWith(ROLL_SPECIAL, 0.95), bf));
+        expect(fail.score, `${x0},${y0} frame ${k}: a failed roll presses nothing`).toBe(0);
+        if (pass.score > 0) {
+          expect(pass.decided, `${x0},${y0} frame ${k}`).toBe(true);
+          decided.push(k);
+          decidedIn = s.fighters[0].action;
+        }
+        const drift = towardX(s.fighters[0].x, bf.rightLedge) | (jump && k === 0 ? Btn.Jump : 0);
+        s = step(s, [drift, 0], { prevInputs: prev }).state;
+        prev = [drift, 0];
+      }
+      expect(decided.length, `${x0},${y0}: ${decided.join(",")}`).toBe(1);
+      expect(rose, `${x0},${y0}: the jump's rise`).toBe(jump);
+      // Decided in the rise, and not again over its top.
+      if (jump) expect(decidedIn).toBe("jump");
+    }
+  });
+
+  it("a level-1 Fox side-recovers at its recoverySkill: the roll is the level's", () => {
+    const s = makeState({ fighters: [makeFighter({ port: 0, grounded: false, action: "fall", actionFrame: 0, x: fx(137), y: fx(25), jumpsUsed: 2, defId: "fox", facing: -1 }), makeFighter({ port: 1 })] });
+    const L1 = tuningForLevel(1);
+    expect(sideRecover(context(s, fox, 1, rollsWith(ROLL_SPECIAL, L1.recoverySkill - 0.01))).score).toBeGreaterThan(0);
+    expect(sideRecover(context(s, fox, 1, rollsWith(ROLL_SPECIAL, L1.recoverySkill + 0.01))).score).toBe(0);
+  });
+
   it("not a side special that carries nothing (Samus's Missile)", () => {
     const s = makeState({ fighters: [makeFighter({ port: 0, grounded: false, action: "fall", x: fx(100), y: fx(-4), jumpsUsed: 2, defId: "samus", facing: -1 }), makeFighter({ port: 1 })] });
     expect(sideRecover(context(s, samus)).score).toBe(0);
@@ -623,6 +858,10 @@ describe("a state free to act (`free`)", () => {
     expect(free(makeFighter({ action: "fall", grounded: false, hitlag: 3 }))).toBe(false);
     expect(free(makeFighter({ action: "turnaround" }))).toBe(false);
     expect(free(makeFighter({ action: "attack", move: "jab1" }))).toBe(false);
+    // A tumble's fall reads a press as a fall does (`airMain`), and a crawl as a crouch does.
+    expect(free(makeFighter({ action: "tumbleFall", grounded: false }))).toBe(true);
+    expect(free(makeFighter({ action: "crawl" }))).toBe(true);
+    expect(free(makeFighter({ action: "landingLag" }))).toBe(false);
   });
 });
 

@@ -351,10 +351,12 @@ export function decideCpu(
 
   // An aerial near or off the stage that would leave the fighter no way back is
   // not pressed (Plan 5, Task 19: `aerialStrands`): whatever asked for it, the
-  // fighter drifts home instead. Judgement, not a roll.
+  // fighter drifts home instead, the whole stick on it, Up and Down let go with the
+  // swing (the Task 19 review's M4: a Down kept from a down air fast-fell). Judgement,
+  // not a roll.
   if (aerialStrands(ctx, bestInput)) {
     const home = ctx.view.self.x < 0 ? ctx.stage.leftLedge : ctx.stage.rightLedge;
-    bestInput = (bestInput & ~(Btn.Attack | Btn.Left | Btn.Right)) | towardX(ctx.view.self.x, home);
+    bestInput = (bestInput & ~(Btn.Attack | Btn.Left | Btn.Right | Btn.Up | Btn.Down)) | towardX(ctx.view.self.x, home);
   }
 
   // The fumble: a dropped frame of input. It is what a low-level CPU's hands

@@ -351,6 +351,12 @@ const MATCHES: readonly Match[] = [
  * down again (a missed tech's bounce is no longer rolled again), and none crouches,
  * ledge-jumps, ledge-rolls or is shield-stunned any more, which the script and the
  * labs reach. All 59 are visited.
+ * Task 19's fix round 1 (one decision a threat for a counter, a reflector and the
+ * shield, the shield's for a threat first seen in a reel, a landing's lag or a
+ * get-up on that action's last frame; the opponent's intangibility seen with its
+ * action; one side-recovery roll an episode) adds no action. The four CPU matches
+ * reach 44 between them, as before: link-samus ledge-jumps, and none ledge-attacks
+ * any more, which the script does. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1078,6 +1084,20 @@ describe("engine golden trace", () => {
   // script and the eight labs are byte-identical. So now: hits 39/42/34/29, 6, 0, 1,
   // 4, 1, 2, 33, 54 and 0; shield hits 0/1/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs
   // 0/0/2/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
+  // Plan 5 Task 19's fix round 1 moved the four CPU matches again. Three from the
+  // first frame a CPU swings at an opponent whose intangibility or invincibility it
+  // has not yet seen (ruling R-T19k: it comes with the action noticed): mario-fox on
+  // 48 and donkeyKong-pikachu on 33 (the 1-100 sample), kirby-marth on 171 (101-200);
+  // link-samus on 224 (201-300), where Samus, seeing Link's swing as she reels,
+  // decides her shield on the reel's last frame (ruling R-T19g). Between them they
+  // raise a shield 81 times (31 before) and parry 15 times (1); they tech 15 times (25)
+  // and lie down 7 times (11). Hits 40, 43, 29 and 27; shield hits 4, 11, 0 and 0; KOs
+  // 0, 0, 1 and 0 (were 39/42/34/29, 0/1/0/0 and 0/0/2/1): Samus, knocked off by Link's
+  // dash attack at 54.9%, reaches the ledge on her up special's fall while Link holds
+  // it in his get-up, and falls past it on 1948. The script and the eight labs are
+  // byte-identical. So now: hits 40/43/29/27, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield
+  // hits 4/11/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/1/0, 1, 2, 0, 0, 0, 0, 0, 2
+  // and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

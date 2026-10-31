@@ -19,6 +19,10 @@ const CTX: SimContext = { fighter: () => DEF, stage: () => STAGE };
 const RULES: MatchRules = { mode: "time", stocks: 1, timeLimit: 60 * 60 * 5, smashBall: true, oneOnOne: false };
 
 describe("the Smash Ball (Plan 5)", () => {
+  it("pins its band over the stage (UNVERIFIED: tuning), so a re-tune is a deliberate edit (the Task 19 review's M8)", () => {
+    expect([SMASH_BALL_FLOOR, SMASH_BALL_CEILING]).toEqual([fx(10), fx(60)]);
+  });
+
   it("floats over the stage and never drifts out of reach", () => {
     let s = createInitialState("s", [{ defId: "t" }], RULES, 77, CTX);
     s.fighters[0].action = "dead";

@@ -528,6 +528,14 @@ describe("shield", () => {
       fighter(1, { x: fx(20), action: "attack", actionFrame: seen(L9) }),
     ]);
     expect(held(shield(context(state, L9)).input, Btn.Left)).toBe(true);
+    // And from a shield already up against the swing (the Task 19 review's M1): the
+    // spent shield is let go for the roll, not held through the swing.
+    const raised = gameState([
+      fighter(0, { shieldHealth: fx(5), action: "shield", actionFrame: 6 }),
+      fighter(1, { x: fx(20), action: "attack", actionFrame: seen(L9) + 6 }),
+    ]);
+    const r = shield(context(raised, L9));
+    expect([held(r.input, Btn.Left), held(r.input, Btn.Shield)]).toEqual([true, true]);
   });
 
   // In the air the shield is a neutral air dodge, which keeps the fighter's
@@ -902,6 +910,15 @@ describe("breaking a loop against the same defence (Plan 5, Task 19)", () => {
       const state = gameState([fighter(0), fighter(1, { x: fx(10), actionFrame: 20, ...over })]);
       expect(attack(context(state, L9)).score, over.action).toBe(0);
     }
+  });
+
+  it("sees a target's intangibility only with the action it has noticed: a roll's start is still a target (ruling R-T19k)", () => {
+    // The roll two frames in: a level 9 (4 frames) still believes it standing, and swings;
+    // a level 1 (30) for longer. Once the roll is seen, it holds off.
+    const rolling = (actionFrame: number) => gameState([fighter(0), fighter(1, { x: fx(10), action: "roll", actionFrame, intangible: 10 })]);
+    expect(attack(context(rolling(2), L9)).score).toBeGreaterThan(0);
+    expect(attack(context(rolling(seen(L9)), L9)).score).toBe(0);
+    expect(attack(context(rolling(20), tuningForLevel(1))).score).toBeGreaterThan(0);
   });
 
   it("after the same move has met the shield three times running, grabs it in grab range or walks in, rather than poke it again", () => {

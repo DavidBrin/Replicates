@@ -135,6 +135,7 @@ describe("determinism", () => {
     const sources = [
       "ai/cpu.ts",
       "ai/behaviours.ts",
+      "ai/specials.ts",
       "input/schemes.ts",
       "input/keyboard.ts",
       "input/gamepad.ts",
@@ -149,7 +150,7 @@ describe("determinism", () => {
 
     // The simulation-facing half additionally avoids the transcendentals two
     // engines are allowed to disagree about (SPEC section 3 rule 3).
-    for (const relative of ["ai/cpu.ts", "ai/behaviours.ts"]) {
+    for (const relative of ["ai/cpu.ts", "ai/behaviours.ts", "ai/specials.ts"]) {
       const source = readFileSync(join(root, relative), "utf8");
       expect(source, relative).not.toMatch(/Math\s*\.\s*(sin|cos|tan|pow|exp|log|atan2|hypot)\b/);
     }

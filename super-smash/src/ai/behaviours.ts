@@ -26,7 +26,11 @@
  *    were half a second ago. A CPU that read the live state — or worse, the
  *    opponent's input — would feel like it was cheating, because it would be.
  *    One exception, ruled (R-T18j): a parry places a swing it has already seen
- *    where the swing is now, as it reads the swing's frame (`parry`).
+ *    where the swing is now, as it reads the swing's frame (`parry`). What it
+ *    can see of the opponent's state comes with the action it has seen: a roll's
+ *    or a ledge's intangibility, a respawn's invincibility, only once that action
+ *    is noticed (ruling R-T19k, `observe`). The Smash Ball and a Final Smash are
+ *    on screen for everybody and are read as they are (`specials.ts`).
  */
 
 import {
@@ -206,8 +210,12 @@ const REELING_ACTIONS: readonly ActionState[] = [
 const INACTIVE_ACTIONS: readonly ActionState[] = ["dead", "entering", "respawnPlatform"];
 /** Helpless after a recovery move (Plan 5, Task 4b): only the stick does anything. */
 const HELPLESS_ACTIONS: readonly ActionState[] = ["specialFall"];
-/** Held by another fighter, or flown by one's star: a mash is all there is to do (Plan 5, Task 19). */
-const HELD_ACTIONS: readonly ActionState[] = ["grabbed", "cargoHeld", "swallowed", "spatStar"];
+/**
+ * Held by another fighter, or flown by one's star: a mash is all there is to do (Plan 5,
+ * Task 19). `specials.ts`'s mash takes these and a broken shield's stun (`MASHED`, built
+ * from this list), and `survive` stays silent in them.
+ */
+export const HELD_ACTIONS: readonly ActionState[] = ["grabbed", "cargoHeld", "swallowed", "spatStar"];
 
 /**
  * What the CPU believes is happening.
@@ -288,8 +296,13 @@ export function observe(state: GameState, port: number, reactionFrames: number):
     };
   }
 
-  const seen = rewind(nearest, reactionFrames);
   const noticed = nearest.actionFrame >= reactionFrames;
+  // What it can see of the target's state goes with the action it has seen (ruling
+  // R-T19k, the Task 19 review's M10): until it notices the action, it believes the
+  // target standing or falling (`targetAction`), with no intangibility or
+  // invincibility of a roll, a dodge, a ledge or a respawn.
+  const rewound = rewind(nearest, reactionFrames);
+  const seen = noticed ? rewound : { ...rewound, intangible: 0, invincible: 0 };
   const targetAction = noticed
     ? nearest.action
     : nearest.grounded
@@ -598,6 +611,36 @@ const GHOST_STAGE: StageDef = {
   theme: "",
 };
 
+/** A ghost run's `StateContext`: `step()`'s for one fighter alone on `GHOST_STAGE`, its `frame` set by the caller each step. */
+type GhostContext = { -readonly [K in keyof StateContext]: StateContext[K] };
+
+function ghostContext(def: FighterDef, frame: number, f: FighterState): GhostContext {
+  return { def, stage: GHOST_STAGE, frame, fighters: [f] };
+}
+
+/**
+ * One step of a copy of a fighter by `step()`'s own per-frame rules for one fighter
+ * alone in the air: the one copy of them that every model run steps (Plan 5, Task 19
+ * fix round 1, the review's M7: `upBPath`, `ghostFall`, `aerialStrands`,
+ * `freeNextStep`). In `step()`'s order: the input read (`updateInputTracking`,
+ * `interpretInput`), the hitstun counted down before the status, as `step()` counts
+ * it (the review's M7: two of the four copies had left this out), the airtime, the
+ * status (`advanceFighter`), the movement (`applyMovement`) and the move
+ * (`integrate`), on the step `ctx.frame` runs. Left out, as no ghost run meets them:
+ * a freeze (none starts in hitlag, and nothing hits a ghost), and the bookkeeping
+ * `step()` does as a hitstun runs out (`comboHits`, `balloon`), which moves nothing
+ * (the fall reads `balloon` only while the hitstun lasts: `hitstunGravityOptions`).
+ */
+function ghostStep(f: FighterState, input: InputFrame, prev: InputFrame, ctx: GhostContext): void {
+  updateInputTracking(f, input, prev);
+  const intent = interpretInput(f, input, prev);
+  if (f.hitstun > 0) f.hitstun -= 1;
+  if (!f.grounded && f.ledge === null) f.airTime += 1;
+  advanceFighter(f, intent, ctx);
+  applyMovement(f, intent, ctx);
+  integrate(f);
+}
+
 /** Whether `f` is in the special `r` models: its up special (either version), or its side special for a sideways one. */
 function inUpB(f: Pick<FighterState, "action" | "move">, r: RecoveryMove): boolean {
   return f.action === "special" && (f.move === r.slot || (r.slot === "upBAir" && f.move === "upB"));
@@ -608,9 +651,7 @@ function inUpB(f: Pick<FighterState, "action" | "move">, r: RecoveryMove): boole
  * started on the first of them (Up and Special pressed with `stick`'s first
  * direction), or carried on from where it is if the fighter is already in it,
  * then the helpless fall. Each frame is `step()`'s for one fighter alone in the
- * air: the input read (`updateInputTracking`, `interpretInput`), the airtime,
- * the status (`advanceFighter`), the movement (`applyMovement`) and the move
- * (`integrate`), on a copy. Not modelled: a hit, a landing, a ledge or a wall on
+ * air, on a copy (`ghostStep`). Not modelled: a hit, a landing, a ledge or a wall on
  * the way (the caller reads those off the path); a blast line is the caller's
  * too. `stop`, if given, ends the path at the first point it accepts.
  */
@@ -625,7 +666,7 @@ export function upBPath(
   const plan = typeof stick === "number" ? one(stick) : stick;
   const f = cloneFighter(self);
   // The frame number is the one thing that changes: the buffer reads it.
-  const ctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def: r.def, stage: GHOST_STAGE, frame: frame0, fighters: [f] };
+  const ctx = ghostContext(r.def, frame0, f);
   const started = inUpB(f, r);
   // The move frame the next step runs: the press is move frame 1.
   let moveFrame = started ? f.actionFrame + 2 : 1;
@@ -635,13 +676,7 @@ export function upBPath(
     const dir = moveFrame >= plan.switchAt && plan.switchAt > 0 ? plan.then : plan.first;
     const input = i === 0 && !started ? (r.press ?? upBPress)(dir) : dir;
     ctx.frame = frame0 + i + 1;
-    updateInputTracking(f, input, prev);
-    const intent = interpretInput(f, input, prev);
-    if (f.hitstun > 0) f.hitstun -= 1;
-    if (!f.grounded && f.ledge === null) f.airTime += 1;
-    advanceFighter(f, intent, ctx);
-    applyMovement(f, intent, ctx);
-    integrate(f);
+    ghostStep(f, input, prev, ctx);
     prev = input;
     moveFrame += 1;
     const p = { x: f.x - self.x, y: f.y - self.y, vy: f.vy, facing: f.facing, helpless: f.action === "specialFall" };
@@ -721,6 +756,23 @@ export function canAct(f: FighterState): boolean {
 /** Helpless after a recovery move (Plan 5, Task 4b): no button does anything until it lands or grabs a ledge. */
 export function isHelpless(f: FighterState): boolean {
   return HELPLESS_ACTIONS.includes(f.action);
+}
+
+/**
+ * States the engine reads a press in on the next step (`handleActionable`):
+ * standing, walking, dashing, running, braking, crouching, crawling, jumping,
+ * falling, and a tumble's fall, which is the fall's (`airMain`; Task 19 fix round 1
+ * added the last two, which Task 19 had left out). A wall tech's late frames and a
+ * move's air tail read one too, but only a press that ends them. A Special pressed
+ * anywhere else waits in the buffer, which only `recover`'s up special may use
+ * (`cpu.ts`, `specialPending`). The shield's decision for a threat it could not act
+ * on comes on the frame before this is true (`freeNextStep`, ruling R-T19g).
+ */
+const FREE: readonly ActionState[] = ["stand", "walk", "dashStart", "run", "runBrake", "crouch", "crawl", "jump", "fall", "tumbleFall"];
+
+/** Free to act (`FREE`), out of hitstun and hitlag: a press now is read on the next step. */
+export function free(f: FighterState): boolean {
+  return canAct(f) && FREE.includes(f.action);
 }
 
 export function isAttacking(action: ActionState): boolean {
@@ -907,11 +959,15 @@ export const survive: Behaviour = (ctx) => {
     // SDI is one pulse per fresh direction press, and the engine counts at most
     // one per SDI_INPUT_INTERVAL frames, so a two-on / two-off cycle at that
     // period extracts every pulse on offer and wastes none.
+    // A per-opportunity choice (ruling R-T19j): rolled every frame, but a pulse is
+    // read only on the frames the engine counts one, so each pulse is its own roll.
     if (ctx.rolls[ROLL_MOVE] >= ctx.tuning.sdiSkill) return { score: 1000, input: 0 };
     const holding = pulse(ctx.view.frame, self.port, SDI_INPUT_INTERVAL, 2);
     return { score: 1000, input: holding ? escape : 0 };
   }
 
+  // A per-opportunity choice (ruling R-T19j): rolled every frame of the reel, but DI
+  // is read once, on the frame the launch is let go, so that frame's roll is the DI.
   if (ctx.rolls[ROLL_MOVE] >= ctx.tuning.diSkill) return { score: 1000, input: 0 };
   return { score: 1000, input: escape };
 };
@@ -1191,26 +1247,19 @@ export function framesToWall(def: FighterDef, self: FighterState, stage: StageVi
 
 /**
  * A copy of the fighter run through `step()`'s per-frame rules for one fighter
- * alone in the air with `stick` held and nothing else pressed (as `upBPath` runs
- * an up special), until `meets` accepts a frame, `k` steps on: that `k`, or null
+ * alone in the air (`ghostStep`) with `stick` held and nothing else pressed (as
+ * `upBPath` runs an up special), until `meets` accepts a frame, `k` steps on: that `k`, or null
  * within `horizon`. `before` is what was held the frame before now: the stick
  * itself, held from before, or nothing, for a fresh press.
  */
 function ghostFall(def: FighterDef, self: FighterState, frame0: number, horizon: number, meets: (prevX: number, prevY: number, f: FighterState, k: number) => boolean, stick: InputFrame = 0, before: InputFrame = stick): number | null {
   const f = cloneFighter(self);
-  const ctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def, stage: GHOST_STAGE, frame: frame0, fighters: [f] };
+  const ctx = ghostContext(def, frame0, f);
   for (let k = 1; k <= horizon; k++) {
     const prevX = f.x;
     const prevY = f.y;
     ctx.frame = frame0 + k;
-    const prev = k === 1 ? before : stick;
-    updateInputTracking(f, stick, prev);
-    const intent = interpretInput(f, stick, prev);
-    if (f.hitstun > 0) f.hitstun -= 1;
-    if (!f.grounded && f.ledge === null) f.airTime += 1;
-    advanceFighter(f, intent, ctx);
-    applyMovement(f, intent, ctx);
-    integrate(f);
+    ghostStep(f, stick, k === 1 ? before : stick, ctx);
     if (meets(prevX, prevY, f, k)) return k;
   }
   return null;
@@ -1224,6 +1273,22 @@ function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFra
   const crosses = (surface: number) => prevY >= surface && y <= surface;
   if (x >= stage.leftLedge && x <= stage.rightLedge && crosses(stage.groundY)) return true;
   return stage.platforms.some((p) => abs(x - platformCentreX(p, stageFrame)) <= p.halfWidth && crosses(p.y));
+}
+
+/**
+ * Whether this fighter, not free to act now (`free`), is after its next step: the last
+ * frame of a reel, a landing's lag or a get-up (ruling R-T19g, for `shieldDecides`).
+ * Its own fighter is run one step on by the engine's rules (`ghostStep`) with nothing
+ * pressed; a freeze holds it where it is (`step()` runs no status in hitlag). A press
+ * made on this frame is read on that step, or waits in the buffer for the first free
+ * frame (`handOff`, `endStatus`): so too where that step also lands a reel in the air,
+ * whose plain landing (`land`, a few frames) the buffer outlasts.
+ */
+export function freeNextStep(def: FighterDef, self: FighterState, frame0: number): boolean {
+  if (free(self) || self.hitlag > 0) return false;
+  const f = cloneFighter(self);
+  ghostStep(f, 0, 0, ghostContext(def, frame0 + 1, f));
+  return free(f);
 }
 
 /**
@@ -1504,7 +1569,8 @@ export const recover: Behaviour = (ctx) => {
 
   // The level-1 self-destruct, made explicit rather than emergent: it drifts
   // back but forgets the button, runs out of altitude and dies. At level 9 the
-  // roll never fails.
+  // roll never fails. A per-frame reaction delay (ruling R-T19j): each frame off the
+  // stage it may forget, so a low level acts late, by when the stage is out of reach.
   if (ctx.rolls[ROLL_RECOVER] >= tuning.recoverySkill) {
     return { score: 900, input: drift };
   }
@@ -1550,6 +1616,7 @@ export const recover: Behaviour = (ctx) => {
       // with its midair jump still there, it jumps first, whatever (Task 19, the
       // Task 13b review's M-11: up specials spent now or never with the jump unused).
       if (!outOfJumps) {
+        // UNVERIFIED (CPU judgement): now or never, a jump pressed every other frame.
         const now = upBNowOrNever(self, stage, r, ctx.view.frame) ? pulse(ctx.view.frame, self.port, 2, 1) : jumping;
         return { score: 950, input: drift | (now ? Btn.Jump : 0) };
       }
@@ -1590,8 +1657,8 @@ const AERIAL_FROM: readonly ActionState[] = ["jump", "fall", "attack"];
  * way) that leaves the fighter no way back (Plan 5, Task 19: the Task 13b
  * re-review's offstage aerials from the edge, the main lever on its
  * self-destructs; M-11's long offstage aerials with no plan back)? Only near a
- * ledge or past one. The aerial is run by the engine's own rules on a copy, as
- * `upBPath` runs an up special: the press, then the same stick held, until the
+ * ledge or past one. The aerial is run by the engine's own rules on a copy
+ * (`ghostStep`), as `upBPath` runs an up special: the press, then the same stick held, until the
  * aerial is over. It is safe if the copy comes down on the stage on the way, or
  * after it is back over the stage above its top, or can still get back: its up
  * special has a plan from there (`upBPlan`), or its midair jump does and the up
@@ -1607,7 +1674,7 @@ export function aerialStrands(ctx: BehaviourContext, input: InputFrame): boolean
   const def = ctx.fighterDef;
   const r = ctx.recovery;
   const f = cloneFighter(self);
-  const gctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def, stage: GHOST_STAGE, frame: ctx.view.frame, fighters: [f] };
+  const gctx = ghostContext(def, ctx.view.frame, f);
   const stick = input & (Btn.Left | Btn.Right | Btn.Up | Btn.Down);
   let prev: InputFrame = 0;
   let begun = false;
@@ -1615,12 +1682,7 @@ export function aerialStrands(ctx: BehaviourContext, input: InputFrame): boolean
     const prevY = f.y;
     const now = k === 1 ? input : stick;
     gctx.frame = ctx.view.frame + k;
-    updateInputTracking(f, now, prev);
-    const intent = interpretInput(f, now, prev);
-    if (!f.grounded && f.ledge === null) f.airTime += 1;
-    advanceFighter(f, intent, gctx);
-    applyMovement(f, intent, gctx);
-    integrate(f);
+    ghostStep(f, now, prev, gctx);
     prev = now;
     if (f.y < prevY && prevY >= stage.groundY && f.y <= stage.groundY && f.x >= stage.leftLedge && f.x <= stage.rightLedge) return false;
     if (f.action === "attack") begun = true;
@@ -1632,18 +1694,13 @@ export function aerialStrands(ctx: BehaviourContext, input: InputFrame): boolean
   if (f.jumpsUsed >= ctx.jumps) return true;
   // Its midair jump, then the up special from the jump's top.
   const j = cloneFighter(f);
-  const jctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { ...gctx, fighters: [j] };
+  const jctx = ghostContext(def, gctx.frame, j);
   const home = towardX(j.x, ledge);
   let jprev: InputFrame = 0;
   for (let k = 1; k <= AERIAL_LOOKAHEAD_FRAMES; k++) {
     const now = (k === 1 ? Btn.Jump : 0) | home;
     jctx.frame = gctx.frame + k;
-    updateInputTracking(j, now, jprev);
-    const intent = interpretInput(j, now, jprev);
-    if (!j.grounded && j.ledge === null) j.airTime += 1;
-    advanceFighter(j, intent, jctx);
-    applyMovement(j, intent, jctx);
-    integrate(j);
+    ghostStep(j, now, jprev, jctx);
     jprev = now;
     if (k > 1 && j.vy <= 0) break;
   }
@@ -1784,32 +1841,42 @@ export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryM
  * (30 frames) sees essentially none of them.
  *
  * One decision a threat (Plan 5, Task 19; ruling R-T18g, as R-T18e made the tech
- * one a landing): the shield rolls its dial on the first frame it sees a swing or
- * a grab in range (`threatBefore` rebuilds the frame before), and on no other. A
+ * one a landing): the shield rolls its dial once a swing or a grab in range, on the
+ * frame `shieldDecides` gives it (the first frame it sees it, or, seen while it
+ * could not act, the last frame of what held it: a reel, a landing's lag, a get-up;
+ * ruling R-T19g), and on no other. A
  * shield it raised it holds while the swing it saw goes on, whatever the roll:
  * rolling every frame let go of a held shield mid-swing (against Donkey Kong's
- * smash, levels 6-8 were hit in that drop 283, 294 and 107 times in 300). The
- * parry (`parry`, decided) is the one deliberate drop.
+ * smash, levels 6-8 were hit in that drop 283, 294 and 107 times in 300); a shield
+ * nearly spent is let go to roll away instead (the Task 19 review's M1). The parry
+ * (`parry`, decided, before this in `BEHAVIOURS`) is the one deliberate drop, and
+ * it is no new decision here: the swing was seen before the drop began.
  */
 export const shield: Behaviour = (ctx) => {
   const { self, targetAction } = ctx.view;
   const { tuning } = ctx;
-  if (!canAct(self) || !ctx.view.target) return NOTHING;
+  if (ctx.view.target === null || !threatNow(ctx)) return NOTHING;
 
   const incomingAttack = isAttacking(targetAction);
   const incomingGrab = isGrabbing(targetAction);
-  if (!threatNow(ctx)) return NOTHING;
 
-  // Decided over the stage (the dial is the chance: no jitter or fumble undoes
-  // it, the up special's steering and the tech's press likewise); off it or below
-  // it, recovering comes first and the shield is only scored.
+  // Decided over the stage (the dial is the chance: no jitter or fumble undoes it,
+  // the up special's steering and the tech's press likewise); off it or below it,
+  // recovering comes first and the shield is only scored. UNVERIFIED (CPU
+  // judgement): "over the stage" reaches 4 under its top.
   const decided = !isOffstage(self, ctx.stage) && self.y >= ctx.stage.groundY - fx(4);
 
-  // Up already, against the swing it was raised for: held through it.
-  if (incomingAttack && (self.action === "shieldStart" || self.action === "shield" || self.action === "shieldStun")) {
-    return { score: 600, input: Btn.Shield, decided };
+  // Whether a dodge would carry the fighter off the stage is recovery judgement, so
+  // a CPU whose recovery roll fails forgets it, as it forgets the jump back in
+  // `recover` (Task 20c).
+  const minded = ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
+
+  // Up already, against the swing it was raised for: held through it, unless it is
+  // nearly spent, when it rolls away (the Task 19 review's M1: a spent shield held).
+  if (incomingAttack && canAct(self) && isShielding(self.action)) {
+    return (shieldSpent(self) ? rollAway(ctx, minded, decided) : null) ?? { score: 600, input: Btn.Shield, decided };
   }
-  if (threatBefore(ctx)) return NOTHING;
+  if (!shieldDecides(ctx)) return NOTHING;
 
   // A grab beats a shield, so the answer to a grab is to leave the ground for a
   // few frames instead. Only levels that dodge at all attempt it.
@@ -1819,21 +1886,11 @@ export const shield: Behaviour = (ctx) => {
 
   if (!incomingAttack || ctx.rolls[ROLL_SHIELD] >= tuning.shieldRate) return NOTHING;
 
-  // Whether an air dodge would carry the fighter off the stage is recovery
-  // judgement, so a CPU whose recovery roll fails forgets it, as it forgets the
-  // jump back in `recover` (Task 20c).
-  const minded = ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
-
   // A shield that is nearly out of health is worse than no shield: it breaks
-  // and hands over 240 frames of free punishment. Roll away instead. In the air
-  // that is a directional dodge (Task 20c): not one whose travel leaves the
-  // stage, where the neutral dodge below is weighed instead.
-  const shieldSpent = self.shieldHealth <= fx(12);
-  if (shieldSpent) {
-    const away = towardX(ctx.view.dx, 0);
-    const dir = away === Btn.Right ? 1 : away === Btn.Left ? -1 : 0;
-    const offstage = minded && sideDodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, ctx.airDodge, dir);
-    if (dir !== 0 && !offstage) return { score: 600, input: away | Btn.Shield, decided };
+  // and hands over 240 frames of free punishment. Roll away instead.
+  if (shieldSpent(self)) {
+    const away = rollAway(ctx, minded, decided);
+    if (away !== null) return away;
   }
 
   // In the air the shield is a neutral air dodge, and it keeps the drift over
@@ -1842,6 +1899,65 @@ export const shield: Behaviour = (ctx) => {
   if (minded && dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, airDodgeFrames(ctx.airDodge, 0))) return NOTHING;
   return { score: 600, input: Btn.Shield, decided };
 };
+
+/** A shield so near out of health that holding it is worse than none: one hit more breaks it. */
+function shieldSpent(f: FighterState): boolean {
+  return f.shieldHealth <= fx(12);
+}
+
+/**
+ * Roll away from the threat, for a spent shield: away and shield. In the air that is
+ * a directional dodge (Task 20c): not one whose travel leaves the stage, where the
+ * shield's neutral dodge is weighed instead (null).
+ */
+function rollAway(ctx: BehaviourContext, minded: boolean, decided: boolean): BehaviourResult | null {
+  const away = towardX(ctx.view.dx, 0);
+  const dir = away === Btn.Right ? 1 : away === Btn.Left ? -1 : 0;
+  const offstage = minded && sideDodgeCarriesOffstage(ctx.view.self, ctx.stage, ctx.airBrake, ctx.airDodge, dir);
+  return dir !== 0 && !offstage ? { score: 600, input: away | Btn.Shield, decided } : null;
+}
+
+/**
+ * Where the fighter cannot act on a threat it sees (ruling R-T19g): a reel, lying
+ * down, held, helpless or frozen (`canAct`), or one of the lags it waits out, a
+ * landing's (its plain landing, an aerial's landing lag, a special's landing) and a
+ * get-up's, from lying down or from a ledge. A shield press made in one only waits
+ * in the buffer, and from a long one runs out before it frees the fighter. Its own
+ * move (an attack, a special, a jump's squat, a roll, a shield's drop) is not one of
+ * them: it chose that with the threat in view, so the shield decides as it first
+ * sees the threat, its press waiting in the buffer for the move's end, as before.
+ * (Task 19 fix round 1's sweep: deciding those at the move's end instead, as
+ * `free` alone would have, had the CPU air-dodge after nearly every aerial, and its
+ * self-destructs rose from 96 to 124 over twelve sweeps.)
+ */
+const WAITS_OUT: readonly ActionState[] = ["land", "landingLag", "specialLanding", "getUp", "ledgeGetUp"];
+
+function cannotAct(f: FighterState): boolean {
+  return !canAct(f) || WAITS_OUT.includes(f.action);
+}
+
+/**
+ * The one frame a threat is decided on (rulings R-T18g, R-T19g). Where it can act
+ * (`cannotAct`), the first frame the threat is seen in range. Where it cannot, the
+ * last frame of the action it is in, the frame before its first free one
+ * (`freeNextStep`, by `free`, the specials' notion), for a threat first seen during
+ * that action (`targetActionAge`, counted from the swing's first sight, no more than
+ * the action's own frames): the press is read as the fighter comes free, or waits in
+ * the buffer for its first free frame. That action began no later than the threat
+ * was first seen, so the fighter could not act on it then nor since: a threat it
+ * could act on at first sight it never decides again (a shield raised then and
+ * dropped by the parry included, since the drop began after).
+ *
+ * The CPU keeps no memory of its own actions, so two threats get no decision: one
+ * first seen in an action that leads into another it cannot act in (lying down, then
+ * a get-up), and one seen further off before the action began that came into range
+ * during it.
+ */
+function shieldDecides(ctx: BehaviourContext): boolean {
+  const { self, targetActionAge } = ctx.view;
+  if (!cannotAct(self)) return !threatBefore(ctx);
+  return ctx.fighterDef !== null && targetActionAge <= self.actionFrame && freeNextStep(ctx.fighterDef, self, ctx.view.frame);
+}
 
 /** A swing or a grab seen within `THREAT_RANGE`: what the shield decides on. */
 function threatNow(ctx: BehaviourContext): boolean {
@@ -1876,6 +1992,8 @@ export const edgeguard: Behaviour = (ctx) => {
   if (!canAct(self) || !target) return NOTHING;
   if (tuning.edgeguardSkill <= 0) return NOTHING;
   if (!isOffstage(target, stage) || isOffstage(self, stage)) return NOTHING;
+  // A chance over a window (ruling R-T19j): rolled every frame the opponent is off
+  // the stage, so the longer they are off, the likelier it goes to the ledge at all.
   if (ctx.rolls[ROLL_EDGEGUARD] >= tuning.edgeguardSkill) return NOTHING;
 
   const ledge = target.x < 0 ? stage.leftLedge : stage.rightLedge;
@@ -1919,9 +2037,11 @@ export const attack: Behaviour = (ctx) => {
   if (!canAct(self) || !target) return NOTHING;
   if (distance > ctx.meleeReach) return NOTHING;
   // Nothing lands on a body that cannot be hit (Plan 5, Task 19): a roll, a dodge,
-  // a ledge's intangibility, a respawn's invincibility, all visible on screen.
-  // Swinging into one again and again was the sweep's commonest loop (dash
-  // attacks into a roll; a jab at an edge at a fighter hanging there).
+  // a ledge's intangibility, a respawn's invincibility, as the CPU sees them, with
+  // the action it has noticed (ruling R-T19k: `observe`), so a slow level still
+  // swings into the start of a roll. Swinging into one again and again was the
+  // sweep's commonest loop (dash attacks into a roll; a jab at an edge at a fighter
+  // hanging there).
   if (target.intangible > 0 || target.invincible > 0) return NOTHING;
 
   const toward = towardX(0, dx);
@@ -1941,6 +2061,8 @@ export const attack: Behaviour = (ctx) => {
     if (distance <= GRAB_RANGE) return { score: 460, input: swinging ? Btn.Grab : 0 };
     return { score: 410, input: toward };
   }
+  // A per-opportunity choice (ruling R-T19j): rolled every frame, but a swing comes
+  // out only on its pulse's press, so each swing's move is its own roll.
   const smart = ctx.rolls[ROLL_MOVE] < tuning.moveChoiceSkill;
 
   if (smart) {
