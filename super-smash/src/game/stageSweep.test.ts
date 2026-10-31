@@ -39,7 +39,8 @@ function sweep(ctx: SimContext, a: string, b: string, stageId: string, smashBall
   const stage = ctx.stage(stageId);
   const view = stageViewFromDef(stage);
   const defs = [a, b].map((id) => ctx.fighter(id));
-  const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs));
+  // Plan 5, Task 19: the match's own fighter lookup, so a Kirby CPU's copy is the one it runs.
+  const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs, (id) => ctx.fighter(id)));
   let cpuSeed = seed ^ 0x1f2e3d4c;
   let prev: readonly InputFrame[] = [0, 0];
   const breaks: string[] = [];

@@ -224,12 +224,17 @@ export interface MatchRunner {
  * What each port's CPU knows of its own fighter, the stage and the match
  * (`cpuWorldFromDef`): the same builder the golden and the CPU sweep use, given
  * every port's definition so a parry can time a swing off its move data (Plan 5,
- * Task 18, ruling R-T18d). A port with no definition gets the stage's view, two
- * jumps and the match's definitions.
+ * Task 18, ruling R-T18d), and the match's own fighter lookup, so a Kirby CPU
+ * knows the move its Copy Ability gives it (Task 19). A port with no definition
+ * gets the stage's view, two jumps and the match's definitions.
  */
-export function matchCpuWorlds(stage: StageDef, defs: readonly (FighterDef | undefined)[]): CpuWorld[] {
+export function matchCpuWorlds(
+  stage: StageDef,
+  defs: readonly (FighterDef | undefined)[],
+  getFighter?: (id: string) => FighterDef | undefined,
+): CpuWorld[] {
   const view = stageViewFromDef(stage);
-  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs) : { stage: view, jumps: 2, matchDefs: defs }));
+  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs, getFighter) : { stage: view, jumps: 2, matchDefs: defs }));
 }
 
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
@@ -298,7 +303,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   // decision forever and stops looking like a player.
   let cpuSeed = seed ^ 0x1f2e3d4c;
 
-  const cpuWorlds = matchCpuWorlds(stage, defs);
+  const cpuWorlds = matchCpuWorlds(stage, defs, getFighter);
 
   const camera = createCamera(stage);
   const vfx: VfxState = createVfx();

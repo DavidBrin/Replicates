@@ -172,6 +172,12 @@ export interface LevelTuning {
   readonly techSkill: number;
   /** Plan 5: the chance it parries a swing it can time: one roll per swing (rulings R-T18d, R-T18e). */
   readonly parrySkill: number;
+  /**
+   * Plan 5, Task 19: the chance it uses a special it has the moment for, one roll a
+   * threat or an opening (`specials.ts`): a reflect, a counter, a charge, a
+   * smash-input special.
+   */
+  readonly specialSkill: number;
 }
 
 /* ------------------------------------------------------------ observation -- */
@@ -193,6 +199,8 @@ const REELING_ACTIONS: readonly ActionState[] = [
 const INACTIVE_ACTIONS: readonly ActionState[] = ["dead", "entering", "respawnPlatform"];
 /** Helpless after a recovery move (Plan 5, Task 4b): only the stick does anything. */
 const HELPLESS_ACTIONS: readonly ActionState[] = ["specialFall"];
+/** Held by another fighter, or flown by one's star: a mash is all there is to do (Plan 5, Task 19). */
+const HELD_ACTIONS: readonly ActionState[] = ["grabbed", "cargoHeld", "swallowed", "spatStar"];
 
 /**
  * What the CPU believes is happening.
@@ -307,13 +315,15 @@ export const ROLL_RECOVER = 3;
 export const ROLL_MOVE = 4;
 export const ROLL_FUMBLE = 5;
 /**
- * Plan 5: teching and hitstun cancels share one roll; parrying has its own. The
- * layout is fixed: these eight, then one jitter per behaviour in `BEHAVIOURS`
- * order (`cpu.ts`), twenty a frame, drawn whatever is decided.
+ * Plan 5: teching and hitstun cancels share one roll; parrying has its own; the
+ * specials (`specials.ts`) share one more. The layout is fixed: these nine, then
+ * one jitter per behaviour in `BEHAVIOURS` order (`cpu.ts`), drawn whatever is
+ * decided.
  */
 export const ROLL_TECH = 6;
 export const ROLL_PARRY = 7;
-export const DECISION_ROLLS = 8;
+export const ROLL_SPECIAL = 8;
+export const DECISION_ROLLS = 9;
 
 export interface BehaviourContext {
   /** Read for `frame` and `rules` only — never for the opponent. */
@@ -336,7 +346,9 @@ export interface BehaviourContext {
   readonly recovery: RecoveryMove | null;
   /**
    * This fighter's own definition, to run its fall by the engine's own rules
-   * (`framesToFloor`; ruling R-T18e). Null: it does not tech.
+   * (`framesToFloor`; ruling R-T18e), and since Task 19 to use its specials
+   * (`specials.ts`): the moveset it fights with now, a Kirby's Copy Ability's
+   * neutral special included (`cpuDef`). Null: it neither techs nor uses them.
    */
   readonly fighterDef: FighterDef | null;
   /**
@@ -366,10 +378,19 @@ export type BehaviourName =
   | "tech"
   | "escape"
   | "survive"
+  | "mash"
+  | "sideRecover"
   | "recover"
+  | "holding"
+  | "finalSmash"
   | "parry"
+  | "reflect"
+  | "counter"
   | "shield"
   | "edgeguard"
+  | "storeCharge"
+  | "smashSpecial"
+  | "smashBall"
   | "attack"
   | "platformMove"
   | "approach"
@@ -471,6 +492,12 @@ export interface RecoveryMove {
   readonly secondAim: number;
   /** It can wall jump, which must come before it (special fall refuses one; Plan 5, Task 10). */
   readonly wallJump: boolean;
+  /**
+   * The press that starts it with a plan's stick: the up special's (`upBPress`) by
+   * default; a sideways recovery's is its side and B (Plan 5, Task 19:
+   * `sideRecoveryFromDef`).
+   */
+  readonly press?: (stick: InputFrame) => InputFrame;
 }
 
 /**
@@ -507,6 +534,30 @@ export interface PathPoint {
 }
 
 /**
+ * A fighter's side special as a sideways recovery (Plan 5, Task 19), modelled as
+ * `recoveryFromDef` models its up special, or null when its side special carries
+ * it nowhere (no `MoveDef.momentum` window with a sideways speed: Samus's
+ * Missile, Link's Boomerang). Pressed with its side and B, never Up or Down
+ * (`specialSlot`); held toward the ledge through it.
+ */
+export function sideRecoveryFromDef(def: FighterDef): RecoveryMove | null {
+  const move = def.moves.sideB;
+  if (move === undefined || !(move.momentum ?? []).some((w) => w.x !== 0)) return null;
+  const p = fighterParams(def);
+  return {
+    def,
+    slot: "sideB",
+    totalFrames: move.fromAir?.totalFrames ?? move.totalFrames,
+    params: p,
+    helplessDrift: mul(p.air_speed_x_stable, move.helpless?.airSpeed ?? ONE),
+    aim: "none",
+    secondAim: 0,
+    wallJump: def.attributes.canWallJump,
+    press: (stick) => (stick & (Btn.Left | Btn.Right)) | Btn.Special,
+  };
+}
+
+/**
  * The stick through an up special: `first` held until the move reaches move
  * frame `switchAt`, then `then` (a second leg aimed another way); the same for
  * a move with one aim. Direction bits only.
@@ -530,9 +581,9 @@ const GHOST_STAGE: StageDef = {
   theme: "",
 };
 
-/** Whether `f` is in the up special `r` models. */
+/** Whether `f` is in the special `r` models: its up special (either version), or its side special for a sideways one. */
 function inUpB(f: Pick<FighterState, "action" | "move">, r: RecoveryMove): boolean {
-  return f.action === "special" && (f.move === "upB" || f.move === r.slot);
+  return f.action === "special" && (f.move === r.slot || (r.slot === "upBAir" && f.move === "upB"));
 }
 
 /**
@@ -565,7 +616,7 @@ export function upBPath(
   const out: PathPoint[] = [];
   for (let i = 0; i < frames; i++) {
     const dir = moveFrame >= plan.switchAt && plan.switchAt > 0 ? plan.then : plan.first;
-    const input = i === 0 && !started ? upBPress(dir) : dir;
+    const input = i === 0 && !started ? (r.press ?? upBPress)(dir) : dir;
     ctx.frame = frame0 + i + 1;
     updateInputTracking(f, input, prev);
     const intent = interpretInput(f, input, prev);
@@ -828,6 +879,9 @@ export function diDirection(self: FighterState, stage: StageView): InputFrame {
 export const survive: Behaviour = (ctx) => {
   const { self } = ctx.view;
   if (!isStunned(self)) return NOTHING;
+  // Held, or stunned standing with its shield broken, there is nothing to DI:
+  // those frames are the mash's (Plan 5, Task 19: `specials.ts`).
+  if (HELD_ACTIONS.includes(self.action) || (self.action === "shieldBroken" && self.grounded)) return NOTHING;
 
   const escape = diDirection(self, ctx.stage);
   if (escape === 0) return { score: 1000, input: 0 };
@@ -1589,23 +1643,3 @@ export const retreat: Behaviour = (ctx) => {
 
 /** The floor: always available, so `cpuInput` always has an answer. */
 export const idle: Behaviour = () => ({ score: 1, input: 0 });
-
-/**
- * Every behaviour, in the order ties break. Earlier wins a tie, which is why
- * the survival and recovery behaviours are listed first: when two scores land
- * equal after jitter, not dying is the better default.
- */
-export const BEHAVIOURS: readonly { readonly name: BehaviourName; readonly run: Behaviour }[] = [
-  { name: "tech", run: tech },
-  { name: "escape", run: escape },
-  { name: "survive", run: survive },
-  { name: "recover", run: recover },
-  { name: "parry", run: parry },
-  { name: "shield", run: shield },
-  { name: "edgeguard", run: edgeguard },
-  { name: "attack", run: attack },
-  { name: "platformMove", run: platformMove },
-  { name: "approach", run: approach },
-  { name: "retreat", run: retreat },
-  { name: "idle", run: idle },
-];

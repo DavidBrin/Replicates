@@ -137,7 +137,8 @@ function cpuMatch(name: string, stage: string, fighters: readonly [string, strin
     driver() {
       const view = stageViewFromDef(CTX.stage(stage));
       const defs = fighters.map((id) => CTX.fighter(id));
-      const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs));
+      // Plan 5, Task 19: the match's own fighter lookup, so a Kirby CPU's copy is the one it runs.
+      const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs, (id) => CTX.fighter(id)));
       let cpuSeed = seed ^ 0x1f2e3d4c;
       return (state) =>
         fighters.map((_, port) => {
@@ -327,6 +328,15 @@ const MATCHES: readonly Match[] = [
  * (a failed roll is a missed tech), and kirby-marth grabs, pummels and is grabbed;
  * none is shield-stunned, ledge-rolls or spot-dodges, which the script does. All
  * 59 are visited.
+ * Plan 5 Task 19 (the CPU uses its specials: Final Smash, Smash Ball, reflect,
+ * counter, stored charges, smash-input specials, a carry, a mouthful, a throw, a
+ * mash, a sideways recovery) adds no action. The four CPU matches reach 44 between
+ * them, up from 40: kirby-marth inhales (`inhaleHold`, `swallowed`, `spatStar`),
+ * ledge-attacks and trumps a ledge, link-samus ledge-rolls, mario-fox spot-dodges,
+ * and three are shield-stunned; none grabs, is grabbed or pummels any more (the
+ * golden's grab was kirby-marth's), which the script and the states lab reach.
+ * No golden CPU match has the Smash Ball on, so no Final Smash there; the Final
+ * Smash and beams labs play them. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -998,6 +1008,26 @@ describe("engine golden trace", () => {
   // are byte-identical. So now: hits 40/24/19/30, 6, 0, 1, 4, 1, 2, 33, 54 and 0;
   // shield hits 1/1/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 1/2/0/1, 1, 2, 0, 0, 0, 0,
   // 0, 2 and 1.
+  // Plan 5 Task 19 (the CPU uses Plan 5's specials, `ai/specials.ts`: a Final Smash and
+  // the Smash Ball, a reflector, a counter, stored and held charges and held smashes,
+  // the smash-input specials, a carry, Kirby's Inhale, a grab's throw and a mash, and a
+  // sideways recovery; each decision draws a ninth roll, `ROLL_SPECIAL`, and nine more
+  // jitters, one per new behaviour; and the Smash Ball keeps over the stage, between
+  // `SMASH_BALL_FLOOR` and `SMASH_BALL_CEILING` above it) moved five traces. The four CPU
+  // matches move from their first sample: the roll layout changed (thirty draws a
+  // frame, from twenty), and on frames 3 and 4 the CPUs open with a special: Mario starts
+  // F.L.U.D.D.'s charge and Donkey Kong Giant Punch's, far apart, and Link and Samus each
+  // flick a smash-input special (the smash-thrown Boomerang, the Super Missile) from a
+  // standstill. Kirby inhales seven times, spitting Marth twice and swallowing him once. Hits 24, 35, 24
+  // and 26; shield hits 1, 0, 3 and 1; KOs 1, 1, 0 and 1 (were 40/24/19/30, 1/1/0/0 and
+  // 1/2/0/1): Fox by a hit, tumbling at 51.3% on 1456; Donkey Kong in his up special on
+  // 2968, a self-destruct; Marth by a hit, tumbling at 124.1% on 3155. The script moves
+  // from its 901-1000 sample, where its Smash Ball spawns (frame 900): only the ball
+  // moves, on every frame from 902, turning back at the stage's ends where it drifted
+  // off to |x| 275 and 163 up before; both fighters are byte-identical (a probe compared
+  // every frame), and neither touches the ball. The eight labs are byte-identical. So
+  // now: hits 24/35/24/26, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield hits 1/0/3/1, 3, 0, 0,
+  // 0, 0, 0, 0, 0 and 0; KOs 1/1/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

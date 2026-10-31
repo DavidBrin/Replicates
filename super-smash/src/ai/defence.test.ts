@@ -34,13 +34,13 @@ import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { makeFighter, makeState } from "@/render/testFixtures";
 import {
-  BEHAVIOURS,
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
   MELEE_RANGE,
   PARRY_AIM,
   ROLL_PARRY,
   ROLL_RECOVER,
+  ROLL_SPECIAL,
   ROLL_TECH,
   TECH_LEAD,
   THREAT_RANGE,
@@ -56,7 +56,7 @@ import {
   type LevelTuning,
   type StageView,
 } from "./behaviours";
-import { MAX_LEVEL, cpuInput, cpuWorldFromDef, decideCpu, tuningForLevel } from "./cpu";
+import { BEHAVIOURS, MAX_LEVEL, cpuInput, cpuWorldFromDef, decideCpu, tuningForLevel } from "./cpu";
 
 beforeAll(() => {
   registerFighters(FIGHTERS);
@@ -738,10 +738,14 @@ describe("the level table's defence dials", () => {
     ["a tumble", () => tumbling(20, 40)],
     ["a tumble's fall", () => fallingAfter(20, 40)],
   ])("techs %s at each level's techSkill, within 0.08", (_name, start) => {
+    // Twice the parry's seeds (Plan 5, Task 19): the decision falls deep in a fall,
+    // so the seed chain to it moves with the roll layout, and 200 left a level 2.3
+    // standard deviations out (level 6, 84/200) when nine behaviours joined.
+    const seeds = 2 * SEEDS;
     for (let level = 1; level <= MAX_LEVEL; level++) {
       let n = 0;
-      for (let seed = 1; seed <= SEEDS; seed++) if (techs(start(), level, seed)) n++;
-      expect(Math.abs(n / SEEDS - tuningForLevel(level).techSkill), `level ${level}: ${n}/${SEEDS}`).toBeLessThanOrEqual(TOLERANCE);
+      for (let seed = 1; seed <= seeds; seed++) if (techs(start(), level, seed)) n++;
+      expect(Math.abs(n / seeds - tuningForLevel(level).techSkill), `level ${level}: ${n}/${seeds}`).toBeLessThanOrEqual(TOLERANCE);
     }
   });
 
@@ -763,11 +767,14 @@ describe("the level table's defence dials", () => {
     const rows = Array.from({ length: MAX_LEVEL }, (_, i) => tuningForLevel(i + 1));
     expect(rows.map((t) => t.techSkill)).toEqual([0, 0.05, 0.12, 0.22, 0.35, 0.5, 0.65, 0.8, 0.95]);
     expect(rows.map((t) => t.parrySkill)).toEqual([0, 0, 0, 0.02, 0.05, 0.1, 0.2, 0.35, 0.5]);
+    // Plan 5, Task 19: the plan's specials row, climbing as `moveChoiceSkill` does.
+    expect(rows.map((t) => t.specialSkill)).toEqual([0, 0.05, 0.12, 0.22, 0.35, 0.5, 0.65, 0.8, 0.95]);
   });
 
-  it("keeps the roll layout fixed: eight decision rolls, then one jitter per behaviour", () => {
-    expect([DECISION_ROLLS, ROLL_TECH, ROLL_PARRY]).toEqual([8, 6, 7]);
-    expect(BEHAVIOURS.length).toBe(12);
+  it("keeps the roll layout fixed: nine decision rolls, then one jitter per behaviour", () => {
+    // Plan 5, Task 19: the specials' roll is the ninth (`ROLL_SPECIAL`), and nine behaviours joined.
+    expect([DECISION_ROLLS, ROLL_TECH, ROLL_PARRY, ROLL_SPECIAL]).toEqual([9, 6, 7, 8]);
+    expect(BEHAVIOURS.length).toBe(21);
   });
 });
 

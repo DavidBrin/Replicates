@@ -171,7 +171,7 @@ describe("the level table", () => {
   });
 
   it("rises monotonically on every skill dial and falls on every error dial", () => {
-    const rising = ["aggression", "shieldRate", "dodgeRate", "diSkill", "sdiSkill", "recoverySkill", "edgeguardSkill", "moveChoiceSkill"] as const;
+    const rising = ["aggression", "shieldRate", "dodgeRate", "diSkill", "sdiSkill", "recoverySkill", "edgeguardSkill", "moveChoiceSkill", "specialSkill"] as const;
     const falling = ["noise", "fumbleChance"] as const;
 
     for (let level = 2; level <= MAX_LEVEL; level++) {

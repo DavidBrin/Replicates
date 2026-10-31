@@ -8,7 +8,6 @@ import { Btn, held, type FighterState, type GameState, type StageDef } from "@/e
 import { emptyCombat } from "@/engine/combat";
 import { emptyKinetic } from "@/engine/kinetic";
 import {
-  BEHAVIOURS,
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
   GRAB_RANGE,
@@ -44,7 +43,7 @@ import {
   type RecoveryMove,
 } from "./behaviours";
 import { getFighter } from "@/fighters";
-import { tuningForLevel } from "./cpu";
+import { BEHAVIOURS, tuningForLevel } from "./cpu";
 
 /* --------------------------------------------------------------- fixtures -- */
 
@@ -798,10 +797,21 @@ describe("the behaviour set", () => {
       "tech",
       "escape",
       "survive",
+      // Plan 5, Task 19: the specials, each where its urgency puts it; a mash
+      // and a sideways recovery are survival too.
+      "mash",
+      "sideRecover",
       "recover",
+      "holding",
+      "finalSmash",
       "parry",
+      "reflect",
+      "counter",
       "shield",
       "edgeguard",
+      "storeCharge",
+      "smashSpecial",
+      "smashBall",
       "attack",
       "platformMove",
       "approach",

@@ -208,6 +208,7 @@ import type {
   MoveSlot,
   ProjectileDef,
   ProjectileState,
+  SmashBallState,
   StageDef,
   StepEvents,
 } from "./types";
@@ -1130,7 +1131,7 @@ export function step(
 
   // It waits out a Final Smash's scene (Plan 5, Task 14), and none appears while a
   // Final Smash, or a projectile one launched, is out (Task 16 fix round 1, ruling R-T16a).
-  if (s.rules.smashBall && !paused) updateSmashBall(s, finalSmashActive(s, finalOut()));
+  if (s.rules.smashBall && !paused) updateSmashBall(s, finalSmashActive(s, finalOut()), stage);
 
   /* -- 9. blast zones ------------------------------------------------------ */
 
@@ -3503,7 +3504,7 @@ function windboxPush(attacker: FighterState, victim: FighterState, c: Candidate,
  * 16 fix round 1, ruling R-T16a): SmashWiki "Final Smash", "only one Smash Ball or
  * Final Smash can be present onscreen at any given time".
  */
-function updateSmashBall(s: GameState, finalActive: boolean): void {
+function updateSmashBall(s: GameState, finalActive: boolean, stage: StageDef): void {
   const ball = s.smashBall;
   const anyoneCharged = s.fighters.some((f) => f.finalSmashReady > 0);
 
@@ -3531,6 +3532,7 @@ function updateSmashBall(s: GameState, finalActive: boolean): void {
   ball.driftTimer -= 1;
   ball.x += ball.vx;
   ball.y += ball.vy;
+  keepOverStage(ball, stage, s.stageFrame);
 
   // 2 HP every 60 frames on its own, so a Smash Ball nobody commits to hitting
   // eventually leaves rather than turning the match into a stalemate around it.
@@ -3540,6 +3542,26 @@ function updateSmashBall(s: GameState, finalActive: boolean): void {
     ball.health = 0;
   }
 }
+
+/**
+ * The Smash Ball floats over the stage (Plan 5, Task 19): it turns back at the
+ * main platform's ends, where the stage's clock has it, and keeps between
+ * `SMASH_BALL_FLOOR` and `SMASH_BALL_CEILING` above it. UNVERIFIED: SmashWiki
+ * "Smash Ball" (https://www.ssbwiki.com/Smash_Ball) says it "floats around the
+ * stage" and gives no bounds; without any it drifted off the screen for good,
+ * out of every fighter's reach.
+ */
+function keepOverStage(ball: SmashBallState, stage: StageDef, stageFrame: number): void {
+  const main = stage.platforms.find((p) => p.ledges) ?? stage.platforms[0];
+  if (main === undefined) return;
+  const cx = platformCentreX(main, stageFrame);
+  if ((ball.x < cx - main.halfWidth && ball.vx < 0) || (ball.x > cx + main.halfWidth && ball.vx > 0)) ball.vx = -ball.vx;
+  if ((ball.y > main.y + SMASH_BALL_CEILING && ball.vy > 0) || (ball.y < main.y + SMASH_BALL_FLOOR && ball.vy < 0)) ball.vy = -ball.vy;
+}
+
+/** How high over the main platform the Smash Ball may float (`keepOverStage`). UNVERIFIED: no source gives a height. */
+export const SMASH_BALL_FLOOR = fx(10);
+export const SMASH_BALL_CEILING = fx(60);
 
 function resolveSmashBallHits(
   s: GameState,

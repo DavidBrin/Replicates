@@ -27,9 +27,9 @@ import {
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
 import { GAME_SIM_CONTEXT } from "./simContext";
 import { meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
-import { cpuWorldFromDef } from "@/ai/cpu";
+import { cpuDef, cpuWorldFromDef } from "@/ai/cpu";
 import { hashState } from "@/engine/hash";
-import { KO_FREEZE_FRAMES } from "@/engine/simulate";
+import { KO_FREEZE_FRAMES, createInitialState } from "@/engine/simulate";
 import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engine/types";
 import { KeyboardInput } from "@/input/keyboard";
 import { CONFIG_ARROWS } from "@/input/schemes";
@@ -263,15 +263,26 @@ describe("the worlds the game's CPUs see", () => {
   it("carry each fighter's up special model, as every other CPU world does", () => {
     const stage = getStageOrThrow("finalDestination");
     const defs = [getFighterOrThrow("mario"), getFighterOrThrow("fox")];
-    const worlds = matchCpuWorlds(stage, defs);
+    const worlds = matchCpuWorlds(stage, defs, getFighterOrThrow);
     defs.forEach((def, i) => {
       expect(worlds[i].recovery, def.id).not.toBeNull();
       expect(worlds[i].recovery, def.id).toEqual(recoveryFromDef(def));
-      expect(worlds[i], def.id).toEqual(cpuWorldFromDef(def, stageViewFromDef(stage), defs));
+      expect(worlds[i], def.id).toEqual(cpuWorldFromDef(def, stageViewFromDef(stage), defs, getFighterOrThrow));
       // Plan 5, Task 18 (ruling R-T18d): every port's definition, for the parry's timing.
       expect(worlds[i].matchDefs, def.id).toEqual(defs);
       expect(worlds[i].fighterDef, def.id).toBe(def);
+      // Plan 5, Task 19: the game's own fighter lookup, so a Kirby CPU's copy is the one the match runs.
+      expect(worlds[i].fighter, def.id).toBe(getFighterOrThrow);
     });
+  });
+
+  it("give a Kirby CPU the neutral special its Copy Ability runs (Plan 5, Task 19)", () => {
+    const stage = getStageOrThrow("finalDestination");
+    const defs = [getFighterOrThrow("kirby"), getFighterOrThrow("samus")];
+    const [world] = matchCpuWorlds(stage, defs, getFighterOrThrow);
+    const self = { ...createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "samus" }], RULES).fighters[0] };
+    self.combat = { ...self.combat, copy: "samus" };
+    expect(cpuDef(self, world)!.moves.neutralB?.name).toBe(getFighterOrThrow("samus").moves.neutralB?.name);
   });
 });
 
