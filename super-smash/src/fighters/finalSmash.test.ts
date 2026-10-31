@@ -119,15 +119,14 @@ describe("cinematic Final Smashes", () => {
       const ending = user.indexOf("finalEnd");
       expect(ending).toBeGreaterThan(0);
       expect(states[ending - 1].fighters[1].action).toBe("finalTrapped");
-      // The end's blow launches Mario out of the trap; the scene, decided before the
-      // frame's hits, holds through that frame and is over on the next.
+      // The end's blow launches Mario out of the trap, and that ends the scene. Only
+      // the frames strictly inside the end are pinned: which frame either edge of a
+      // scene stills or frees the bystander on is Task 14 fix round 1's (the
+      // freeze-edge alignment).
       const launched = states.findIndex((s, i) => i >= ending && s.fighters[1].action !== "finalTrapped");
       expect(launched).toBeGreaterThanOrEqual(ending);
-      for (const s of states.slice(ending, launched + 1)) expect(s.cinematic).toBe(0);
-      // Who stands still is decided by the frame before's scene (Task 14), so Fox stands
-      // from the frame after the end starts (Marth's scene is his end alone) through
-      // the one after the launch.
-      for (const s of states.slice(ending + 1, launched + 2)) expect(s.fighters[2].actionFrame).toBe(states[ending].fighters[2].actionFrame);
+      for (const s of states.slice(ending, launched)) expect(s.cinematic).toBe(0);
+      for (const s of states.slice(ending + 1, launched + 1)) expect(s.fighters[2].actionFrame).toBe(states[ending].fighters[2].actionFrame);
       expect(states[launched + 1].cinematic).toBe(-1);
     });
   }

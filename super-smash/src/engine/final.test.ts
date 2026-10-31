@@ -363,8 +363,8 @@ describe("the trapped (Plan 5, Task 14)", () => {
       expect(st.fighters[3].action).toBe("finalTrapped");
       expect(st.fighters[3].damage).toBe(0);
     }
-    // The scene runs through the end's launch (Task 15), so its last frame has all 21%.
-    expect(toFloat(scene[scene.length - 1].fighters[1].damage)).toBeCloseTo(21 * 1.05, 2);
+    // The scene runs through the end until its launch (Task 15): port 1 takes all of it.
+    expect(toFloat(states[states.length - 1].fighters[1].damage)).toBeCloseTo(21 * 1.05, 2);
   });
 
   it("are let go by a KO, which clears `trappedBy`", () => {
