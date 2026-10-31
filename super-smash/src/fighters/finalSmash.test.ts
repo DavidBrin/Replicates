@@ -13,7 +13,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { gameFrameOfMotion } from "@/engine/acmd/interpreter";
 import { SMASH_BALL_SPAWN_INTERVAL } from "@/engine/constants";
-import { FINAL_SMASH_READY } from "@/engine/final";
+import { FINAL_SMASH_READY, travelWindows } from "@/engine/final";
 import { fx, mul, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
 import { moveFrameOf } from "@/engine/hitbox";
@@ -1111,6 +1111,70 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
     const farthest = Math.min(...inStart.map((st) => st.fighters[0].x));
     expect(farthest).toBeLessThan(FD_LEFT - fx(40) - fx(distance));
   });
+
+  // Fix round 3 (ruling R-T16k): the hold covers every part of the move, its end
+  // included, past the scene's launch; the user is let go only when the move ends, then
+  // gets the jump back and falls. SmashWiki "Final Smash": "upon ending the move, the
+  // character gains a slight boost in height and regains their spent midair jumps".
+  it("holds Donkey Kong through Jungle Rush's end, launch and all, in the air; he falls only once it is over, his jump back", () => {
+    const s = ready("donkeyKong", 18);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(150), jumpsUsed: 2 });
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(150) });
+    const at = { x: s.fighters[0].x, y: s.fighters[0].y };
+    const { states } = runHeld(s, 400, inFront);
+    const user = slots(states, 0);
+    const last = user.lastIndexOf("finalEnd");
+    // The launch: Mario out of the trap and into a launch, with the end still to play.
+    const launch = states.findIndex((st, i) => i > 0 && states[i - 1].fighters[1].action === "finalTrapped" && st.fighters[1].action !== "finalTrapped");
+    expect(launch).toBeGreaterThan(0);
+    expect(user[launch]).toBe("finalEnd");
+    expect(last - launch).toBeGreaterThan(10);
+    for (const st of states.slice(0, last + 1)) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([at.x, at.y]);
+    expect([states[last + 1].fighters[0].action, states[last + 1].fighters[0].jumpsUsed]).toEqual(["fall", 1]);
+    expect(states[last + 10].fighters[0].y).toBeLessThan(at.y);
+  });
+
+  // Fix round 3 (ruling R-T16l): a dash's hold is lifted only inside its `momentum`
+  // window. Used in the air, Critical Hit holds through its 24-frame startup and Volt
+  // Tackle through its 46 ("Surrounds itself with electricity before dashing forwards",
+  // ruling R-T15h); the dash then travels as published, and the user is held again
+  // after it, to the move's end.
+  it.each([
+    ["marth", 25, 70],
+    ["pikachu", 47, 83],
+  ] as const)("%s: used in the air, holds through its startup, dashes in its window (%i-%i), and holds after it", (id, from, to) => {
+    const s = ready(id, 0);
+    const at = { x: FD_LEFT - fx(40), y: fx(40) };
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: at.x, y: at.y, facing: 1 });
+    Object.assign(s.fighters[1], { x: fx(60) });
+    Object.assign(s.fighters[2], { x: fx(70) });
+    const { states } = run(s, 200);
+    const inStart = states.filter((st) => st.fighters[0].move === "finalSmash");
+    const frameOf = (st: GameState) => moveFrameOf(st.fighters[0].actionFrame);
+    const windup = inStart.filter((st) => frameOf(st) < from);
+    expect(windup.length).toBe(from - 1);
+    for (const st of windup) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([at.x, at.y]);
+    const dash = inStart.filter((st) => frameOf(st) >= from && frameOf(st) <= to);
+    expect(dash.length).toBe(to - from + 1);
+    // It travels from the window's first frame, and stops dead after its last.
+    expect(dash[0].fighters[0].x).toBeGreaterThan(at.x);
+    expect(dash[dash.length - 1].fighters[0].x - at.x).toBeGreaterThan(fx(100));
+    const after = inStart.filter((st) => frameOf(st) > to);
+    expect(after.length).toBeGreaterThan(10);
+    for (const st of after) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([dash[dash.length - 1].fighters[0].x, dash[dash.length - 1].fighters[0].y]);
+  });
+
+  // Fix round 3 (ruling R-T16m): the Final Smash parts that travel instead of holding,
+  // and on which frames, pinned, so that no `momentum` edit changes who holds unseen.
+  it("travels in these Final Smash parts alone: Critical Hit's dash and Volt Tackle's", () => {
+    const travel: Record<string, readonly (readonly [number, number])[]> = {};
+    for (const d of FIGHTERS) {
+      for (const move of Object.values(d.moves)) {
+        if (move?.final !== undefined && travelWindows(move).length > 0) travel[`${d.id} ${move.slot}`] = travelWindows(move);
+      }
+    }
+    expect(travel).toEqual({ "marth finalSmash": [[25, 70]], "pikachu finalSmash": [[47, 83]] });
+  });
 });
 
 /**
@@ -1210,6 +1274,65 @@ describe("the beams roll back across a misprediction between rehits", () => {
         expect(hashState(s), `snapshot ${k}, step ${i}`).toBe(hashState(states[i]));
       }
     }
+  });
+});
+
+/**
+ * Rollback across the hold (fix round 3, rulings R-T16k and R-T16l): from a snapshot in
+ * an aerial Jungle Rush's end, after its launch, and in Volt Tackle's and Critical
+ * Hit's held startups in the air, a wrong branch (the other two press shield and jump)
+ * is simulated and thrown away, and the right inputs re-simulated from the snapshot give
+ * the original states, hash for hash; the snapshot is untouched.
+ */
+describe("the hold rolls back across a misprediction", () => {
+  const FD_LEFT = FD_FLOOR.x - FD_FLOOR.halfWidth;
+  const rollsBack = (states: readonly GameState[], at: readonly number[], frames: number) => {
+    for (const k of at) {
+      const snapshot = states[k];
+      const before = hashState(snapshot);
+      let wrong = cloneState(snapshot);
+      let prev: InputFrame[] = [0, 0, 0];
+      for (let i = k + 1; i < k + 12; i++) {
+        const alt = i % 2 === 0 ? Btn.Shield : Btn.Jump;
+        const keys: InputFrame[] = [0, alt, alt];
+        wrong = step(wrong, keys, { prevInputs: prev }).state;
+        prev = keys;
+      }
+      expect(hashState(wrong), `snapshot ${k}: the wrong branch diverges`).not.toBe(hashState(states[k + 11]));
+      expect(hashState(snapshot)).toBe(before);
+      let s = cloneState(snapshot);
+      prev = [0, 0, 0];
+      for (let i = k + 1; i < frames; i++) {
+        s = step(s, [0, 0, 0], { prevInputs: prev }).state;
+        expect(hashState(s), `snapshot ${k}, step ${i}`).toBe(hashState(states[i]));
+      }
+    }
+  };
+
+  it("in an aerial Jungle Rush's end, after the launch", () => {
+    const s = ready("donkeyKong", 18);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(150), jumpsUsed: 2 });
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(150) });
+    const { states } = runHeld(s, 320, inFront);
+    const user = slots(states, 0);
+    const last = user.lastIndexOf("finalEnd");
+    const launch = states.findIndex((st, i) => i > 0 && states[i - 1].fighters[1].action === "finalTrapped" && st.fighters[1].action !== "finalTrapped");
+    expect(launch).toBeGreaterThan(0);
+    expect(last).toBeGreaterThan(launch + 10);
+    rollsBack(states, [launch + 1, launch + 5, last - 2], 320);
+  });
+
+  it.each([
+    ["pikachu", [5, 30, 44]],
+    ["marth", [5, 20]],
+  ] as const)("in %s's held startup in the air", (id, at) => {
+    const s = ready(id, 0);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: FD_LEFT - fx(40), y: fx(40), facing: 1 });
+    Object.assign(s.fighters[1], { x: fx(60) });
+    Object.assign(s.fighters[2], { x: fx(70) });
+    const { states } = run(s, 160);
+    for (const k of at) expect(moveFrameOf(states[k].fighters[0].actionFrame)).toBeLessThan(id === "pikachu" ? 47 : 25);
+    rollsBack(states, at, 160);
   });
 });
 

@@ -97,29 +97,46 @@ export function finalSmashActive(s: { readonly fighters: readonly FighterState[]
 }
 
 /**
- * Does `f`'s Final Smash hold it where it is in the air? A Final Smash's start, used in
- * the air, stands its user still for the move: one that traps nobody (Mario Finale,
- * Zero Laser, the Ancient Bow and Arrow; Plan 5, Task 16 fix round 1, ruling R-T16b),
- * and a cinematic one's too, which whiffed plays to its end there (Jungle Rush, Ultra
- * Sword, Team Star Fox; fix round 2, ruling R-T16j). SmashWiki "Mario (SSBU)/Final
+ * Does `f`'s Final Smash hold it where it is in the air? Every part of one, used in the
+ * air, stands its user still: one that traps nobody (Mario Finale, Zero Laser, the
+ * Ancient Bow and Arrow; Plan 5, Task 16 fix round 1, ruling R-T16b); a cinematic one's
+ * start too, which whiffed plays to its end there (Jungle Rush, Ultra Sword, Team Star
+ * Fox; fix round 2, ruling R-T16j); and its end, through and past the scene's launch,
+ * until the move is over (fix round 3, ruling R-T16k). SmashWiki "Mario (SSBU)/Final
  * Smash" calls Mario Finale "a desperate recovery tool", and SmashWiki "Final Smash":
  * "When most Final Smashes are performed in the air, upon ending the move, the
  * character gains a slight boost in height and regains their spent midair jumps,
- * which can aid in recovery" (`refreshFinalJumps`). A cinematic one that traps goes on
- * to its scene, which holds its user anyway (ruling R-T14d).
+ * which can aid in recovery" (`refreshFinalJumps`): the user is let go when the move
+ * ends. While a scene plays, it holds its user anyway (ruling R-T14d).
  *
- * Not a start whose move travels (`MoveDef.momentum`): the published dashes keep their
- * momentum and fall as they do (ruling R-T16j). SmashWiki "Critical Hit": "In the air,
- * the user will travel at high speed directly forward"; "Volt Tackle": it "ignores
- * edges".
+ * The one exception is a part's travel, inside its `momentum` windows alone
+ * (`travelWindows`; fix round 3, ruling R-T16l): the published dashes travel as they
+ * do, and their windup and whatever follows the dash hold. SmashWiki "Critical Hit": "In
+ * the air, the user will travel at high speed directly forward"; "Volt Tackle": it
+ * "ignores edges", after it "Surrounds itself with electricity before dashing forwards"
+ * (SmashWiki "Pikachu (SSBU)", ruling R-T15h). Which parts travel, and on which frames,
+ * is pinned (`finalSmash.test.ts`, ruling R-T16m): today Critical Hit's dash and Volt
+ * Tackle's alone.
  *
- * UNVERIFIED: the kinetics, no gravity and no movement at all for the whole move (no
- * page gives them); the height boost has no published size and is not modelled.
+ * UNVERIFIED: the kinetics, no gravity and no movement at all outside a dash (no page
+ * gives them); the height boost has no published size and is not modelled.
  */
 export function holdsAloft(f: FighterState, def: FighterDef): boolean {
   if (f.grounded || f.action !== "special" || f.move === null) return false;
   const move = def.moves[f.move];
-  return move?.final?.phase === "start" && move.momentum === undefined;
+  if (move?.final === undefined) return false;
+  const frame = moveFrameOf(f.actionFrame);
+  return !travelWindows(move).some(([from, to]) => frame >= from && frame <= to);
+}
+
+/**
+ * The move frames a Final Smash part travels on, instead of holding its user in the air
+ * (`holdsAloft`): each `momentum` window, from its frame to the last it holds the speed
+ * (Plan 5, Task 16 fix round 3, rulings R-T16l and R-T16m). None for a part with no
+ * momentum.
+ */
+export function travelWindows(move: MoveDef): readonly (readonly [number, number])[] {
+  return (move.momentum ?? []).map((w) => [w.frame, w.frame + (w.hold ?? 0)] as const);
 }
 
 /**

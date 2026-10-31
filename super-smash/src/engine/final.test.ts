@@ -650,9 +650,10 @@ describe("the scene holds the match still, its user and the stage included (Task
 
   it("does not land out of a Final Smash: a part it lands in plays on (UNVERIFIED: no source says what a landing does to one)", () => {
     // Just above the floor, with nobody in reach: it lands in the start, which plays on.
-    // A start with a dash (`momentum`; a late one here), as a start without one is held
-    // in the air for the move and never lands (Task 16 fix round 2, ruling R-T16j).
-    const dash: SimContext = { fighter: () => defWith({ ...MOVES, finalSmash: { ...FINAL, momentum: [{ frame: 15, x: fx(1), y: 0, hold: 2 }] } }), stage: () => STAGE };
+    // A start that travels down (a `momentum` window from its first frame), as one held
+    // in the air never lands: a Final Smash holds its user there outside its travel
+    // (Task 16 fix rounds 2 and 3, rulings R-T16j and R-T16l).
+    const dash: SimContext = { fighter: () => defWith({ ...MOVES, finalSmash: { ...FINAL, momentum: [{ frame: 1, x: 0, y: fx(-1), hold: 14 }] } }), stage: () => STAGE };
     const s = aloft(fx(3));
     s.fighters[1].x = fx(120);
     const { states } = run(s, 16, USE, dash);
