@@ -70,7 +70,10 @@ export function stoneOf(f: Pick<FighterState, "action" | "move" | "actionFrame" 
   if (f.action !== "special" || f.move === null) return null;
   const stone = def.moves[f.move]?.stone;
   if (stone === undefined || f.combat.stoneFrames <= 0 || f.combat.stoneTaken >= stone.hp) return null;
-  const [from, to] = stoneWindow(f, stone);
+  // A stone that ended in the air is the air's window's wherever it is: on the step
+  // it lands, its frame 46 is the air's "Stone protection 29-46" still (the Task 13
+  // tail, the re-review's N6; UNVERIFIED: no published timeline times that landing).
+  const [from, to] = f.combat.stoneEndedAir ? stone.air : stoneWindow(f, stone);
   const frame = moveFrameOf(f.actionFrame);
   return frame >= from && frame <= to ? stone : null;
 }

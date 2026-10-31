@@ -378,8 +378,17 @@ export const SMASH_INPUT_WINDOW = 5;
  */
 export const TAP_JUMP_FRAMES = SMASH_INPUT_WINDOW;
 
-/** Frames a smash attack may be charged before it fires on its own. */
+/** Frames a smash attack charges for: its power stops rising here (`chargeMultiplier`). */
 export const SMASH_CHARGE_MAX = 60;
+/**
+ * Frames a fully charged smash may be held on at full power before it goes on its
+ * own (the Task 13 tail, ruling R-T13o). SmashWiki "Smash attack"
+ * (https://www.ssbwiki.com/Smash_attack, revision 2062630), Ultimate: "they can also
+ * be held for an additional 2 seconds after that, not increasing their power any
+ * further"; "Min Min (SSBU)" (revision 2046068): "instead of the usual 2 seconds (120
+ * frames)". Ness's, Min Min's and a few others' differ; none is on this roster.
+ */
+export const SMASH_FULL_CHARGE_HOLD = 120;
 /** Full charge multiplies damage by this much. */
 export const SMASH_CHARGE_DAMAGE = fx(1.4);
 

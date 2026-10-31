@@ -59,8 +59,8 @@ interface Frame {
   readonly hits: readonly { damage: number; hitboxId: number }[];
 }
 
-/** Smash `slot` at a victim standing on its earliest hitbox; hold the attack `HELD` frames, then let go. */
-function chargeAt(def: FighterDef, slot: MoveSlot, dir: Btn): Frame[] {
+/** Smash `slot` at a victim standing on its earliest hitbox; hold the attack `held` frames, then let go. */
+function chargeAt(def: FighterDef, slot: MoveSlot, dir: Btn, held = HELD): Frame[] {
   let s: GameState = createInitialState("finalDestination", [{ defId: def.id }, { defId: "mario" }], RULES, 7);
   for (let i = 0; i < SETTLE; i++) s = step(s, [0, 0], { prevInputs: [0, 0] }).state;
   const [attacker, victim] = s.fighters;
@@ -68,7 +68,7 @@ function chargeAt(def: FighterDef, slot: MoveSlot, dir: Btn): Frame[] {
   victim.x = attacker.x + (attacker.facing >= 0 ? hb.x : -hb.x);
   const inputs: InputFrame[] = [
     dir | Btn.Attack,
-    ...Array<InputFrame>(HELD).fill(Btn.Attack),
+    ...Array<InputFrame>(held).fill(Btn.Attack),
     ...Array<InputFrame>(120).fill(0),
   ];
   let prev: InputFrame = 0;
@@ -110,6 +110,37 @@ describe("a held smash attack", () => {
       expect(hb, `no hitbox ${hit.hitboxId} live on move frame ${moveFrame}`).toBeDefined();
       const fresh = computeStaleness([], slot).damage;
       expect(hit.damage).toBe(mul(mul((hb as Hitbox).damage, chargeMultiplier(charge)), fresh));
+    });
+  }
+});
+
+/**
+ * The Task 13 tail (ruling R-T13o): SmashWiki "Smash attack"
+ * (https://www.ssbwiki.com/Smash_attack, revision 2062630), Ultimate: "smash attacks
+ * can still be charged for 1 second. However, they can also be held for an
+ * additional 2 seconds after that, not increasing their power any further"; 2
+ * seconds is 120 frames ("Min Min (SSBU)": "instead of the usual 2 seconds (120
+ * frames)"). So 60 frames of charge, 120 more held at full power, 180 in all, and
+ * then it goes on its own ("Ness (SSBU)/Up smash": "automatically unleashed from
+ * charging state").
+ */
+describe("a smash held past its full charge (R-T13o)", () => {
+  for (const def of FIGHTERS) {
+    it.each(SMASHES)(`${def.id} %s: held on, it charges 60, holds 120 more at full power, and goes on its own at 180`, (slot, dir) => {
+      const frames = chargeAt(def, slot, dir, 260);
+      const charges = frames.map((f) => f.charge);
+      expect(Math.max(...charges)).toBe(180);
+      // It goes on while Attack is still held: the 180th frame of hold is the last.
+      const top = charges.indexOf(180);
+      expect(frames[top + 1].held).toBe(true);
+      expect(frames[top + 1].charge).toBe(180);
+      expect(frames[top + 1].actionFrame).toBe(frames[top].actionFrame + 1);
+      // The power stops at 60: its hit lands at the full charge's 1.4×, as a 60-frame hold's does.
+      const landed = frames.find((f) => f.hits.length > 0);
+      expect(landed, "the swing never landed").toBeDefined();
+      const sixty = chargeAt(def, slot, dir, 100).find((f) => f.hits.length > 0);
+      expect(landed!.hits[0].damage).toBe(sixty!.hits[0].damage);
+      expect(chargeMultiplier(180)).toBe(chargeMultiplier(60));
     });
   }
 });

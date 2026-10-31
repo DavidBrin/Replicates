@@ -13,7 +13,7 @@
  * may read them on entry. `clearHitRecord` does not.
  */
 
-import { SMASH_CHARGE_MAX } from "../constants";
+import { SMASH_CHARGE_MAX, SMASH_FULL_CHARGE_HOLD } from "../constants";
 import { smashHoldFrame } from "../acmd/run";
 import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
@@ -62,22 +62,24 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   // SmashWiki's "Charges between", ruling R-T13i), else the frame before its script
   // raises START_SMASH_HOLD (R-T13e), else the frame before its earliest hitbox goes
   // live (ruling P5-R15), so nothing can be hit while it charges.
-  // It charges only while the button that started it stays held, from its start,
-  // until the release or the full charge; once let go, Attack does not touch the
-  // move again (Plan 5, Task 13 fix round 3, ruling R-T13l; `CombatState.smashLetGo`).
+  // Whether it charges is decided on the hold frame: it charges if and only if
+  // Attack is held there (the Task 13 tail, ruling R-T13n), then while it stays
+  // held, up to the full hold; a release closes it, and once let go Attack does not
+  // touch the move again (fix round 3, ruling R-T13l; `CombatState.smashLetGo`).
   // SmashWiki "Smash attack" (https://www.ssbwiki.com/Smash_attack, revision
   // 2062630): "they can be charged by holding the buttons down"; "the move's
   // script calling for a command on a certain frame to determine whether the
-  // attack will be charged or not".
+  // attack will be charged or not" (UNVERIFIED for Ultimate: that sentence is in
+  // the page's Smash 4 section, and its Ultimate section does not restate it).
+  // The full hold is 60 frames of charge and `SMASH_FULL_CHARGE_HOLD` more at full
+  // power (R-T13o; `chargeMultiplier` stops at 60), then it goes on its own.
   if (f.action === "attack" && move.chargeable) {
-    if (!intent.attackHeld) f.combat.smashLetGo = true;
-    if (!f.combat.smashLetGo && f.charge < SMASH_CHARGE_MAX) {
-      const holdFrame = smashHoldFrame(ctx.def, f);
-      if (f.actionFrame >= holdFrame) {
-        f.actionFrame = holdFrame;
-        f.charge += 1;
-        return;
-      }
+    const holdFrame = smashHoldFrame(ctx.def, f);
+    if (f.actionFrame >= holdFrame && !intent.attackHeld) f.combat.smashLetGo = true;
+    if (!f.combat.smashLetGo && f.charge < SMASH_CHARGE_MAX + SMASH_FULL_CHARGE_HOLD && f.actionFrame >= holdFrame) {
+      f.actionFrame = holdFrame;
+      f.charge += 1;
+      return;
     }
   }
   if (move.followUp !== undefined && intent.attackPressed && f.actionFrame >= 3 && hasMove(ctx, move.followUp)) {

@@ -437,6 +437,45 @@ describe("a Stone that lands (R-T13k)", () => {
     expect(free - landed).toBe(32);
   });
 
+  // The Task 13 tail (the re-review's N6): the step it lands on is its frame 46, a
+  // frame of the air's "Stone protection 29-46", and "The stone transformation (and
+  // subsequent protection) lasts a minimum of 18 frames": still a stone there.
+  it("ended on the step it lands, is a stone on that step still: its frame 46, the air's protection (N6)", () => {
+    const { landed } = heldDrop(120, 60);
+    const { states } = heldDrop(120, 60, [landed]);
+    expect(frameOf(kirbyOf(states[landed]))).toBe(46);
+    expect(kirbyOf(states[landed]).grounded).toBe(true);
+    expect(stoneOf(kirbyOf(states[landed]), kirby)).not.toBeNull();
+    expect(states.slice(landed + 1).every((s) => stoneOf(kirbyOf(s), kirby) === null)).toBe(true);
+  });
+
+  // The Task 13 tail (the re-review's N7): a stone that ends on its 150th frame in
+  // the air, untouched, is the air's too, wherever it lands.
+  it("untouched, ending on its 150th frame in the air and landing on that step or in its end lag: interruptible 32 frames after its last (N7)", () => {
+    // Final Destination with its top blast zone out of the way: dropped from 694 to
+    // 698 it lands on the stone's last step, from 699 to about 735 in its end lag.
+    const tall: StageDef = { ...finalDestination, id: "tall", blastZone: { ...finalDestination.blastZone, top: fx(4000) } };
+    const base = ctx();
+    const c: SimContext = { ...base, stage: (id) => (id === "tall" ? tall : base.stage(id)) };
+    const seen = { onEnd: 0, inLag: 0 };
+    for (let y = 690; y <= 740; y += 2) {
+      const { states } = run(lineUp("tall", 0, y, "mario", 60, c), 300, stoneInputs(), c);
+      const last = states.findIndex((s) => kirbyOf(s).combat.stoneFrames >= 150);
+      const landed = states.findIndex((s) => kirbyOf(s).grounded);
+      if (last < 0 || landed < last) continue;
+      const free = states.findIndex((s, i) => i > last && kirbyOf(s).action !== "special");
+      if (landed - last > 32) continue;
+      expect(free - last, `from ${y}: ended ${last}, landed ${landed}`).toBe(32);
+      if (landed === last) {
+        seen.onEnd += 1;
+        // Its frame 46 on the landing step, a stone still (N6).
+        expect(stoneOf(kirbyOf(states[landed]), kirby), `from ${y}`).not.toBeNull();
+      } else seen.inLag += 1;
+    }
+    expect(seen.onEnd).toBeGreaterThan(0);
+    expect(seen.inLag).toBeGreaterThan(0);
+  });
+
   // Fix round 3 (ruling R-T13m): the air's 32 frames after its cancel, wherever it lands.
   it("cancelled in the air on 46 and landing on 47-77, is interruptible on 78 still (32 frames after the cancel)", () => {
     const frames: number[] = [];

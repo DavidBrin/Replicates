@@ -645,9 +645,10 @@ describe("a held smash, from its release to its first box (https://www.ssbwiki.c
 });
 
 /**
- * Plan 5, Task 13 fix round 3 (ruling R-T13l): a smash charges only while the
- * button that started it is held, from its start, until the release or the full
- * charge; after that, Attack does not touch the move. SmashWiki "Smash attack"
+ * Plan 5, Task 13 fix round 3 (ruling R-T13l): once let go, Attack does not touch
+ * the move again. The Task 13 tail (ruling R-T13n): whether it charges at all is
+ * decided on its hold frame, by Attack held there; then it charges while held, up to
+ * the full hold, and a release closes it. SmashWiki "Smash attack"
  * (https://www.ssbwiki.com/Smash_attack, revision 2062630): "they can be charged
  * by holding the buttons down"; "the move's script calling for a command on a
  * certain frame to determine whether the attack will be charged or not".
@@ -697,9 +698,20 @@ describe("a smash, once let go, never charges again (R-T13l)", () => {
     expect(endOf(tapped)).toBeGreaterThan(chargeOn + 6);
   });
 
-  it.each(RELEASES.filter(([, , chargeOn]) => chargeOn >= 3))("%s %s: let go before its hold frame and held again on it, it does not charge (held from its start)", (id, slot, chargeOn) => {
-    // Up on step 1; down again from the step the move reaches its hold frame (game frame `chargeOn`, step chargeOn − 1).
+  it.each(RELEASES.filter(([, , chargeOn]) => chargeOn >= 3))("%s %s: let go before its hold frame and held again on it, it charges: decided on the hold frame (R-T13n)", (id, slot, chargeOn) => {
+    // Up on step 1; down again from the step the move reaches its hold frame (game frame
+    // `chargeOn`, step chargeOn − 1) for 21 steps: held on the hold frame, so it charges,
+    // a frame a step. The first is the hold frame's own step, so the swing ends the
+    // other 20 steps later than a tap's.
     const run = swing(id, slot, (i) => i >= chargeOn - 1 && i < chargeOn + 20);
+    const charge = Math.max(...run.map((x) => x.charge));
+    expect(charge).toBe(21);
+    expect(endOf(run)).toBe(endOf(swing(id, slot, () => false)) + charge - 1);
+  });
+
+  it.each(RELEASES.filter(([, , chargeOn]) => chargeOn >= 3))("%s %s: held from its start but let go on its hold frame, it does not charge (R-T13n)", (id, slot, chargeOn) => {
+    // Held on steps 0 to chargeOn − 3, up on step chargeOn − 2 and the hold frame's step, then held again.
+    const run = swing(id, slot, (i) => i < chargeOn - 2 || i >= chargeOn);
     expect(run.every((x) => x.charge === 0)).toBe(true);
     stepsOn(run, 1);
     expect(endOf(run)).toBe(endOf(swing(id, slot, () => false)));
