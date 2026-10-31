@@ -31,8 +31,13 @@ import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
   MELEE_RANGE,
+  COUNTER_AIM,
   ROLL_SPECIAL,
   free,
+  isOffstage,
+  shield,
+  sideRecoveryFromDef,
+  upBInReach,
   observe,
   recoveryFromDef,
   stageViewFromDef,
@@ -44,7 +49,6 @@ import {
 import { BEHAVIOURS, cpuDef, cpuInput, cpuWorldFromDef, decideCpu, tuningForLevel } from "./cpu";
 import {
   CARGO_CARRY_FRAMES,
-  COUNTER_AIM,
   REFLECT_AIM,
   counter,
   finalSmash,
@@ -53,6 +57,8 @@ import {
   mash,
   mashPeriod,
   reflect,
+  SIDE_RECOVER_ABOVE,
+  SIDE_RECOVER_BELOW,
   sideRecover,
   smashBall,
   smashSpecial,
@@ -435,6 +441,92 @@ describe("reflect and counter", () => {
     expect(late).toBeGreaterThan(0);
   });
 
+  describe("the counter before the shield (ruling R-T19l)", () => {
+    // Link's forward tilt 14 away, at a standing level-9 Marth: seen early, its hit
+    // further off than the counter's aim.
+    const c = marth.moves.downB!.counter!;
+    const aim = c.active[0] + COUNTER_AIM;
+    const hit = swingHitFrame(link, { move: "ftilt", actionFrame: 0, combat: makeFighter().combat })!;
+    const r = tuningForLevel(9).reactionFrames;
+    const at = (actionFrame: number, self: Partial<Parameters<typeof makeFighter>[0]> = {}, swing: Partial<Parameters<typeof makeFighter>[0]> = {}) =>
+      makeState({
+        frame: 100 + actionFrame,
+        fighters: [
+          makeFighter({ port: 0, facing: 1, defId: "marth", actionFrame: 30, ...self }),
+          makeFighter({ port: 1, defId: "link", x: fx(14), action: "attack", move: "ftilt", actionFrame, facing: -1, ...swing }),
+        ],
+      });
+    const decides = (b: typeof counter, s: GameState) => b(context(s, marth)).score > 0;
+
+    it("decides counter-then-shield on the aim frame only, for a swing seen early", () => {
+      expect(hit - r).toBeGreaterThan(aim);
+      const counterOn: number[] = [];
+      const shieldOn: number[] = [];
+      for (let a = r; a <= hit; a++) {
+        if (decides(counter, at(a))) counterOn.push(a);
+        if (decides(shield, at(a))) shieldOn.push(a);
+      }
+      expect([counterOn, shieldOn]).toEqual([[hit - aim], [hit - aim]]);
+      // On that frame the counter takes it; with the counter's roll failed, the shield.
+      const s = at(hit - aim);
+      expect(counter(context(s, marth)).decided).toBe(true);
+      expect(counter(context(s, marth, 9, rollsWith(ROLL_SPECIAL, 0.99))).score).toBe(0);
+      expect(shield(context(s, marth, 9, rollsWith(ROLL_SPECIAL, 0.99))).input).toBe(Btn.Shield);
+      expect(decideCpu(s, 0, 9, 1, cpuWorldFromDef(marth, DEFAULT_STAGE_VIEW, [marth, link])).behaviour).toMatch(/counter|shield/);
+    });
+
+    it("a swing the counter declines on its frame (facing away) still gets the shield's decision on that frame", () => {
+      const away = (a: number) => at(a, { facing: -1 });
+      const shieldOn: number[] = [];
+      for (let a = r; a <= hit; a++) if (decides(shield, away(a))) shieldOn.push(a);
+      expect(shieldOn).toEqual([hit - aim]);
+      expect(counter(context(away(hit - aim), marth)).score).toBe(0);
+    });
+
+    it("decides neither twice over a hitlag freeze at the aim frame: on the freeze's last frame", () => {
+      const frozen = [3, 2, 1, 0].map((hitlag) => at(hit - aim, {}, { hitlag }));
+      expect(frozen.map((s) => decides(counter, s))).toEqual([false, false, false, true]);
+      expect(frozen.map((s) => decides(shield, s))).toEqual([false, false, false, true]);
+    });
+
+    it("a smash first seen with its charge still to come: the shield decides at first sight and not again once it is let go", () => {
+      // Donkey Kong's forward smash, its hit far enough past its hold for the counter's aim
+      // to come after the release: before the hold its hit frame is unknown (it may charge).
+      const dk = FIGHTERS.find((f) => f.id === "donkeyKong")!;
+      const hold = smashHoldFrame(dk, { move: "fsmash" });
+      const smash = (actionFrame: number) =>
+        makeState({
+          frame: 100 + actionFrame,
+          fighters: [
+            makeFighter({ port: 0, facing: 1, defId: "marth", actionFrame: 30 }),
+            makeFighter({ port: 1, defId: "donkeyKong", x: fx(14), action: "attack", move: "fsmash", actionFrame, facing: -1, combat: { ...makeFighter().combat, smashLetGo: actionFrame >= hold } }),
+          ],
+        });
+      const lands = swingHitFrame(dk, smash(hold).fighters[1])!;
+      expect(r).toBeLessThan(hold);
+      expect(lands - aim).toBeGreaterThanOrEqual(hold);
+      const shieldOn: number[] = [];
+      for (let a = r; a <= lands; a++) if (decides(shield, smash(a))) shieldOn.push(a);
+      expect(shieldOn).toEqual([r]);
+    });
+
+    it("a swing whose aim frame comes while it waits out a landing's lag decides on the lag's last frame", () => {
+      // Free at first sight (deferred), then a 6-frame landing lag from the frame before the aim.
+      const LAG = 6;
+      const start = hit - aim - 1;
+      expect(start).toBeGreaterThan(r);
+      const state = (a: number) =>
+        a < start ? at(a) : a < start + LAG ? at(a, { action: "landingLag", actionFrame: a - start, charge: LAG }) : at(a, { action: "stand", actionFrame: a - start - LAG });
+      const shieldOn: number[] = [];
+      const counterOn: number[] = [];
+      for (let a = r; a <= hit; a++) {
+        if (decides(shield, state(a))) shieldOn.push(a);
+        if (decides(counter, state(a))) counterOn.push(a);
+      }
+      expect([shieldOn, counterOn]).toEqual([[start + LAG - 1], []]);
+    });
+  });
+
   it("a level-9 Marth CPU counters a real swing, and the engine's counter catches it", () => {
     // Marth's own dash attack, 14 away, from the frame a level 9 sees it: its hit is
     // then inside the counter's live frames and short of its aim, so the counter decides
@@ -809,6 +901,48 @@ describe("side recovery", () => {
       expect(rose, `${x0},${y0}: the jump's rise`).toBe(jump);
       // Decided in the rise, and not again over its top.
       if (jump) expect(decidedIn).toBe("jump");
+    }
+  });
+
+  it("decides a window opened in a jump's rise exactly once (the Task 19 re-review's New Breakage 5)", () => {
+    // Fox and Donkey Kong spend their midair jump off Battlefield's right side, drifting
+    // home: the window opens in the rise. The rebuilt frame before (`sideBefore`) has to
+    // say "out of it" on its first frame and "in it" on every later one.
+    const bf = stageViewFromDef(STAGES.find((x) => x.id === "battlefield")!);
+    for (const [id, x0, y0] of [["fox", 110, 0], ["fox", 115, 5], ["donkeyKong", 125, -15], ["donkeyKong", 135, -20]] as const) {
+      const def = defOf(id);
+      const sideDef = sideRecoveryFromDef(def)!;
+      let s = createInitialState("battlefield", [{ defId: id }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true } as const, 5);
+      Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(x0), y: fx(y0), jumpsUsed: def.attributes.jumps - 1, facing: -1, intangible: 0, invincible: 0 });
+      Object.assign(s.fighters[1], { x: 0, intangible: 0, invincible: 0 });
+      let prev: InputFrame[] = [0, 0];
+      const windows: number[] = [];
+      let open: number | null = null;
+      let rose = false;
+      for (let k = 0; k < 160 && (s.fighters[0].action === "fall" || s.fighters[0].action === "jump"); k++) {
+        const me = s.fighters[0];
+        const ledge = bf.rightLedge;
+        const eligible =
+          free(me) && isOffstage(me, bf) && me.jumpsUsed >= def.attributes.jumps && me.y >= bf.groundY - SIDE_RECOVER_BELOW && me.y <= bf.groundY + SIDE_RECOVER_ABOVE &&
+          upBInReach(me, ledge, bf, sideDef, towardX(me.x, ledge), s.frame);
+        if (eligible) {
+          if (open === null) {
+            open = 0;
+            rose ||= me.action === "jump" && me.vy > 0;
+          }
+          if (sideRecover(context(s, def, 7, rollsWith(ROLL_SPECIAL, 0), bf)).score > 0) open++;
+        } else if (open !== null) {
+          windows.push(open);
+          open = null;
+        }
+        const input = towardX(me.x, bf.rightLedge) | (k === 0 ? Btn.Jump : 0);
+        s = step(s, [input, 0], { prevInputs: prev }).state;
+        prev = [input, 0];
+      }
+      if (open !== null) windows.push(open);
+      expect(rose, `${id} ${x0},${y0}: a window opened in the rise`).toBe(true);
+      expect(windows, `${id} ${x0},${y0}`).toEqual(windows.map(() => 1));
+      expect(windows.length).toBeGreaterThan(0);
     }
   });
 

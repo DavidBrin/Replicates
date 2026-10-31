@@ -101,6 +101,8 @@ import type {
 
 /** Entry animation: fighters drop in intangible rather than materialising. */
 export const ENTRY_FRAMES = 12;
+/** The entry drop's intangibility: its whole length plus a beat (`createInitialState`). */
+export const ENTRY_INTANGIBILITY = ENTRY_FRAMES + 30;
 /** Blank frames between losing a stock and appearing on the respawn platform. */
 export const DEAD_FRAMES = 60;
 /** Shield is up on frame 1 — the shield-*start* is a single frame in Ultimate. */

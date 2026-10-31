@@ -141,7 +141,7 @@ import {
   resolveCollision,
 } from "./physics";
 import {
-  ENTRY_FRAMES,
+  ENTRY_INTANGIBILITY,
   advanceFighter,
   applyMovement,
   chargeMultiplier,
@@ -438,7 +438,7 @@ export function createInitialState(
       balloon: false,
       // The entry drop is intangible for its whole length plus a beat, so two
       // fighters spawning on top of each other is not a coin flip.
-      intangible: ENTRY_FRAMES + 30,
+      intangible: ENTRY_INTANGIBILITY,
       invincible: 0,
       grabbedBy: -1,
       grabbing: -1,

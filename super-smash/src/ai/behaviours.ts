@@ -26,11 +26,11 @@
  *    were half a second ago. A CPU that read the live state — or worse, the
  *    opponent's input — would feel like it was cheating, because it would be.
  *    One exception, ruled (R-T18j): a parry places a swing it has already seen
- *    where the swing is now, as it reads the swing's frame (`parry`). What it
- *    can see of the opponent's state comes with the action it has seen: a roll's
- *    or a ledge's intangibility, a respawn's invincibility, only once that action
- *    is noticed (ruling R-T19k, `observe`). The Smash Ball and a Final Smash are
- *    on screen for everybody and are read as they are (`specials.ts`).
+ *    where the swing is now, as it reads the swing's frame (`parry`). It sees the
+ *    opponent's intangibility only once it began at least the reaction time ago,
+ *    so not one that began in the frames its view hasn't caught up with (ruling
+ *    R-T19k, amended: `observe`, `intangibleSince`). Invincibility (a respawn's)
+ *    shows on screen, as the Smash Ball and a Final Smash do, and is read as it is.
  */
 
 import {
@@ -42,6 +42,7 @@ import {
   type GameState,
   type Hitbox,
   type InputFrame,
+  type CounterDef,
   type MoveAim,
   type MoveDef,
   type MoveSlot,
@@ -49,9 +50,23 @@ import {
   type StageDef,
 } from "@/engine/types";
 import { cloneFighter } from "@/engine/simulate";
-import { advanceFighter, applyMovement, interpretInput, shieldCovers, updateInputTracking, type StateContext } from "@/engine/states";
-import { HARD_PLATFORM_DEPTH, integrate, platformCentreX } from "@/engine/physics";
+import { isFinalSlot } from "@/engine/final";
+import {
+  DOWNED_FRAMES,
+  ENTRY_INTANGIBILITY,
+  LEDGE_HANG_MIN,
+  advanceFighter,
+  applyMovement,
+  dodgeWindow,
+  interpretInput,
+  moveIntangibility,
+  shieldCovers,
+  updateInputTracking,
+  type StateContext,
+} from "@/engine/states";
+import { HARD_PLATFORM_DEPTH, integrate, ledgeIntangibilityFrames, platformCentreX } from "@/engine/physics";
 import { WALL_JUMP_WINDOW, WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
+import { FOOTSTOOL_INTANGIBLE_FIRST } from "@/engine/footstool";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
 import { smashHoldFrame } from "@/engine/acmd/run";
 import { actionFrameOf, capsulesOverlap, deepestReach, hitboxWorldPos, hurtboxCapsule, sweptCapsuleOverlaps, type Capsule } from "@/engine/hitbox";
@@ -72,6 +87,7 @@ import {
   LEDGE_GRAB_BACK_PENALTY,
   LEDGE_GRAB_RANGE_X,
   LEDGE_GRAB_RANGE_Y,
+  LEDGE_REGRAB_SCALING,
   PERFECT_SHIELD_WINDOW,
   SDI_INPUT_INTERVAL,
   SHIELD_MIN_HOLD,
@@ -268,7 +284,7 @@ function rewind(f: FighterState, frames: number): FighterState {
   return { ...f, x: f.x - f.vx * frames, y: f.y - f.vy * frames };
 }
 
-export function observe(state: GameState, port: number, reactionFrames: number): Observation {
+export function observe(state: GameState, port: number, reactionFrames: number, defs: readonly (FighterDef | undefined)[] = []): Observation {
   const self = state.fighters[port];
   let nearest: FighterState | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
@@ -299,12 +315,12 @@ export function observe(state: GameState, port: number, reactionFrames: number):
   }
 
   const noticed = nearest.actionFrame >= reactionFrames;
-  // What it can see of the target's state goes with the action it has seen (ruling
-  // R-T19k, the Task 19 review's M10): until it notices the action, it believes the
-  // target standing or falling (`targetAction`), with no intangibility or
-  // invincibility of a roll, a dodge, a ledge or a respawn.
+  // Its intangibility, only where it began at least the reaction time ago (ruling
+  // R-T19k, amended): one begun in the frames the view hasn't caught up with is
+  // hidden, one it has seen stays seen across the target's actions (a ledge's into
+  // the get-up). Invincibility (a respawn's, a throw's catch) is on screen, read as it is.
   const rewound = rewind(nearest, reactionFrames);
-  const seen = noticed ? rewound : { ...rewound, intangible: 0, invincible: 0 };
+  const seen = intangibleSince(nearest, defs[nearest.port]) >= reactionFrames ? rewound : { ...rewound, intangible: 0 };
   const targetAction = noticed
     ? nearest.action
     : nearest.grounded
@@ -325,6 +341,48 @@ export function observe(state: GameState, port: number, reactionFrames: number):
     facingTarget: dx === 0 ? true : dx > 0 === self.facing > 0,
     frame: state.frame,
   };
+}
+
+/**
+ * How many frames ago, at least, the fighter's intangibility began (ruling R-T19k,
+ * amended), from the engine's own timers; `Infinity` with none. The engine grants it
+ * two ways:
+ *  - a window an action re-asserts a frame at a time (a dodge, a tech, a move's own
+ *    frames: `dodgeWindow`, `moveIntangibility`), which leaves the countdown at 1:
+ *    begun at the window's first frame; a footstool jump's, by its own clock
+ *    (`footstoolFrame`, from `FOOTSTOOL_INTANGIBLE_FIRST`); any other held at 1 (Kirby's
+ *    mouthful and its star), at the action's start at the latest, or a countdown's
+ *    last frame;
+ *  - a grant of 2 or more counting down a frame at a time, the entry drop's
+ *    (`ENTRY_INTANGIBILITY`, at the match's start) or a ledge grab's
+ *    (`ledgeIntangibilityFrames`, as the hang began). So in the hang, its own frames;
+ *    elsewhere, the grant less what is left: the entry's exactly (the only grant a
+ *    fighter with no ledge grab since its last hit or KO can have, `ledgeRegrabs`
+ *    0), and a ledge's at least, its least grant being the one with no air time
+ *    (the air time before the grab is not kept), at the damage now (no hit lands on
+ *    it since) and the last grab's regrab count (an earlier grab's was larger); and
+ *    at least the action's own frames (the hang's least, `LEDGE_HANG_MIN`, before a
+ *    ledge option's).
+ * Not read exactly, and so hidden for longer than the view would (measured in the
+ * sweep): a ledge grant's air time; a window that took over from intangibility
+ * already running (an air dodge's into a tech, a dodge's last frame into its
+ * landing), read from the window's or the action's start; and a Kirby star's, begun
+ * at the swallow before it, read from the star's start.
+ */
+export function intangibleSince(f: FighterState, def: FighterDef | undefined): number {
+  if (f.intangible <= 0) return Number.POSITIVE_INFINITY;
+  const w = def === undefined ? null : (dodgeWindow(f, def.attributes) ?? moveIntangibility(f, def));
+  if (w !== null && f.intangible <= 1 && f.actionFrame >= w[0] && f.actionFrame <= w[1]) return f.actionFrame - w[0];
+  if (f.action === "ledgeHang") return f.actionFrame;
+  const ledgeOption = LEDGE_OPTIONS.includes(f.action);
+  if (f.intangible <= 1 && !ledgeOption) {
+    const bounce = f.combat.footstoolFrame;
+    return bounce >= FOOTSTOOL_INTANGIBLE_FIRST ? bounce - FOOTSTOOL_INTANGIBLE_FIRST : f.actionFrame;
+  }
+  const inAction = f.actionFrame + (ledgeOption ? LEDGE_HANG_MIN : 1);
+  if (f.intangible <= 1) return inAction;
+  const grant = f.ledgeRegrabs === 0 ? ENTRY_INTANGIBILITY : ledgeIntangibilityFrames(0, f.damage, Math.min(f.ledgeRegrabs - 1, LEDGE_REGRAB_SCALING.length - 2));
+  return Math.max(inAction, grant - f.intangible);
 }
 
 /* --------------------------------------------------------------- contexts -- */
@@ -967,8 +1025,10 @@ export const survive: Behaviour = (ctx) => {
     // SDI is one pulse per fresh direction press, and the engine counts at most
     // one per SDI_INPUT_INTERVAL frames, so a two-on / two-off cycle at that
     // period extracts every pulse on offer and wastes none.
-    // A per-opportunity choice (ruling R-T19j): rolled every frame, but a pulse is
-    // read only on the frames the engine counts one, so each pulse is its own roll.
+    // A chance over a window (ruling R-T19j, its label corrected): the pulse holds
+    // the stick 2 frames in every SDI_INPUT_INTERVAL, with a roll on each, and a
+    // pass on the second after a miss on the first is still a fresh press, so a
+    // pulse gets up to two rolls: 1 − (1 − sdiSkill)² a pulse.
     if (ctx.rolls[ROLL_MOVE] >= ctx.tuning.sdiSkill) return { score: 1000, input: 0 };
     const holding = pulse(ctx.view.frame, self.port, SDI_INPUT_INTERVAL, 2);
     return { score: 1000, input: holding ? escape : 0 };
@@ -1333,7 +1393,8 @@ function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFra
  * Whether this fighter, not free to act now (`free`), is after its next step: the last
  * frame of a reel, a landing's lag or a get-up (ruling R-T19g, for `shieldDecides`).
  * Its own fighter is run one step on by the engine's rules (`ghostStep`) with nothing
- * pressed; a freeze holds it where it is (`step()` runs no status in hitlag). A press
+ * pressed and nothing in its buffer (ruling R-T19n); a freeze holds it where it is
+ * (`step()` runs no status in hitlag). A press
  * made on this frame is read on that step, or waits in the buffer for the first free
  * frame (`handOff`, `endStatus`): so too where that step also lands a reel in the air,
  * whose plain landing (`land`, a few frames) the buffer outlasts.
@@ -1341,6 +1402,10 @@ function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFra
 export function freeNextStep(def: FighterDef, self: FighterState, frame0: number): boolean {
   if (free(self) || self.hitlag > 0) return false;
   const f = cloneFighter(self);
+  // Its own earlier press is not what frees it (ruling R-T19n): the decision's fresh
+  // Shield press is read before the buffer (`handleActionable`), so a buffered Attack
+  // left in the copy would take a ledge get-up into the attack and read "not free".
+  f.bufferedAction = null;
   ghostStep(f, 0, 0, ghostContext(def, frame0 + 1, f));
   return free(f);
 }
@@ -1427,6 +1492,60 @@ export function swingHitFrame(def: FighterDef | undefined, f: Pick<FighterState,
 /** A box that lands a hit on a shield: not a catch (a grab goes through one) or a windbox (a push). */
 function strikes(hb: Hitbox): boolean {
   return hb.grabbing !== true && hb.windbox !== true;
+}
+
+/** The special slots, in the order a property is looked for, and the stick that picks each (`specialSlot`). */
+const SPECIAL_SLOTS: readonly { readonly slot: MoveSlot; readonly dir: InputFrame }[] = [
+  { slot: "downB", dir: Btn.Down },
+  { slot: "sideB", dir: 0 },
+  { slot: "neutralB", dir: 0 },
+];
+
+/** The first special of this fighter's with the property, its slot and the stick that picks it. */
+export function specialWith(def: FighterDef | null, has: (m: MoveDef) => boolean): { slot: MoveSlot; dir: InputFrame; move: MoveDef } | null {
+  if (def === null) return null;
+  for (const { slot, dir } of SPECIAL_SLOTS) {
+    const move = def.moves[slot];
+    if (move !== undefined && has(move)) return { slot, dir, move };
+  }
+  return null;
+}
+
+/**
+ * UNVERIFIED (tuning): the move frames after the counter goes up that the CPU
+ * aims a swing's first hit to land on (Marth's is up on frames 6-27).
+ */
+export const COUNTER_AIM = 2;
+
+/**
+ * When the counter decides the swing in view (rulings R-T19f, R-T19l), the one
+ * timing `counter` and `shield` both read: the frames from now to its decision frame
+ * (0 now, more to come, less that many frames ago), or null for a swing it can't meet.
+ *
+ * Its frame is the one that puts the swing's first hit `COUNTER_AIM` frames into the
+ * counter's live frames (pressed now, the counter is on move frame k on step k; the
+ * swing's first box is live on step `hit − actionFrame`). For a swing first seen with
+ * its hit already sooner than that but inside the live frames, it is the frame the
+ * swing is first seen. A frame the attacker is frozen on (its hitlag) repeats its move
+ * frame, so it is never the frame: the freeze's last (hitlag 0) is.
+ *
+ * Null: no swing it can time (not an attack, unseen, no box of its own, a smash whose
+ * charge is still to come: `swingHitFrame`), a Final Smash, or one first seen too late.
+ */
+export function counterWait(view: Observation, swingDef: FighterDef | undefined, c: CounterDef): number | null {
+  const { target, targetAction, targetActionAge } = view;
+  if (target === null || !isAttacking(targetAction) || targetActionAge < 0 || isFinalSlot(target.move)) return null;
+  const hit = swingHitFrame(swingDef, target);
+  if (hit === null) return null;
+  const lands = hit - target.actionFrame;
+  const aim = c.active[0] + COUNTER_AIM;
+  // Where its hit was when it was first seen.
+  const first = lands + targetActionAge;
+  let wait: number;
+  if (first >= aim) wait = lands - aim;
+  else if (first >= c.active[0]) wait = -targetActionAge;
+  else return null;
+  return wait === 0 && target.hitlag > 0 ? 1 : wait;
 }
 
 /** A shield the engine will drop on the next step: up, out of shieldstun and past `SHIELD_MIN_HOLD` (`STATUS_GUARD`). */
@@ -1915,19 +2034,45 @@ export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryM
  *
  * One decision a threat (Plan 5, Task 19; ruling R-T18g, as R-T18e made the tech
  * one a landing): the shield rolls its dial once a swing or a grab in range, on the
- * frame `shieldDecides` gives it (the first frame it sees it, or, seen while it
- * could not act, the last frame of what held it: a reel, a landing's lag, a get-up;
- * ruling R-T19g), and on no other. A
- * shield it raised it holds while the swing it saw goes on, whatever the roll:
- * rolling every frame let go of a held shield mid-swing (against Donkey Kong's
- * smash, levels 6-8 were hit in that drop 283, 294 and 107 times in 300); a shield
- * nearly spent is let go to roll away instead (the Task 19 review's M1). The parry
- * (`parry`, decided, before this in `BEHAVIOURS`) is the one deliberate drop, and
- * it is no new decision here: the swing was seen before the drop began.
+ * frame `shieldDecides` gives it (the first frame it sees it; for a fighter with a
+ * counter, a swing the counter can catch on the counter's frame, after the counter,
+ * ruling R-T19l; seen while it could not act, the last frame of what held it: a
+ * reel, a landing's lag, a get-up, lying down and its get-up, a helpless fall and its
+ * landing; rulings R-T19g and its fixed chains), and on no other. A
+ * shield it raised it holds while the swing it saw goes on, whatever the roll, its
+ * stun included (ruling R-T19o): rolling every frame let go of a held shield
+ * mid-swing (against Donkey Kong's smash, levels 6-8 were hit in that drop 283, 294
+ * and 107 times in 300); a shield nearly spent is let go to roll away instead (the
+ * Task 19 review's M1). The parry (`parry`, decided, before this in `BEHAVIOURS`) is
+ * the one deliberate drop, and it is no new decision here: the swing was seen before
+ * the drop began.
+ *
+ * A press it decided that waits in the buffer comes out as the press it judged
+ * (ruling R-T19m): on the free frame in the air that reads it, the stick is masked off
+ * whatever wins the frame (`forbid`, as `tech` masks a fast fall's Down), so the air
+ * dodge is the neutral one `dodgeCarriesOffstage` weighed. A mask, not a decided result: a
+ * decided hold here would lose the frame to every decided behaviour before this one
+ * (`recover`'s steering among them), whose stick would make the dodge directional;
+ * and no button another behaviour presses on that frame changes what comes out,
+ * since `handleActionable` reads the buffered Shield before every other press, on
+ * the ground and in the air. On the ground the stick makes no difference (a Shield
+ * press is `shieldStart` whatever it holds: measured, no roll or spot dodge out of a
+ * last-frame decision in 48 sweeps), so it is not masked there: masking it changed
+ * nothing on that frame and only the stick's history after it (a flick's, a tilt's).
+ * In a tumble's fall `tech` decides the same neutral for its own press first, so the
+ * two agree.
  */
 export const shield: Behaviour = (ctx) => {
   const { self, targetAction } = ctx.view;
   const { tuning } = ctx;
+  // Its press waiting in the buffer comes out on this step as the press it judged
+  // (ruling R-T19m): in the air the stick kept neutral whoever wins the frame, so the
+  // air dodge is the neutral one (`dodgeCarriesOffstage` below judged that), not a
+  // directional one another behaviour's stick makes of it; `tech` holds the same
+  // neutral in a tumble's fall, decided, and comes first. On the ground the press is a
+  // shield whatever the stick, so the stick is left alone. A threat seen again on this
+  // frame is decided no more: the press already made is its answer (the hand-off).
+  if (free(self) && shieldWaiting(self, ctx.view.frame)) return { score: 0, input: 0, forbid: self.grounded ? 0 : STICK };
   if (ctx.view.target === null || !threatNow(ctx)) return NOTHING;
 
   const incomingAttack = isAttacking(targetAction);
@@ -1944,9 +2089,11 @@ export const shield: Behaviour = (ctx) => {
   // `recover` (Task 20c).
   const minded = ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
 
-  // Up already, against the swing it was raised for: held through it, unless it is
-  // nearly spent, when it rolls away (the Task 19 review's M1: a spent shield held).
-  if (incomingAttack && canAct(self) && isShielding(self.action)) {
+  // Up already, against the swing it was raised for: held through it, its stun too
+  // (ruling R-T19o: the engine ends the stun in a drop unless Shield is held, and the
+  // stun's `hitstun` leaves `canAct` false), unless it is nearly spent, when it rolls
+  // away (the Task 19 review's M1: a spent shield held).
+  if (incomingAttack && isShielding(self.action) && (canAct(self) || self.action === "shieldStun")) {
     return (shieldSpent(self) ? rollAway(ctx, minded, decided) : null) ?? { score: 600, input: Btn.Shield, decided };
   }
   if (!shieldDecides(ctx)) return NOTHING;
@@ -2010,27 +2157,73 @@ function cannotAct(f: FighterState): boolean {
 }
 
 /**
- * The one frame a threat is decided on (rulings R-T18g, R-T19g). Where it can act
- * (`cannotAct`), the first frame the threat is seen in range. Where it cannot, the
- * last frame of the action it is in, the frame before its first free one
- * (`freeNextStep`, by `free`, the specials' notion), for a threat first seen during
- * that action (`targetActionAge`, counted from the swing's first sight, no more than
- * the action's own frames): the press is read as the fighter comes free, or waits in
- * the buffer for its first free frame. That action began no later than the threat
- * was first seen, so the fighter could not act on it then nor since: a threat it
- * could act on at first sight it never decides again (a shield raised then and
- * dropped by the parry included, since the drop began after).
+ * The one frame a threat is decided on (rulings R-T18g, R-T19g, R-T19l). Where it can
+ * act (`cannotAct`), the first frame the threat is seen in range, or, for a swing a
+ * counter of its own can catch (`counterTakes`), the counter's frame. Where it
+ * cannot, the last frame of the stretch it is held in, the frame before its first
+ * free one (`freeNextStep`, by `free`, the specials' notion, its own buffered press
+ * left out: ruling R-T19n), for a threat whose own decision frame came during that
+ * stretch (`targetActionAge` from the swing's first sight, or the counter's frame
+ * since passed, no more than the stretch's frames, `heldFor`): the press is read as
+ * the fighter comes free, or waits in the buffer for its first free frame. The
+ * stretch began no later than that frame, so the fighter could not act on it then
+ * nor since: a threat it could act on at its frame it never decides again (a shield
+ * raised then and dropped by the parry included, since the drop began after).
  *
- * The CPU keeps no memory of its own actions, so two threats get no decision: one
- * first seen in an action that leads into another it cannot act in (lying down, then
- * a get-up), and one seen further off before the action began that came into range
- * during it.
+ * The CPU keeps no memory of its own actions, so some threats get no decision or
+ * two: one seen further off before the stretch began that came into range during it
+ * (none); one whose first sight `threatBefore` rebuilds out of range on the frame
+ * after a last-frame decision whose roll failed (two; a passing roll's press waits in
+ * the buffer, and `shield` stands on it); one first seen in a helpless move that
+ * lands into its special landing (two, `heldFor`). Each is counted in the sweep.
  */
 function shieldDecides(ctx: BehaviourContext): boolean {
   const { self, targetActionAge } = ctx.view;
-  if (!cannotAct(self)) return !threatBefore(ctx);
-  return ctx.fighterDef !== null && targetActionAge <= self.actionFrame && freeNextStep(ctx.fighterDef, self, ctx.view.frame);
+  const wait = counterTakes(ctx);
+  if (!cannotAct(self)) return wait === null ? !threatBefore(ctx) : wait === 0;
+  if (ctx.fighterDef === null || !freeNextStep(ctx.fighterDef, self, ctx.view.frame)) return false;
+  // Frames since the threat's own decision frame: its first sight, or the counter's.
+  const since = wait === null ? targetActionAge : -wait;
+  return since >= 0 && since <= heldFor(self);
 }
+
+/**
+ * For a fighter with a counter, the swing the shield leaves to it (ruling R-T19l):
+ * the counter's wait (`counterWait`), on whose frame the counter decides first and
+ * the shield only if the counter didn't take it; null for a threat the shield decides
+ * itself. Keyed on the counter's timing alone, not its other gates (free, over the
+ * stage, facing, the slide, range), so a swing the counter declines on its frame still
+ * gets the shield's decision on that frame. Not a smash whose charge was still to come
+ * when first seen (its hold frame no earlier than the reaction time): the shield
+ * decided that at first sight.
+ */
+function counterTakes(ctx: BehaviourContext): number | null {
+  const pick = specialWith(ctx.fighterDef, (m) => m.counter !== undefined);
+  const target = ctx.view.target;
+  if (pick === null || target === null) return null;
+  const swingDef = ctx.matchDefs[target.port];
+  const move = target.move === null ? undefined : swingDef?.moves[target.move];
+  if (swingDef !== undefined && move?.chargeable === true && smashHoldFrame(swingDef, target) >= ctx.tuning.reactionFrames) return null;
+  return counterWait(ctx.view, swingDef, pick.move.counter!);
+}
+
+/**
+ * How long the stretch the fighter is held in has run, for a threat first seen in it
+ * (ruling R-T19g, extended to the engine's fixed chains): the action's own frames; a
+ * get-up's, and the lying down before it, which only ever leads into it and lasts
+ * `DOWNED_FRAMES`; a special landing's, and the helpless fall before it, whose length
+ * the engine keeps nowhere, so any threat seen before the landing counts (a special
+ * landing can also follow the move itself, landed mid-move: a threat decided at first
+ * sight in that move is decided again here; measured).
+ */
+function heldFor(f: FighterState): number {
+  if (f.action === "getUp") return f.actionFrame + DOWNED_FRAMES;
+  if (f.action === "specialLanding") return Number.POSITIVE_INFINITY;
+  return f.actionFrame;
+}
+
+/** The stick's four directions. */
+const STICK: InputFrame = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
 
 /** A swing or a grab seen within `THREAT_RANGE`: what the shield decides on. */
 function threatNow(ctx: BehaviourContext): boolean {

@@ -362,6 +362,13 @@ const MATCHES: readonly Match[] = [
  * of the frame and holds nothing; a ceiling stop is no floor met) adds no action. The
  * four CPU matches reach 47 between them, up from 44: kirby-marth crouches again, and two
  * are shield-stunned again; none loses an action the four reached. All 59 are visited.
+ * Task 19's fix round 2 (the counter before the shield; the shield's press comes out as
+ * the press it judged; its decision on a ledge get-up's last frame, a fixed chain's and
+ * once at the hand-off; its hold through the shieldstun; the opponent's intangibility
+ * hidden only where it began in the frames the view hasn't caught up with) adds no
+ * action. The four CPU matches reach 46 between them, down from 47: kirby-marth
+ * ledge-rolls, and none gets up from lying down or is shield-stunned any more, which the
+ * states lab and the script reach. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1120,6 +1127,23 @@ describe("engine golden trace", () => {
   // the eight labs are byte-identical. So now: hits 40/43/26/25, 6, 0, 1, 4, 1, 2, 33,
   // 54 and 0; shield hits 4/15/0/2, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0,
   // 0, 0, 0, 0, 2 and 1.
+  // Plan 5 Task 19's fix round 2 (ruling R-T19k amended: the view hides only the
+  // intangibility that began in the frames it hasn't caught up with, read off the
+  // engine's own clocks, and keeps one it has seen across the target's actions) moved
+  // all four CPU matches, each from the first swing it changes: donkeyKong-pikachu on 33
+  // (the 1-100 sample), where Pikachu no longer swings at Donkey Kong's roll, intangible
+  // since the entry drop; kirby-marth on 994 (901-1000), mario-fox on 2756 (2701-2800)
+  // and link-samus on 1464 (1401-1500), where the level-7 Marth and Fox and the level-9
+  // Link turn to swing at a tech or a roll whose own intangibility began fewer frames ago
+  // than their reaction time (shown before, with the action noticed). Between them they
+  // raise a shield 77 times (79 before), tech 17 times (18) and lie down once (4).
+  // Hits 37, 29, 26 and 18; shield hits 5, 10, 0 and 0; KOs 0, 0,
+  // 0 and 1 (were 40/43/26/25, 4/15/0/2 and 0/0/0/1): link-samus's counts are as before;
+  // Marth, launched by Kirby's dash attack on 2130, comes back on his up special to the
+  // ledge Kirby holds in a ledge roll and falls past it on 2429 at 101.2%, where he went
+  // by a hit on 3469 before. No golden CPU counters. The script and the eight labs are
+  // byte-identical. So now: hits 37/29/26/18, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield
+  // hits 5/10/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

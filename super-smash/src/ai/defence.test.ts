@@ -35,6 +35,7 @@ import { shieldBubble } from "@/engine/shield";
 import { kineticLaunch, kineticSum } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { createInitialState, registerFighters, registerStages, registryContext, step, type SimContext } from "@/engine/simulate";
+import { DOWNED_FRAMES, GETUP_FRAMES } from "@/engine/states";
 import { WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
 import { platformCentreX } from "@/engine/physics";
 import { Btn, held, type FighterDef, type FighterState, type GameState, type Hitbox, type InputFrame, type MoveSlot, type StageDef } from "@/engine/types";
@@ -2114,6 +2115,175 @@ describe("shield, once a threat (ruling R-T18g)", () => {
    * in a drop of a shield it raised (Task 18's measure: levels 6-8, 283, 294 and 107
    * times in 300).
    */
+  it("decides a ledge get-up's last frame though its own Attack waits in the buffer (ruling R-T19n)", () => {
+    // Mario climbing at the left ledge sees Donkey Kong's forward smash on get-up frame
+    // 18; an Attack of his own is buffered on frame 23. The copy that reads the next
+    // step has no buffer: the decision's Shield is read before it.
+    const climb = (k: number, buffered: boolean) =>
+      makeState({
+        frame: 100 + k,
+        fighters: [
+          makeFighter({
+            port: 0, action: "ledgeGetUp", actionFrame: k, grounded: false, platform: -1, x: DEFAULT_STAGE_VIEW.leftLedge, y: 0, ledge: { platform: 0, side: -1 },
+            bufferedAction: buffered && k >= 23 ? { kind: "attack", frame: 123 } : null,
+          }),
+          makeFighter({ port: 1, defId: "donkeyKong", x: DEFAULT_STAGE_VIEW.leftLedge + fx(18), facing: -1, action: "attack", move: "fsmash", actionFrame: L9.reactionFrames + k - 18 }),
+        ],
+      });
+    for (const buffered of [false, true]) {
+      const decidedOn: number[] = [];
+      for (let k = 18; k <= 25; k++) if (shield(context(climb(k, buffered), L9)).score > 0) decidedOn.push(k);
+      expect(decidedOn, buffered ? "an Attack buffered" : "nothing buffered").toEqual([25]);
+    }
+  });
+
+  it("decides a threat first seen lying down on the get-up's last frame: one held stretch (R-T19g's fixed chain)", () => {
+    const decidedOn: string[] = [];
+    for (let k = 0; k < DOWNED_FRAMES + GETUP_FRAMES; k++) {
+      const self = k < DOWNED_FRAMES ? { action: "downed" as const, actionFrame: k } : { action: "getUp" as const, actionFrame: k - DOWNED_FRAMES };
+      // Seen on lying-down frame 10.
+      if (shield(context(threat(L9.reactionFrames + k - 10, self), L9)).score > 0) decidedOn.push(`${self.action}/${self.actionFrame}`);
+    }
+    expect(decidedOn).toEqual([`getUp/${GETUP_FRAMES - 1}`]);
+  });
+
+  it("decides a threat first seen in a helpless fall on its special landing's last frame (R-T19g's fixed chain)", () => {
+    const LAND = 10;
+    const decidedOn: string[] = [];
+    for (let k = 0; k < 10 + LAND; k++) {
+      const self =
+        k < 10
+          ? { action: "specialFall" as const, actionFrame: k, grounded: false, platform: -1, y: fx(10) }
+          : { action: "specialLanding" as const, actionFrame: k - 10, charge: LAND };
+      if (shield(context(threat(L9.reactionFrames + k - 3, self), L9)).score > 0) decidedOn.push(`${self.action}/${self.actionFrame}`);
+    }
+    expect(decidedOn).toEqual([`specialLanding/${LAND - 1}`]);
+  });
+
+  it("decides once at the hand-off: no first sight on the free frame after a lag's last-frame decision (the re-review's marth-kirby, f2770/f2771)", () => {
+    // Kirby (level 7, 10 frames' reaction) on the last frame of a landing's lag, Marth's
+    // jab seen during it 29.0 away; a frame on, standing, 29.4 away, where the frame
+    // before rebuilt on Marth's velocity now (it sped up) is 30.1: out of range.
+    const L7 = tuningForLevel(7);
+    const frame = (last: boolean) =>
+      makeState({
+        frame: last ? 500 : 501,
+        fighters: [
+          makeFighter({
+            port: 0, defId: "kirby", ...(last ? { action: "landingLag" as const, actionFrame: 5, charge: 6 } : { action: "stand" as const, actionFrame: 0 }),
+            // The decision's press, waiting in the buffer on the frame after.
+            bufferedAction: last ? null : { kind: "shield", frame: 501 },
+          }),
+          makeFighter({ port: 1, defId: "marth", x: fx(last ? 23.1 : 22.4), vx: fx(last ? -0.59 : -0.7), facing: -1, action: "attack", move: "jab1", actionFrame: last ? 13 : 14 }),
+        ],
+      });
+    expect(observe(frame(true), 0, L7.reactionFrames).distance).toBeLessThanOrEqual(fx(29.05));
+    expect(shield(context(frame(true), L7)).score).toBeGreaterThan(0);
+    // Its press waits in the buffer: that is the threat's answer, and on the ground the
+    // stick is left alone.
+    expect(shield(context(frame(false), L7))).toEqual({ score: 0, input: 0, forbid: 0 });
+  });
+
+  it("holds a raised shield through its stun, and a spent one still rolls away (ruling R-T19o)", () => {
+    const stunned = threat(L9.reactionFrames + 6, { action: "shieldStun", actionFrame: 2, hitstun: 3 });
+    expect(shield(context(stunned, L9)).input).toBe(Btn.Shield);
+    const spent = threat(L9.reactionFrames + 6, { action: "shieldStun", actionFrame: 2, hitstun: 3, shieldHealth: fx(5) });
+    const r = shield(context(spent, L9));
+    expect([held(r.input, Btn.Left), held(r.input, Btn.Shield)]).toEqual([true, true]);
+    // The hold is for a swing: a grab seen coming in the stun is no swing to hold it
+    // against (a grab beats a shield), so it is not held for that.
+    const grabbed = makeState({
+      fighters: [
+        makeFighter({ port: 0, action: "shieldStun", actionFrame: 2, hitstun: 3 }),
+        makeFighter({ port: 1, defId: "donkeyKong", x: fx(10), facing: -1, action: "grab", move: "grab", actionFrame: L9.reactionFrames + 2 }),
+      ],
+    });
+    expect(shield(context(grabbed, L9)).input).not.toBe(Btn.Shield);
+  });
+
+  it("a level-9 shield hit by Donkey Kong's forward smash is still up when its stun ends (ruling R-T19o)", () => {
+    const world = cpuWorldFromDef(defOf("mario"), FD, [defOf("mario"), defOf("donkeyKong")]);
+    let stuns = 0;
+    const exits: string[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "donkeyKong" }], RULES, 21);
+      Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: 0, intangible: 0, facing: 1 });
+      Object.assign(s.fighters[1], { action: "attack", move: "fsmash", actionFrame: L9.reactionFrames, grounded: true, platform: 0, x: fx(14), y: 0, intangible: 0, facing: -1 });
+      s.fighters[1].combat.smashLetGo = true;
+      let cs = seed;
+      let prev: InputFrame[] = [0, 0];
+      for (let i = 0; i < 90; i++) {
+        const d = decideCpu(s, 0, 9, cs, world);
+        cs = d.seed;
+        const before = s.fighters[0];
+        if (before.action === "shieldStun" && before.hitstun === 1) expect(held(d.input, Btn.Shield), `seed ${seed}: Shield held on the stun's last frame`).toBe(true);
+        s = step(s, [d.input, 0], { prevInputs: prev }).state;
+        prev = [d.input, 0];
+        if (before.action === "shieldStun" && s.fighters[0].action !== "shieldStun") {
+          stuns++;
+          exits.push(s.fighters[0].action);
+          break;
+        }
+      }
+    }
+    expect(stuns).toBeGreaterThan(5);
+    expect(exits.filter((a) => a !== "shield")).toEqual([]);
+  });
+
+  it("with its press waiting in a tumble's fall, tech's neutral hold takes the frame and the shield's mask agrees (R-T19m beside tech's holds)", () => {
+    // Both claim the frame: tech decides (first in BEHAVIOURS) the neutral it holds for
+    // its own press, before its floor hold; the shield masks the stick off whoever wins.
+    // The two say the same thing, so neither overrides the other.
+    const s = threat(L9.reactionFrames + 4, { action: "tumbleFall", actionFrame: 3, grounded: false, platform: -1, y: fx(20), x: fx(-6) });
+    s.fighters[0].bufferedAction = { kind: "shield", frame: s.frame };
+    const STICK = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
+    expect(shield(context(s, L9))).toEqual({ score: 0, input: 0, forbid: STICK });
+    expect(tech(context(s, L9))).toEqual({ score: 1100, input: 0, decided: true });
+    const world = cpuWorldFromDef(defOf("mario"), DEFAULT_STAGE_VIEW, [defOf("mario"), defOf("donkeyKong")]);
+    for (let seed = 1; seed <= 20; seed++) {
+      const d = decideCpu(s, 0, 9, seed, world);
+      expect([d.behaviour, d.input & STICK], `seed ${seed}`).toEqual(["tech", 0]);
+    }
+    // In a plain fall (no tech), whatever wins keeps the stick off.
+    const fall = threat(L9.reactionFrames + 4, { action: "fall", actionFrame: 3, grounded: false, platform: -1, y: fx(20), x: fx(-6) });
+    fall.fighters[0].bufferedAction = { kind: "shield", frame: fall.frame };
+    for (let seed = 1; seed <= 20; seed++) expect(decideCpu(fall, 0, 9, seed, world).input & STICK, `seed ${seed}`).toBe(0);
+  });
+
+  it("a last-frame decision in the air comes out as the neutral dodge it judged (ruling R-T19m: the re-review's seed 1011 Fox)", () => {
+    // Fox (level 7) at the end of a reel over Pokémon Stadium 2, near its left ledge;
+    // Mario's jab, seen during the reel, to his left. On the free frame after,
+    // `approach` holds Left: with the stick its own, the dodge would slingshot and slide.
+    const PS2 = stageViewFromDef(stageOf("pokemonStadium2"));
+    const world = cpuWorldFromDef(defOf("fox"), PS2, [defOf("fox"), defOf("mario")]);
+    let checked = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      let s = createInitialState("pokemonStadium2", [{ defId: "fox" }, { defId: "mario" }], RULES, 21);
+      Object.assign(s.fighters[0], { action: "hitstun", actionFrame: 20, hitstun: 1, grounded: false, platform: -1, x: fx(-77.5), y: fx(20), intangible: 0, invincible: 0, facing: -1 });
+      Object.assign(s.fighters[1], { action: "attack", move: "jab1", actionFrame: tuningForLevel(7).reactionFrames + 5, grounded: true, platform: 0, x: fx(-90), y: 0, intangible: 0, facing: 1 });
+      let cs = seed;
+      const first = decideCpu(s, 0, 7, cs, world);
+      if (first.behaviour !== "shield") continue;
+      checked++;
+      let prev: InputFrame[] = [0, 0];
+      let dodge = -1;
+      for (let i = 0; i < 160; i++) {
+        const d = i === 0 ? first : decideCpu(s, 0, 7, cs, world);
+        cs = d.seed;
+        s = step(s, [d.input, 0], { prevInputs: prev }).state;
+        prev = [d.input, 0];
+        if (dodge < 0 && s.fighters[0].action === "airDodge") {
+          dodge = s.fighters[0].charge;
+          expect(dodge, `seed ${seed}: a neutral dodge`).toBe(0);
+        }
+        if (s.fighters[0].grounded) break;
+      }
+      expect(dodge, `seed ${seed}: dodged`).toBe(0);
+      expect([s.fighters[0].grounded, s.fighters[0].x >= PS2.leftLedge], `seed ${seed}: lands on the stage`).toEqual([true, true]);
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+
   it("against Donkey Kong's forward smash, blocks at its shieldRate and is never hit in the drop", () => {
     const SEEDS = 120;
     for (const level of [5, 6, 7, 8, 9]) {

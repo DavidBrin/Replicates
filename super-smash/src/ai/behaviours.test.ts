@@ -43,6 +43,8 @@ import {
   type RecoveryMove,
 } from "./behaviours";
 import { getFighter } from "@/fighters";
+import { ENTRY_INTANGIBILITY, dodgeWindow } from "@/engine/states";
+import { FOOTSTOOL_INTANGIBLE_FIRST } from "@/engine/footstool";
 import { BEHAVIOURS, tuningForLevel } from "./cpu";
 
 /* --------------------------------------------------------------- fixtures -- */
@@ -915,10 +917,56 @@ describe("breaking a loop against the same defence (Plan 5, Task 19)", () => {
   it("sees a target's intangibility only with the action it has noticed: a roll's start is still a target (ruling R-T19k)", () => {
     // The roll two frames in: a level 9 (4 frames) still believes it standing, and swings;
     // a level 1 (30) for longer. Once the roll is seen, it holds off.
-    const rolling = (actionFrame: number) => gameState([fighter(0), fighter(1, { x: fx(10), action: "roll", actionFrame, intangible: 10 })]);
+    // A roll's intangibility is a window, held at 1 a frame at a time (a countdown of 2 or
+    // more is a ledge's or the entry's grant, read off its own clock: R-T19k amended).
+    const rolling = (actionFrame: number) => gameState([fighter(0), fighter(1, { x: fx(10), action: "roll", actionFrame, intangible: 1 })]);
     expect(attack(context(rolling(2), L9)).score).toBeGreaterThan(0);
     expect(attack(context(rolling(seen(L9)), L9)).score).toBe(0);
     expect(attack(context(rolling(20), tuningForLevel(1))).score).toBeGreaterThan(0);
+  });
+
+  it("keeps invulnerability it has already seen, and respawn invincibility, visible across an action change (R-T19k amended)", () => {
+    // A ledge's intangibility, set at the grab, carried into the get-up two frames in:
+    // the hang under it (at least LEDGE_HANG_MIN frames) was seen, and so was the
+    // intangibility. A level 9 holds off.
+    const climbing = gameState([fighter(0), fighter(1, { x: fx(10), action: "ledgeGetUp", actionFrame: 2, intangible: 40 })]);
+    expect(observe(climbing, 0, L9.reactionFrames).target?.intangible).toBe(40);
+    expect(attack(context(climbing, L9)).score).toBe(0);
+    // A ledge's grant carried on past the get-up, into an aerial out of a ledge jump: 33 of
+    // its least 64 (no air time, no damage, a first grab) left, so 31 frames on at least.
+    const carried = gameState([fighter(0), fighter(1, { x: fx(10), action: "attack", actionFrame: 4, intangible: 33, ledgeRegrabs: 1, grounded: false })]);
+    for (const t of [L9, tuningForLevel(7)]) expect(observe(carried, 0, t.reactionFrames).target?.intangible, `level reaction ${t.reactionFrames}`).toBe(33);
+    // The entry drop's, exactly: 12 frames on, so seen at levels 9 and 7, not at level 1.
+    const entering = (over: Partial<FighterState>) => gameState([fighter(0), fighter(1, { x: fx(10), action: "fall", actionFrame: 3, intangible: ENTRY_INTANGIBILITY - 12, ...over })]);
+    expect([L9, tuningForLevel(7), tuningForLevel(1)].map((t) => observe(entering({}), 0, t.reactionFrames).target?.intangible)).toEqual([ENTRY_INTANGIBILITY - 12, ENTRY_INTANGIBILITY - 12, 0]);
+    // Respawn invincibility shows on screen: a live read, at any level.
+    for (const t of [L9, tuningForLevel(1)]) {
+      const respawned = gameState([fighter(0), fighter(1, { x: fx(10), action: "fall", actionFrame: 1, invincible: 100 })]);
+      expect(observe(respawned, 0, t.reactionFrames).target?.invincible, `level reaction ${t.reactionFrames}`).toBe(100);
+      expect(attack(context(respawned, t)).score, `level reaction ${t.reactionFrames}`).toBe(0);
+    }
+  });
+
+  it("hides an intangibility that began inside the window it has not seen yet, read off the action's own frames (R-T19k amended)", () => {
+    const mario = getFighter("mario")!;
+    const rolling = (actionFrame: number) => gameState([fighter(0), fighter(1, { x: fx(10), action: "roll", actionFrame, intangible: 1 })]);
+    const w = dodgeWindow(rolling(0).fighters[1], mario.attributes)!;
+    const seenAt = (actionFrame: number) => observe(rolling(actionFrame), 0, L9.reactionFrames, [mario, mario]).target?.intangible;
+    // Begun one frame ago, inside the 4 frames a level 9 has not seen: hidden.
+    expect(seenAt(w[0] + 1)).toBe(0);
+    expect(attack({ ...context(rolling(w[0] + 1), L9), view: observe(rolling(w[0] + 1), 0, L9.reactionFrames, [mario, mario]) }).score).toBeGreaterThan(0);
+    // Begun as long ago as the level's reaction: seen.
+    expect(seenAt(w[0] + L9.reactionFrames)).toBe(1);
+    // A hold no table gives, begun with its action (Kirby's mouthful), from the action's
+    // start; a footstool jump's by its own clock, whatever the jump's frame.
+    const swallowed = (actionFrame: number) => gameState([fighter(0), fighter(1, { x: fx(10), action: "swallowed", actionFrame, intangible: 1 })]);
+    expect([3, 4].map((af) => observe(swallowed(af), 0, L9.reactionFrames).target?.intangible)).toEqual([0, 1]);
+    const bounced = (since: number) => {
+      const f = fighter(1, { x: fx(10), action: "jump", actionFrame: 20, intangible: 1, grounded: false });
+      f.combat.footstoolFrame = FOOTSTOOL_INTANGIBLE_FIRST + since;
+      return gameState([fighter(0), f]);
+    };
+    expect([1, L9.reactionFrames].map((k) => observe(bounced(k), 0, L9.reactionFrames).target?.intangible)).toEqual([0, 1]);
   });
 
   it("after the same move has met the shield three times running, grabs it in grab range or walks in, rather than poke it again", () => {

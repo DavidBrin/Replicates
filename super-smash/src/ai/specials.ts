@@ -25,8 +25,8 @@
  * Special is still only ever `recover`'s up special (`cpu.ts`, `specialPending`).
  */
 
-import { SMASH_CHARGE_MAX } from "@/engine/constants";
-import { finalSmashActive, isFinalSlot } from "@/engine/final";
+import { LAUNCH_SPEED_DECAY, SMASH_CHARGE_MAX } from "@/engine/constants";
+import { finalSmashActive } from "@/engine/final";
 import { abs, fx } from "@/engine/fixed";
 import { platformCentreX } from "@/engine/physics";
 import { smashHoldFrame } from "@/engine/acmd/run";
@@ -37,7 +37,6 @@ import {
   type ActionState,
   type FighterDef,
   type FighterState,
-  type InputFrame,
   type MoveDef,
   type MoveSlot,
   type ProjectileDef,
@@ -49,15 +48,15 @@ import {
   THREAT_RANGE,
   VERTICAL_REACH,
   canAct,
+  counterWait,
   dodgeDrift,
   free,
   fullHopPulse,
-  isAttacking,
   isOffstage,
   moveReach,
   pulse,
   sideRecoveryFromDef,
-  swingHitFrame,
+  specialWith,
   towardX,
   upBInReach,
   type Behaviour,
@@ -86,22 +85,8 @@ function skilled(ctx: BehaviourContext): boolean {
   return ctx.rolls[ROLL_SPECIAL] < ctx.tuning.specialSkill;
 }
 
-/** The special slots, in the order a property is looked for, and the stick that picks each (`specialSlot`). */
-const SPECIAL_SLOTS: readonly { readonly slot: MoveSlot; readonly dir: InputFrame }[] = [
-  { slot: "downB", dir: Btn.Down },
-  { slot: "sideB", dir: 0 },
-  { slot: "neutralB", dir: 0 },
-];
-
-/** The first special of this fighter's with the property, its slot and the stick that picks it. */
-export function specialWith(def: FighterDef | null, has: (m: MoveDef) => boolean): { slot: MoveSlot; dir: InputFrame; move: MoveDef } | null {
-  if (def === null) return null;
-  for (const { slot, dir } of SPECIAL_SLOTS) {
-    const move = def.moves[slot];
-    if (move !== undefined && has(move)) return { slot, dir, move };
-  }
-  return null;
-}
+/* `specialWith` (a fighter's special with a property) and the counter's timing are
+ * `behaviours.ts`'s, which `shield` reads too (ruling R-T19l). */
 
 /** A projectile's definition, from the fighter whose moveset defines it (`ProjectileState.source`). */
 function projectileDefOf(ctx: BehaviourContext, p: ProjectileState): ProjectileDef | undefined {
@@ -451,37 +436,25 @@ export const reflect: Behaviour = (ctx) => {
 };
 
 /**
- * UNVERIFIED (tuning): the move frames after the counter goes up that the CPU
- * aims a swing's first hit to land on (Marth's is up on frames 6-27).
- */
-export const COUNTER_AIM = 2;
-
-/**
  * Counter a swing it sees coming (Marth's Counter), timed off the swing's move
  * data as the parry is (`swingHitFrame`): decided once a swing (rulings R-T18e,
- * R-T19f), on the frame that puts its first hit `COUNTER_AIM` frames into the
- * counter's live frames, or, for a swing first seen with its hit already sooner
- * than that but still inside them, on the frame it is first seen. Not a grab (it
+ * R-T19f), on the counter's decision frame (`counterWait`, which `shield` reads too:
+ * ruling R-T19l): the frame that puts its first hit `COUNTER_AIM` frames into the
+ * counter's live frames, or, for a swing first seen with its hit already sooner than
+ * that but still inside them, the frame it is first seen; never a frame the attacker
+ * is frozen on. Before the shield (`BEHAVIOURS`): on that frame the counter decides
+ * first, and the shield only if the counter didn't take the swing. Not a grab (it
  * goes through a counter) and not a Final Smash (SmashWiki "Unblockable attack":
  * "cannot be defended against with a shield or a counterattack"). Not from a run
  * whose slide would carry it off (`slideStaysOn`).
  */
 export const counter: Behaviour = (ctx) => {
-  const { self, target, targetAction, targetActionAge, distance, facingTarget } = ctx.view;
+  const { self, target, distance, facingTarget } = ctx.view;
   const pick = specialWith(ctx.fighterDef, (m) => m.counter !== undefined);
   // Not off the stage: a counter there spends the fall it has left.
   if (pick === null || target === null || !free(self) || isOffstage(self, ctx.stage)) return NOTHING;
-  if (!isAttacking(targetAction) || targetActionAge < 0 || distance > THREAT_RANGE || !facingTarget) return NOTHING;
-  if (isFinalSlot(target.move)) return NOTHING;
-  const hit = swingHitFrame(ctx.matchDefs[target.port], target);
-  if (hit === null) return NOTHING;
-  const c = pick.move.counter!;
-  // Pressed now, the counter is on move frame k on step k; the swing's first box
-  // is live on step `hit − actionFrame`.
-  const lands = hit - target.actionFrame;
-  const aim = c.active[0] + COUNTER_AIM;
-  const timed = lands === aim || (targetActionAge === 0 && lands >= c.active[0] && lands < aim);
-  if (!timed || !slideStaysOn(ctx) || !skilled(ctx)) return NOTHING;
+  if (distance > THREAT_RANGE || !facingTarget) return NOTHING;
+  if (counterWait(ctx.view, ctx.matchDefs[target.port], pick.move.counter!) !== 0 || !slideStaysOn(ctx) || !skilled(ctx)) return NOTHING;
   return { score: 630, input: pick.dir | Btn.Special, decided: true };
 };
 
@@ -738,17 +711,50 @@ function sideWindow(ctx: BehaviourContext, f: FighterState): boolean {
 }
 
 /**
- * The fighter the frame before, one frame back on its own velocity, where it can be
- * told it was in the same window: the same action, a frame younger; or, on a fall's
+ * The fighter the frame before, one step back (`stepBack`), where it can be told it
+ * was in the same window: the same action, a frame younger; or, on a fall's
  * first frame, the jump it came over the top of (`airMain` turns a jump into a fall
  * at the top: the fall's speed is then one to two frames of gravity), with no jump of
  * its own spent since. Null where it was in another action (a jump's first frame
  * spends one; a fall begun out of a move, a dodge or a reel): the window opens now.
  */
 function sideBefore(ctx: BehaviourContext, f: FighterState): FighterState | null {
-  const back = { ...f, x: f.x - f.vx, y: f.y - f.vy, airTime: Math.max(0, f.airTime - 1) };
+  if (ctx.fighterDef === null) return null;
+  const back = stepBack(ctx.fighterDef, f);
   if (f.actionFrame > 0) return { ...back, actionFrame: f.actionFrame - 1 };
-  if (f.action !== "fall" || ctx.fighterDef === null) return null;
+  if (f.action !== "fall") return null;
   const g = fighterParams(ctx.fighterDef).air_accel_y;
   return f.vy <= -g && f.vy > -2 * g ? { ...back, action: "jump" } : null;
+}
+
+/**
+ * The fighter one step back, by the engine's own step (R-T19i's rebuild): where it was
+ * (`integrate` moved it by this step's speed) and how fast it moved then. Gravity's step
+ * is given back to its fall (`gravityStep`: none at its top fall speed or a fast
+ * fall's, where it already was), and its launch's decay (`LAUNCH_SPEED_DECAY`) to the
+ * launch. The stick that step isn't kept anywhere; it is taken as held toward the
+ * nearer ledge, as `recover` holds it off the stage, so one step of air acceleration
+ * (`airControlX`) comes back off the drift, none at its top speed, where it already was.
+ */
+function stepBack(def: FighterDef, f: FighterState): FighterState {
+  const p = fighterParams(def);
+  const k = f.kinetic;
+  const terminal = f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable;
+  const gravityY = k.gravityY > -terminal ? k.gravityY + p.air_accel_y : k.gravityY;
+  const launch = f.launchSpeed > 0 ? f.launchSpeed + LAUNCH_SPEED_DECAY : 0;
+  const scale = (v: number) => (f.launchSpeed > 0 ? Math.trunc((v * launch) / f.launchSpeed) : v);
+  const home = f.x < 0 ? 1 : -1;
+  const capped = home > 0 ? k.controlX >= p.air_speed_x_stable : k.controlX <= -p.air_speed_x_stable;
+  const controlX = capped ? k.controlX : k.controlX - home * (p.air_accel_x_add + p.air_accel_x_mul);
+  const kinetic = { ...k, gravityY, controlX, damageX: scale(k.damageX), damageY: scale(k.damageY) };
+  return {
+    ...f,
+    x: f.x - f.vx,
+    y: f.y - f.vy,
+    vx: kinetic.controlX + kinetic.stopX + kinetic.motionX + kinetic.damageX,
+    vy: kinetic.gravityY + kinetic.motionY + kinetic.damageY,
+    launchSpeed: launch,
+    kinetic,
+    airTime: Math.max(0, f.airTime - 1),
+  };
 }

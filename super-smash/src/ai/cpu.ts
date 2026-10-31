@@ -302,7 +302,8 @@ export function decideCpu(
 
   const ctx: BehaviourContext = {
     state,
-    view: observe(state, port, tuning.reactionFrames),
+    // The match's definitions, to read when the opponent's intangibility began (ruling R-T19k).
+    view: observe(state, port, tuning.reactionFrames, world.matchDefs ?? []),
     stage: world.stage ?? DEFAULT_STAGE_VIEW,
     tuning,
     jumps: world.jumps ?? DEFAULT_AIR_JUMPS,
@@ -363,6 +364,9 @@ export function decideCpu(
   if (aerialStrands(ctx, bestInput)) {
     const home = ctx.view.self.x < 0 ? ctx.stage.leftLedge : ctx.stage.rightLedge;
     bestInput = (bestInput & ~(Btn.Attack | Btn.Left | Btn.Right | Btn.Up | Btn.Down)) | towardX(ctx.view.self.x, home);
+    // A kept-out button stays out of the stick it steers home with (the shield's
+    // neutral while its press waits: ruling R-T19m).
+    bestInput &= ~forbid;
   }
 
   // The fumble: a dropped frame of input. It is what a low-level CPU's hands
