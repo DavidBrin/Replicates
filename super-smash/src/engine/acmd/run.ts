@@ -6,7 +6,7 @@
  * the four can never disagree about which frame the move is on.
  */
 
-import { actionFrameOf, chargeHoldFrame, moveFrameOf } from "../hitbox";
+import { HITBOX_PARTS, actionFrameOf, chargeHoldFrame, moveFrameOf } from "../hitbox";
 import { ONE } from "../fixed";
 import { isUnmodelledAutolink } from "../knockback";
 import type { FighterDef, FighterState, MoveSlot } from "../types";
@@ -167,6 +167,9 @@ export function throwStrikeFrame(script: AcmdScript): number | null {
  * - A hitbox with an autolink angle the engine does not model (363°, 366°,
  *   368°) throws, in whatever runs the slot: a script's boxes, the compiled
  *   legacy move's, or a projectile's (Plan 3, Task 19; `AUTOLINK_UNMODELLED`).
+ * - A hitbox on a part other than 0 to 3 (`HITBOX_PARTS`) throws, a script's or the
+ *   compiled legacy move's (`Hitbox.part`): the hit record and the pick key a target
+ *   by its part, and a fifth would collide (Plan 5, Task 16 fix round 2).
  */
 export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
   const slots = new Set([...Object.keys(def.moves), ...Object.keys(def.scripts ?? {})] as MoveSlot[]);
@@ -178,7 +181,10 @@ export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
     if (script === null) continue;
     scheduleOf(script);
     for (const c of flatten(script)) {
-      if (c.op === "attack") refuseUnmodelledAngle(def, slot, `hitbox ${c.params.id}`, c.params.angle);
+      if (c.op === "attack") {
+        refuseUnmodelledAngle(def, slot, `hitbox ${c.params.id}`, c.params.angle);
+        refuseUnboundedPart(def, slot, c.params.id, c.params.part);
+      }
       if (c.op !== "attack" && c.op !== "catch") continue;
       if (!bones.pose(def.id, script.motion, 1, c.params.bone, scratch)) {
         throw new Error(
@@ -200,6 +206,12 @@ function refuseUnmodelledAngle(def: FighterDef, slot: MoveSlot, what: string, an
   throw new Error(
     `${def.id} ${slot}: ${what} has angle ${angle / ONE}°, an autolink angle the engine does not model (only 365° and 367° are)`,
   );
+}
+
+/** Throw for a hitbox on a part outside 0 to 3 (`HITBOX_PARTS`), naming the fighter, the move and the part. */
+function refuseUnboundedPart(def: FighterDef, slot: MoveSlot, id: number, part: number): void {
+  if (Number.isInteger(part) && part >= 0 && part < HITBOX_PARTS) return;
+  throw new Error(`${def.id} ${slot}: hitbox ${id} has part ${part}, outside 0 to ${HITBOX_PARTS - 1}: the hit record keys a target by its part`);
 }
 
 /** The same refusal for the hitboxes of the projectiles `slot` throws, whatever runs the slot. */

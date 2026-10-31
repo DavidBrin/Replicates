@@ -922,8 +922,8 @@ export function step(
     // So does a Final Smash's user while its scene plays, in the air too, with no
     // gravity or speed of its own (fix round 1, ruling R-T14d): the scene is
     // "unskippable" (SmashWiki "Final Smash").
-    // An aerial Final Smash that traps nobody holds its user where it is for the move
-    // (Plan 5, Task 16 fix round 1, ruling R-T16b: `holdsAloft`).
+    // An aerial Final Smash's start holds its user where it is for the move, a dash's
+    // excepted (Plan 5, Task 16 fix rounds 1 and 2, rulings R-T16b and R-T16j: `holdsAloft`).
     if (f.port === scene || holdsAloft(f, defs[i])) {
       kineticClear(f);
       continue;

@@ -374,8 +374,10 @@ export interface Hitbox {
    * its own, so it may land on a fighter beside the move's other parts, on the same
    * frame too (SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox: "If a hitbox has a
    * part value of 1, for example, it can connect after landing a hitbox with a part
-   * value of 0"). 0 to 3; absent, 0 (Plan 5, Task 16 fix round 1, ruling R-T16e: Zero
-   * Laser's fringe beams, separate articles in the game, on parts 1 and 2).
+   * value of 0"). 0 to 3 (`HITBOX_PARTS`), any other refused at load
+   * (`prepareFighterScripts`; fix round 2); absent, 0 (Plan 5, Task 16 fix round 1,
+   * ruling R-T16e: Zero Laser's fringe beams, separate articles in the game, on parts 1
+   * and 2).
    */
   readonly part?: number;
   /**

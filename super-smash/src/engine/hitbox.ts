@@ -569,6 +569,14 @@ export function reboundFrames(damage: number): number {
 export const SMASH_BALL_TARGET = 8;
 
 /**
+ * How many parts a move's boxes may be on (smash-script `Part`, `Hitbox.part`): 0 to 3,
+ * as the game's are. The record's key (`recordKey`) and the pick's (`simulate.ts`
+ * `pickKey`, `source × 4 + part`) are built on it, so a box on any other part is
+ * refused at load (`prepareFighterScripts`; Plan 5, Task 16 fix round 2).
+ */
+export const HITBOX_PARTS = 4;
+
+/**
  * A hit record's entry is its key (`recordKey`: the target, below 16, plus 16 times
  * the box's part, 0 to 3), plus this times the frame from which the target may be
  * struck again, for a box with a rehit; the key alone for one without, struck once
@@ -577,7 +585,7 @@ export const SMASH_BALL_TARGET = 8;
  * clone walk it as they always did, and a record with no rehit or part in it is the
  * ports it always held.
  */
-const REARM_STRIDE = 64;
+const REARM_STRIDE = 16 * HITBOX_PARTS;
 
 /** A target's key in a record for a box of `part` (`Hitbox.part`; Plan 5, Task 16 fix round 1). */
 function recordKey(target: number, part: number): number {

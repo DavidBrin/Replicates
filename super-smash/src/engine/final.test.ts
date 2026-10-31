@@ -650,13 +650,18 @@ describe("the scene holds the match still, its user and the stage included (Task
 
   it("does not land out of a Final Smash: a part it lands in plays on (UNVERIFIED: no source says what a landing does to one)", () => {
     // Just above the floor, with nobody in reach: it lands in the start, which plays on.
+    // A start with a dash (`momentum`; a late one here), as a start without one is held
+    // in the air for the move and never lands (Task 16 fix round 2, ruling R-T16j).
+    const dash: SimContext = { fighter: () => defWith({ ...MOVES, finalSmash: { ...FINAL, momentum: [{ frame: 15, x: fx(1), y: 0, hold: 2 }] } }), stage: () => STAGE };
     const s = aloft(fx(3));
     s.fighters[1].x = fx(120);
-    const { states } = run(s, 16, USE);
+    const { states } = run(s, 16, USE, dash);
     const landed = states.findIndex((st) => st.fighters[0].grounded);
     expect(landed).toBeGreaterThan(0);
     expect(landed).toBeLessThan(12);
     for (const st of states.slice(landed, 15)) expect([st.fighters[0].action, st.fighters[0].move]).toEqual(["special", "finalSmash"]);
+    const held = run(aloft(fx(3)), 16, USE).states;
+    expect(held.every((st) => !st.fighters[0].grounded && st.fighters[0].y === fx(3))).toBe(true);
   });
 
   it("does not trap Kirby in his Stone, which takes the hit as a stone takes any (SmashWiki \"Stone\")", () => {

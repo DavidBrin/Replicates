@@ -97,21 +97,29 @@ export function finalSmashActive(s: { readonly fighters: readonly FighterState[]
 }
 
 /**
- * Does `f`'s Final Smash hold it where it is in the air (Plan 5, Task 16 fix round 1,
- * ruling R-T16b)? A start that traps nobody (Mario Finale, Zero Laser, the Ancient
- * Bow and Arrow), used in the air, stands its user still for the move: SmashWiki
- * "Mario (SSBU)/Final Smash" calls Mario Finale "a desperate recovery tool", and
- * SmashWiki "Final Smash": "When most Final Smashes are performed in the air, upon
- * ending the move, the character gains a slight boost in height and regains their
- * spent midair jumps" (`refreshFinalJumps`). UNVERIFIED: the kinetics, no gravity
- * and no movement at all for the whole move (no page gives them); the height boost
- * has no published size and is not modelled. A cinematic one's scene holds its user
- * already (ruling R-T14d).
+ * Does `f`'s Final Smash hold it where it is in the air? A Final Smash's start, used in
+ * the air, stands its user still for the move: one that traps nobody (Mario Finale,
+ * Zero Laser, the Ancient Bow and Arrow; Plan 5, Task 16 fix round 1, ruling R-T16b),
+ * and a cinematic one's too, which whiffed plays to its end there (Jungle Rush, Ultra
+ * Sword, Team Star Fox; fix round 2, ruling R-T16j). SmashWiki "Mario (SSBU)/Final
+ * Smash" calls Mario Finale "a desperate recovery tool", and SmashWiki "Final Smash":
+ * "When most Final Smashes are performed in the air, upon ending the move, the
+ * character gains a slight boost in height and regains their spent midair jumps,
+ * which can aid in recovery" (`refreshFinalJumps`). A cinematic one that traps goes on
+ * to its scene, which holds its user anyway (ruling R-T14d).
+ *
+ * Not a start whose move travels (`MoveDef.momentum`): the published dashes keep their
+ * momentum and fall as they do (ruling R-T16j). SmashWiki "Critical Hit": "In the air,
+ * the user will travel at high speed directly forward"; "Volt Tackle": it "ignores
+ * edges".
+ *
+ * UNVERIFIED: the kinetics, no gravity and no movement at all for the whole move (no
+ * page gives them); the height boost has no published size and is not modelled.
  */
 export function holdsAloft(f: FighterState, def: FighterDef): boolean {
   if (f.grounded || f.action !== "special" || f.move === null) return false;
-  const final = def.moves[f.move]?.final;
-  return final !== undefined && final.phase === "start" && final.trap !== true;
+  const move = def.moves[f.move];
+  return move?.final?.phase === "start" && move.momentum === undefined;
 }
 
 /**

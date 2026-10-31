@@ -1124,8 +1124,9 @@ const legacy: FighterDef = {
     // intangible". Not a cinematic: it traps nobody.
     // - The start, `game_finalstart` (fix round 1, ruling R-T16c): on 48-68, a 1%
     //   electric box, angle 18, KBG 100, FKB 12, radius 10, 17 ahead and 13 up, hitlag
-    //   ×0 (`DisableHitlag`), `Rehit=10`; and two 0% pulls, FKB 30, flinchless,
-    //   `DisableHitlag`: 18° at radius 20, 15 behind, and 366° at radius 30, 17 ahead,
+    //   ×0 (its `Hitlag=0.0`, with `DisableHitlag=false`), `Rehit=10`; and two 0% pulls,
+    //   FKB 30, flinchless, `DisableHitlag=true` (the start's only boxes that set it):
+    //   18° at radius 20, 15 behind, and 366° at radius 30, 17 ahead,
     //   loaded at 367 (ruling P5-R18's stand-in; `windboxPush`). A windbox pushes every
     //   frame it is out, so each pull is authored one frame at a time on its `Rehit=10`,
     //   48, 58 and 68. `clear_all` on 69. UNVERIFIED: the start's length, its last

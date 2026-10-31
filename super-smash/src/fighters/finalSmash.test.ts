@@ -277,11 +277,12 @@ describe("each part's length", () => {
 
   it("plays Jungle Rush's end, begun and ended in the air, to its final_air_end's frame 46", () => {
     // High over Final Destination, Mario in front: the scene holds Donkey Kong where it
-    // began, and he is still airborne when his end could end.
+    // began, and he is still airborne when his end could end. His start holds him there
+    // too (fix round 2, ruling R-T16j), so Mario is held in front of him until trapped.
     const s = ready("donkeyKong", 18);
     Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(150) });
     Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(150) });
-    const { states } = run(s, 400);
+    const { states } = runHeld(s, 400, inFront);
     const user = slots(states, 0);
     const last = user.lastIndexOf("finalEnd");
     expect(last).toBeGreaterThan(0);
@@ -607,6 +608,12 @@ function runHeld(
 function hold(f: FighterState, x: number, y: number): void {
   Object.assign(f, { x, y, grounded: false, platform: -1, ledge: null });
   kineticClear(f);
+}
+
+/** Port 1 held 18 in front of port 0, at its height, until a Final Smash traps it. */
+function inFront(s: GameState): void {
+  const victim = s.fighters[1];
+  if (victim.action !== "finalTrapped" && s.fighters[0].move === "finalSmash") hold(victim, s.fighters[0].x + fx(18), s.fighters[0].y);
 }
 
 /** The frames (event index + 1) and damages of every hit on port 1. */
@@ -983,6 +990,52 @@ describe("a Final Smash is out while one of its projectiles is (ruling R-T16a)",
     const { states } = runHeld(setup(), 140, () => {}, (i) => [i === 0 ? Btn.Special : 0, i === tail ? Btn.Special : 0, 0]);
     expect([states[tail].fighters[1].move, states[tail].fighters[1].finalSmashReady]).toEqual(["neutralB", FINAL_SMASH_READY]);
   });
+
+  // Fix round 2 (the re-review's N2): the arrow's tail keeps the other two as well.
+  const arrowSetup = () => {
+    const s = ready("link", 0);
+    Object.assign(s.fighters[0], { x: fx(75), facing: -1 });
+    Object.assign(s.fighters[1], { x: fx(78) });
+    Object.assign(s.fighters[2], { x: fx(79) });
+    return s;
+  };
+  const arrowOf = (st: GameState) => st.projectiles.find((p) => p.defId === "ancientArrow");
+
+  it("keeps the standby of a fighter the Ancient Arrow strikes after Link's move, and drops no ball", () => {
+    const s = arrowSetup();
+    s.fighters[2].finalSmashReady = FINAL_SMASH_READY;
+    // Fox, in standby, is put in the arrow's path once Link's move is over. The arrow is
+    // near the left blast line by then, and its 35% sends him through it: the KO's own
+    // rule then takes the power (UNVERIFIED, `step`), so the pin runs up to it.
+    const { states, events } = runHeld(s, 130, (st) => {
+      const arrow = arrowOf(st);
+      if (arrow !== undefined && st.fighters[0].move === null) hold(st.fighters[2], arrow.x, arrow.y);
+    });
+    const struck = events.findIndex((e) => e.hits.some((h) => h.victim === 2 && h.attacker === 0));
+    expect(struck).toBeGreaterThan(0);
+    expect(slots([states[struck - 1]], 0)[0]).toBeNull();
+    expect(states[struck].fighters[2].hitstun).toBeGreaterThan(0);
+    const ko = states.findIndex((st) => st.fighters[2].action === "dead");
+    expect(ko).toBeGreaterThan(struck + 2);
+    expect(states.slice(0, ko).every((st) => st.fighters[2].finalSmashReady === FINAL_SMASH_READY)).toBe(true);
+    expect(states.every((st) => !st.smashBall.active)).toBe(true);
+  });
+
+  it("spawns no Smash Ball while the Ancient Arrow flies on past Link's move; once it is gone, one appears", () => {
+    const plain = run(arrowSetup(), 130).states;
+    const tail = plain.findIndex((st, i) => i > 60 && slots([st], 0)[0] === null && arrowOf(st) !== undefined);
+    const gone = plain.findIndex((st, i) => i > tail && arrowOf(st) === undefined);
+    expect(tail).toBeGreaterThan(100);
+    expect(gone).toBeGreaterThan(tail);
+    const spawnRun = (due: number) => {
+      const s = arrowSetup();
+      Object.assign(s.rules, { smashBall: true });
+      s.frame = SMASH_BALL_SPAWN_INTERVAL - (due + 1);
+      return run(s, due + 3).states;
+    };
+    for (let due = tail; due < gone; due++) expect(spawnRun(due).every((st) => !st.smashBall.active), `due on ${due}`).toBe(true);
+    expect(spawnRun(gone + 1)[gone + 1].smashBall.active).toBe(true);
+  });
 });
 
 /**
@@ -991,9 +1044,10 @@ describe("a Final Smash is out while one of its projectiles is (ruling R-T16a)",
  * slight boost in height and regains their spent midair jumps, which can aid in
  * recovery"; SmashWiki "Mario (SSBU)/Final Smash": "so it can also be used as a desperate
  * recovery tool when aimed away from the stage". One that traps nobody holds its user
- * where it is for the move (UNVERIFIED: held still, no gravity and no drift); every one
- * that ends in the air gives back the spent midair jumps. The boost is carried: no size
- * is published.
+ * where it is for the move (UNVERIFIED: held still, no gravity and no drift), and so,
+ * since fix round 2 (ruling R-T16j), does a cinematic one's start, whiffed, a dash's
+ * excepted; every one that ends in the air gives back the spent midair jumps. The boost
+ * is carried: no size is published.
  */
 describe("a Final Smash in the air (ruling R-T16b)", () => {
   const FD_LEFT = FD_FLOOR.x - FD_FLOOR.halfWidth;
@@ -1015,12 +1069,47 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
     const s = ready("donkeyKong", 18);
     Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(150), jumpsUsed: 2 });
     Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(150) });
-    const { states } = run(s, 400);
+    const { states } = runHeld(s, 400, inFront);
     const user = slots(states, 0);
     const last = user.lastIndexOf("finalEnd");
     expect(last).toBeGreaterThan(0);
     expect(states[last].fighters[0].jumpsUsed).toBe(2);
     expect([states[last + 1].fighters[0].grounded, states[last + 1].fighters[0].jumpsUsed]).toEqual([false, 1]);
+  });
+
+  // Fix round 2 (ruling R-T16j): a cinematic Final Smash whiffed in the air holds its user
+  // too, as "most Final Smashes" do. Nobody is near, so the start traps nobody and plays
+  // to its end, where the user is (UNVERIFIED: held still, as R-T16b's).
+  it.each(["donkeyKong", "kirby", "fox"])("%s: a cinematic one whiffed offstage 40 up holds there, survives it and ends with a midair jump back", (id) => {
+    const s = ready(id, 0);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: FD_LEFT - fx(40), y: fx(40), facing: -1, jumpsUsed: 2 });
+    Object.assign(s.fighters[1], { x: fx(60) });
+    Object.assign(s.fighters[2], { x: fx(70) });
+    const { states } = run(s, 200);
+    const user = slots(states, 0);
+    const last = user.lastIndexOf("finalSmash");
+    expect(last).toBeGreaterThan(60);
+    expect(user.slice(0, last + 1).every((m) => m === "finalSmash")).toBe(true);
+    for (const st of states.slice(0, last + 1)) expect([st.fighters[0].x, st.fighters[0].y, st.fighters[0].stocks]).toEqual([FD_LEFT - fx(40), fx(40), 3]);
+    expect([states[last + 1].fighters[0].action, states[last + 1].fighters[0].jumpsUsed]).toEqual(["fall", 1]);
+  });
+
+  // The published dashes keep their momentum (ruling R-T16j): SmashWiki "Critical Hit",
+  // "In the air, the user will travel at high speed directly forward"; "Volt Tackle",
+  // "ignores edges". Whiffed in the air, each dashes on, unheld.
+  it.each([
+    ["marth", 100],
+    ["pikachu", 100],
+  ] as const)("%s: whiffed in the air, dashes on, unheld", (id, distance) => {
+    const s = ready(id, 0);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: FD_LEFT - fx(40), y: fx(40), facing: -1, jumpsUsed: 2 });
+    Object.assign(s.fighters[1], { x: fx(60) });
+    Object.assign(s.fighters[2], { x: fx(70) });
+    const { states } = run(s, 150);
+    const inStart = states.filter((st) => st.fighters[0].move === "finalSmash");
+    expect(inStart.length).toBeGreaterThan(20);
+    const farthest = Math.min(...inStart.map((st) => st.fighters[0].x));
+    expect(farthest).toBeLessThan(FD_LEFT - fx(40) - fx(distance));
   });
 });
 

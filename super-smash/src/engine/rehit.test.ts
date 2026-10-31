@@ -11,7 +11,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import { LEGACY_BONE_TABLE } from "./acmd/bones";
 import { ATTACK, clearAll, frame, script } from "./acmd/dsl";
+import { prepareFighterScripts } from "./acmd/run";
 import { fx } from "./fixed";
 import { kineticClear } from "./kinetic";
 import { cloneState, createInitialState, step } from "./simulate";
@@ -147,6 +149,23 @@ describe("a box's part keeps a hit record of its own (ruling R-T16e)", () => {
     const s = standing(ctx, ["a", "b"], [0, 10]);
     const landed = hits(ctx, s, 8, (i) => [i === 0 ? Btn.Attack : 0, 0], [1]);
     expect(landed.map(([f, , , id]) => [f, id])).toEqual(want);
+  });
+});
+
+describe("a box's part is 0 to 3, refused at load otherwise (fix round 2, the re-review's N4)", () => {
+  // The hit record keys a target by `target + 16 × part` below its re-arm stride (64),
+  // and the pick by `source × 4 + part`: a fifth part would collide with both.
+  const withPart = (part: number) => fighterWith("a", script("game_attack11", "attack_11", [frame(2), ATTACK({ id: 0, part, bone: "top", damage: 1, angle: 0, kbg: 0, fkb: 10, bkb: 0, size: 3, x: 0, y: 6, z: 10, hitlag: 0 })]));
+  const legacyWithPart = (part: number) => ({ ...fighterWith("a", script("game_attack11", "attack_11", [])), scripts: {}, moves: { jab1: { ...JAB, hitboxes: [{ id: 0, startFrame: 2, endFrame: 3, x: 0, y: fx(6), radius: fx(3), damage: fx(1), angle: 0, baseKnockback: 0, knockbackGrowth: 0, part }] } } }) as FighterDef;
+
+  it.each([0, 1, 2, 3])("loads a script's box and a table's on part %i", (part) => {
+    expect(() => prepareFighterScripts(withPart(part), LEGACY_BONE_TABLE)).not.toThrow();
+    expect(() => prepareFighterScripts(legacyWithPart(part), LEGACY_BONE_TABLE)).not.toThrow();
+  });
+
+  it.each([4, 5, -1, 1.5])("refuses a script's box and a table's on part %s", (part) => {
+    expect(() => prepareFighterScripts(withPart(part), LEGACY_BONE_TABLE)).toThrow(/a jab1: hitbox 0 has part .*, outside 0 to 3/);
+    expect(() => prepareFighterScripts(legacyWithPart(part), LEGACY_BONE_TABLE)).toThrow(/a jab1: hitbox 0 has part .*, outside 0 to 3/);
   });
 });
 
