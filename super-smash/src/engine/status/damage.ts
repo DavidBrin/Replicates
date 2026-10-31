@@ -1,7 +1,7 @@
 /**
  * Reeling statuses: DAMAGE, DAMAGE_FLY, DAMAGE_FALL, DOWN_WAIT, DOWN_STAND
- * (Plan 2, Task 6; DAMAGE_FALL Plan 3, Task 12), and TREAD_DAMAGE (Plan 5,
- * Task 11).
+ * (Plan 2, Task 6; DAMAGE_FALL Plan 3, Task 12), TREAD_DAMAGE (Plan 5,
+ * Task 11), and the replica's FINAL_TRAPPED (Plan 5, Task 14).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim.
  */
@@ -207,7 +207,30 @@ export const STATUS_REBOUND: FighterStatus = {
   },
 };
 
+/**
+ * Trapped by a cinematic Final Smash (Plan 5, Task 14: `final.ts`): still, where
+ * the trap caught it, until the scene's last blow launches it, or until the Final
+ * Smash is over without one (its user no longer in a Final Smash move, a KO
+ * included). Entered on contact, so it ends as a reel does (`endStatus`), keeping
+ * a press made on its last frame. Whatever ends it, `trappedBy` goes with it.
+ */
+export const STATUS_FINAL_TRAPPED: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_FINAL_TRAPPED",
+  action: "finalTrapped",
+  kineticType: "NONE",
+  main(f, intent, ctx) {
+    const user = ctx.fighters[f.combat.trappedBy];
+    const move = user === undefined || user.action !== "special" || user.move === null ? undefined : ctx.defs?.[user.port]?.moves[user.move];
+    if (move?.final === undefined) endStatus(f, f.grounded ? "stand" : "fall", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
+  },
+  end(f) {
+    f.combat.trappedBy = -1;
+  },
+};
+
 export const DAMAGE_STATUSES: readonly FighterStatus[] = [
+  STATUS_FINAL_TRAPPED,
   STATUS_REBOUND,
   STATUS_TREAD_DAMAGE,
   STATUS_DAMAGE,

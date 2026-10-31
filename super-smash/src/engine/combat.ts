@@ -262,6 +262,12 @@ export interface CombatState {
    * Per move, as `aimX`: cleared when the special starts and when it ends.
    */
   turned: boolean;
+  /**
+   * Plan 5, Task 14: the port whose Final Smash has trapped this fighter
+   * (`finalTrapped`, `final.ts`), or −1. Cleared when the trap ends, however it
+   * ends (`STATUS_FINAL_TRAPPED`'s `end`: the launch, a KO, the Final Smash over).
+   */
+  trappedBy: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -314,6 +320,7 @@ export function emptyCombat(): CombatState {
     aimX: 0,
     aimY: 0,
     turned: false,
+    trappedBy: -1,
   };
 }
 
@@ -364,5 +371,6 @@ export function cloneCombat(c: CombatState): CombatState {
     aimX: c.aimX,
     aimY: c.aimY,
     turned: c.turned,
+    trappedBy: c.trappedBy,
   };
 }

@@ -47,7 +47,7 @@ const PINNED: Readonly<Record<ActionState, GroundExit>> = {
   hitstun: K, rebound: L, tumble: K, tumbleFall: K, grabbed: K, thrown: K, downed: T, getUp: F,
   tech: F, techRoll: C, techWall: K, techCeiling: K,
   ledgeHang: K, ledgeGetUp: K, ledgeAttack: K, ledgeRoll: K, ledgeJump: K, ledgeTrumped: K,
-  cargoCarry: K, cargoHeld: K, inhaleHold: K, swallowed: K, spatStar: K, footstooled: L,
+  cargoCarry: K, cargoHeld: K, inhaleHold: K, swallowed: K, spatStar: K, footstooled: L, finalTrapped: K,
   respawnPlatform: K, dead: K, entering: K,
 };
 

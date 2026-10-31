@@ -681,8 +681,11 @@ export const SMASH_BALL_HEALTH = fx(40);
 export const SMASH_BALL_DECAY = fx(2);
 export const SMASH_BALL_DECAY_INTERVAL = 60;
 export const SMASH_BALL_SPAWN_INTERVAL = 900;
-/** Frames the winner glows in standby before the Final Smash must be used. */
-export const FINAL_SMASH_STANDBY = 600;
+// Plan 5, Task 14: no standby limit. SmashWiki "Final Smash"
+// (https://www.ssbwiki.com/Final_Smash) gives a Smash Ball's Final Smash none;
+// only the Final Smash Meter's expires: "If a player doesn't use a Final Smash
+// granted by the Final Smash Meter in about 20 seconds, the effect will expire".
+// The ready flag is `FINAL_SMASH_READY` in `final.ts`.
 
 /** Sudden death starts everyone here. */
 export const SUDDEN_DEATH_DAMAGE = fx(300);

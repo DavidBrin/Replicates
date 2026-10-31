@@ -186,9 +186,9 @@ const MATCHES: readonly Match[] = [
 ];
 
 /**
- * Every `ActionState` the ten matches must visit between them: all 58. A
- * `Record` rather than a list, so a new state is a compile error here until
- * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
+ * Every `ActionState` the ten matches must visit between them: all 59 but the one
+ * exempted, by name, as not yet reachable (`NotYetVisited`, below). A `Record`
+ * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
  * Plan 3 Task 12 added the four tech states and `tumbleFall`. A tumble that lands in
@@ -275,8 +275,23 @@ const MATCHES: readonly Match[] = [
  * 35 between them, down from 42: none pummels, throws, is grabbed or thrown,
  * rebounds or is shield-stunned any more, which the script and the labs reach. All
  * 58 are visited.
+ * Plan 5 Task 14 added `finalTrapped`, a fighter caught in a cinematic Final Smash.
+ * No fighter has a Final Smash until Task 15, so no golden match can trap anybody:
+ * it is the one action exempted (ruling P5-R14), with its reason, and Task 15 drops
+ * the exemption by staging a Final Smash in a golden lab. The ten traces were
+ * byte-identical with the Final Smash engine in. All 58 others are visited.
  */
-const MUST_VISIT: Record<ActionState, true> = {
+/**
+ * An action no golden match can reach yet, and why (ruling P5-R14: new actions are
+ * visited, not exempted; `finalTrapped` alone waits for Task 15). The coverage pin
+ * skips it, and fails once a match reaches it, so the exemption cannot outlive its
+ * reason.
+ */
+interface NotYetVisited {
+  readonly notYetVisited: string;
+}
+
+const MUST_VISIT: Record<ActionState, true | NotYetVisited> = {
   stand: true,
   walk: true,
   dashStart: true,
@@ -329,6 +344,10 @@ const MUST_VISIT: Record<ActionState, true> = {
   cargoCarry: true,
   cargoHeld: true,
   footstooled: true,
+  finalTrapped: {
+    notYetVisited:
+      "no fighter has a Final Smash before Plan 5 Task 15, so no golden match can trap anybody; Task 15 removes this exemption by staging a Final Smash in a golden lab",
+  },
   inhaleHold: true,
   swallowed: true,
   spatStar: true,
@@ -848,8 +867,13 @@ describe("engine golden trace", () => {
   // states and soft-stick paths visited are pinned, not just counted.
   function expectCoverage(): void {
     const actions = new Set(all.flatMap((p) => [...p.actions]));
-    const unvisited = (Object.keys(MUST_VISIT) as ActionState[]).filter((a) => !actions.has(a));
+    const listed = Object.keys(MUST_VISIT) as ActionState[];
+    const unvisited = listed.filter((a) => MUST_VISIT[a] === true && !actions.has(a));
     expect(unvisited, "action states no match reaches").toEqual([]);
+    // The exemptions, by name, and none a match reaches by now (P5-R14).
+    const exempt = listed.filter((a) => MUST_VISIT[a] !== true);
+    expect(exempt, "action states exempted as not yet visited").toEqual(["finalTrapped"]);
+    expect(exempt.filter((a) => actions.has(a)), "exempted action states a match reaches now: drop the exemption").toEqual([]);
     const soft = new Set(all.flatMap((p) => [...p.soft]));
     expect(SOFT_PATHS.filter((p) => !soft.has(p)), "Btn.Soft paths no match takes").toEqual([]);
   }

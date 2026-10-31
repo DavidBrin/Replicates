@@ -22,6 +22,9 @@
  */
 
 import { ONE, fx, clamp, mul } from "./fixed";
+// A cycle (`final.ts` imports this file too), safe only because each side calls
+// the other at run time, never at module load: see `final.ts`.
+import { beginFinalSmash } from "./final";
 import {
   airDodgeCharge,
   airDodgeFrames,
@@ -397,6 +400,12 @@ export interface StateContext {
    * (`MoveDef.whenOut`). Absent outside `step`: then none is out.
    */
   readonly out?: (def: ProjectileDef) => number;
+  /**
+   * Everybody's definitions, by port (Plan 5, Task 14: a fighter trapped in a
+   * Final Smash reads its user's move, `STATUS_FINAL_TRAPPED`). Absent outside
+   * `step`: then a trap reads no move and lets go.
+   */
+  readonly defs?: readonly FighterDef[];
 }
 
 /** Change status through the StatusModule (`status/kind.ts`): end, reset, pre. */
@@ -635,6 +644,11 @@ export function beginSpecial(
   stick: Stick = { x: stickX, y: 0, soft: false },
   flick = NO_FLICK,
 ): boolean {
+  // With the Smash Ball's power the neutral special is the Final Smash, in its
+  // place in the order (Plan 5, Task 14: `final.ts`; SmashWiki "Final Smash": "the
+  // character's neutral special move is replaced with a single use of their Final
+  // Smash"). Any other special leaves the power alone.
+  if (beginFinalSmash(f, ctx, slot === "neutralB")) return true;
   // Begun in the air, an up special is the fighter's aerial one where it has one
   // of its own (Plan 5, Task 13b: `upBAir`, Link's aerial Spin Attack).
   const own = failedVersion(ctx, smashVersion(ctx.def, slot === "upB" && !f.grounded && ctx.def.moves.upBAir !== undefined ? "upBAir" : slot, flick));

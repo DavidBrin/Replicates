@@ -159,8 +159,10 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
  * up specials' `aim`, `turn`, `rise`, `launch`, `phases`, `fromAir` and
  * `descentHold` (Task 13b), which the engine reads off the move whatever script
  * runs it (`upSpecial.ts`); and a `specialCharge` that loops inside the script's
- * lead, before its first command (`chargeInLead`: Link's Spin Attack). Tasks 14
- * and 16 add a Final Smash's phases and a rehit.
+ * lead, before its first command (`chargeInLead`: Link's Spin Attack). Task 14
+ * adds a Final Smash's part (`final`): its trap, scene and launch are the engine's
+ * reading of the move, and a cutscene script's boxes hang off `virtualfinalattack`
+ * bones no skeleton has. Task 16 adds a rehit.
  */
 export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
   "specialCharge",
@@ -177,6 +179,7 @@ export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
   "airTotalFrames",
   "intangible",
   "copyDamage",
+  "final",
 ];
 
 /**

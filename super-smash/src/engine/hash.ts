@@ -210,6 +210,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.aimX);
   x = mixInt(x, c.aimY);
   x = mixBool(x, c.turned);
+  x = mixInt(x, c.trappedBy);
   return x;
 }
 

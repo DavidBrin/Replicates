@@ -227,6 +227,11 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   spatStar: "DISABLE",
   // UNVERIFIED: stood on again while still footstooled.
   footstooled: "ENABLE",
+  // Trapped in a Final Smash (Plan 5, Task 14): held where the trap caught it, out
+  // of everybody's reach but its scene's, as the carried and the swallowed are
+  // held. UNVERIFIED: no source says; SSBU's capture statuses are each Final
+  // Smash's own.
+  finalTrapped: "DISABLE",
   // Not on the stage.
   respawnPlatform: "DISABLE",
   dead: "DISABLE",

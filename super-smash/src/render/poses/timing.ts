@@ -203,6 +203,10 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   sideBSmash: "sideB",
   // Fix round 1: Link's failed throw is his throw's motion, held past its end.
   sideBFailed: "sideB",
+  // Plan 5, Task 14: a Final Smash's scene and finishing blow borrow the neutral
+  // special's clip, as its start does (UNVERIFIED: no Final Smash clip is authored).
+  finalAttack: "neutralB",
+  finalEnd: "neutralB",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */
@@ -317,9 +321,11 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
       return "tumble";
     case "grabbed":
     // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held. Task 11:
-    // stood on, held still under the jumper's feet.
+    // stood on, held still under the jumper's feet. Task 14: trapped in a Final
+    // Smash, held still for its scene.
     case "cargoHeld":
     case "footstooled":
+    case "finalTrapped":
       return "grabbed";
     // ...and Donkey Kong carrying: no clip has the carry's raised arms, and his
     // walk reads as the carry (it walks). Plan 5, Task 9: Kirby walking with a

@@ -17,6 +17,7 @@ import { SMASH_CHARGE_MAX, SMASH_FULL_CHARGE_HOLD } from "../constants";
 import { smashHoldFrame } from "../acmd/run";
 import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
+import { nextFinalPhase } from "../final";
 import { specialChargeMain } from "../specialCharge";
 import { stoneMain } from "../stone";
 import { upSpecialStick } from "../upSpecial";
@@ -99,6 +100,9 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   // fighter acts on frame T + 1, this one (`handOff`). A stored full charge
   // ends on its own published frame (`moveEndFrame`, Plan 5).
   if (f.actionFrame >= moveEndFrame(f, move)) {
+    // A Final Smash goes on to its next part if it has trapped anybody (Plan 5,
+    // Task 14: `final.ts`); the part entered counts this frame as its frame 1.
+    if (move.final !== undefined && nextFinalPhase(f, ctx, move.final.next) !== null) return;
     // In the air a move with a longer aerial animation plays on to its end
     // unless the fighter acts (`MoveDef.airTotalFrames`, Plan 5: Mario's Cape,
     // SmashWiki "Mario (SSBU)": "forcing the player to have to interrupt the

@@ -610,6 +610,12 @@ describe("who cannot be stood on (Plan 5 review)", () => {
       Object.assign(s.fighters[1], { action: "spatStar", grounded: false, platform: -1 });
       return s;
     }],
+    ["a fighter trapped in a Final Smash", () => {
+      const s = stoolOn("fox", "mario");
+      Object.assign(s.fighters[1], { action: "finalTrapped" });
+      s.fighters[1].combat.trappedBy = 2;
+      return s;
+    }],
     ["a fighter on the respawn platform", () => {
       const s = stoolOn("fox");
       Object.assign(s.fighters[1], { action: "respawnPlatform", grounded: false, platform: -1 });
@@ -662,7 +668,7 @@ describe("who cannot be stood on (Plan 5 review)", () => {
       hitstun: E, rebound: E, tumble: E, tumbleFall: E, grabbed: D, thrown: D, downed: E, getUp: E,
       tech: E, techRoll: E, techWall: E, techCeiling: E,
       ledgeHang: N, ledgeGetUp: N, ledgeAttack: N, ledgeRoll: N, ledgeJump: N, ledgeTrumped: E,
-      cargoCarry: D, cargoHeld: D, footstooled: E, inhaleHold: D, swallowed: D, spatStar: D,
+      cargoCarry: D, cargoHeld: D, footstooled: E, finalTrapped: D, inhaleHold: D, swallowed: D, spatStar: D,
       respawnPlatform: D, dead: D, entering: D,
     });
   });

@@ -68,7 +68,7 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 57 over the 58 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 57 over the 59 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
@@ -86,7 +86,8 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
     // more, the footstooled, and no motion more: it plays the grab's. Task 12: one
     // more, the crawl, and no motion more: it plays the crouch's. Task 13c's fix
     // round 1: one more, the rebound, and no motion more: it plays the stand's.
-    expect(ACTIONS).toHaveLength(58);
+    // Task 14: one more, the trapped, and no motion more: it plays the grab's.
+    expect(ACTIONS).toHaveLength(59);
     expect(named.size).toBe(57);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
     // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their

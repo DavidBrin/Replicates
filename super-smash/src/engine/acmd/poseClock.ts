@@ -119,6 +119,8 @@ function airDodgeSuffix(charge: number): string {
  * (`poseNameFor`'s clip, a loop on the same clock; its own motion would bake the
  * crouch's frames byte for byte). Task 13c fix round 1: a rebound plays the stand's
  * (UNVERIFIED stand-in: no rebound clip is authored; the presentation's to add).
+ * Task 14: the fighter trapped in a Final Smash plays the grab's (`poseNameFor`'s
+ * clip; its own motion would bake the grab's frames byte for byte, ruling R-T8c).
  */
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   crawl: "crouch",
@@ -128,6 +130,7 @@ export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>
   cargoCarry: "walk",
   cargoHeld: "grabbed",
   footstooled: "grabbed",
+  finalTrapped: "grabbed",
   inhaleHold: "walk",
   swallowed: "tumble",
   spatStar: "tumble",

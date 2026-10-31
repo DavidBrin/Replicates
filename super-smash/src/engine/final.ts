@@ -1,0 +1,139 @@
+/**
+ * Final Smashes (Plan 5, Task 14).
+ *
+ * Breaking the Smash Ball sets `finalSmashReady` ("Standby Mode"); SmashWiki
+ * "Final Smash" (https://www.ssbwiki.com/Final_Smash): "the character's neutral
+ * special move is replaced with a single use of their Final Smash", so the next
+ * *neutral* special spends it and starts the fighter's `finalSmash` move
+ * (`beginFinalSmash`). SmashWiki "Smash Ball" (https://www.ssbwiki.com/Smash_Ball):
+ * "Players can attack a fighter in standby mode to make them 'drop' the Smash
+ * Ball, at which point it will begin roaming the stage again" (`dropSmashBall`).
+ * A cinematic Final Smash traps whoever its first hit touches, and then, SmashWiki
+ * "Final Smash": "If the hitbox created from this action makes contact with an
+ * opponent, the game effectively pauses as an unskippable scene plays out". The
+ * replica plays that scene in the simulation itself, as ordinary state, so a
+ * rollback replays it exactly:
+ *
+ * - `start`: the `finalSmash` move. With `trap`, every box of it that lands traps
+ *   instead of hitting: the victim takes the damage and waits, trapped
+ *   (`finalTrapped`, `CombatState.trappedBy`). With nobody trapped it simply
+ *   ends: a whiff.
+ * - `attack`: the scene's hits. `GameState.cinematic` holds the user's port, and
+ *   everybody else, every projectile, the Smash Ball and the clock stand still
+ *   (`updateCinematic`, `inCinematic`). Its boxes reach every fighter it trapped,
+ *   wherever they are (SSBU hangs them off `virtualfinalattack` bones, which the
+ *   scene places; the replica has none), for damage only.
+ * - `end`: the finishing blow, which also reaches every fighter trapped, and
+ *   launches.
+ *
+ * A Final Smash with no `trap` (Task 16's) is an ordinary, very large move.
+ * SmashWiki "Unblockable attack" (https://www.ssbwiki.com/Unblockable_attack):
+ * "in Ultimate, all Final Smashes are unblockable", an unblockable attack being
+ * one that "cannot be defended against with a shield or a counterattack"; so no
+ * counter catches a Final Smash box (`step`), and the trap and the scene take
+ * no shield. UNVERIFIED-simplified: the cutscene's camera and its playback speed
+ * are presentation (Task 17).
+ *
+ * `final.ts` and `states.ts` import each other: `states.ts` calls
+ * `beginFinalSmash` and `status/attack.ts` `nextFinalPhase`, and this file calls
+ * `startMove`, `startAction` and `releaseGrab`. The cycle is safe only because
+ * neither side calls the other at module load: every call is made at run time,
+ * from inside a function, so whichever module loads first finds the other's
+ * exports bound by the time any of them runs. Keep it that way: no top-level
+ * call across the cycle.
+ */
+
+import { kineticClear } from "./kinetic";
+import { SMASH_BALL_HEALTH } from "./constants";
+import { fx } from "./fixed";
+import { releaseGrab, startAction, startMove } from "./states";
+import type { StateContext } from "./states";
+import type { FighterDef, FighterState, GameState, MoveSlot } from "./types";
+
+/**
+ * The ready flag the Smash Ball sets ("Standby Mode"). UNVERIFIED: that it lasts
+ * until used — SmashWiki "Final Smash" gives the Final Smash Meter's version
+ * "about 20 seconds" and the Smash Ball's none; the replica keeps it until it is
+ * used, dropped (`dropSmashBall`) or the stock is lost.
+ */
+export const FINAL_SMASH_READY = 1;
+
+/** The fighters `user`'s Final Smash has trapped. */
+export function trappedBy(s: { readonly fighters: readonly FighterState[] }, user: number): FighterState[] {
+  return s.fighters.filter((f) => f.action === "finalTrapped" && f.combat.trappedBy === user);
+}
+
+/**
+ * A neutral special with a Final Smash ready starts it, and spends it; anything
+ * else leaves the power where it is. Returns true if it started.
+ */
+export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boolean): boolean {
+  if (!neutral || f.finalSmashReady <= 0 || ctx.def.moves.finalSmash === undefined) return false;
+  f.finalSmashReady = 0;
+  startMove(f, "special", "finalSmash");
+  return true;
+}
+
+/**
+ * A trap box landed: the victim waits, trapped, for the scene, still where it
+ * was caught (`kineticClear`; `step` neither moves nor collides it, nor lets it
+ * take a ledge). Anybody it was holding, or being held by, is let go first
+ * (`releaseGrab` clears both halves), so nobody is left hanging off a fighter
+ * who is in the cutscene. The reel it was in ends: the scene's last blow is
+ * what launches it. `step` also drops any launch it had parked.
+ */
+export function trapVictim(user: FighterState, victim: FighterState, fighters: readonly FighterState[]): void {
+  releaseGrab(victim, fighters);
+  kineticClear(victim);
+  victim.hitstun = 0;
+  startAction(victim, "finalTrapped");
+  victim.combat.trappedBy = user.port;
+}
+
+/**
+ * Called when a Final Smash part's move ends: on to the next part if anybody is
+ * trapped, else the move is over. Returns the slot started, or null.
+ */
+export function nextFinalPhase(f: FighterState, ctx: StateContext, next: MoveSlot | undefined): MoveSlot | null {
+  if (next === undefined) return null;
+  if (trappedBy(ctx, f.port).length === 0) return null;
+  startMove(f, "special", next);
+  return next;
+}
+
+/**
+ * The cinematic, decided once a frame after the state machines have run: it
+ * plays while a fighter's move is an `attack` part with somebody trapped.
+ */
+export function updateCinematic(s: GameState, defs: readonly FighterDef[]): void {
+  s.cinematic = -1;
+  for (let i = 0; i < s.fighters.length; i++) {
+    const f = s.fighters[i];
+    if (f.action !== "special" || f.move === null) continue;
+    if (defs[i].moves[f.move]?.final?.phase !== "attack") continue;
+    if (trappedBy(s, f.port).length > 0) {
+      s.cinematic = f.port;
+      return;
+    }
+  }
+}
+
+/** Does this fighter play on while `s.cinematic` stands everybody else still? */
+export function inCinematic(s: Pick<GameState, "cinematic">, f: FighterState): boolean {
+  return f.port === s.cinematic || (f.action === "finalTrapped" && f.combat.trappedBy === s.cinematic);
+}
+
+/**
+ * A hit that deals hitstun to a fighter in standby drops the Smash Ball's power,
+ * and the ball roams again from where they are. SmashWiki "Final Smash" (In
+ * competitive play): "Characters on Final Smash standby can also randomly drop it
+ * from any hit that deals hitstun". UNVERIFIED: every such hit drops it here (the
+ * page says "randomly", and publishes no chance); the dropped ball's HP (a fresh
+ * one's 40) and the 10 units above the fighter it appears at.
+ */
+export function dropSmashBall(s: Pick<GameState, "smashBall">, f: FighterState): void {
+  if (f.finalSmashReady <= 0) return;
+  f.finalSmashReady = 0;
+  if (s.smashBall.active) return;
+  Object.assign(s.smashBall, { active: true, x: f.x, y: f.y + fx(10), vx: 0, vy: 0, health: SMASH_BALL_HEALTH, driftTimer: 0 });
+}

@@ -150,6 +150,8 @@ export type ActionState =
   | "cargoHeld"
   // stood on by a footstool jump, on the ground (Plan 5, Task 11)
   | "footstooled"
+  // caught in a Final Smash's trap, waiting for its scene (Plan 5, Task 14)
+  | "finalTrapped"
   // Kirby's Inhale (Plan 5, Task 9): the mouthful, the fighter inside him, and the
   // fighter he spat flying as his star
   | "inhaleHold"
@@ -210,7 +212,11 @@ export type MoveSlot =
   | "sideBSmash"
   // Plan 5, Task 13d fix round 1: a throw with its article already out
   // (`MoveDef.whenOut`): Link's failed throw.
-  | "sideBFailed";
+  | "sideBFailed"
+  // Plan 5, Task 14: a cinematic Final Smash's scene and its finishing blow
+  // (`MoveDef.final`), after its `finalSmash` start.
+  | "finalAttack"
+  | "finalEnd";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -556,6 +562,18 @@ export interface CounterDef {
   readonly freeze: number;
   /** The move slot the counterattack is. Its hitboxes deal the counter's damage (`MoveDef.counterDamage`). */
   readonly then: MoveSlot;
+}
+
+/**
+ * One part of a Final Smash (Plan 5, Task 14: `final.ts`): the `start` (its boxes
+ * trap what they touch when `trap` is set), the scene's `attack` hits, and the
+ * `end` that launches. `next` is the slot that follows when this part ends with
+ * somebody trapped.
+ */
+export interface FinalPhase {
+  readonly phase: "start" | "attack" | "end";
+  readonly trap?: boolean;
+  readonly next?: MoveSlot;
 }
 
 /**
@@ -955,6 +973,8 @@ export interface MoveDef {
   readonly turnAt?: number;
   /** Its catch boxes swallow rather than grab (Plan 5, Task 9: Kirby's Inhale). See `InhaleDef`. */
   readonly inhale?: InhaleDef;
+  /** Which part of a Final Smash this move is (Plan 5, Task 14: `final.ts`). See `FinalPhase`. */
+  readonly final?: FinalPhase;
   /**
    * A copied move's damage multiplier, on its hitboxes and its projectiles'
    * (Plan 5, Task 9: Kirby's Copy Ability, ×1.2; `withCopyAbility`). Q12.

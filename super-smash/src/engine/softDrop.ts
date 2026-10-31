@@ -107,6 +107,9 @@ export const SOFT_DROP: Readonly<Record<ActionState, SoftDrop>> = {
   spatStar: "stay",
   // UNVERIFIED: the footstooled's freeze (Plan 5, Task 11).
   footstooled: "stay",
+  // UNVERIFIED: the trapped in a Final Smash (Plan 5, Task 14) are held where the
+  // trap caught them and meet no platform (`step` neither moves nor collides them).
+  finalTrapped: "stay",
   respawnPlatform: "stay",
   dead: "stay",
   entering: "stay",

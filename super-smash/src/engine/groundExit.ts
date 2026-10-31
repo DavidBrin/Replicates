@@ -151,6 +151,10 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   // UNVERIFIED: the footstooled's freeze plays out in the air, as a landing's lag
   // does, and ends in a fall (`STATUS_TREAD_DAMAGE`).
   footstooled: "lag",
+  // Trapped in a Final Smash (Plan 5, Task 14): held where the trap caught it, it
+  // never meets an edge (`step` neither moves nor collides it). UNVERIFIED: no page
+  // names the trapped at an edge; were it ever pushed off, it would stay trapped.
+  finalTrapped: "keep",
   // Not on the stage.
   respawnPlatform: "keep",
   dead: "keep",

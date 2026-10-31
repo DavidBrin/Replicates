@@ -85,6 +85,11 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // the game is `special_s1_blank`, on his throw's animation; he plays his throw's
   // motion here, `MoveDef.motionOf`).
   sideBFailed: "special_s_blank",
+  // Plan 5, Task 14: a cinematic Final Smash's scene and its finishing blow, after
+  // its start (`final`); the motions of its `game_finalattack` and `game_finalend`
+  // scripts (Task 15).
+  finalAttack: "final_attack",
+  finalEnd: "final_end",
 };
 
 /**

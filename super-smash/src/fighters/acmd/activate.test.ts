@@ -68,6 +68,8 @@ import { ACTIVE_SCRIPT_SLOTS, PLAN5_BEHAVIOUR, activatable, gameScriptOf } from 
 import { REFERENCE_SCRIPTS } from "./index";
 import { ARTICLE_PROJECTILES, liftScript } from "./lift";
 import { bakedContext } from "@/game/bake";
+import { boneRole, placeableBone } from "@/render3d/retarget/placeable";
+import { SKELETONS } from "@/render3d/skeletons";
 import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
 
 const BONES = readBakeFromDisk().bones;
@@ -250,6 +252,7 @@ describe("what keeps a move on its legacy frames (Plan 5 review)", () => {
         "copyDamage",
         "counter",
         "counterDamage",
+        "final",
         "heavyArmour",
         "holdLoop",
         "inhale",
@@ -772,6 +775,28 @@ describe("a smash, once let go, never charges again (R-T13l)", () => {
       expect(hashState(replay)).toBe(hashState(states[at]));
       for (let i = at + 1; i < 40; i++) replay = step(replay, inputs(i), { prevInputs: inputs(i - 1), ctx: GAME }).state;
       expect(hashState(replay), `rolled back to ${at}`).toBe(hashState(states[39]));
+    }
+  });
+});
+
+describe("a Final Smash's cutscene script (Plan 5, Task 14)", () => {
+  it("stays off its script even where a bone table could place `virtualfinalattack`", () => {
+    // A script whose every box hangs off the cutscene bone, as `game_finalattack`'s do.
+    const ref = REFERENCE_SCRIPTS.mario;
+    const jab = ref.scripts[ref.slots.jab1!];
+    const virtual = {
+      ...jab,
+      commands: jab.commands.map((c) => (c.op === "attack" ? { ...c, params: { ...c.params, bone: "virtualfinalattack" } } : c)),
+    };
+    const everyBone = () => true;
+    const scene = { ...mario.moves.jab1!, slot: "finalAttack" as const, final: { phase: "attack" as const } };
+    expect(activatable("finalAttack", { ...scene, final: undefined }, virtual, everyBone)).toBe(true);
+    expect(activatable("finalAttack", scene, virtual, everyBone)).toBe(false);
+    // And no committed skeleton has the bone, so the limb rule could not place it anyway.
+    expect(activatable("finalAttack", { ...scene, final: undefined }, virtual)).toBe(false);
+    for (const id of Object.keys(SKELETONS)) {
+      expect(boneRole(SKELETONS[id], "virtualfinalattack").kind, id).toBe("missing");
+      expect(activatable("finalAttack", { ...scene, final: undefined }, virtual, (bone) => placeableBone(SKELETONS[id], bone)), id).toBe(false);
     }
   });
 });
