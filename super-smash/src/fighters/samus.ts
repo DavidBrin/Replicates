@@ -1155,9 +1155,17 @@ const legacy: FighterDef = {
     //   `final_air_end`'s CancelFrame 64 under `FT_MOTION_RATE(FSM=0.5)` from 30 is
     //   30 + 34 × 0.5 = 47 too (`gameFrameOfMotion`'s convention), so no `airTotalFrames`
     //   (the review's M7).
-    // UNVERIFIED: the beam's height (9, the arm cannon's, where the script's muzzle
-    // boxes sit at 15) and reach (150 units, 12 to 162 ahead), which the laser article's
-    // status sets, unpublished; the fringe beams' along it.
+    // - The beam's axis (fix round 4, ruling R-T16o): level at the muzzle's height, 15
+    //   up, where `game_final`'s two muzzle boxes sit (`ATTACK(ID=0, Part=0,
+    //   Bone=hash40("top"), Damage=1.0, …, Size=13.0, X=0.0, Y=15.0, Z=20.0, …)`, and on
+    //   8 the same with `Damage=2.0`, `Size=15.0`); its end on the same axis; the fringe
+    //   beams 14 above and below it, at 29 and 1, from `game_final`'s
+    //   `WorkModule::set_float(14, FIGHTER_SAMUS_STATUS_FINAL_WORK_FLOAT_OY)` and
+    //   `set_float(-14, …)` before each `generate_article(…_LASER2)`; their blasts with
+    //   them. (It was 9, a stand-in, which ran the beam's top edge 4-5 below her cannon.)
+    // UNVERIFIED: the beam's reach (150 units, 12 to 162 ahead), which the laser
+    // article's status sets, unpublished, and that it runs level; the fringe beams'
+    // reach along it.
     // UNVERIFIED (ruling R-T16f): the beam's hits freeze Samus, as her own move's hits
     // do. SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag): "Hitlag only affects the
     // object that deals the damage", which makes the laser article the frozen one; the
@@ -1187,12 +1195,12 @@ const legacy: FighterDef = {
         ...[48, 58, 68].map((f, i) => finalBox(4 + i, f, f, { damage: 0, angle: 367, kbg: 100, fkb: 30, radius: 30, x: 17, y: 13, hitlag: 0, transcendent: true, windbox: true })),
         finalBox(7, 70, 76, { damage: 1, angle: 20, kbg: 100, fkb: 22, radius: 13, x: 20, y: 15, hitlag: 0, transcendent: true, rehit: 8 }),
         finalBox(8, 77, 80, { damage: 2, angle: 20, kbg: 100, fkb: 22, radius: 15, x: 20, y: 15, hitlag: 0, transcendent: true, rehit: 8 }),
-        finalBox(9, 81, 208, { damage: 1.5, angle: 20, kbg: 100, fkb: 16, radius: 5, x: 12, y: 9, x2: 162, y2: 9, transcendent: true }),
-        finalBox(10, 209, 216, { damage: 5.5, angle: 361, kbg: 183, bkb: 45, radius: 11, x: 12, y: 9, x2: 162, y2: 9, transcendent: true, effect: "electric", forceReaction: true, rehit: 0 }),
-        finalBox(11, 86, 208, { damage: 0.5, angle: 325, kbg: 100, fkb: 20, radius: 6, x: 12, y: 23, x2: 162, y2: 23, transcendent: true, part: 1, rehit: 8 }),
-        finalBox(12, 86, 208, { damage: 0.5, angle: 45, kbg: 100, fkb: 24, radius: 6, x: 12, y: -5, x2: 162, y2: -5, transcendent: true, part: 2, rehit: 8 }),
-        finalBox(13, 209, 216, { damage: 2.5, angle: 45, kbg: 183, bkb: 95, radius: 12.5, x: 12, y: 23, x2: 162, y2: 23, transcendent: true, effect: "electric", forceReaction: true, part: 1, rehit: 0 }),
-        finalBox(14, 209, 216, { damage: 2.5, angle: 45, kbg: 183, bkb: 95, radius: 12.5, x: 12, y: -5, x2: 162, y2: -5, transcendent: true, effect: "electric", forceReaction: true, part: 2, rehit: 0 }),
+        finalBox(9, 81, 208, { damage: 1.5, angle: 20, kbg: 100, fkb: 16, radius: 5, x: 12, y: 15, x2: 162, y2: 15, transcendent: true }),
+        finalBox(10, 209, 216, { damage: 5.5, angle: 361, kbg: 183, bkb: 45, radius: 11, x: 12, y: 15, x2: 162, y2: 15, transcendent: true, effect: "electric", forceReaction: true, rehit: 0 }),
+        finalBox(11, 86, 208, { damage: 0.5, angle: 325, kbg: 100, fkb: 20, radius: 6, x: 12, y: 29, x2: 162, y2: 29, transcendent: true, part: 1, rehit: 8 }),
+        finalBox(12, 86, 208, { damage: 0.5, angle: 45, kbg: 100, fkb: 24, radius: 6, x: 12, y: 1, x2: 162, y2: 1, transcendent: true, part: 2, rehit: 8 }),
+        finalBox(13, 209, 216, { damage: 2.5, angle: 45, kbg: 183, bkb: 95, radius: 12.5, x: 12, y: 29, x2: 162, y2: 29, transcendent: true, effect: "electric", forceReaction: true, part: 1, rehit: 0 }),
+        finalBox(14, 209, 216, { damage: 2.5, angle: 45, kbg: 183, bkb: 95, radius: 12.5, x: 12, y: 1, x2: 162, y2: 1, transcendent: true, effect: "electric", forceReaction: true, part: 2, rehit: 0 }),
       ],
     },
   },

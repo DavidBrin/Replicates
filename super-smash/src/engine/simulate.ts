@@ -69,6 +69,7 @@ import {
   staleSlot,
 } from "./knockback";
 import {
+  HITBOX_PARTS,
   SMASH_BALL_TARGET,
   alreadyHit,
   capsulesOverlap,
@@ -660,7 +661,17 @@ function candidateKey(c: Candidate): number {
  * count here.
  */
 function pickKey(c: Candidate): number {
-  return candidateKey(c) * 4 + (c.projectile === null ? (c.hitbox.part ?? 0) : 0);
+  return pickKeyOf(candidateKey(c), c.projectile === null ? (c.hitbox.part ?? 0) : 0);
+}
+
+/**
+ * `pickKey`'s encoding: `source × HITBOX_PARTS + part`. Built on the bound a part is held
+ * to at load (`prepareFighterScripts`), as the hit record's key is (`hitbox.ts`), so the
+ * bound and both encodings move together, and every source and part has a key of its own
+ * (Plan 5, Task 16 fix round 4; it was a literal 4).
+ */
+export function pickKeyOf(source: number, part: number): number {
+  return source * HITBOX_PARTS + part;
 }
 
 /** A candidate's part in its source's hit record: a fighter box's own, 0 for a projectile's. */
@@ -922,9 +933,10 @@ export function step(
     // So does a Final Smash's user while its scene plays, in the air too, with no
     // gravity or speed of its own (fix round 1, ruling R-T14d): the scene is
     // "unskippable" (SmashWiki "Final Smash").
-    // An aerial Final Smash holds its user where it is through every part, a dash's
-    // travel excepted (Plan 5, Task 16 fix rounds 1-3, rulings R-T16b, R-T16j to R-T16l:
-    // `holdsAloft`).
+    // An aerial Final Smash holds its user where it is through every part, but a part
+    // that travels only before its first travel window: from it on, a dash keeps its
+    // ordinary kinetics, carrying on and falling (Plan 5, Task 16 fix rounds 1-4,
+    // rulings R-T16b, R-T16j to R-T16l, R-T16l amended, R-T16n: `holdsAloft`).
     if (f.port === scene || holdsAloft(f, defs[i])) {
       kineticClear(f);
       continue;

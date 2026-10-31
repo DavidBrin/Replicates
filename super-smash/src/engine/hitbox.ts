@@ -571,8 +571,9 @@ export const SMASH_BALL_TARGET = 8;
 /**
  * How many parts a move's boxes may be on (smash-script `Part`, `Hitbox.part`): 0 to 3,
  * as the game's are. The record's key (`recordKey`) and the pick's (`simulate.ts`
- * `pickKey`, `source × 4 + part`) are built on it, so a box on any other part is
- * refused at load (`prepareFighterScripts`; Plan 5, Task 16 fix round 2).
+ * `pickKeyOf`, `source × HITBOX_PARTS + part`, Task 16 fix round 4) are built on it, so
+ * a box on any other part is refused at load (`prepareFighterScripts`; Plan 5, Task 16
+ * fix round 2).
  */
 export const HITBOX_PARTS = 4;
 

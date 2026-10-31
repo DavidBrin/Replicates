@@ -28,12 +28,13 @@ import { STATES_LAB } from "./goldenStatesLab";
 import { PROJECTILE_LAB } from "./goldenProjectileLab";
 import { FINAL_LAB } from "./goldenFinalLab";
 import { BEAM_LAB } from "./goldenBeamLab";
+import { DASH_LAB } from "./goldenDashLab";
 import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./projectilePaths";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Twelve matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Thirteen matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
@@ -57,7 +58,10 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * Battlefield: Samus's Zero Laser charges, then strikes Donkey Kong again at each of
  * its boxes' rehits, its fringe beams beside its beam, Mario Finale's flames, used in
  * the air, which holds him there, strike Samus again at theirs, and the Ancient Arrow,
- * in the air too, flies and strikes Mario.
+ * in the air too, flies and strikes Mario; and a 300-frame dash lab (`goldenDashLab.ts`,
+ * Task 16 fix round 4): Pikachu whiffs Volt Tackle in the air, held through its
+ * startup, then tackles, carries on and falls off the side blast line, and Fox whiffs
+ * Team Star Fox in the air, held through its start.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -206,10 +210,17 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => BEAM_LAB.inputs(frame);
     },
   },
+  {
+    ...DASH_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => DASH_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the twelve matches must visit between them: all 59. A `Record`
+ * Every `ActionState` the thirteen matches must visit between them: all 59. A `Record`
  * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
@@ -501,7 +512,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all twelve matches.
+ * on every frame of all thirteen matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -921,6 +932,22 @@ describe("engine golden trace", () => {
   // golden clank meets a rehit box. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2, 33 and
   // 51; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0,
   // 0 and 2.
+  // Plan 5 Task 16's fix round 4 (an aerial Final Smash holds its user only before its
+  // part's first travel window, and from it on a dash keeps its ordinary kinetics, ruling
+  // R-T16l amended; the travel read from what the engine applies, R-T16n) moved no trace
+  // by itself: no golden match used a Final Smash dash or a cinematic one in the air. It
+  // added the dash lab (`goldenDashLab.ts`): Pikachu, held through Volt Tackle's startup
+  // at (-150, 30), tackles on 47-83 and carries on, falling, off the side blast line on
+  // 136, and Fox, held through Team Star Fox's start at 50.45 up on 178-261, falls with
+  // his midair jump back and lands on 290. No hit, one KO. Zero Laser's beam on its
+  // muzzle's axis, 15 up, its fringe beams at 29 and 1 and its blasts with them (ruling
+  // R-T16o), moved the beams lab alone, from its 101-200 sample (its steps are this
+  // task's own, ruling R-T13c-f; none re-timed): the lower fringe beam strikes Donkey
+  // Kong 15 times, not 12, so Zero Laser's end lands on 412, not 407, and he is KO'd on
+  // 593, not 587; everything from Mario Finale on is as it was. 54 hits there. The
+  // eleven other traces are byte-identical. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2,
+  // 33, 54 and 0; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2,
+  // 0, 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -982,7 +1009,19 @@ describe("engine golden trace", () => {
     const lab = played.get(BEAM_LAB.name)!;
     expect(["samus finalSmash", "mario finalSmash", "link finalSmash"].filter((m) => !lab.moves.has(m)), "Final Smashes the beams lab no longer plays").toEqual([]);
     expect(["hugeFlame", "ancientArrow"].filter((id) => !lab.launched.has(id)), "Final Smash projectiles the beams lab no longer launches").toEqual([]);
-    expect(lab.hits, "Zero Laser's 48 on Donkey Kong, Mario Finale's two on Samus and the Ancient Arrow on Mario").toBe(51);
+    expect(lab.hits, "Zero Laser's 51 on Donkey Kong, Mario Finale's two on Samus and the Ancient Arrow on Mario").toBe(54);
+  }
+
+  // Plan 5, Task 16 fix round 4: the dash lab whiffs a Final Smash dash and a cinematic
+  // Final Smash in the air (`goldenDashLab.ts`); no other golden match uses one in the
+  // air. Held through its startup only, Volt Tackle carries Pikachu off the side blast
+  // line (ruling R-T16l, amended): the match's one KO. Held to its end, he would have
+  // fallen onto the stage.
+  function expectDashes(): void {
+    const lab = played.get(DASH_LAB.name)!;
+    expect(["pikachu finalSmash", "fox finalSmash"].filter((m) => !lab.moves.has(m)), "Final Smashes the dash lab no longer whiffs").toEqual([]);
+    expect(lab.actions.has("finalTrapped"), "nobody trapped: both whiff").toBe(false);
+    expect([lab.hits, lab.kos], "no hit, and Volt Tackle's self-destruct").toEqual([0, 1]);
   }
 
   function expectInvariants(): void {
@@ -996,6 +1035,7 @@ describe("engine golden trace", () => {
   it("lets a projectile expire, settle, explode and clank", expectProjectilePaths);
   it("smash-inputs both side specials in the projectile lab", expectSmashSpecials);
   it("plays the beams and the arrow in the beams lab", expectBeams);
+  it("whiffs a dash and a cinematic Final Smash in the air in the dash lab", expectDashes);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -1007,6 +1047,7 @@ describe("engine golden trace", () => {
       expectProjectilePaths();
       expectSmashSpecials();
       expectBeams();
+      expectDashes();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;

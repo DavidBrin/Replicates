@@ -21,8 +21,9 @@ import { describe, expect, it } from "vitest";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { smashville } from "@/stages/smashville";
+import { frame, momentum, script } from "./acmd/dsl";
 import { ONE, fx, toFloat } from "./fixed";
-import { FINAL_SMASH_READY } from "./final";
+import { FINAL_SMASH_READY, travelWindows } from "./final";
 import { hashState } from "./hash";
 import { kineticSet } from "./kinetic";
 import { platformCentreX } from "./physics";
@@ -651,8 +652,8 @@ describe("the scene holds the match still, its user and the stage included (Task
   it("does not land out of a Final Smash: a part it lands in plays on (UNVERIFIED: no source says what a landing does to one)", () => {
     // Just above the floor, with nobody in reach: it lands in the start, which plays on.
     // A start that travels down (a `momentum` window from its first frame), as one held
-    // in the air never lands: a Final Smash holds its user there outside its travel
-    // (Task 16 fix rounds 2 and 3, rulings R-T16j and R-T16l).
+    // in the air never lands: a Final Smash holds its user there before its first travel
+    // (Task 16 fix rounds 2 to 4, rulings R-T16j and R-T16l, amended).
     const dash: SimContext = { fighter: () => defWith({ ...MOVES, finalSmash: { ...FINAL, momentum: [{ frame: 1, x: 0, y: fx(-1), hold: 14 }] } }), stage: () => STAGE };
     const s = aloft(fx(3));
     s.fighters[1].x = fx(120);
@@ -663,6 +664,66 @@ describe("the scene holds the match still, its user and the stage included (Task
     for (const st of states.slice(landed, 15)) expect([st.fighters[0].action, st.fighters[0].move]).toEqual(["special", "finalSmash"]);
     const held = run(aloft(fx(3)), 16, USE).states;
     expect(held.every((st) => !st.fighters[0].grounded && st.fighters[0].y === fx(3))).toBe(true);
+  });
+
+  /**
+   * Plan 5, Task 16 fix round 4 (ruling R-T16l, amended): an aerial Final Smash part holds
+   * its user only before its first `momentum` window; from that window's first frame to
+   * the move's end the part keeps its normal kinetics, between and after its windows too.
+   * SmashWiki "Critical Hit" (https://www.ssbwiki.com/Critical_Hit): "missing with this
+   * attack … in the air without any intervening terrain, usually results in a
+   * self-destruct". UNVERIFIED: those kinetics (the window's speed handed on to drift,
+   * and gravity). A stand-in start, 20 frames, two windows: 2 a frame on 6-8, 1 on 14.
+   */
+  it("holds an aerial part's user only before its first travel: from it on, the user drifts and falls, between its windows and after them", () => {
+    const two: SimContext = { fighter: () => defWith({ ...MOVES, finalSmash: { ...FINAL, momentum: [{ frame: 6, x: fx(2), y: 0, hold: 2 }, { frame: 14, x: fx(1), y: 0, hold: 0 }] } }), stage: () => STAGE };
+    const s = aloft(fx(40));
+    s.fighters[1].x = fx(120);
+    const { states } = run(s, 20, USE, two);
+    const at = { x: s.fighters[0].x, y: s.fighters[0].y };
+    const inStart = states.filter((st) => st.fighters[0].move === "finalSmash");
+    expect(inStart).toHaveLength(20);
+    for (const st of inStart.slice(0, 5)) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([at.x, at.y]);
+    expect(inStart[5].fighters[0].x - at.x).toBe(fx(2));
+    // Between the windows (9-13) and after the last (15-20): never held again.
+    for (const k of [...[8, 9, 10, 11, 12], ...[14, 15, 16, 17, 18, 19]]) {
+      expect(inStart[k].fighters[0].x, `frame ${k + 1}`).toBeGreaterThan(inStart[k - 1].fighters[0].x);
+      expect(inStart[k].fighters[0].y, `frame ${k + 1}`).toBeLessThan(inStart[k - 1].fighters[0].y);
+    }
+  });
+
+  /**
+   * Plan 5, Task 16 fix round 4 (ruling R-T16n): a part's travel is what the engine
+   * applies, `moveMomentum`: a script's own `momentum` commands where it has any (it "is
+   * taken at its word"), else the move's `MoveDef.momentum` (the legacy move's, which its
+   * compiled script carries, or an imported script's, which publishes none). So a dash a
+   * script sets is never held unseen.
+   */
+  it("reads a part's travel from what moveMomentum applies: its script's own momentum, else the move's", () => {
+    const moved = { ...FINAL, momentum: [{ frame: 2, x: fx(3), y: 0, hold: 1 }] };
+    const own = { ...defWith({ ...MOVES, finalSmash: moved }), scripts: { finalSmash: script("game_final", "final", [frame(6), momentum(2, 0, 4), frame(12), momentum(1, 0)]) } };
+    expect(travelWindows(own, "finalSmash")).toEqual([
+      [6, 10],
+      [12, 12],
+    ]);
+    const imported = { ...defWith({ ...MOVES, finalSmash: moved }), scripts: { finalSmash: script("game_final", "final", [frame(3)]) } };
+    expect(travelWindows(imported, "finalSmash")).toEqual([[2, 3]]);
+    expect(travelWindows(defWith({ ...MOVES, finalSmash: moved }), "finalSmash")).toEqual([[2, 3]]);
+    expect(travelWindows(DEF, "finalSmash")).toEqual([]);
+  });
+
+  it("lets a dash its own script sets travel in the air: held before it, moving from its first frame, never held after", () => {
+    const def = { ...DEF, scripts: { finalSmash: script("game_final", "final", [frame(6), momentum(2, 0, 4)]) } };
+    const ctx: SimContext = { fighter: () => def, stage: () => STAGE };
+    const s = aloft(fx(40));
+    s.fighters[1].x = fx(120);
+    const { states } = run(s, 20, USE, ctx);
+    const at = { x: s.fighters[0].x, y: s.fighters[0].y };
+    const inStart = states.filter((st) => st.fighters[0].move === "finalSmash");
+    expect(inStart).toHaveLength(20);
+    for (const st of inStart.slice(0, 5)) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([at.x, at.y]);
+    for (let k = 5; k < 9; k++) expect(inStart[k].fighters[0].x - inStart[k - 1].fighters[0].x, `frame ${k + 1}`).toBe(fx(2));
+    for (let k = 10; k < 20; k++) expect(inStart[k].fighters[0].y, `frame ${k + 1}`).toBeLessThan(inStart[k - 1].fighters[0].y);
   });
 
   it("does not trap Kirby in his Stone, which takes the hit as a stone takes any (SmashWiki \"Stone\")", () => {

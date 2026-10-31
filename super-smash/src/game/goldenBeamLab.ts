@@ -22,14 +22,15 @@
  * projectiles included (Task 16 fix round 1, ruling R-T16a), and each fighter it hits
  * has spent its own or has none, so no hit drops a standby (`dropSmashBall`):
  * - Zero Laser (fix round 1: its start, its scripted clears and its fringe beams,
- *   rulings R-T16c to R-T16e): the start's charge strikes Donkey Kong on 48, 58 and 68
- *   (1%) and its pulls draw him in; the muzzle on 70 (1%); then the beam (1.5%, 13
- *   hits) from 81 and the fringe beams (0.5%; 16 above, 12 below) from 92, each on its
- *   own record, carry him along the floor; the end and both blasts on 407 (5.5% and
- *   2.5% twice): 48 hits, 50.4%. He tumbles off to the right and is KO'd on 587. The
- *   fringe beams pass under the top platform (the upper one, 23 up, reaches the lower
- *   platforms, where Link and Mario stood before fix round 1), and Samus's Final
- *   Smash is over on 475.
+ *   rulings R-T16c to R-T16e; fix round 4: on the muzzle's axis, 15 up, ruling
+ *   R-T16o): the start's charge strikes Donkey Kong on 48, 58 and 68 (1%) and its
+ *   pulls draw him in; the muzzle on 70 (1%); then the beam (1.5%, 13 hits) from 81 and
+ *   the fringe beams (0.5%; 16 above, 15 below) from 92, each on its own record, carry
+ *   him along the floor; the end and both blasts on 412 (5.5% and 2.5% twice): 51
+ *   hits, 52.0%. He tumbles off to the right and is KO'd on 593. The fringe beams pass
+ *   under the top platform (the upper one, 29 up, reaches the lower platforms, where
+ *   Link and Mario stood before fix round 1), and Samus's Final Smash is over on
+ *   480.
  * - Mario Finale, in the air (ruling R-T16b): Mario drops through the top platform on
  *   480 and presses it on 513, 10 up, where it holds him until 673; its flames are out
  *   on 517 and strike Samus on 632 and 644 (3.0%, the mid stage: 50°, a launch to the
@@ -64,8 +65,8 @@ type Step = readonly [frames: number, samus: InputFrame, link: InputFrame, donke
 const STEPS: readonly Step[] = [
   [1, B, 0, 0, 0], //                 1: Zero Laser; its charge strikes Donkey Kong on 48,
   [478, 0, 0, 0, 0], //                  58 and 68, the muzzle on 70, the beam from 81 and
-  //                                     the fringe beams from 92, the end on 407; over on
-  //                                     475; he is KO'd on 587
+  //                                     the fringe beams from 92, the end on 412; over on
+  //                                     480; he is KO'd on 593
   [3, 0, 0, 0, D], //               480: Mario drops through the top platform
   [30, 0, 0, 0, 0],
   [1, 0, 0, 0, B], //               513: Mario Finale in the air, held there until 673; the

@@ -1046,7 +1046,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    *   through its last, 68.
    * - The muzzle: its two boxes, radius 13 on 70-76 and 15 on 77-80, 20 ahead and
    *   15 up.
-   * - The beam: its capsule, 12 to 162 ahead at 9 up, radius 5 (10 high), on
+   * - The beam: its capsule, 12 to 162 ahead at 15 up, radius 5 (10 high), on
    *   81-208; `samus_laser2`'s two fringe beams beside it, radius 6, 14 above and
    *   14 below, from 86; then the three end blasts, radius 11 and 12.5, on 209-216.
    *

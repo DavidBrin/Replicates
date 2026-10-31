@@ -374,6 +374,24 @@ describe("a cinematic Final Smash that traps nobody", () => {
     const end = states[states.length - 1].fighters[0];
     expect(end.action === "dead" || end.action === "respawnPlatform" || !end.grounded || end.stocks < 3).toBe(true);
   });
+
+  // Fix round 4 (ruling R-T16l, amended): the tackle's window ends past the edge, in the
+  // air (on its frame 83, UNVERIFIED: `pikachu.ts`), and nothing stops it there: its speed
+  // goes on as drift, and it falls, to the side blast line. SmashWiki "Volt Tackle": "it
+  // is fairly easy to self-destruct off the side blast line if the player misses".
+  it("pikachu: run off the edge by the tackle, goes on past it after the tackle's window, with no stop in mid-air, to the blast line", () => {
+    const { states, events } = whiff("pikachu", 260);
+    const user = slots(states, 0);
+    const end = states.findIndex((st, i) => user[i] === "finalSmash" && moveFrameOf(st.fighters[0].actionFrame) === 83);
+    expect(end).toBeGreaterThan(0);
+    expect(states[end].fighters[0].grounded).toBe(false);
+    expect(states[end].fighters[0].x).toBeGreaterThan(EDGE);
+    const ko = events.findIndex((e) => e.kos.some((k) => k.port === 0));
+    expect(ko).toBeGreaterThan(end + 1);
+    for (let i = end + 1; i < ko; i++) expect(states[i].fighters[0].x).toBeGreaterThan(states[i - 1].fighters[0].x);
+    expect(user[ko - 1]).toBe("finalSmash");
+    expect(states[ko - 1].fighters[0].x).toBeGreaterThan(FD_STAGE.blastZone.right - fx(10));
+  });
 });
 
 describe("Critical Hit's dash (ruling R-T15f)", () => {
@@ -810,14 +828,21 @@ describe("the three's boxes carry their scripts' numbers", () => {
       [17, 13, 0, undefined, true],
       [20, 15, 0, 8, false],
       [20, 15, 0, 8, false],
-      [12, 9, 0, undefined, false],
-      [12, 9, 0, 0, false],
-      [12, 23, 1, 8, false],
-      [12, -5, 2, 8, false],
-      [12, 23, 1, 0, false],
-      [12, -5, 2, 0, false],
+      [12, 15, 0, undefined, false],
+      [12, 15, 0, 0, false],
+      [12, 29, 1, 8, false],
+      [12, 1, 2, 8, false],
+      [12, 29, 1, 0, false],
+      [12, 1, 2, 0, false],
     ]);
-    for (const id of [9, 10, 11, 12, 13, 14]) expect(toFloat(byId(id).x2!), `box ${id}`).toBe(162);
+    // Fix round 4 (ruling R-T16o): the beam, its end and the fringe beams run level on the
+    // muzzle's axis, 15 up: `game_final`'s muzzle boxes, `ATTACK(ID=0, Part=0,
+    // Bone=hash40("top"), Damage=1.0, …, Size=13.0, X=0.0, Y=15.0, Z=20.0, …)` and, on its
+    // 8, `ATTACK(ID=0, …, Damage=2.0, …, Size=15.0, X=0.0, Y=15.0, Z=20.0, …)`; the
+    // fringe beams 14 above and below it, `WorkModule::set_float(14, …_FLOAT_OY)` and
+    // `set_float(-14, …)` before each `generate_article(…_LASER2)` (rubendal Data Viewer
+    // 13.0.1, …/character/Samus/data.json). UNVERIFIED: the beam's reach (12 to 162).
+    for (const id of [9, 10, 11, 12, 13, 14]) expect([toFloat(byId(id).x2!), byId(id).y2], `box ${id}`).toEqual([162, byId(id).y]);
     expect([zero.rehit, zero.clearAt]).toEqual([10, [69, 77, 81, 209]]);
   });
 
@@ -1045,9 +1070,10 @@ describe("a Final Smash is out while one of its projectiles is (ruling R-T16a)",
  * recovery"; SmashWiki "Mario (SSBU)/Final Smash": "so it can also be used as a desperate
  * recovery tool when aimed away from the stage". One that traps nobody holds its user
  * where it is for the move (UNVERIFIED: held still, no gravity and no drift), and so,
- * since fix round 2 (ruling R-T16j), does a cinematic one's start, whiffed, a dash's
- * excepted; every one that ends in the air gives back the spent midair jumps. The boost
- * is carried: no size is published.
+ * since fix round 2 (ruling R-T16j), does a cinematic one's start, whiffed, and since
+ * fix round 3 every part (ruling R-T16k); a dash only before its travel (fix round 4,
+ * ruling R-T16l, amended); every one that ends in the air gives back the spent midair
+ * jumps. The boost is carried: no size is published.
  */
 describe("a Final Smash in the air (ruling R-T16b)", () => {
   const FD_LEFT = FD_FLOOR.x - FD_FLOOR.halfWidth;
@@ -1096,7 +1122,9 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
 
   // The published dashes keep their momentum (ruling R-T16j): SmashWiki "Critical Hit",
   // "In the air, the user will travel at high speed directly forward"; "Volt Tackle",
-  // "ignores edges". Whiffed in the air, each dashes on, unheld.
+  // "ignores edges". Whiffed in the air, each dashes on, unheld. UNVERIFIED: the 100
+  // units is a floor under both dashes' lengths, which are themselves UNVERIFIED
+  // (`marth.ts`: 6 a frame on 25-70, 276; `pikachu.ts`: 4.5 a frame on 47-83, 166.5).
   it.each([
     ["marth", 100],
     ["pikachu", 100],
@@ -1134,43 +1162,112 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
     expect(states[last + 10].fighters[0].y).toBeLessThan(at.y);
   });
 
-  // Fix round 3 (ruling R-T16l): a dash's hold is lifted only inside its `momentum`
-  // window. Used in the air, Critical Hit holds through its 24-frame startup and Volt
-  // Tackle through its 46 ("Surrounds itself with electricity before dashing forwards",
-  // ruling R-T15h); the dash then travels as published, and the user is held again
-  // after it, to the move's end.
-  it.each([
-    ["marth", 25, 70],
-    ["pikachu", 47, 83],
-  ] as const)("%s: used in the air, holds through its startup, dashes in its window (%i-%i), and holds after it", (id, from, to) => {
+  /**
+   * Fix round 4 (ruling R-T16l, amended): a dash holds its user only before its first
+   * `momentum` window. Used in the air, Critical Hit holds through its startup and Volt
+   * Tackle through its own ("Surrounds itself with electricity before dashing forwards",
+   * ruling R-T15h); the dash then travels; and from the window on the part keeps its
+   * normal kinetics, the dash's speed handed on to drift and gravity, so a whiff "in the
+   * air without any intervening terrain, usually results in a self-destruct" (SmashWiki
+   * "Critical Hit", https://www.ssbwiki.com/Critical_Hit), and "it is fairly easy to
+   * self-destruct off the side blast line if the player misses" (SmashWiki "Volt Tackle",
+   * https://www.ssbwiki.com/Volt_Tackle).
+   * - The windows (`travelWindows`): Critical Hit's from 25, `game_finalstart`'s last
+   *   command (rubendal Data Viewer 13.0.1,
+   *   https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Marth/data.json), so a
+   *   24-frame startup; Volt Tackle's from 47, its initial hit, after `game_final`'s
+   *   sparks on 10-46 (…/character/Pikachu/data.json), so 46. Their ends (70, 83) and
+   *   speeds are UNVERIFIED (`marth.ts`, `pikachu.ts`): SSBU moves both by status or
+   *   animation, unpublished.
+   * - The distances: every window frame but the last moves the window's speed (6, 4.5),
+   *   and on the last the speed is handed to drift, which loses that frame's air brake
+   *   (`applyMoveMomentum`): Marth 275.996 (fx(276) − 15), Pikachu 166.492 (fx(166.5) −
+   *   31). UNVERIFIED, as the speeds are.
+   * - UNVERIFIED: the kinetics after the window (no page gives them).
+   */
+  const DASHES = [
+    { id: "marth", from: 25, to: 70, speed: fx(6), distance: fx(276) - 15 },
+    { id: "pikachu", from: 47, to: 83, speed: fx(4.5), distance: fx(166.5) - 31 },
+  ] as const;
+
+  /** `id` in the air at (x, 40), facing right, using its Final Smash; Mario and Fox far behind on the floor. */
+  const aerialDash = (id: string, x: number, frames: number) => {
     const s = ready(id, 0);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x, y: fx(40), facing: 1 });
+    Object.assign(s.fighters[1], { x: fx(-70) });
+    Object.assign(s.fighters[2], { x: fx(-80) });
+    return run(s, frames);
+  };
+  const frameOf = (st: GameState) => moveFrameOf(st.fighters[0].actionFrame);
+  /** The step port 0 is KO'd on, and the state before it: where it was. */
+  const koOf = (states: readonly GameState[], events: readonly StepEvents[]) => {
+    const at = events.findIndex((e) => e.kos.some((k) => k.port === 0));
+    return { at, before: states[at - 1] };
+  };
+
+  it.each(DASHES)("$id: used in the air, holds through its startup, dashes exactly its distance in its window, then carries on and falls", ({ id, from, to, speed, distance }) => {
     const at = { x: FD_LEFT - fx(40), y: fx(40) };
-    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: at.x, y: at.y, facing: 1 });
-    Object.assign(s.fighters[1], { x: fx(60) });
-    Object.assign(s.fighters[2], { x: fx(70) });
-    const { states } = run(s, 200);
+    const { states, events } = aerialDash(id, at.x, 200);
     const inStart = states.filter((st) => st.fighters[0].move === "finalSmash");
-    const frameOf = (st: GameState) => moveFrameOf(st.fighters[0].actionFrame);
     const windup = inStart.filter((st) => frameOf(st) < from);
     expect(windup.length).toBe(from - 1);
     for (const st of windup) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([at.x, at.y]);
     const dash = inStart.filter((st) => frameOf(st) >= from && frameOf(st) <= to);
     expect(dash.length).toBe(to - from + 1);
-    // It travels from the window's first frame, and stops dead after its last.
-    expect(dash[0].fighters[0].x).toBeGreaterThan(at.x);
-    expect(dash[dash.length - 1].fighters[0].x - at.x).toBeGreaterThan(fx(100));
+    // It travels from the window's first frame, at the window's speed, to its last.
+    const xs = [at.x, ...dash.map((st) => st.fighters[0].x)];
+    for (let k = 1; k < xs.length - 1; k++) expect(xs[k] - xs[k - 1]).toBe(speed);
+    expect(dash[dash.length - 1].fighters[0].x - at.x).toBe(distance);
+    // From the window on, nothing holds it: it carries on forward and falls, every step,
+    // until it is KO'd off the far side, its start still playing.
     const after = inStart.filter((st) => frameOf(st) > to);
-    expect(after.length).toBeGreaterThan(10);
-    for (const st of after) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([dash[dash.length - 1].fighters[0].x, dash[dash.length - 1].fighters[0].y]);
+    expect(after.length).toBeGreaterThan(5);
+    let prev = dash[dash.length - 1].fighters[0];
+    for (const st of after) {
+      expect(st.fighters[0].x).toBeGreaterThan(prev.x);
+      expect(st.fighters[0].y).toBeLessThan(prev.y);
+      prev = st.fighters[0];
+    }
+    const ko = koOf(states, events);
+    expect(ko.at).toBeGreaterThan(0);
+    expect(ko.before.fighters[0].move).toBe("finalSmash");
+    expect(frameOf(ko.before)).toBeGreaterThan(to);
+    expect(ko.before.fighters[0].x).toBeGreaterThan(FD_STAGE.blastZone.right - fx(10));
   });
 
-  // Fix round 3 (ruling R-T16m): the Final Smash parts that travel instead of holding,
-  // and on which frames, pinned, so that no `momentum` edit changes who holds unseen.
+  // The brief's case (fix round 4): over the stage, 20 from its right edge, facing the
+  // near blast line, with nobody in reach. Critical Hit's dash reaches the blast line
+  // inside its window; Volt Tackle's ends 13.5 short of it, and carries it over.
+  it("marth: used in the air at x 60 facing the near blast line, is KO'd off it inside his dash", () => {
+    const { states, events } = aerialDash("marth", fx(60), 160);
+    const ko = koOf(states, events);
+    expect(ko.at).toBeGreaterThan(0);
+    expect(ko.before.fighters[0].move).toBe("finalSmash");
+    expect(frameOf(ko.before)).toBeGreaterThanOrEqual(25);
+    expect(frameOf(ko.before)).toBeLessThanOrEqual(70);
+    expect(ko.before.fighters[0].x).toBeGreaterThan(FD_STAGE.blastZone.right - fx(6));
+  });
+
+  it("pikachu: used in the air at x 60 facing the near blast line, carries on past his dash's end and is KO'd off it", () => {
+    const { states, events } = aerialDash("pikachu", fx(60), 160);
+    const end = states.find((st) => st.fighters[0].move === "finalSmash" && frameOf(st) === 83)!;
+    expect(end.fighters[0].x).toBe(fx(60) + fx(166.5) - 31);
+    const ko = koOf(states, events);
+    expect(ko.at).toBeGreaterThan(0);
+    expect(ko.before.fighters[0].move).toBe("finalSmash");
+    expect(frameOf(ko.before)).toBeGreaterThan(83);
+    expect(ko.before.fighters[0].x).toBeGreaterThan(end.fighters[0].x);
+  });
+
+  // Fix round 3 (ruling R-T16m), re-read in fix round 4 (ruling R-T16n): the Final Smash
+  // parts that travel, and on which frames, pinned, so that no `momentum` edit, a
+  // `MoveDef`'s or a script's own, changes who holds unseen. The frames are UNVERIFIED
+  // (above).
   it("travels in these Final Smash parts alone: Critical Hit's dash and Volt Tackle's", () => {
     const travel: Record<string, readonly (readonly [number, number])[]> = {};
     for (const d of FIGHTERS) {
       for (const move of Object.values(d.moves)) {
-        if (move?.final !== undefined && travelWindows(move).length > 0) travel[`${d.id} ${move.slot}`] = travelWindows(move);
+        if (move?.final !== undefined && travelWindows(d, move.slot).length > 0) travel[`${d.id} ${move.slot}`] = travelWindows(d, move.slot);
       }
     }
     expect(travel).toEqual({ "marth finalSmash": [[25, 70]], "pikachu finalSmash": [[47, 83]] });
@@ -1235,11 +1332,46 @@ describe("Zero Laser's start, clears and fringe beams (rulings R-T16c to R-T16e)
     // (325°, 14 above) passes over his head.
     expect(framesOf(hits, 12)).toEqual(Array.from({ length: 16 }, (_, k) => 86 + 8 * k));
     expect(framesOf(hits, 11)).toEqual([]);
-    // On the laser's 140 the end and both blasts land together: 5.5 + 2.5 + 2.5 = 10.5,
-    // SmashWiki "Samus (SSBU)"'s "10.5% (main blast)", each a fresh move's.
-    const on209 = [...hits.values()].flat().filter(([f]) => f === 209).map(([, d]) => d);
-    expect(on209.reduce((a, d) => a + d, 0)).toBeCloseTo(10.5 * FRESH, 1);
-    expect(on209).toHaveLength(3);
+    // On the laser's 140, the beam on the muzzle's axis (fix round 4, ruling R-T16o), the
+    // end and the lower blast land on a standing Mario, 5.5 + 2.5 = 8, SmashWiki "Samus
+    // (SSBU)"'s "8% (fringe blast)"; the upper blast (29 up) passes over him.
+    const blasts = (hs: Map<number, [number, number][]>) => [...hs.entries()].flatMap(([id, l]) => l.filter(([f]) => f === 209).map(([, d]) => [id, d] as const));
+    expect(blasts(hits).map(([id]) => id).sort((a, b) => a - b)).toEqual([10, 14]);
+    expect(blasts(hits).reduce((a, [, d]) => a + d, 0)).toBeCloseTo(8 * FRESH, 1);
+    // Held 6 up, he is inside all three: 5.5 + 2.5 + 2.5 = 10.5, SmashWiki's "10.5% (main
+    // blast)", each a fresh move's.
+    const held = runHeld(ready("samus", 90), 400, (s) => hold(s.fighters[1], s.fighters[0].x + fx(90), fx(6)));
+    const up = byBox(held.states, held.events);
+    expect(blasts(up).map(([id]) => id).sort((a, b) => a - b)).toEqual([10, 13, 14]);
+    expect(blasts(up).reduce((a, [, d]) => a + d, 0)).toBeCloseTo(10.5 * FRESH, 1);
+  });
+
+  /**
+   * Fix round 4 (ruling R-T16o): with the beam on the muzzle's axis (15 up, radius 5: 10
+   * to 20), a fighter standing in front of it is struck by the beam if it stands taller
+   * than 10, and by the lower fringe beam (1 up, radius 6: down to the floor) whatever
+   * its height. On the roster's own (unbaked) hurtboxes Kirby and Pikachu stand under the
+   * beam; UNVERIFIED: those hurtboxes' heights (the baked bodies are taller: Pikachu's is
+   * struck by the beam there, Kirby's is not). All are struck by the end on 140.
+   */
+  it("strikes every fighter standing in front of it: the lower fringe 16 times, the beam 13 times but for the two shortest, the end once", () => {
+    const struck: Record<string, [number, number, number]> = {};
+    for (const victim of FIGHTERS.map((f) => f.id)) {
+      const s = createInitialState("finalDestination", [{ defId: "samus" }, { defId: victim }, { defId: "fox" }], RULES, 6);
+      const xs = [fx(-30), fx(60), fx(-75)];
+      s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: xs[i], y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+      s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+      const standing = (st: GameState) => {
+        Object.assign(st.fighters[1], { x: st.fighters[0].x + fx(90), y: 0, grounded: true, platform: 0, ledge: null });
+        kineticClear(st.fighters[1]);
+      };
+      const played = runHeld(s, 400, standing);
+      const hits = byBox(played.states, played.events);
+      struck[victim] = [framesOf(hits, 9).length, framesOf(hits, 12).length, framesOf(hits, 10).length];
+    }
+    const tall: [number, number, number] = [13, 16, 1];
+    const short: [number, number, number] = [0, 16, 1];
+    expect(struck).toEqual({ mario: tall, donkeyKong: tall, link: tall, samus: tall, kirby: short, fox: tall, pikachu: short, marth: tall });
   });
 });
 
@@ -1286,15 +1418,19 @@ describe("the beams roll back across a misprediction between rehits", () => {
  */
 describe("the hold rolls back across a misprediction", () => {
   const FD_LEFT = FD_FLOOR.x - FD_FLOOR.halfWidth;
-  const rollsBack = (states: readonly GameState[], at: readonly number[], frames: number) => {
+  /** The others press shield and jump in turn; the user presses nothing. */
+  const othersWrong = (i: number): InputFrame[] => {
+    const alt = i % 2 === 0 ? Btn.Shield : Btn.Jump;
+    return [0, alt, alt];
+  };
+  const rollsBack = (states: readonly GameState[], at: readonly number[], frames: number, wrongKeys: (i: number) => InputFrame[] = othersWrong) => {
     for (const k of at) {
       const snapshot = states[k];
       const before = hashState(snapshot);
       let wrong = cloneState(snapshot);
       let prev: InputFrame[] = [0, 0, 0];
       for (let i = k + 1; i < k + 12; i++) {
-        const alt = i % 2 === 0 ? Btn.Shield : Btn.Jump;
-        const keys: InputFrame[] = [0, alt, alt];
+        const keys = wrongKeys(i);
         wrong = step(wrong, keys, { prevInputs: prev }).state;
         prev = keys;
       }
@@ -1333,6 +1469,42 @@ describe("the hold rolls back across a misprediction", () => {
     const { states } = run(s, 160);
     for (const k of at) expect(moveFrameOf(states[k].fighters[0].actionFrame)).toBeLessThan(id === "pikachu" ? 47 : 25);
     rollsBack(states, at, 160);
+  });
+
+  /**
+   * Fix round 4 (re-review 2, out of scope): the user's own port mispredicted. The wrong
+   * branch runs port 0 through eight button sets (jump, shield, attack, special, left and
+   * attack, right and jump, up and special, down and grab), with the others pressing
+   * shield and jump in turn, or alone. Snapshots in an aerial Jungle Rush's end after the
+   * launch, in Volt Tackle's and Critical Hit's held startups in the air, in Critical
+   * Hit's dash (where a special press ends it, `dashEnd`), and in both dashes' carry-on
+   * after their windows (ruling R-T16l, amended).
+   */
+  const USER_WRONG: readonly InputFrame[] = [Btn.Jump, Btn.Shield, Btn.Attack, Btn.Special, Btn.Left | Btn.Attack, Btn.Right | Btn.Jump, Btn.Up | Btn.Special, Btn.Down | Btn.Grab];
+  it.each([
+    ["the user's port and the others'", (i: number): InputFrame[] => [USER_WRONG[i % USER_WRONG.length], ...othersWrong(i).slice(1)]],
+    ["the user's port alone", (i: number): InputFrame[] => [USER_WRONG[i % USER_WRONG.length], 0, 0]],
+  ] as const)("mispredicting %s, across held windups, a dash, its carry-on and an aerial end part", (_, wrongKeys) => {
+    const dk = ready("donkeyKong", 18);
+    Object.assign(dk.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(150), jumpsUsed: 2 });
+    Object.assign(dk.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(150) });
+    const { states: rush } = runHeld(dk, 320, inFront);
+    const last = slots(rush, 0).lastIndexOf("finalEnd");
+    const launch = rush.findIndex((st, i) => i > 0 && rush[i - 1].fighters[1].action === "finalTrapped" && st.fighters[1].action !== "finalTrapped");
+    expect(last).toBeGreaterThan(launch + 10);
+    rollsBack(rush, [launch + 1, launch + 5, last - 2], 320, wrongKeys);
+    for (const [id, at, carry] of [
+      ["pikachu", [5, 30, 44], [90, 100]],
+      ["marth", [5, 20, 30], [75]],
+    ] as const) {
+      const s = ready(id, 0);
+      Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: FD_LEFT - fx(40), y: fx(40), facing: 1 });
+      Object.assign(s.fighters[1], { x: fx(60) });
+      Object.assign(s.fighters[2], { x: fx(70) });
+      const { states } = run(s, 160);
+      for (const k of carry) expect([states[k].fighters[0].move, moveFrameOf(states[k].fighters[0].actionFrame) > (id === "pikachu" ? 83 : 70)]).toEqual(["finalSmash", true]);
+      rollsBack(states, [...at, ...carry], 160, wrongKeys);
+    }
   });
 });
 

@@ -1101,16 +1101,16 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
     }
   });
 
-  it("fires the beam at its box's length and height: 12 to 162 ahead at 9 up, 10 high, on 81-208", () => {
-    for (const frame of [81, 85]) expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([{ x1: 12, x2: 162, y: 9, height: 10 }]);
+  it("fires the beam at its box's length and height: 12 to 162 ahead at 15 up, 10 high, on 81-208", () => {
+    for (const frame of [81, 85]) expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([{ x1: 12, x2: 162, y: 15, height: 10 }]);
   });
 
   it("adds samus_laser2's two fringe beams from 86, 14 above and 14 below it, 12 high", () => {
     for (const frame of [86, 150, 208]) {
       expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([
-        { x1: 12, x2: 162, y: 23, height: 12 },
-        { x1: 12, x2: 162, y: 9, height: 10 },
-        { x1: 12, x2: 162, y: -5, height: 12 },
+        { x1: 12, x2: 162, y: 29, height: 12 },
+        { x1: 12, x2: 162, y: 15, height: 10 },
+        { x1: 12, x2: 162, y: 1, height: 12 },
       ]);
     }
   });
@@ -1118,9 +1118,9 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
   it("ends in the three blasts, 209-216, at their boxes' sizes: the beam's 22 high, each fringe's 25", () => {
     for (const frame of [209, 216]) {
       expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([
-        { x1: 12, x2: 162, y: 23, height: 25 },
-        { x1: 12, x2: 162, y: 9, height: 22 },
-        { x1: 12, x2: 162, y: -5, height: 25 },
+        { x1: 12, x2: 162, y: 29, height: 25 },
+        { x1: 12, x2: 162, y: 15, height: 22 },
+        { x1: 12, x2: 162, y: 1, height: 25 },
       ]);
     }
     for (const frame of [217, 240, 263]) expect(laserAt(frame).strokes, `frame ${frame}`).toEqual([]);

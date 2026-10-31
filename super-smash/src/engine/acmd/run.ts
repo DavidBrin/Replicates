@@ -76,6 +76,28 @@ export function moveMomentum(def: Pick<FighterDef, "moves">, f: Pick<FighterStat
 }
 
 /**
+ * Every window of scripted movement `moveMomentum` applies to the move in `slot`, as
+ * game frames, from the first to the last it holds (Plan 5, Task 16 fix round 4, ruling
+ * R-T16n): the script's own `momentum` commands where it has any (the compiled legacy
+ * script's are its `MoveDef.momentum`), else, for an imported script that publishes
+ * none, the legacy move's `momentum`. One reading with `moveMomentum`, so a reader of
+ * a move's travel (`final.ts`, `travelWindows`) can never miss a script's own. Read off
+ * the schedule, so no frame is run.
+ */
+export function momentumWindows(def: Pick<FighterDef, "moves" | "scripts">, slot: MoveSlot): readonly (readonly [number, number])[] {
+  const script = gameScriptFor(def, slot);
+  if (script === null) return [];
+  if (!opsOf(script).has("momentum")) return (def.moves[slot]?.momentum ?? []).map((m) => [m.frame, m.frame + (m.hold ?? 0)] as const);
+  const { commands, fire } = scheduleOf(script);
+  const windows: (readonly [number, number])[] = [];
+  for (let i = 0; i < commands.length; i++) {
+    const c = commands[i];
+    if (c.op === "momentum") windows.push([fire[i], fire[i] + c.hold]);
+  }
+  return windows;
+}
+
+/**
  * Super armour this frame (Plan 5, Task 13): the script's, or, for a script
  * that never sets it, the legacy move's `superArmourFrames` window.
  */

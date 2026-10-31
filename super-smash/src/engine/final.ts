@@ -55,6 +55,7 @@
  * call across the cycle.
  */
 
+import { momentumWindows } from "./acmd/run";
 import { kineticClear } from "./kinetic";
 import { SMASH_BALL_HEALTH } from "./constants";
 import { fx } from "./fixed";
@@ -109,34 +110,41 @@ export function finalSmashActive(s: { readonly fighters: readonly FighterState[]
  * which can aid in recovery" (`refreshFinalJumps`): the user is let go when the move
  * ends. While a scene plays, it holds its user anyway (ruling R-T14d).
  *
- * The one exception is a part's travel, inside its `momentum` windows alone
- * (`travelWindows`; fix round 3, ruling R-T16l): the published dashes travel as they
- * do, and their windup and whatever follows the dash hold. SmashWiki "Critical Hit": "In
- * the air, the user will travel at high speed directly forward"; "Volt Tackle": it
- * "ignores edges", after it "Surrounds itself with electricity before dashing forwards"
- * (SmashWiki "Pikachu (SSBU)", ruling R-T15h). Which parts travel, and on which frames,
- * is pinned (`finalSmash.test.ts`, ruling R-T16m): today Critical Hit's dash and Volt
- * Tackle's alone.
+ * The one exception is a part that travels (`travelWindows`): it holds its user only
+ * before its first travel window, its windup, and from that window's first frame to the
+ * move's end keeps its normal kinetics, the travel and then whatever its status does with
+ * the speed and gravity (fix round 4, ruling R-T16l, amended; round 3 held after the
+ * window too). So a dash whiffed in the air carries on and falls, as published: SmashWiki
+ * "Critical Hit" (https://www.ssbwiki.com/Critical_Hit), "In the air, the user will
+ * travel at high speed directly forward", and "missing with this attack … in the air
+ * without any intervening terrain, usually results in a self-destruct"; "Volt Tackle"
+ * (https://www.ssbwiki.com/Volt_Tackle), "it is fairly easy to self-destruct off the side
+ * blast line if the player misses", after it "Surrounds itself with electricity before
+ * dashing forwards" (SmashWiki "Pikachu (SSBU)", ruling R-T15h). Which parts travel, and
+ * on which frames, is pinned (`finalSmash.test.ts`, ruling R-T16m): today Critical Hit's
+ * dash and Volt Tackle's alone.
  *
- * UNVERIFIED: the kinetics, no gravity and no movement at all outside a dash (no page
- * gives them); the height boost has no published size and is not modelled.
+ * UNVERIFIED: the kinetics, no gravity and no movement at all while held (no page gives
+ * them), and from a travel window on, the engine's ordinary ones (the window's speed
+ * handed on to drift, `applyMoveMomentum`, and gravity); the height boost has no
+ * published size and is not modelled.
  */
 export function holdsAloft(f: FighterState, def: FighterDef): boolean {
   if (f.grounded || f.action !== "special" || f.move === null) return false;
-  const move = def.moves[f.move];
-  if (move?.final === undefined) return false;
-  const frame = moveFrameOf(f.actionFrame);
-  return !travelWindows(move).some(([from, to]) => frame >= from && frame <= to);
+  if (def.moves[f.move]?.final === undefined) return false;
+  const windows = travelWindows(def, f.move);
+  return windows.length === 0 || moveFrameOf(f.actionFrame) < Math.min(...windows.map(([from]) => from));
 }
 
 /**
- * The move frames a Final Smash part travels on, instead of holding its user in the air
- * (`holdsAloft`): each `momentum` window, from its frame to the last it holds the speed
- * (Plan 5, Task 16 fix round 3, rulings R-T16l and R-T16m). None for a part with no
- * momentum.
+ * The move frames a Final Smash part travels on (`holdsAloft`): each window of the
+ * scripted movement the engine applies to it (`moveMomentum`), from its first frame to
+ * the last it holds the speed: a script's own `momentum` commands where it has any, else
+ * the move's `MoveDef.momentum` (`momentumWindows`; Plan 5, Task 16 fix rounds 3 and 4,
+ * rulings R-T16l, R-T16m and R-T16n). None for a part that never travels.
  */
-export function travelWindows(move: MoveDef): readonly (readonly [number, number])[] {
-  return (move.momentum ?? []).map((w) => [w.frame, w.frame + (w.hold ?? 0)] as const);
+export function travelWindows(def: Pick<FighterDef, "moves" | "scripts">, slot: MoveSlot): readonly (readonly [number, number])[] {
+  return momentumWindows(def, slot);
 }
 
 /**
