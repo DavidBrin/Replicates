@@ -620,7 +620,9 @@ const legacy: FighterDef = {
       // against the page's "If Donkey Kong lands from the aerial version before
       // undergoing helplessness" and SmashWiki "Donkey Kong (SSBU)"'s "offers almost
       // no vertical recovery"; as the gravity he tops out about 5.8 up and comes
-      // back down. That landing lands into the grounded one at its frame 63.
+      // back down (ruling R-T13b-b: this reading kept, on those two quotes; one field
+      // if a source later disagrees). That landing lands into the grounded one at its
+      // frame 63.
       fromAir: {
         totalFrames: 70,
         launch: { vy: fx(0.9) },

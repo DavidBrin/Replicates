@@ -256,6 +256,12 @@ export interface CombatState {
    */
   aimX: number;
   aimY: number;
+  /**
+   * Plan 5, Task 13b fix round 1 (ruling R-T13b-e): the up special's B-reverse has
+   * turned the fighter (`MoveDef.turn`; `upSpecial.ts`), which it does once a move.
+   * Per move, as `aimX`: cleared when the special starts and when it ends.
+   */
+  turned: boolean;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -307,6 +313,7 @@ export function emptyCombat(): CombatState {
     rebound: 0,
     aimX: 0,
     aimY: 0,
+    turned: false,
   };
 }
 
@@ -356,5 +363,6 @@ export function cloneCombat(c: CombatState): CombatState {
     rebound: c.rebound,
     aimX: c.aimX,
     aimY: c.aimY,
+    turned: c.turned,
   };
 }

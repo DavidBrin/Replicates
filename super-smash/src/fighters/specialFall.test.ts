@@ -130,9 +130,12 @@ describe("every up special's published special fall", () => {
     it(`${def.id}'s is ${PUBLISHED[def.id].url}'s`, () => {
       const p = PUBLISHED[def.id];
       const accel = p.airAccel !== undefined ? { airAccel: p.airAccel } : {};
-      expect(def.moves.upB?.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...(p.aerialOnly ? { aerialOnly: true } : {}), ...accel });
-      // An aerial up special of its own (Plan 5, Task 13b: Link's) falls the same way, begun in the air.
-      if (def.moves.upBAir !== undefined) expect(def.moves.upBAir.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...accel });
+      // An aerial up special of its own (Plan 5, Task 13b: Link's) carries the fall's
+      // published acceleration; the grounded one, helpless only if its platform goes,
+      // reads none (the Task 13b review's M-9: it was never read).
+      const own = def.moves.upBAir !== undefined;
+      expect(def.moves.upB?.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...(p.aerialOnly ? { aerialOnly: true } : {}), ...(own ? {} : accel) });
+      if (own) expect(def.moves.upBAir!.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...accel });
     });
   }
 

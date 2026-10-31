@@ -1021,6 +1021,15 @@ export interface MoveDef {
    * window live on it carries the fall.
    */
   readonly descentHold?: number;
+  /**
+   * Begun in the air with its aim pointing down (`CombatState.aimY` < 0), the move
+   * falls through soft platforms with the stick held down, as a plain fall does
+   * (Plan 5, Task 13b fix round 1, ruling R-T13b-d; `softDrop.ts`): SmashWiki
+   * "Platform" (https://www.ssbwiki.com/Platform), the up specials "of Fox, Falco,
+   * and Wolf when used in the air, which will pass down through soft platforms when
+   * directed at a downward angle". Any other special lands on them.
+   */
+  readonly softDropAimedDown?: boolean;
   /** What this move launches, if anything. See `ProjectileDef`. */
   readonly projectiles?: readonly ProjectileDef[];
 }

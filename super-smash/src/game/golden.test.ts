@@ -269,6 +269,11 @@ const MATCHES: readonly Match[] = [
  * into the aerials' `landingLag`. The projectile lab, appended after its 300 (ruling
  * R-T11a), now also tumbles Samus into `tumbleFall`, `downed` and `getUp`, which the
  * CPU matches and the states lab already reach. All 58 are visited.
+ * Plan 5 Task 13b's fix round 1 (the CPU's up special press holds Up from the frame
+ * it decides on; drop-through by status) adds no action. The four CPU matches reach
+ * 35 between them, down from 42: none pummels, throws, is grabbed or thrown,
+ * rebounds or is shield-stunned any more, which the script and the labs reach. All
+ * 58 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -798,6 +803,23 @@ describe("engine golden trace", () => {
   // Super Missile hits Link on 368 and the smash-thrown Boomerang hits Samus on 473
   // (`expectSmashSpecials`). So now: hits 34/32/22/19, 6, 0, 1, 4, 1 and 2; shield
   // hits 1/6/0/0, 3, 0, 0, 0, 0 and 0; KOs 1/0/1/1, 1, 2, 0, 0, 0 and 0.
+  // Plan 5 Task 13b's fix round 1 (the CPU's up special press holds Up and never
+  // Down from the frame it decides on until the special comes out, a buffered press
+  // included, ruling R-T13b-c; a soft platform dropped through only in a fall, a
+  // jump, special fall, a tumble's fall out of hitstun or a Fire Fox aimed down,
+  // R-T13b-d; a B-reverse turns the speed round with the fighter, once, R-T13b-e;
+  // the aerial up special stales as the up special, R-T13b-f) moved the four CPU
+  // matches, each on the first frame a CPU that had decided on its up special held
+  // Up where it used to drift: mario-fox on 262 (the 201-300 sample),
+  // donkeyKong-pikachu on 1190 (1101-1200), link-samus on 1341 (1301-1400) and
+  // kirby-marth on 802 (801-900). Hits 18, 32, 25 and 26; shield hits 0, 6, 0 and 0;
+  // KOs 2, 0, 0 and 1 (were 34/32/22/19, 1/6/0/0 and 1/0/1/1): Mario twice in
+  // special fall, his up special each time buffered through a forward air that
+  // carried him under Battlefield's stage (frames 368 and 1671; the first came out a
+  // Cape before), and Marth by a hit, tumbling at 105%. The script and the five labs
+  // are byte-identical (the projectile lab's 600 frames untouched, ruling R-T11a). So
+  // now: hits 18/32/25/26, 6, 0, 1, 4, 1 and 2; shield hits 0/6/0/0, 3, 0, 0, 0, 0
+  // and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

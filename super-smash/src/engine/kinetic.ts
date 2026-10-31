@@ -704,6 +704,21 @@ export function kineticMotion(f: FighterState, vx: number, vy: number): void {
 }
 
 /**
+ * A B-reverse's speed (Plan 5, Task 13b fix round 1, ruling R-T13b-e): the fighter's
+ * own horizontal energies, drift, stop and a move's scripted momentum, turned round
+ * with it. SmashWiki "B-reversing" (https://www.ssbwiki.com/B-reversing): "turning
+ * around and reversing their momentum". UNVERIFIED: a launch's speed (DAMAGE) is
+ * left as it was; it is not the fighter's own momentum, and no source says.
+ */
+export function kineticReverseX(f: FighterState): void {
+  const k = f.kinetic;
+  k.controlX = -k.controlX;
+  k.stopX = -k.stopX;
+  k.motionX = -k.motionX;
+  kineticSum(f);
+}
+
+/**
  * The hold is over: the velocity it left becomes drift and gravity's to change.
  * A no-op when MOTION is already zero, so it is safe to call whenever no hold is live.
  */

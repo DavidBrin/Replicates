@@ -868,8 +868,10 @@ const legacy: FighterDef = {
       // https://www.ssbwiki.com/Dolphin_Slash: "After jumping up, Marth stalls in the
       // air for some time before he starts falling"), and then "Gravity after jump
       // 0.06". Handing the 3.5 on rose him 117. "Aerial height multiplier 1.1". The
-      // stick read on frame 5 aims it: "Stick sensitivity to angle 0.5", "Maximum
-      // angle deviation 20°". No reverse is published for Ultimate.
+      // stick read on frame 5 aims it (UNVERIFIED: the page publishes no frame the
+      // angle is decided on; 5 is the rise's first, Task 13b review's M-1): "Stick
+      // sensitivity to angle 0.5", "Maximum angle deviation 20°". No reverse is
+      // published for Ultimate.
       momentum: [{ frame: 5, x: fx(0.6), y: fx(3.5), hold: 14, aimAt: 5, endSpeed: { y: 0 } }],
       aim: { kind: "tilt", max: fx(20) },
       rise: { ground: fx(1), air: fx(1.1) },

@@ -793,8 +793,9 @@ const legacy: FighterDef = {
       // (fix round 1): SmashWiki "Helpless" (https://www.ssbwiki.com/Helpless),
       // "Spin Attack makes Link ... helpless after the move was used if in the
       // air"; the grounded one only if its platform goes. Begun in the air it is
-      // `upBAir` now (Task 13b), which carries its own.
-      helpless: { landingLag: 30, airSpeed: fx(0.909), aerialOnly: true, airAccel: fx(0.025) },
+      // `upBAir` now (Task 13b), which carries its own, the fall's acceleration with
+      // it (fix round 1: the Task 13b review's M-9, never read here).
+      helpless: { landingLag: 30, airSpeed: fx(0.909), aerialOnly: true },
       hitboxes: [
         {
           id: 0,

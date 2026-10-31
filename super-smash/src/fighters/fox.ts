@@ -766,6 +766,13 @@ const legacy: FighterDef = {
       // skyward"). The legacy dash fired on frame 20, at a fixed 73°.
       momentum: [{ frame: 43, x: 0, y: fx(3.8), hold: 30, aimAt: 30, decel: { after: 6, by: fx(0.1) } }],
       aim: { kind: "octant" },
+      // Aimed down from the air it falls through soft platforms, Down held (Plan 5,
+      // Task 13b fix round 1, ruling R-T13b-d): SmashWiki "Platform"
+      // (https://www.ssbwiki.com/Platform), the up specials "of Fox, Falco, and Wolf
+      // when used in the air, which will pass down through soft platforms when
+      // directed at a downward angle". UNVERIFIED: that it needs Down held as every
+      // other drop does; the page says only "directed at a downward angle".
+      softDropAimedDown: true,
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Fox (SSBU)/Up special"
       // (https://www.ssbwiki.com/Fox_(SSBU)/Up_special): "Helplessness air speed
       // multiplier 0.85", "Landing lag 20 frames"; UltimateFrameData's 20

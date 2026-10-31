@@ -894,7 +894,9 @@ const legacy: FighterDef = {
       // descent, the legacy -3.4 (UNVERIFIED), falls on until he lands (`descentHold`;
       // SmashWiki "Helpless", https://www.ssbwiki.com/Helpless: "the move does not end
       // until Kirby lands on the ground, grabs the edge of a stage, or bypasses the
-      // lower blast line"), on frame 49, its descending hit's last.
+      // lower blast line"), on frame 49, its descending hit's last (UNVERIFIED: the
+      // page gives "Hit 2, clean 41-49 / late 50-52" at ground level and no frame the
+      // fall holds on; holding the clean hit's last is a choice, Task 13b review's M-1).
       momentum: [
         { frame: 3, x: 0, y: fx(3.2), hold: 12, endSpeed: { y: 0 } },
         { frame: 24, x: fx(0.2), y: fx(-3.4), hold: 26 },

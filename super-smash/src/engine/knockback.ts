@@ -487,6 +487,20 @@ export interface Staleness {
 }
 
 /**
+ * The slot a move stales as, where it is a version of another (Plan 5, Task 13b fix
+ * round 1, ruling R-T13b-f): an aerial up special of its own (Link's Spin Attack in
+ * the air) is the up special's. SmashWiki "Stale Moves"
+ * (https://www.ssbwiki.com/Stale_Moves): "any variation of the same special move
+ * counts as the same move". Read by slot, for every fighter alike.
+ */
+export const STALES_AS: Readonly<Partial<Record<MoveSlot, MoveSlot>>> = { upBAir: "upB" };
+
+/** The slot `slot` joins and is looked up in the stale queue as (`STALES_AS`). */
+export function staleSlot(slot: MoveSlot): MoveSlot {
+  return STALES_AS[slot] ?? slot;
+}
+
+/**
  * Ultimate's nine-slot staleness queue, and the reason its combos stay real.
  *
  * Damage takes the full reduction, but knockback is computed from a damage value
@@ -512,8 +526,9 @@ export function computeStaleness(
   let reduction = 0;
   let present = false;
   const n = Math.min(queue.length, STALE_QUEUE_LENGTH);
+  const as = staleSlot(slot);
   for (let i = 0; i < n; i++) {
-    if (queue[i] !== slot) continue;
+    if (staleSlot(queue[i]) !== as) continue;
     present = true;
     const [num, den] = shieldQueue[i] === true ? STALE_SHIELD_RATIO : ([1, 1] as const);
     reduction += (STALE_SLOT_REDUCTION_1E5[i] * num * STALE_SHIELD_RATIO[1]) / den;

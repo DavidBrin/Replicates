@@ -67,6 +67,7 @@ import {
   knockbackToVelocity,
   launchWorldAngle,
   resolveAngle,
+  staleSlot,
 } from "./knockback";
 import {
   SMASH_BALL_TARGET,
@@ -107,6 +108,7 @@ import { pinHeldFighters, ridesCaptor } from "./held";
 import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
 import { stopsAtEdge } from "./groundExit";
+import { dropsThroughSoft } from "./softDrop";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -819,8 +821,13 @@ export function step(
       // The statuses that stop at the edge instead of sliding off it: the catch
       // statuses, the shield, the rolls, a waveland, a grounded attack's own movement
       // (`GROUND_EXIT`, `stopsAtEdge`; Plan 5, Task 12 fix rounds 2 and 3).
-      // Holding down in the air falls through a soft platform (`dropsThroughSoft`).
-      { cliffStop: stopsAtEdge(f, outward), ecb, ...(dropsThroughSoft(f, intents[i]) ? { passThroughSoft: true } : {}) },
+      // Holding down in the air falls through a soft platform, in the statuses that
+      // do (`SOFT_DROP`, `dropsThroughSoft`; ruling R-T13b-d).
+      {
+        cliffStop: stopsAtEdge(f, outward),
+        ecb,
+        ...(dropsThroughSoft(f, f.move === null ? undefined : defs[i].moves[f.move], intents[i]) ? { passThroughSoft: true } : {}),
+      },
     );
     // A wall that stopped the body is remembered for a wall jump, or a wall tech
     // jump (Plan 5, Task 10), before the tech below reads it.
@@ -2436,7 +2443,8 @@ function hitReachesShield(victim: FighterState, victimDef: FighterDef, c: Candid
 function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield: boolean): void {
   if (slot === null || attacker.combat.swingQueued) return;
   attacker.combat.swingQueued = true;
-  attacker.staleQueue.unshift(slot);
+  // A version of another move joins as that move (`STALES_AS`, ruling R-T13b-f).
+  attacker.staleQueue.unshift(staleSlot(slot));
   attacker.combat.staleShield.unshift(onShield);
   if (attacker.staleQueue.length > STALE_QUEUE_LENGTH) attacker.staleQueue.length = STALE_QUEUE_LENGTH;
   if (attacker.combat.staleShield.length > STALE_QUEUE_LENGTH) {
@@ -3272,16 +3280,4 @@ export function resolveOutcome(s: GameState): GameState["outcome"] {
 /** Distance between two fighters, for the CPU and the camera. */
 export function fighterDistance(a: FighterState, b: FighterState): number {
   return abs(a.x - b.x) + abs(a.y - b.y);
-}
-
-/**
- * Whether `f`, in the air, falls through soft platforms this frame (Plan 5, Task
- * 13b): with the stick held down, in any falling state but a reel. SmashWiki
- * "Helpless" (https://www.ssbwiki.com/Helpless): "holding down to drop through
- * them"; the ability to fall through soft platforms "Starting in Super Smash Bros.
- * Melee, this can be done at any time (not just when a character is helpless)".
- * UNVERIFIED: that hitstun keeps a fighter on them (a reel reads no stick here).
- */
-export function dropsThroughSoft(f: Pick<FighterState, "grounded" | "hitstun">, intent: Pick<Intent, "y">): boolean {
-  return !f.grounded && f.hitstun <= 0 && intent.y < 0;
 }

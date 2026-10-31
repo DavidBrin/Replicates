@@ -179,6 +179,7 @@ function clearSpecialMove(f: FighterState): void {
   f.combat.stoneEndedAir = false;
   f.combat.aimX = 0;
   f.combat.aimY = 0;
+  f.combat.turned = false;
 }
 
 export const STATUS_SPECIAL: FighterStatus = {

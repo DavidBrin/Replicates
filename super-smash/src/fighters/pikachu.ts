@@ -740,7 +740,9 @@ const legacy: FighterDef = {
       // at "Travel speed multiplier for second dash 0.9": 55 and 49.5 units (was 157
       // sideways), on its hit's frames, 15-19 and 29-33. Each goes the way the stick
       // points (`aim` "legs", "Stick sensitivity to choose an angle 0.5"), the first
-      // read as it starts, up with the stick at rest (SmashWiki "Quick Attack",
+      // read as it starts (UNVERIFIED: on frame 15, the leg's first; the page
+      // publishes a frame only for the second, Task 13b review's M-1), up with the
+      // stick at rest (SmashWiki "Quick Attack",
       // https://www.ssbwiki.com/Quick_Attack: "in the direction in which the player's
       // control stick is tilted, or upwards if it is not tilted"), the second on the
       // "Earliest continuable (hit 1 → 2) 20" frame, refused unless it turns at least

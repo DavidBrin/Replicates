@@ -15,6 +15,7 @@
 import type { ActiveMomentum } from "./acmd/interpreter";
 import { DIAGONAL, ONE, cosDeg, magnitude, mul, sinDeg } from "./fixed";
 import { moveFrameOf } from "./hitbox";
+import { kineticReverseX } from "./kinetic";
 import type { FighterParams } from "./params";
 import type { FighterState, MoveAim, MoveDef, MoveLaunch, MoveMomentum, MovePhase } from "./types";
 
@@ -82,11 +83,21 @@ function stickAim(s: Stick): { x: number; y: number } {
  * held back inside the move's `turn` window it turns the fighter round, and on
  * an aimed window's `aimAt` frame it is read as that window's aim. The turn
  * comes first, so an aim read on the same frame reads it the new way round.
+ *
+ * The turn is a B-reverse (fix round 1, ruling R-T13b-e): it turns the fighter's
+ * horizontal speed round with it (`kineticReverseX`), and comes once a move, so a
+ * stick wiggled inside the window does not turn it back (`CombatState.turned`).
+ * SmashWiki "B-reversing" (https://www.ssbwiki.com/B-reversing): "turning around
+ * and reversing their momentum".
  */
 export function upSpecialStick(f: FighterState, move: MoveDef, s: Stick): void {
   const frame = moveFrameOf(f.actionFrame);
   const turn = move.turn;
-  if (turn !== undefined && frame >= turn[0] && frame <= turn[1] && s.x !== 0 && s.x !== f.facing) f.facing = s.x;
+  if (turn !== undefined && !f.combat.turned && frame >= turn[0] && frame <= turn[1] && s.x !== 0 && s.x !== f.facing) {
+    f.facing = s.x;
+    f.combat.turned = true;
+    kineticReverseX(f);
+  }
   const aim = move.aim;
   if (aim === undefined) return;
   let before: MoveMomentum | undefined;

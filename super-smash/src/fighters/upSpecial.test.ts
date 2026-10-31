@@ -20,7 +20,8 @@ import { hashState } from "@/engine/hash";
 import { fighterParams } from "@/engine/params";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { FighterState, GameState, InputFrame, MatchRules, StageDef } from "@/engine/types";
+import type { FighterState, GameState, InputFrame, MatchRules, MoveSlot, StageDef } from "@/engine/types";
+import { computeStaleness } from "@/engine/knockback";
 import { STAGES } from "@/stages";
 import { battlefield } from "@/stages/battlefield";
 import { finalDestination } from "@/stages/finalDestination";
@@ -134,7 +135,9 @@ describe("each up special lasts as published", () => {
   it("Kirby's Final Cutter falls on until it lands (SmashWiki Helpless: 'the move does not end until Kirby lands on the ground')", () => {
     const fs = me(upB(scene("kirby"), 200));
     expect(endsAt(fs)).toBe(-1);
-    // Its fall is the descent's, on every frame of the hold.
+    // Its fall is the descent's, on every frame of the hold. UNVERIFIED: the frame it
+    // holds, 49, its clean descending hit's last ("Hit 2, clean 41-49" at ground
+    // level); the page names no frame the fall holds on.
     expect(fs.slice(60).every((f) => f.vy === fs[60].vy && f.vy < 0)).toBe(true);
   });
 });
@@ -142,6 +145,8 @@ describe("each up special lasts as published", () => {
 describe("the up specials' angles", () => {
   // "Stick sensitivity to angle 0.5", "Maximum angle deviation 12°" (Mario) and
   // 20° (Marth): full deflection turns the rise by the maximum toward the stick.
+  // UNVERIFIED: the frame the stick is read on, Mario's 4 and Marth's 5 (each rise's
+  // first frame); neither page publishes an angle-decision frame.
   for (const [id, max, frame] of [
     ["mario", 12, 5],
     ["marth", 20, 6],
@@ -150,6 +155,12 @@ describe("the up specials' angles", () => {
       const straight = heading(me(upB(scene(id), frame))[frame - 1]);
       const forward = heading(me(upB(scene(id), frame, () => Btn.Right))[frame - 1]);
       expect(forward - straight).toBeCloseTo(max, 0);
+      // Facing left, the stick held its way (forward) turns it forward too: the
+      // same 12° or 20°, mirrored.
+      const leftStraight = heading(me(upB(scene(id, { facing: -1 }), frame))[frame - 1]);
+      const leftForward = heading(me(upB(scene(id, { facing: -1 }), frame, () => Btn.Left))[frame - 1]);
+      expect(leftStraight).toBeCloseTo(-straight, 1);
+      expect(leftForward - leftStraight).toBeCloseTo(-max, 0);
       // Held back, it turns away: Marth has no published reverse, so he keeps
       // facing right and angles back by the maximum.
       if (id === "marth") {
@@ -226,8 +237,8 @@ describe("the up specials' angles", () => {
   });
 
   it("Pikachu's two legs each go the way the stick points, 55 then 49.5 units (Dash travel speed 11, Dash duration 5 frames, Travel speed multiplier for second dash 0.9)", () => {
-    // Leg 1 up-right (read on its first frame, 15), leg 2 left (read on 20,
-    // Earliest continuable 20).
+    // Leg 1 up-right (read on its first frame, 15: UNVERIFIED, the page publishes a
+    // frame for the second leg only), leg 2 left (read on 20, Earliest continuable 20).
     const fs = me(upB(scene("pikachu"), 34, (i) => (i < 19 ? Btn.Up | Btn.Right : Btn.Left)));
     const leg1 = [units(fs[18].x - fs[13].x), units(fs[18].y - fs[13].y)];
     expect(Math.hypot(leg1[0], leg1[1])).toBeCloseTo(55, 0);
@@ -262,8 +273,32 @@ describe("the up specials' control and reversal", () => {
     expect(on4[5].facing).toBe(1);
   });
 
+  it("Mario does not turn on frames 1 and 2, before his window (Optional reverse 3)", () => {
+    const early = me(upB(scene("mario"), 6, (i) => (i < 2 ? Btn.Left : 0)));
+    expect(early.map((f) => f.facing)).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+
+  it("a reverse turns the fighter and its horizontal speed with it, once a move (SmashWiki B-reversing: 'turning around and reversing their momentum')", () => {
+    // Samus leaves at 0.35 forward on frame 1; the stick back on frame 2 turns her,
+    // and her 0.35 becomes 0.35 the other way, which her drift then adds to.
+    const turned = me(upB(scene("samus"), 4, (i) => (i === 1 ? Btn.Left : 0)));
+    expect(units(turned[0].vx)).toBeCloseTo(0.35, 3);
+    expect(turned[1].facing).toBe(-1);
+    expect(units(turned[1].vx)).toBeLessThan(-0.33);
+    // The stick wiggled back and forth inside the window (frames 1-4) turns her once.
+    const wiggled = me(upB(scene("samus"), 6, (i) => (i === 1 || i === 3 ? Btn.Left : i === 2 ? Btn.Right : 0)));
+    expect(wiggled.map((f) => f.facing)).toEqual([1, -1, -1, -1, -1, -1]);
+    // Once a move, not once ever: a turn left over from an earlier one is cleared
+    // when the special starts (`clearSpecialMove`).
+    const before = scene("samus");
+    before.fighters[0].combat.turned = true;
+    expect(me(upB(before, 3, (i) => (i === 1 ? Btn.Left : 0)))[1].facing).toBe(-1);
+  });
+
   for (const id of ["samus", "kirby"] as const) {
     it(`${id} turns round with the stick held back as the move starts (Stick sensitivity to reverse 0.25; UNVERIFIED window: frames 1-4)`, () => {
+      // On the press itself, frame 1: the stick is read as the move starts.
+      expect(me(upB(scene(id), 3, () => Btn.Left))[0].facing).toBe(-1);
       expect(me(upB(scene(id), 3, () => Btn.Left))[2].facing).toBe(-1);
       expect(me(upB(scene(id), 8, (i) => (i === 5 ? Btn.Left : 0)))[7].facing).toBe(1);
     });
@@ -291,6 +326,13 @@ describe("the up specials' control and reversal", () => {
     expect(top).toBeGreaterThan(5);
     expect(top).toBeLessThan(7);
     expect(units(fs[39].vy)).toBeLessThan(0);
+  });
+
+  it("Donkey Kong's grounded spin, let go, slows by 0.015 a frame, and by 0.04 after its last hit (Ground friction 0.015; Ground friction after last hit 0.04)", () => {
+    const early = me(upB(scene("donkeyKong", { grounded: true }, "finalDestination"), 34, (i) => (i < 30 ? Btn.Right : 0)));
+    expect(units(early[31].vx - early[30].vx)).toBeCloseTo(-0.015, 3);
+    const late = me(upB(scene("donkeyKong", { grounded: true }, "finalDestination"), 74, (i) => (i < 70 ? Btn.Right : 0)));
+    expect(units(late[71].vx - late[70].vx)).toBeCloseTo(-0.04, 3);
   });
 
   it("Donkey Kong steers on the ground at 0.034 a frame up to 1.1 (Ground acceleration 0.034, Maximum ground speed 1.1)", () => {
@@ -429,44 +471,138 @@ describe("Link's Spin Attack charge (SmashWiki: Charges between 3-4, Maximum cha
 });
 
 describe("dropping through a soft platform", () => {
-  // SmashWiki "Helpless" (https://www.ssbwiki.com/Helpless): "holding down to drop
-  // through them"; falling through soft platforms "Starting in Melee, this can be
-  // done at any time (not just when a character is helpless)".
-  const above = (action: FighterState["action"], down: boolean): FighterState[] => {
-    const s = scene("mario", { action, x: 0, y: fx(52), vy: fx(-1) }, "battlefield");
-    if (action === "specialFall") s.fighters[0].combat.helplessMove = "upB";
+  // SmashWiki "Platform" (https://www.ssbwiki.com/Platform), Soft platforms:
+  // "Airborne characters may pass through a soft platform from above by holding
+  // down on the control stick as they approach it"; "Characters performing aerial
+  // attacks, including stall-then-fall maneuvers, cannot fall through soft
+  // platforms during the attack. Most special moves also follow this rule, with
+  // exceptions such as ... the up special moves of Fox, Falco, and Wolf when used in
+  // the air, which will pass down through soft platforms when directed at a downward
+  // angle"; "tumbling and reeling characters ... will land in a lying position upon a
+  // soft platform if they contact it from above" (ruling R-T13b-d).
+  const top = battlefield.platforms.find((p) => p.soft && p.x === 0)!.y;
+  /** `id` over Battlefield's top platform as `over` puts it, `input(i)` held each frame; every frame. */
+  const over = (id: string, over: Partial<FighterState>, input: (i: number) => InputFrame, frames = 40): FighterState[] => {
+    const s = scene(id, { x: 0, y: fx(52), vy: fx(-1), ...over }, "battlefield");
+    if (over.action === "specialFall") s.fighters[0].combat.helplessMove = "upB";
     const out: GameState[] = [];
     let state = s;
     let prev: readonly InputFrame[] = [0, 0];
-    for (let i = 0; i < 30; i++) {
-      const now = [down ? Btn.Down : 0, 0];
+    for (let i = 0; i < frames; i++) {
+      const now = [input(i), 0];
       state = step(state, now, { prevInputs: prev }).state;
       prev = now;
       out.push(state);
     }
     return me(out);
   };
-  const top = battlefield.platforms.find((p) => p.soft && p.x === 0)!.y;
+  /** It came down on the platform, and never below it. */
+  const landedOnTop = (fs: readonly FighterState[]): boolean => fs.some((f) => f.grounded && f.y === top) && fs.every((f) => f.y >= top);
+  const passed = (fs: readonly FighterState[]): boolean => fs.some((f) => f.y < top - fx(5));
 
   for (const action of ["fall", "specialFall"] as const) {
     it(`a fighter in ${action} holding down passes through; one not holding it lands`, () => {
-      expect(above(action, false).some((f) => f.grounded && f.y === top)).toBe(true);
-      expect(above(action, true).some((f) => f.grounded && f.y === top)).toBe(false);
+      expect(landedOnTop(over("mario", { action }, () => 0))).toBe(true);
+      expect(passed(over("mario", { action }, () => Btn.Down))).toBe(true);
     });
   }
 
-  it("a fighter still reeling in hitstun does not: it meets the platform, Down held or not (UNVERIFIED: a reel reads no stick here)", () => {
-    const s = scene("mario", { action: "tumble", x: 0, y: fx(52), vy: fx(-1), hitstun: 40 }, "battlefield");
+  it("a jump passes through once it comes down, Down held", () => {
+    expect(passed(over("mario", { action: "jump", vy: fx(-1) }, () => Btn.Down))).toBe(true);
+    // A jump turns to a fall when it stops rising (`airMain`), so the jump's own row
+    // is met on its apex frame: still rising as its status runs, then coming down
+    // through the platform as it moves.
+    const apex = over("mario", { action: "jump", y: top + fx(0.03), vy: fx(0.01) }, () => Btn.Down, 10);
+    expect(apex[0].grounded).toBe(false);
+    expect(apex[0].y).toBeLessThan(top);
+  });
+
+  it("an aerial attack does not: Mario's and Link's down airs land on it, Down held", () => {
+    for (const id of ["mario", "link"]) {
+      const fs = over(id, {}, (i) => (i === 0 ? Btn.Down | Btn.Attack : Btn.Down));
+      expect(fs[1].action, id).toBe("attack");
+      expect(landedOnTop(fs), id).toBe(true);
+    }
+  });
+
+  it("a special does not: Kirby's Stone and Final Cutter's descent land on it, Down held", () => {
+    const stone = over("kirby", { y: fx(70) }, (i) => (i === 0 ? Btn.Down | Btn.Special : Btn.Down), 80);
+    expect(stone[1].move).toBe("downB");
+    expect(landedOnTop(stone)).toBe(true);
+    // Final Cutter from 30 above, then Down held through its fall.
+    const cutter = over("kirby", { y: fx(55) }, (i) => (i === 0 ? Btn.Up | Btn.Special : Btn.Down), 120);
+    expect(cutter[1].move).toBe("upB");
+    expect(landedOnTop(cutter)).toBe(true);
+  });
+
+  it("Fox's Fire Fox aimed down passes through (the page's named exception)", () => {
+    // Started 20 over it, aimed down on frame 30; the dash from 43 goes on down.
+    const fs = over("fox", { y: fx(68) }, (i) => (i === 0 ? Btn.Up | Btn.Special : Btn.Down), 70);
+    expect(fs[50].action).toBe("special");
+    expect(fs[50].combat.aimY).toBeLessThan(0);
+    expect(passed(fs)).toBe(true);
+  });
+
+  it("Fox's Fire Fox does not before it is aimed down: its charge lands on it, Down held", () => {
+    // Started 1 over it: the charge sinks from frame 13 (Startup gravity 0.015) and
+    // meets the platform before the aim is read on 30.
+    const fs = over("fox", { y: top + fx(1), vy: 0 }, (i) => (i === 0 ? Btn.Up | Btn.Special : Btn.Down), 30);
+    expect(fs[1].move).toBe("upB");
+    expect(fs.every((f) => f.y >= top)).toBe(true);
+    expect(fs.some((f) => f.grounded && f.y === top)).toBe(true);
+  });
+
+  it("Fox's Fire Fox begun on the ground does not (the page's 'when used in the air')", () => {
+    // From the top platform, aimed down-right on frame 30: it dashes off the edge and
+    // down onto the right one (Battlefield's lower platforms, 27.2 up), Down held.
+    const s = scene("fox", { x: fx(5), y: top, grounded: true, platform: battlefield.platforms.findIndex((p) => p.soft && p.x === 0) }, "battlefield");
     let state = s;
     let prev: readonly InputFrame[] = [0, 0];
-    let lowest = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < 20; i++) {
-      const now = [Btn.Down, 0];
+    const fs: FighterState[] = [];
+    for (let i = 0; i < 60; i++) {
+      const now = [i === 0 ? Btn.Up | Btn.Special : i < 31 ? Btn.Down | Btn.Right : Btn.Down, 0];
       state = step(state, now, { prevInputs: prev }).state;
       prev = now;
-      lowest = Math.min(lowest, state.fighters[0].y);
+      fs.push(state.fighters[0]);
     }
-    expect(lowest).toBeGreaterThanOrEqual(top);
+    const lower = battlefield.platforms.find((p) => p.soft && p.x > 0)!;
+    expect(fs[30].combat.aimY).toBeLessThan(0);
+    expect(fs.some((f) => !f.grounded && f.y < top)).toBe(true);
+    expect(fs.some((f) => f.grounded && f.y === lower.y)).toBe(true);
+    expect(fs.every((f) => f.y >= lower.y)).toBe(true);
+  });
+
+  it("a tumble's fall, out of hitstun, does: Down held, it passes through", () => {
+    expect(passed(over("mario", { action: "tumbleFall", hitstun: 0 }, () => Btn.Down))).toBe(true);
+  });
+
+  it("an air dodge does not (UNVERIFIED: no source lets one through)", () => {
+    expect(landedOnTop(over("mario", { action: "airDodge", vy: fx(-2) }, () => Btn.Down))).toBe(true);
+  });
+
+  it("a fighter still reeling in hitstun does not: it meets the platform, Down held or not", () => {
+    const fs = over("mario", { action: "tumble", hitstun: 40 }, () => Btn.Down, 20);
+    expect(fs.every((f) => f.y >= top)).toBe(true);
+  });
+
+  it("rolls back across a down air landing on it: a snapshot before the landing replays to the same hash", () => {
+    const s = scene("mario", { x: 0, y: fx(60), vy: fx(-1) }, "battlefield");
+    const input = (i: number): InputFrame => (i === 0 ? Btn.Down | Btn.Attack : Btn.Down);
+    const run = (from: GameState, i0: number, n: number): GameState => {
+      let state = from;
+      let prev: readonly InputFrame[] = [i0 === 0 ? 0 : input(i0 - 1), 0];
+      for (let i = i0; i < i0 + n; i++) {
+        const now = [input(i), 0];
+        state = step(state, now, { prevInputs: prev }).state;
+        prev = now;
+      }
+      return state;
+    };
+    const mid = run(s, 0, 4);
+    expect(mid.fighters[0].action).toBe("attack");
+    const a = run(cloneState(mid), 4, 30);
+    expect(a.fighters[0].y).toBe(top);
+    expect(hashState(run(cloneState(mid), 4, 30))).toBe(hashState(a));
   });
 });
 
@@ -499,4 +635,27 @@ describe("rollback through an up special", () => {
       expect(hashState(on(snap))).toBe(hashState(on(frames[cut - 1])));
     });
   }
+});
+
+describe("Link's aerial Spin Attack stales as his Spin Attack (ruling R-T13b-f)", () => {
+  // SmashWiki "Stale Moves" (https://www.ssbwiki.com/Stale_Moves): "any variation of
+  // the same special move counts as the same move".
+  it("joins the stale queue as the up special", () => {
+    // Mario in the air beside him, where the first front hit (frames 8-9, 10 up and
+    // 11.25 ahead) comes out.
+    const s = scene("link", { x: fx(-8), y: fx(4), facing: 1 }, "finalDestination");
+    Object.assign(s.fighters[1], { x: fx(4), y: fx(20), facing: -1, action: "fall", grounded: false, platform: -1 });
+    const fs = upB(s, 14);
+    const hit = fs.find((st) => st.fighters[0].staleQueue.length > 0);
+    expect(hit, "the aerial spin hits Mario").toBeDefined();
+    expect(hit!.fighters[0].move).toBe("upBAir");
+    expect(hit!.fighters[0].staleQueue[0]).toBe("upB");
+  });
+
+  it("is as stale as the up special after either one", () => {
+    const after = (queue: MoveSlot[], slot: MoveSlot) => computeStaleness(queue, slot);
+    expect(after(["upB"], "upBAir")).toEqual(after(["upB"], "upB"));
+    expect(after(["upBAir"], "upB")).toEqual(after(["upB"], "upB"));
+    expect(after(["upB"], "upBAir").damage).toBeLessThan(fx(1));
+  });
 });

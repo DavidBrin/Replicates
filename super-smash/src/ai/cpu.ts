@@ -27,8 +27,9 @@
  */
 
 import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
+import { BUFFER_FRAMES } from "@/engine/constants";
 import { nextRandom } from "@/engine/fixed";
-import type { AirDodgeAttributes, FighterDef, GameState, InputFrame } from "@/engine/types";
+import type { AirDodgeAttributes, FighterDef, FighterState, GameState, InputFrame } from "@/engine/types";
 import {
   BEHAVIOURS,
   DECISION_ROLLS,
@@ -45,6 +46,7 @@ import {
   type RecoveryMove,
   type StageView,
   observe,
+  upBHold,
 } from "./behaviours";
 
 /** Ultimate's CPU levels. Anything outside is clamped. */
@@ -227,10 +229,24 @@ export function decideCpu(
   // the stage — and it is cheaper and more honest than deliberately aiming
   // badly. Level 9 never fumbles.
   if (rolls[ROLL_FUMBLE] < tuning.fumbleChance) {
-    return { input: 0, seed, behaviour: bestName, scores };
+    return { input: specialPending(self, state.frame) ? upBHold(0) : 0, seed, behaviour: bestName, scores };
   }
 
-  return { input: bestInput, seed, behaviour: bestName, scores };
+  return { input: specialPending(self, state.frame) ? upBHold(bestInput) : bestInput, seed, behaviour: bestName, scores };
+}
+
+/**
+ * A Special press still in the fighter's buffer for the next frame: only the up
+ * special's (`recover` is the one behaviour that presses Special). Whatever wins
+ * the frame, or a fumble, it fires holding Up and never Down, never on a stick
+ * that would make it a side or a neutral special (ruling R-T13b-c; the Task 13b
+ * review's I-1: a press buffered in an offstage aerial fired on the drift frame
+ * after it, as a side special).
+ */
+function specialPending(self: FighterState, frame: number): boolean {
+  const b = self.bufferedAction;
+  // The next step runs frame `frame + 1`, and reads a press up to `BUFFER_FRAMES` old.
+  return b !== null && b.kind === "special" && frame + 1 - b.frame <= BUFFER_FRAMES;
 }
 
 /**

@@ -22,10 +22,11 @@ import { FIGHTERS } from "@/fighters";
 import { bakedContext } from "@/game/bake";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { STAGES } from "@/stages";
+import { battlefield } from "@/stages/battlefield";
 import { finalDestination } from "@/stages/finalDestination";
 import { townAndCity } from "@/stages/townAndCity";
 import { cpuWorldFromDef } from "./cpu";
-import { recoveryFromDef, stageViewFromDef, upBInReach, upBNowOrNever, upBPath, upBPlan, upBSticks, type UpBStick } from "./behaviours";
+import { recoveryFromDef, stageViewFromDef, upBHold, upBInReach, upBNowOrNever, upBPath, upBPlan, upBPress, upBStickNow, upBSticks, type UpBStick } from "./behaviours";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
@@ -53,6 +54,13 @@ function airborne(stage: string, id: string, at: Partial<FighterState>, marioX =
   return s;
 }
 
+/**
+ * The press that starts the up special, as the CPU makes it (ruling R-T13b-c): Up
+ * and Special with the stick's side, never Down, which would cancel Up and make it
+ * a side special.
+ */
+const PRESS = (dir: InputFrame): InputFrame => (dir & ~Btn.Down) | Btn.Up | Btn.Special;
+
 /** Up special on the first frame, holding `plan` as the move runs; every frame's state. */
 function upB(start: GameState, plan: UpBStick, frames: number, ctx?: SimContext): GameState[] {
   const out: GameState[] = [];
@@ -61,7 +69,7 @@ function upB(start: GameState, plan: UpBStick, frames: number, ctx?: SimContext)
   for (let i = 0; i < frames; i++) {
     // The press is move frame 1; frame i + 1 of the move is step i.
     const dir = plan.switchAt > 0 && i + 1 >= plan.switchAt ? plan.then : plan.first;
-    const now = [dir | (i === 0 ? Btn.Up | Btn.Special : 0), 0];
+    const now = [i === 0 ? PRESS(dir) : dir, 0];
     state = step(state, now, { prevInputs: prev, ...(ctx !== undefined ? { ctx } : {}) }).state;
     prev = now;
     out.push(state);
@@ -137,6 +145,131 @@ describe("the CPU's up special model", () => {
       const model = upBPath(r, mid.fighters[0], plan, 60, mid.frame);
       expect(model.map((p) => [p.x, p.y]), id).toEqual(all.slice(cut).map((s) => [s.fighters[0].x - mid.fighters[0].x, s.fighters[0].y - mid.fighters[0].y]));
     }
+  });
+});
+
+describe("the CPU's up special press is always the up special (ruling R-T13b-c)", () => {
+  const fd = stageViewFromDef(finalDestination);
+
+  it("starts the up special with every stick it would hold, pressed as it presses it", () => {
+    for (const def of FIGHTERS) {
+      const r = recoveryFromDef(def)!;
+      for (const plan of [...upBSticks(r, 1), ...upBSticks(r, -1)]) {
+        const start = airborne("void", def.id, { x: 0, y: 0 });
+        const [first] = upB(start, plan, 1);
+        expect([first.fighters[0].action, first.fighters[0].move], `${def.id} plan ${plan.first}`).toEqual(["special", r.slot]);
+      }
+    }
+  });
+
+  it("leads Fox toward the stage through every octant that does, down-toward included", () => {
+    const r = recoveryFromDef(FIGHTERS.find((d) => d.id === "fox")!)!;
+    expect(upBSticks(r, 1).map((p) => p.first)).toEqual([Btn.Right | Btn.Up, Btn.Right, Btn.Up, Btn.Right | Btn.Down, 0]);
+    expect(upBSticks(r, -1).map((p) => p.first)).toEqual([Btn.Left | Btn.Up, Btn.Left, Btn.Up, Btn.Left | Btn.Down, 0]);
+  });
+
+  it("starts Fire Fox on Fox's downward plan, and aims it down on frame 30 (Frame to decide dash angle 30)", () => {
+    const fs = upB(airborne("void", "fox", { x: 0, y: 0 }), one(Btn.Right | Btn.Down), 50).map((s) => s.fighters[0]);
+    expect([fs[0].action, fs[0].move]).toEqual(["special", "upB"]);
+    expect([fs[30].combat.aimX, fs[30].combat.aimY]).toEqual([fx(1), fx(-1)]);
+    expect(fs[45].vy).toBeLessThan(0);
+  });
+
+  it("an up special pressed during an offstage aerial comes out as the up special, whatever frame the aerial ends on", () => {
+    // Mario out of jumps 25 off the ledge and 30 under it, in a neutral air: the CPU
+    // presses for the up special while he cannot act, and the buffered press fires
+    // on the aerial's first actionable frame. On every phase of its press pulse.
+    const mario = FIGHTERS.find((d) => d.id === "mario")!;
+    for (let phase = 0; phase < 6; phase++) {
+      const s = airborne("finalDestination", "mario", { x: fx(-105), y: fx(-30), action: "attack", move: "nair", actionFrame: 0, facing: 1 }, fx(40));
+      s.frame = phase;
+      const run = cpuRun(s, cpuWorldFromDef(mario, fd), 120);
+      const special = run.find((f) => f.action === "special");
+      expect(special?.move, `phase ${phase}`).toBe("upB");
+    }
+  });
+
+  it("does not wall jump while it is still rising, and does once it falls", () => {
+    // Against Final Destination's wall under its left ledge (the wall to his right).
+    const at = (vy: number) => {
+      const s = airborne("finalDestination", "mario", { x: fx(-84), y: fx(-30), vy, facing: 1 }, fx(40));
+      s.fighters[0].combat.wallSide = 1;
+      s.fighters[0].combat.wallFrames = 0;
+      return decideCpu(s, 0, 9, 7, cpuWorldFromDef(FIGHTERS.find((f) => f.id === "mario")!, fd)).input;
+    };
+    expect(at(fx(1)) & Btn.Left).toBe(0);
+    expect(at(-fx(1)) & Btn.Left).not.toBe(0);
+  });
+
+  it("holds Up and never Down on every frame once it has decided, and presses Special on its pulse", () => {
+    // Fox out of jumps, 30 off Final Destination's left ledge: in reach, so decided.
+    // Every phase of the six-frame pulse: the frames between presses hold Up too, so
+    // whichever one the special comes out on reads as the up special.
+    const world = cpuWorldFromDef(FIGHTERS.find((d) => d.id === "fox")!, fd);
+    let presses = 0;
+    for (let phase = 0; phase < 6; phase++) {
+      const s = airborne("finalDestination", "fox", { x: fx(-110), y: fx(10), facing: 1 }, fx(40));
+      s.frame = phase;
+      const d = decideCpu(s, 0, 9, 7, world);
+      expect(d.behaviour, `phase ${phase}`).toBe("recover");
+      expect(d.input & Btn.Up, `phase ${phase}`).not.toBe(0);
+      expect(d.input & Btn.Down, `phase ${phase}`).toBe(0);
+      if ((d.input & Btn.Special) !== 0) presses += 1;
+    }
+    expect(presses).toBe(3);
+    // The press and the hold strip a plan's Down (Fox's `T | Down`) and add Up.
+    expect(upBPress(Btn.Right | Btn.Down)).toBe(Btn.Right | Btn.Up | Btn.Special);
+    expect(upBHold(Btn.Left | Btn.Down)).toBe(Btn.Left | Btn.Up);
+  });
+
+  it("in its own up special, holds the stick and presses nothing: no second press, no Up added", () => {
+    // Fox 20 frames into a Fire Fox off Final Destination's left ledge, every phase of
+    // the pulse: the stick its plan holds, and never Special.
+    const fox = FIGHTERS.find((d) => d.id === "fox")!;
+    const r = recoveryFromDef(fox)!;
+    const mid = upB(airborne("finalDestination", "fox", { x: fx(-110), y: fx(10), facing: 1 }, fx(40)), one(Btn.Right), 20)[19];
+    expect([mid.fighters[0].action, mid.fighters[0].move]).toEqual(["special", "upB"]);
+    const plan = upBPlan(mid.fighters[0], fd.leftLedge, fd, r) ?? upBSticks(r, 1)[0];
+    for (let phase = 0; phase < 6; phase++) {
+      mid.frame = 100 + phase;
+      const d = decideCpu(mid, 0, 9, 7, cpuWorldFromDef(fox, fd));
+      expect(d.behaviour, `phase ${phase}`).toBe("recover");
+      expect(d.input, `phase ${phase}`).toBe(upBStickNow(plan, mid.fighters[0], r));
+    }
+  });
+
+  it("in its own up special over the stage, holds nothing: the move flies as authored", () => {
+    // Pikachu between Quick Attack's legs over Battlefield's main platform.
+    const bf = stageViewFromDef(battlefield);
+    const pikachu = FIGHTERS.find((d) => d.id === "pikachu")!;
+    const mid = upB(airborne("battlefield", "pikachu", { x: fx(10), y: fx(10), facing: 1 }, fx(-60)), one(Btn.Up), 22)[21];
+    expect([mid.fighters[0].action, mid.fighters[0].move]).toEqual(["special", "upB"]);
+    for (let phase = 0; phase < 6; phase++) {
+      mid.frame = 100 + phase;
+      const d = decideCpu(mid, 0, 9, 7, cpuWorldFromDef(pikachu, bf));
+      expect([d.behaviour, d.input], `phase ${phase}`).toEqual(["recover", 0]);
+    }
+  });
+
+  it("holds Up, never Down, while a Special press waits in the buffer, whatever wins the frame", () => {
+    // Mario in a neutral air over the middle of the stage, where recovering is not
+    // what wins: a Special press still in his buffer fires as the up special.
+    const mario = FIGHTERS.find((d) => d.id === "mario")!;
+    const world = cpuWorldFromDef(mario, fd);
+    const at = (age: number) => {
+      const s = airborne("finalDestination", "mario", { x: 0, y: fx(30), action: "attack", move: "nair", actionFrame: 5, facing: 1 }, fx(40));
+      s.frame = 100;
+      s.fighters[0].bufferedAction = { kind: "special", frame: 100 - age };
+      return decideCpu(s, 0, 9, 7, world);
+    };
+    for (const age of [0, 8]) {
+      const d = at(age);
+      expect(d.behaviour, `age ${age}`).not.toBe("recover");
+      expect(d.input & Btn.Up, `age ${age}`).not.toBe(0);
+      expect(d.input & Btn.Down, `age ${age}`).toBe(0);
+    }
+    // Past the buffer's nine frames on the next step, it no longer holds anything.
+    expect(at(9).input & Btn.Up).toBe(0);
   });
 });
 
@@ -344,8 +477,9 @@ describe("the CPU's up special model in the game's form of each fighter (Plan 5,
       expect(s.fighters[0].action, `frame ${i}`).not.toBe("dead");
       back = recovered(s.fighters[0]);
     }
-    // It first judges the up special worth it after 30 frames of drifting in (measured).
-    expect(firstPress).toBeGreaterThan(0);
+    // It first judges the up special worth it after 30 frames of drifting in
+    // (measured; pinned, the Task 13b review's M-3).
+    expect(firstPress).toBe(30);
     expect(back).toBe(true);
   });
 });

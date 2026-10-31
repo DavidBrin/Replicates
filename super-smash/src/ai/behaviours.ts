@@ -513,7 +513,7 @@ export function upBPath(
   const out: PathPoint[] = [];
   for (let i = 0; i < frames; i++) {
     const dir = moveFrame >= plan.switchAt && plan.switchAt > 0 ? plan.then : plan.first;
-    const input = dir | (i === 0 && !started ? Btn.Up | Btn.Special : 0);
+    const input = i === 0 && !started ? upBPress(dir) : dir;
     ctx.frame = frame0 + i + 1;
     updateInputTracking(f, input, prev);
     const intent = interpretInput(f, input, prev);
@@ -549,6 +549,22 @@ export function upBSticks(r: RecoveryMove, toward: number): UpBStick[] {
     return [...out, ...firsts.map(one)];
   }
   return [T, 0, A].map(one);
+}
+
+/**
+ * The press that starts the up special, with a plan's stick (ruling R-T13b-c): its
+ * side, Up and Special, never Down. Up and Down cancel (`stickY` 0), so a press with
+ * both is a side special: Fox's `T | Down` plan pressed whole came out as Fox Illusion
+ * (the Task 13b review's I-1). The plan's Down is held from the move's second frame
+ * on, which is where Fire Fox reads its aim (`upSpecial.ts`).
+ */
+export function upBPress(stick: InputFrame): InputFrame {
+  return upBHold(stick) | Btn.Special;
+}
+
+/** A plan's stick with Up and without Down: what the CPU holds until its up special comes out (ruling R-T13b-c). */
+export function upBHold(stick: InputFrame): InputFrame {
+  return (stick & ~Btn.Down) | Btn.Up;
 }
 
 /** The stick a plan holds on the move frame the fighter's next step runs (its first, outside the move). */
@@ -879,9 +895,12 @@ export const recover: Behaviour = (ctx) => {
     if (r !== null && plan === null && !upBNowOrNever(self, stage, r, ctx.view.frame)) {
       return { score: 950, input: drift | (!outOfJumps && jumping ? Btn.Jump : 0) };
     }
+    // Decided: every frame up to the one the special comes out holds Up and never
+    // Down (ruling R-T13b-c), so whichever frame the press lands on, or a buffered
+    // one fires on, reads as the up special and not a side or neutral one.
     const firing = pulse(ctx.view.frame, self.port, 6, 3);
     const stick = plan === null ? drift : upBStickNow(plan, self, r!);
-    return { score: 950, input: (firing ? stick | Btn.Special | Btn.Up : drift) };
+    return { score: 950, input: firing ? upBPress(stick) : upBHold(stick) };
   }
 
   return { score: 900, input: drift | (jumping ? Btn.Jump : 0) };

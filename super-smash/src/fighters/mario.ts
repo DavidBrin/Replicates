@@ -875,7 +875,9 @@ const legacy: FighterDef = {
       // up. Handing the full 2.9 on, as before, rose him 81, half again Samus's
       // published Screw Attack (about 54) where SmashWiki "Mario (SSBU)"
       // (https://www.ssbwiki.com/Mario_(SSBU)) calls his distance "merely average"
-      // and "Samus (SSBU)" hers "only average". The stick read on frame 4 aims it.
+      // and "Samus (SSBU)" hers "only average". The stick read on frame 4 aims it
+      // (UNVERIFIED: the page publishes no frame the angle is decided on; 4 is the
+      // rise's first, Task 13b review's M-1).
       momentum: [{ frame: 4, x: fx(0.5), y: fx(2.9), hold: 15, aimAt: 4, endSpeed: { y: 0 } }],
       // "Stick sensitivity to angle 0.5", "Maximum angle deviation 12°": a full
       // tilt turns the rise 12° toward its side (UNVERIFIED that a soft one turns it half).

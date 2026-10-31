@@ -87,11 +87,16 @@ describe("every fighter can recover", () => {
   // Donkey Kong's recovers sideways (Plan 5, Task 13b): SmashWiki "Donkey Kong
   // (SSBU)" (https://www.ssbwiki.com/Donkey_Kong_(SSBU)): Spinning Kong "has decently
   // long horizontal recovery distance" but "offers almost no vertical recovery".
-  it("donkeyKong's up-special covers distance sideways", () => {
-    const state = airborne("donkeyKong");
-    const startX = toFloat(state.fighters[0].x);
-    const frames = run(state, UP_SPECIAL | Btn.Right, 70);
-    expect(Math.max(...frames.map((f) => toFloat(f.x))) - startX).toBeGreaterThan(60);
+  it("donkeyKong's up-special covers distance sideways, further than he drifts without it", () => {
+    // His plain drift, Right held for 70 frames with no up special, covers 80.0
+    // (the Task 13b review's measurement); the up special's "Maximum air speed 1.7"
+    // carries him 90.5.
+    const startX = toFloat(airborne("donkeyKong").fighters[0].x);
+    const drift = run(airborne("donkeyKong"), Btn.Right, 70);
+    const spun = run(airborne("donkeyKong"), UP_SPECIAL | Btn.Right, 70);
+    const far = (fs: FighterState[]) => Math.max(...fs.map((f) => toFloat(f.x))) - startX;
+    expect(far(spun)).toBeGreaterThan(far(drift) + 5);
+    expect(far(spun)).toBeGreaterThan(85);
   });
 
   for (const fighter of FIGHTERS.filter((d) => d.id !== "donkeyKong")) {
@@ -107,7 +112,11 @@ describe("every fighter can recover", () => {
       // less than that is not a recovery, it is a stumble.
       expect(peak - startY, `${fighter.id} rose ${(peak - startY).toFixed(1)}`).toBeGreaterThan(13);
     });
+  }
 
+  // Every fighter, Donkey Kong too (the Task 13b review's M-2): his sideways test
+  // above needs the same guard.
+  for (const fighter of FIGHTERS) {
     it(`${fighter.id}'s up-special enters the special state at all`, () => {
       // Guards the test above against passing for the wrong reason: if the
       // input never reached the move, a fighter who happened to drift upward
