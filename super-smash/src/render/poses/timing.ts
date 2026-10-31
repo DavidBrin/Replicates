@@ -201,6 +201,8 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   // (UNVERIFIED for Samus's Super Missile, whose own animation is unauthored here;
   // the bake times it to its own 57 frames). Link's smash throw is his throw's.
   sideBSmash: "sideB",
+  // Fix round 1: Link's failed throw is his throw's motion, held past its end.
+  sideBFailed: "sideB",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */

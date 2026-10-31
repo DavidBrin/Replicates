@@ -89,6 +89,7 @@ import type {
   InputFrame,
   MoveDef,
   MoveSlot,
+  ProjectileDef,
   StageDef,
   StoreCharge,
 } from "./types";
@@ -390,6 +391,12 @@ export interface StateContext {
   readonly heads?: readonly FootstoolHead[];
   /** Footstools decided this frame, applied to their victims after every state machine has run (`applyFootstools`). */
   readonly footstools?: Footstool[];
+  /**
+   * How many of `def`'s article this fighter has out (`ProjectileDef.maxOut`; Plan 5,
+   * Task 13d fix round 1, ruling R-T13d-d), for a move with a failed version
+   * (`MoveDef.whenOut`). Absent outside `step`: then none is out.
+   */
+  readonly out?: (def: ProjectileDef) => number;
 }
 
 /** Change status through the StatusModule (`status/kind.ts`): end, reset, pre. */
@@ -630,7 +637,7 @@ export function beginSpecial(
 ): boolean {
   // Begun in the air, an up special is the fighter's aerial one where it has one
   // of its own (Plan 5, Task 13b: `upBAir`, Link's aerial Spin Attack).
-  const own = smashVersion(ctx.def, slot === "upB" && !f.grounded && ctx.def.moves.upBAir !== undefined ? "upBAir" : slot, flick);
+  const own = failedVersion(ctx, smashVersion(ctx.def, slot === "upB" && !f.grounded && ctx.def.moves.upBAir !== undefined ? "upBAir" : slot, flick));
   const move = ctx.def.moves[own];
   if (move === undefined) return false;
   if (slot === "sideB" && stickX !== 0 && f.action !== "run") f.facing = stickX;
@@ -657,6 +664,20 @@ export function beginSpecial(
 function smashVersion(def: FighterDef, slot: MoveSlot, flick: number): MoveSlot {
   const smash = def.moves[slot]?.smashInput;
   return smash !== undefined && flick <= smash.within && def.moves[smash.slot] !== undefined ? smash.slot : slot;
+}
+
+/**
+ * The move a special press starts as `slot` when one of its projectiles is out as
+ * many times as it may be, counted by article: its failed version (`MoveDef.whenOut`;
+ * Plan 5, Task 13d fix round 1, ruling R-T13d-d: Link's failed throw, SmashWiki "Link
+ * (SSBU)/Side special", "Throw (failed)"), else the move itself.
+ */
+function failedVersion(ctx: StateContext, slot: MoveSlot): MoveSlot {
+  const move = ctx.def.moves[slot];
+  const to = move?.whenOut;
+  const out = ctx.out;
+  if (to === undefined || out === undefined || ctx.def.moves[to] === undefined) return slot;
+  return (move!.projectiles ?? []).some((p) => p.maxOut !== undefined && out(p) >= p.maxOut) ? to : slot;
 }
 
 /**

@@ -29,7 +29,7 @@ import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
 import { insideSolidBody } from "@/engine/physics";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
-import { FIGHTERS } from "./index";
+import { FIGHTERS, fox } from "./index";
 import { STAGES } from "@/stages";
 
 const RULES: MatchRules = {
@@ -249,6 +249,31 @@ describe("Fox Illusion actually crosses ground", () => {
     expect(walkedTo, "the walk must not have hit the ledge").toBeLessThan(80);
 
     expect(travelled).toBeGreaterThan(walkedTo);
+  });
+
+  // Plan 5, Task 13d fix round 1 (the review's carry): SmashWiki "Fox (SSBU)/Side special"
+  // (https://www.ssbwiki.com/Fox_(SSBU)/Side_special, revision 1707090), "Landing":
+  // "Interruptible 17"; UltimateFrameData (https://ultimateframedata.com/fox), "Side B
+  // (Fox Illusion)", landing lag 16.
+  it("lands from the air into its own 16 frames of lag", () => {
+    expect(fox.moves.sideB).toMatchObject({ aerialLandingLag: 16 });
+    expect(fox.moves.sideB!.landingLag).toBeUndefined();
+    let s = createInitialState("finalDestination", [{ defId: "fox" }], RULES, 3);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, intangible: 0, x: fx(-40), y: fx(3), facing: 1 });
+    const states: GameState[] = [];
+    let prev: InputFrame[] = [0];
+    for (let i = 0; i < 40; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Right | Btn.Special : 0];
+      s = step(s, now, { prevInputs: prev }).state;
+      prev = now;
+      states.push(s);
+    }
+    expect(states[0].fighters[0]).toMatchObject({ action: "special", move: "sideB" });
+    const landed = states.findIndex((st) => st.fighters[0].grounded);
+    expect(landed).toBeGreaterThan(0);
+    expect(states[landed].fighters[0]).toMatchObject({ action: "landingLag", charge: 16 });
+    expect(states[landed + 15].fighters[0].action).toBe("landingLag");
+    expect(states[landed + 16].fighters[0].action).toBe("stand");
   });
 });
 

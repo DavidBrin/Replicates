@@ -207,7 +207,10 @@ export type MoveSlot =
   | "upBAir"
   // Plan 5, Task 13d: a side special's smash-input version (`MoveDef.smashInput`):
   // Samus's Super Missile, Link's smash-thrown Boomerang.
-  | "sideBSmash";
+  | "sideBSmash"
+  // Plan 5, Task 13d fix round 1: a throw with its article already out
+  // (`MoveDef.whenOut`): Link's failed throw.
+  | "sideBFailed";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -455,11 +458,19 @@ export interface ProjectileDef {
    */
   readonly accelerate?: { readonly after: number; readonly perFrame: number; readonly maxSpeed: number };
   /**
-   * No more of it than this are out for one owner at once: a move that would launch
-   * another launches nothing (Plan 5, Task 13d: Samus's "Maximum Homing Missiles at a
-   * time 2", "Maximum Super Missiles at a time 1"; `spawnDueProjectiles`).
+   * No more of its article than this are out for one owner at once: a move that would
+   * launch another launches nothing (Plan 5, Task 13d: Samus's "Maximum Homing
+   * Missiles at a time 2", "Maximum Super Missiles at a time 1";
+   * `spawnDueProjectiles`), and a move with a failed version starts that instead
+   * (`MoveDef.whenOut`; fix round 1: Link's one Boomerang).
    */
   readonly maxOut?: number;
+  /**
+   * The article it is, which `maxOut` counts: its own `id` by default. Definitions of
+   * one article share it (Plan 5, Task 13d fix round 1, ruling R-T13d-d: Link's
+   * Boomerang, thrown with a tilt or a smash input, is one article; `articleOf`).
+   */
+  readonly article?: string;
   /** Drawing hint for the renderer. */
   readonly visual: "arrow" | "bomb" | "boomerang" | "energy" | "fire" | "spark" | "missile";
   /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */
@@ -862,6 +873,12 @@ export interface MoveDef {
    */
   readonly smashInput?: { readonly within: number; readonly slot: MoveSlot };
   /**
+   * With a projectile of this move's already out as many times as its `maxOut`
+   * allows, counted by article, the special starts the move in `whenOut` instead
+   * (Plan 5, Task 13d fix round 1, ruling R-T13d-d: Link's failed throw).
+   */
+  readonly whenOut?: MoveSlot;
+  /**
    * A special begun in the air that lands while still out lands into this many
    * frames of lag, as an aerial does (`onLanded`; Plan 5, Task 13d: Samus's Super
    * Missile). Not `landingLag`, an aerial's.
@@ -869,8 +886,10 @@ export interface MoveDef {
   readonly aerialLandingLag?: number;
   /**
    * The move plays `motionOf`'s motion: the same clip on the same clock, so the bake
-   * gives it nothing of its own and refuses one of another length (Plan 5, Task 13d:
-   * Link's smash throw plays his throw's, `special_s1` for both in the game).
+   * gives it nothing of its own, and a longer move holds that motion's last frame
+   * (`poseIndexOf` clamps). Plan 5, Task 13d: Link's smash throw plays his throw's,
+   * `special_s1` for both in the game; fix round 1: his failed throw, `special_s1_blank`
+   * on the same animation.
    */
   readonly motionOf?: MoveSlot;
   /**

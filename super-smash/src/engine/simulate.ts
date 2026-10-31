@@ -89,6 +89,7 @@ import type { Capsule } from "./hitbox";
 import type { Ecb, Point } from "./physics";
 import {
   advanceProjectile,
+  articleOf,
   chargeFraction,
   cloneProjectile,
   findProjectileDef,
@@ -656,6 +657,7 @@ export function step(
     fighters: s.fighters,
     heads,
     footstools,
+    out: (def) => projectilesOut(s.projectiles, s.fighters[i].port, defs[i].id, articleOf(def), (id) => findProjectileDef(defs[i], id)),
   });
 
   /* -- 3. action state machines ------------------------------------------- */
@@ -1250,7 +1252,10 @@ function spawnDueProjectiles(
       // (SSBU)/Side special"): the move plays on and launches nothing. UNVERIFIED: that
       // nothing is launched (no source says what the move does at the limit), and that
       // the two missiles count apart, each against its own limit, as the page lists them.
-      if (def.maxOut !== undefined && projectilesOut(s.projectiles, f.port, source, def) >= def.maxOut) continue;
+      // Counted by article (fix round 1, ruling R-T13d-d: Link's two Boomerang throws are
+      // one), and a move with a failed version has already become it at its start
+      // (`MoveDef.whenOut`), so for his throws this only backs that up.
+      if (def.maxOut !== undefined && projectilesOut(s.projectiles, f.port, source, articleOf(def), (pid) => findProjectileDef(defs[i], pid)) >= def.maxOut) continue;
       const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move));
       // One that would start inside the stage's solid body (its owner beside a wall
       // or under the stage, facing it) is never launched: it is in the wall from

@@ -81,6 +81,10 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // `sideB` already carries here; Link's smash throw plays his throw's
   // (`MoveDef.motionOf`).
   sideBSmash: "special_s_smash",
+  // Fix round 1: a throw with its article already out, the replica's name (Link's in
+  // the game is `special_s1_blank`, on his throw's animation; he plays his throw's
+  // motion here, `MoveDef.motionOf`).
+  sideBFailed: "special_s_blank",
 };
 
 /**

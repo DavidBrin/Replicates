@@ -254,8 +254,10 @@ export interface MotionSampler {
 
 /**
  * The sampler for each slot's active script motion. A move that plays another's
- * motion (`MoveDef.motionOf`; Plan 5, Task 13d: Link's smash throw) bakes none of its
- * own, and must last that motion's frames: the same clip on the same clock.
+ * motion (`MoveDef.motionOf`; Plan 5, Task 13d: Link's smash throw, and fix round 1
+ * his failed throw) bakes none of its own: it runs that motion's clock, and a longer
+ * one holds its last frame (`poseIndexOf` clamps). The other move must be there and
+ * run the same motion.
  */
 export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & { slot: MoveSlot }> {
   const out = new Map<MotionKind, MotionSampler & { slot: MoveSlot }>();
@@ -264,10 +266,9 @@ export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & {
     const script = gameScriptFor(def, slot);
     if (move === undefined || script === null) continue;
     if (move.motionOf !== undefined) {
-      const of = def.moves[move.motionOf];
-      const theirs = gameScriptFor(def, move.motionOf);
-      if (of === undefined || theirs === null || theirs.motion !== script.motion || scriptTiming(theirs, of.totalFrames).frames !== scriptTiming(script, move.totalFrames).frames) {
-        throw new Error(`bake ${def.id}: ${def.id} ${slot} plays ${move.motionOf}'s motion for a length of its own`);
+      const theirs = def.moves[move.motionOf] === undefined ? null : gameScriptFor(def, move.motionOf);
+      if (theirs === null || theirs.motion !== script.motion) {
+        throw new Error(`bake ${def.id}: ${def.id} ${slot} plays ${move.motionOf}'s motion, which ${move.motionOf} does not run`);
       }
       continue;
     }

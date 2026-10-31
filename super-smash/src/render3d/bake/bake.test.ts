@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { airDodgeCharge, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
 import { BONE_POSE_STRIDE } from "@/engine/acmd/bones";
 import { gameScriptFor } from "@/engine/acmd/legacy";
-import { clipTimeOfFrame, MOTION_OF_ACTION, OPEN_ENDED_FRAMES, statusDuration, statusMotion } from "@/engine/acmd/poseClock";
+import { clipTimeOfFrame, MOTION_OF_ACTION, OPEN_ENDED_FRAMES, poseIndexOf, statusDuration, statusMotion, type ClockedFighter } from "@/engine/acmd/poseClock";
 import { dodgeIntangible, groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from "@/engine/groundDodge";
 import { STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
 import type { ActionState, FighterDef } from "@/engine/types";
@@ -270,9 +270,24 @@ describe("the move motions the bake plays (Plan 5, Task 13d)", () => {
     expect(linkMoves.get(gameScriptFor(link, "sideB")!.motion)).toMatchObject({ slot: "sideB", clock: { kind: "script", frames: 45 } });
   });
 
-  it("refuses a move that plays another's motion for a length of its own", () => {
+  it("bake Link's failed throw on none either: it plays his throw's 45 frames and holds the last past them (fix round 1)", () => {
     const link = fighterOf("link");
-    const longer = { ...link, moves: { ...link.moves, sideBSmash: { ...link.moves.sideBSmash!, totalFrames: 50 } } };
-    expect(() => moveSamplers(longer)).toThrow(/link sideBSmash plays sideB's motion/);
+    const motion = gameScriptFor(link, "sideB")!.motion;
+    expect(gameScriptFor(link, "sideBFailed")!.motion).toBe(motion);
+    expect([...moveSamplers(link).values()].map((m) => m.slot)).not.toContain("sideBFailed");
+    const clock = moveSamplers(link).get(motion)!.clock;
+    const at = (actionFrame: number) => {
+      const f: ClockedFighter = { defId: "link", action: "special", move: "sideBFailed", actionFrame, port: 0, charge: 0, hitstun: 0, jumpsUsed: 0, fastFalling: false, vx: 0, vy: 0, shortHop: false };
+      return poseIndexOf(link, f, 0, () => clock);
+    };
+    expect(at(30)).toEqual({ motion, frame: 31 });
+    expect(at(44)).toEqual({ motion, frame: 45 });
+    expect(at(58)).toEqual({ motion, frame: 45 });
+  });
+
+  it("refuses a move that plays the motion of a move it does not have", () => {
+    const link = fighterOf("link");
+    const rest = { ...link.moves, sideB: undefined };
+    expect(() => moveSamplers({ ...link, moves: rest })).toThrow(/link sideBSmash plays sideB's motion, which sideB does not run/);
   });
 });

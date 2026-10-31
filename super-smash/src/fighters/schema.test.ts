@@ -177,6 +177,12 @@ describe("aerials", () => {
       if (!move) continue;
       expect(move.landingLag, `${fighter.name}'s ${slot} declares landingLag`).toBeUndefined();
     }
+    // Nor anything but an aerial: the engine reads `landingLag` for aerials alone, and a
+    // special's own landing lag is `aerialLandingLag` (Plan 5, Task 13d fix round 1: Fox
+    // Illusion's 16 sat in `landingLag`, never read).
+    for (const { slot, move } of moves(fighter)) {
+      if (move.landingLag !== undefined) expect(AERIAL_SLOTS, `${fighter.name}'s ${slot} declares landingLag`).toContain(slot);
+    }
   });
 
   it.each(each)("%s orders every autocancel window sensibly", (_name, fighter) => {

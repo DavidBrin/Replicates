@@ -401,6 +401,20 @@ describe("tilt versus smash", () => {
     expect(groundAttackSlot(f, intent)).toBe("utilt");
   });
 
+  it("draws the line at the window: an attack 5 frames after a fresh Right is a forward smash, 6 frames after a forward tilt", () => {
+    // The one smash flick (`Intent.flickAge`; Plan 5, Task 13d fix round 1, the
+    // review's Minor 1): the attack's side of it, on the interpretation, as above.
+    const at = (frames: number) => {
+      const f = fighter();
+      f.lastDirPressed = Btn.Right;
+      f.framesSinceDirPress = frames;
+      const intent = interpretInput(f, Btn.Right | Btn.Attack, Btn.Right);
+      return [intent.flickAge, intent.smash, groundAttackSlot(f, intent)];
+    };
+    expect(at(SMASH_INPUT_WINDOW)).toEqual([5, true, "fsmash"]);
+    expect(at(SMASH_INPUT_WINDOW + 1)).toEqual([6, false, "ftilt"]);
+  });
+
   it("reads a bare attack as a jab", () => {
     const f = fighter();
     tick(f, Btn.Attack, 0);

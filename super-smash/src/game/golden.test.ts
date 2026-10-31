@@ -44,10 +44,11 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * crawl lab (`goldenCrawlLab.ts`, Task 12, ruling R-T8e): Pikachu crawls, down
  * tilts out of the crawl, and crawls off the stage's edge onto the ledge, and a
  * projectile lab (`goldenProjectileLab.ts`, Task 13c, ruling R-T8e; 300 frames after
- * its fix round 1, 600 after Task 13d): Samus's bomb settles and goes off on its
- * timer, her Charge Shot and Link's arrow clank, a Charge Shot flies out its life,
- * one clanks with Link's jab and he rebounds, and the smash-input specials, Samus's
- * Super Missile and Link's smash-thrown Boomerang, each land their hit.
+ * its fix round 1, 600 after Task 13d, 800 after Task 13d's fix round 1): Samus's bomb
+ * settles and goes off on its timer, her Charge Shot and Link's arrow clank, a Charge
+ * Shot flies out its life, one clanks with Link's jab and he rebounds, the smash-input
+ * specials, Samus's Super Missile and Link's smash-thrown Boomerang, each land their
+ * hit, and Link throws with his Boomerang out, which fails.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -506,6 +507,8 @@ interface Played {
   readonly projectilePaths: ReadonlyMap<ProjectilePath, number>;
   /** Every projectile launched, by definition id (Plan 5, Task 13d). */
   readonly launched: ReadonlySet<string>;
+  /** Every move a fighter was in, as `"<fighter> <slot>"` (Plan 5, Task 13d fix round 1). */
+  readonly moves: ReadonlySet<string>;
   /** The first few frames that broke `invariantBreaks`, if any did. */
   readonly invariantBreaks: readonly string[];
 }
@@ -527,6 +530,7 @@ function play(match: Match): Played {
   const soft = new Set<SoftPath>();
   const hitKinds = new Set<string>();
   const launched = new Set<string>();
+  const moves = new Set<string>();
   /** The paths each projectile (by `instanceId`) reached. */
   const reached = new Map<number, Set<ProjectilePath>>();
   const breaks: string[] = [];
@@ -539,6 +543,7 @@ function play(match: Match): Played {
     for (let port = 0; port < out.state.fighters.length; port++) {
       const after = out.state.fighters[port];
       actions.add(after.action);
+      if (after.move !== null) moves.add(`${after.defId} ${after.move}`);
       for (const p of softPaths(state.fighters[port], after, inputs[port], prev[port])) soft.add(p);
       if (breaks.length < 5) breaks.push(...invariantBreaks(after, frame));
     }
@@ -560,7 +565,7 @@ function play(match: Match): Played {
   }
   const projectilePaths = new Map<ProjectilePath, number>();
   for (const set of reached.values()) for (const path of set) projectilePaths.set(path, (projectilePaths.get(path) ?? 0) + 1);
-  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, launched, invariantBreaks: breaks };
+  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, launched, moves, invariantBreaks: breaks };
 }
 
 describe("engine golden trace", () => {
@@ -820,6 +825,15 @@ describe("engine golden trace", () => {
   // are byte-identical (the projectile lab's 600 frames untouched, ruling R-T11a). So
   // now: hits 18/32/25/26, 6, 0, 1, 4, 1 and 2; shield hits 0/6/0/0, 3, 0, 0, 0, 0
   // and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0 and 0.
+  // Plan 5 Task 13d's fix round 1 (one Boomerang out at a time, a throw with one out
+  // being the failed throw, ruling R-T13d-d; a reflected Super Missile neither waits
+  // again nor is clamped to 4.2, R-T13d-e; Fox Illusion's published landing lag of 16,
+  // in `aerialLandingLag`) left the nine other traces byte-identical, and the
+  // projectile lab's first 600 frames: no golden match has two Boomerangs out,
+  // reflects a Super Missile or lands an aerial Fox Illusion. The projectile lab
+  // appends frames 601-800 (ruling R-T11a): Link throws the Boomerang on 601 and, with
+  // it out, throws again on 651, which fails (`expectSmashSpecials`); no hit. Every
+  // count is as it was.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -871,6 +885,8 @@ describe("engine golden trace", () => {
     const lab = played.get(PROJECTILE_LAB.name)!;
     expect(["superMissile", "boomerangSmash"].filter((id) => !lab.launched.has(id)), "smash-input specials the projectile lab no longer launches").toEqual([]);
     expect(lab.hits, "the Super Missile on Link and the smash-thrown Boomerang on Samus").toBe(2);
+    // Fix round 1 (ruling R-T13d-d): Link throws with his Boomerang out, and the throw fails.
+    expect(lab.moves.has("link sideBFailed"), "the projectile lab's failed throw").toBe(true);
   }
 
   function expectInvariants(): void {

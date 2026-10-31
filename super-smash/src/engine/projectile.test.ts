@@ -15,6 +15,7 @@ import {
   projectileChargeScale,
   projectileHitbox,
   projectileHitboxActive,
+  articleOf,
   projectilesDueOnFrame,
   projectilesOut,
   spawnProjectile,
@@ -434,14 +435,22 @@ describe("accelerating (Plan 5, Task 13d)", () => {
 });
 
 describe("how many are out (Plan 5, Task 13d)", () => {
-  it("counts one owner's of one definition from one moveset", () => {
+  it("counts one owner's of one article from one moveset: a definition's own id, or the article it shares (fix round 1, R-T13d-d)", () => {
     const owner = fighter();
+    // A second definition of the arrow's article, thrown another way.
+    const HARD: ProjectileDef = { ...ARROW, id: "hardArrow", article: "arrow" };
+    const defOf = (id: string) => [ARROW, DART, HARD].find((d) => d.id === id);
     const mine = spawnProjectile(ARROW, owner, 1, "zoner");
     const other = { ...spawnProjectile(ARROW, owner, 2, "zoner"), owner: 1 };
     const copied = spawnProjectile(ARROW, owner, 3, "kirby");
-    const kind = { ...spawnProjectile(ARROW, owner, 4, "zoner"), defId: "dart" };
-    expect(projectilesOut([mine, other, copied, kind], 0, "zoner", ARROW)).toBe(1);
-    expect(projectilesOut([mine, mine], 0, "zoner", ARROW)).toBe(2);
+    const kind = spawnProjectile(DART, owner, 4, "zoner");
+    const shared = spawnProjectile(HARD, owner, 5, "zoner");
+    const out = [mine, other, copied, kind, shared];
+    expect([articleOf(ARROW), articleOf(DART), articleOf(HARD)]).toEqual(["arrow", "dart", "arrow"]);
+    expect(projectilesOut(out, 0, "zoner", "arrow", defOf)).toBe(2);
+    expect(projectilesOut(out, 0, "zoner", "dart", defOf)).toBe(1);
+    expect(projectilesOut(out, 1, "zoner", "arrow", defOf)).toBe(1);
+    expect(projectilesOut(out, 0, "kirby", "arrow", defOf)).toBe(1);
   });
 });
 

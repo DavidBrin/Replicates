@@ -720,9 +720,11 @@ const legacy: FighterDef = {
       // is encoded is a straight missile at the homing variant's damage. That
       // is a deliberate simplification, not a transcription slip. Published, not
       // modelled (Task 13d): its "Initial speed 1.15" and deceleration (the 1.5
-      // below is the legacy table's), "Interruptible (aerial) 60", and both
-      // missiles' aerial "Horizontal speed divisor 2", "Air friction 0.0025" and
-      // movement "enabled starting on frame 35".
+      // below is the legacy table's), its row's radius 2.4 (the 3.0 below is the
+      // legacy table's), "Interruptible (aerial) 60", "Missile X offset 1u" (the
+      // offsets below are the legacy table's), and both missiles' aerial
+      // "Horizontal speed divisor 2", "Air friction 0.0025" and movement "enabled
+      // starting on frame 35".
       //
       // The smash input (Plan 5, Task 13d): B pressed within "Smash input window 5
       // frames" of a smash flick (the page's move parameters) fires the Super

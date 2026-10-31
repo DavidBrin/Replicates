@@ -24,7 +24,9 @@
  * - the smash-input specials (Task 13d, ruling R-T11a: appended after frame 300,
  *   the steps before it untouched): Samus's Super Missile waits, flies and hits
  *   Link, and Link's smash-thrown Boomerang hits Samus, turns and comes home. No
- *   other golden match smash-inputs a special.
+ *   other golden match smash-inputs a special;
+ * - the failed throw (Task 13d fix round 1, ruling R-T13d-d: appended after frame
+ *   600): Link throws the Boomerang and, with it out, throws again, which fails.
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added; the pins in
@@ -46,6 +48,7 @@ const D = Btn.Down;
 const J = Btn.Jump;
 const L = Btn.Left;
 const R = Btn.Right;
+const S = Btn.Soft;
 
 const STEPS: readonly ScriptStep[] = [
   // The bomb.
@@ -85,6 +88,14 @@ const STEPS: readonly ScriptStep[] = [
   [179, 0, 0], //                       out on 447 at 3.1, it hits Samus on 473 (9.6%,
   //                                    ×1.2: 11.52%), turns on 507 (age 60) and is
   //                                    caught on 566; to 600, the trace's last sample
+  // The failed throw (Task 13d fix round 1, ruling R-T13d-d; appended after 600).
+  [1, 0, S | L | B], //            601: Link throws the Boomerang as a tilt (Tilt held):
+  [49, 0, 0], //                        out on 627 at 2.4
+  [1, 0, L | B], //                651: and again with a smash input while it is out:
+  [149, 0, 0], //                       the failed throw, launching nothing, actionable
+  //                                    on 710 (its 60th frame); the Boomerang turns on
+  //                                    672 and is caught on 717; to 800, the trace's
+  //                                    last sample
 ];
 
 export const PROJECTILE_LAB: LabMatch = {
@@ -93,7 +104,7 @@ export const PROJECTILE_LAB: LabMatch = {
   fighters: ["samus", "link"],
   seed: 1013,
   rules: { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true },
-  frames: 600,
+  frames: 800,
   setup(state: GameState) {
     const [samus, link] = state.fighters;
     Object.assign(samus, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-30), y: 0, facing: 1, intangible: 0, invincible: 0 });

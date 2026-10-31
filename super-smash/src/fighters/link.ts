@@ -52,6 +52,12 @@ const BOOMERANG: ProjectileDef = {
   // turning back 16", the clean hit's 8% giving way to the late 6% on frame
   // 10 (the box below is the clean one, at the replica's radius), and the
   // floor's "Downward ground collision range −0.5u".
+  //
+  // One out at a time (Plan 5, Task 13d fix round 1, ruling R-T13d-d): thrown with
+  // one out, the throw fails (the page's "Throw (failed)"; `sideBFailed`). Both
+  // throws are this article, so they share the one.
+  article: "boomerang",
+  maxOut: 1,
   id: "boomerang",
   spawnFrame: 27,
   offsetX: fx(9.0),
@@ -725,6 +731,8 @@ const legacy: FighterDef = {
       // special moves: Link ... - Boomerang": 8, the default setting's. Smash
       // attacks' window is the replica's own 5 (`SMASH_INPUT_WINDOW`, DECISIONS D7).
       smashInput: { within: 8, slot: "sideBSmash" },
+      // With his Boomerang out, the throw fails (fix round 1, ruling R-T13d-d).
+      whenOut: "sideBFailed",
       hitboxes: [],
       projectiles: [BOOMERANG],
     },
@@ -739,6 +747,8 @@ const legacy: FighterDef = {
       // `game_specials1`, CancelFrame 46), so it plays the throw's (`motionOf`).
       totalFrames: 45,
       motionOf: "sideB",
+      // With his Boomerang out, the throw fails (fix round 1, ruling R-T13d-d).
+      whenOut: "sideBFailed",
       hitboxes: [],
       projectiles: [
         {
@@ -760,6 +770,25 @@ const legacy: FighterDef = {
           hitbox: { ...BOOMERANG.hitbox, endFrame: 166, damage: fx(9.6) },
         },
       ],
+    },
+
+    sideBFailed: {
+      slot: "sideBFailed",
+      name: "Boomerang (failed throw)",
+      // Plan 5, Task 13d fix round 1 (ruling R-T13d-d): a throw, tilted or smashed,
+      // with his Boomerang already out. SmashWiki "Link (SSBU)/Side special"
+      // (https://www.ssbwiki.com/Link_(SSBU)/Side_special, revision 1840696), "Throw
+      // (failed)": "Interruptible (grounded) 60", "Interruptible (aerial) 46",
+      // "Animation length 63"; rubendal 13.0.1 Motions: `special_s1_blank` CancelFrame
+      // 60 and `special_air_s1_blank` CancelFrame 46, both on the throw's animation
+      // `d01specials1`, so it plays the throw's motion (`motionOf`), holding its last
+      // frame past the throw's 45. Nothing is launched. UNVERIFIED: its landing, which
+      // no source gives; it lands plainly, as the throw does (UltimateFrameData gives
+      // the throw no landing lag, https://ultimateframedata.com/link).
+      totalFrames: 59,
+      aerialTotalFrames: 45,
+      motionOf: "sideB",
+      hitboxes: [],
     },
 
     upB: {

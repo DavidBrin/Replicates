@@ -255,8 +255,17 @@ export function advanceProjectile(
   // 4.2"): from that frame of its life it gains its acceleration a frame along its
   // way, up to its most. UNVERIFIED: that the first gain comes on that frame (age
   // 26, its wait ages 0 to 25) and adds to the speed it waited at.
+  // Sent back by a reflector (fix round 1, ruling R-T13d-e), it does not wait again
+  // (a reflection renews its clock, `reflectProjectile`), and it gains only while it
+  // is slower than its most, so a reflector's speed-up is never clamped back: its
+  // cap is the larger of its speed and its most. UNVERIFIED: no source covers a
+  // reflected Super Missile; read otherwise, it would wait out its age again and be
+  // held to 4.2.
   const a = def.accelerate;
-  if (a !== undefined && p.age >= a.after) setSpeed(p, p.vx, p.vy, Math.min(length(p.vx, p.vy) + a.perFrame, a.maxSpeed));
+  if (a !== undefined && (p.age >= a.after || p.reflected > 0)) {
+    const speed = length(p.vx, p.vy);
+    if (speed < a.maxSpeed) setSpeed(p, p.vx, p.vy, Math.min(speed + a.perFrame, a.maxSpeed));
+  }
   p.vy = fall(p.vy, def.gravity, def.maxFall);
   p.x += p.vx;
   p.y += p.vy;
@@ -528,15 +537,32 @@ function meetUnderside(p: ProjectileState, rule: SurfaceRule, i: number, y: numb
   return true;
 }
 
+/** The article a projectile counts as for its limit (`ProjectileDef.maxOut`): its own id unless it shares one. */
+export function articleOf(def: ProjectileDef): string {
+  return def.article ?? def.id;
+}
+
 /**
- * How many of `def` the fighter in port `owner` has out (`ProjectileDef.maxOut`; Plan
- * 5, Task 13d), from its moveset (`source`). UNVERIFIED: that one a reflector sent back
- * is out of the count, a reflection making it the reflector's (SmashWiki "Reflect":
- * reflected projectiles "change ownership from the original user to the reflector").
+ * How many of `article` the fighter in port `owner` has out (`ProjectileDef.maxOut`;
+ * Plan 5, Task 13d), from its moveset (`source`), each projectile's article read off
+ * its definition (`defOf`; fix round 1, ruling R-T13d-d: Link's two Boomerang throws
+ * are one article). UNVERIFIED: that one a reflector sent back is out of the count, a
+ * reflection making it the reflector's (SmashWiki "Reflect": reflected projectiles
+ * "change ownership from the original user to the reflector").
  */
-export function projectilesOut(projectiles: readonly ProjectileState[], owner: number, source: string, def: ProjectileDef): number {
+export function projectilesOut(
+  projectiles: readonly ProjectileState[],
+  owner: number,
+  source: string,
+  article: string,
+  defOf: (id: string) => ProjectileDef | undefined,
+): number {
   let n = 0;
-  for (const p of projectiles) if (p.owner === owner && p.source === source && p.defId === def.id) n += 1;
+  for (const p of projectiles) {
+    if (p.owner !== owner || p.source !== source) continue;
+    const def = defOf(p.defId);
+    if ((def === undefined ? p.defId : articleOf(def)) === article) n += 1;
+  }
   return n;
 }
 

@@ -721,7 +721,13 @@ const legacy: FighterDef = {
       name: "Fox Illusion",
       totalFrames: 55,
       momentum: [{ frame: 18, x: fx(6.2), y: fx(0), hold: 8 }],
-      landingLag: 16,
+      // Landing during it in the air (Plan 5, Task 13d fix round 1; it sat in
+      // `landingLag`, an aerial's field the engine never read for a special):
+      // SmashWiki "Fox (SSBU)/Side special" (https://www.ssbwiki.com/Fox_(SSBU)/Side_special,
+      // revision 1707090), "Landing": "Interruptible 17"; UltimateFrameData
+      // (https://ultimateframedata.com/fox), "Side B (Fox Illusion)", landing lag 16.
+      // UNVERIFIED, as for the Super Missile: on any frame of the move.
+      aerialLandingLag: 16,
       hitboxes: [
         {
           // The hitboxes trail *behind* him rather than sitting on him, which
