@@ -246,6 +246,9 @@ describe("projectiles", () => {
     ["samus", "chargeShot", 60, [0, 59], "https://www.ssbwiki.com/Samus_(SSBU)/Neutral_special"],
     // Homing Missile "Lifetime 120 frames"; "Missile 18-137".
     ["samus", "missile", 120, [0, 119], "https://www.ssbwiki.com/Samus_(SSBU)/Side_special"],
+    // The Super Missile (Plan 5, Task 13d): "Super Missile 21-96"; "Period before
+    // accelerating 26 frames", "Lifetime upon accelerating 50 frames".
+    ["samus", "superMissile", 76, [0, 75], "https://www.ssbwiki.com/Samus_(SSBU)/Side_special"],
     // "Bomb generation 11", "Maximum duration before exploding 72 frames",
     // "Explosion (early, mid, late) 83-94, 95-97, 98-100": frames 11-100, exploding from 83.
     ["samus", "bomb", 90, [72, 89], "https://www.ssbwiki.com/Samus_(SSBU)/Down_special"],
@@ -255,6 +258,10 @@ describe("projectiles", () => {
     ["link", "arrow", 46, [0, 45], "https://www.ssbwiki.com/Link_(SSBU)/Neutral_special"],
     // A tilt throw: "Lifetime 125 frames (tilt)"; "Tilt input hitboxes (clean, late, returning) 27-36, 37-71, 72-151".
     ["link", "boomerang", 125, [0, 124], "https://www.ssbwiki.com/Link_(SSBU)/Side_special"],
+    // A smash throw (Plan 5, Task 13d): "Lifetime ... 167 frames (smash)". Its "Smash
+    // input hitboxes (clean, late, returning) 27-36, 37-86, 87-192" span 166 frames;
+    // the lifetime is followed, as the tilt throw's 125 is (27-151).
+    ["link", "boomerangSmash", 167, [0, 166], "https://www.ssbwiki.com/Link_(SSBU)/Side_special"],
     // "Maximum time before exploding 1800 frames (30 seconds)".
     ["link", "remoteBomb", 1800, [0, 1799], "https://www.ssbwiki.com/Link_(SSBU)/Down_special"],
     // The grounded jolt: "Lifetime 96 frames"; "Clean hit 19-52", "Mid hit 53-85", "Late hit 86-114".
@@ -320,10 +327,11 @@ describe("projectiles", () => {
     // Plan 5, Task 9: Kirby's spit fires the spat fighter as a star.
     expect(new Set(owners)).toEqual(new Set(["mario", "link", "samus", "kirby", "fox", "pikachu"]));
 
+    // Plan 5, Task 13d: his Boomerang has a smash throw of its own, a fourth definition.
     const linkProjectiles = everyProjectile(getFighterOrThrow("link"));
-    expect(linkProjectiles).toHaveLength(3);
+    expect(linkProjectiles).toHaveLength(4);
     expect(new Set(linkProjectiles.map((p) => p.slot))).toEqual(
-      new Set(["neutralB", "sideB", "downB"])
+      new Set(["neutralB", "sideB", "sideBSmash", "downB"])
     );
   });
 

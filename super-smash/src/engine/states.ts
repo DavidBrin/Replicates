@@ -175,6 +175,14 @@ export interface Intent {
   readonly downPressed: boolean;
   /** The horizontal direction has been held past the 3-frame walk window. */
   readonly wantsDash: boolean;
+  /**
+   * How many frames ago the fresh direction press still held was made, or `NO_FLICK`
+   * when that direction is let go or the stick is a soft tilt: the smash flick
+   * (DECISIONS D7). A button pressed within a window of it smashes: an attack within
+   * `SMASH_INPUT_WINDOW` (`smash`), a side special within its own move's
+   * (`MoveDef.smashInput`; Plan 5, Task 13d).
+   */
+  readonly flickAge: number;
   /** Attack pressed within 5 frames of a fresh direction press: a smash. */
   readonly smash: boolean;
   /** The fresh direction that made `smash` true, which may differ from x/y. */
@@ -224,6 +232,9 @@ export function updateInputTracking(f: FighterState, input: InputFrame, prev: In
   if (f.framesSinceDirPress < 1000) f.framesSinceDirPress += 1;
 }
 
+/** `Intent.flickAge` with no flick: older than any window. */
+export const NO_FLICK = 0x7fffffff;
+
 /**
  * Read one frame of keys as one frame of intent. SPEC §6.
  *
@@ -241,11 +252,9 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
   // A partial tilt is what the keyboard's timing rules stand in for: the stick
   // that knows it is not fully deflected walks and tilts on its own say-so.
   const soft = held(input, Btn.Soft);
-  const smash =
-    pressed(input, prev, Btn.Attack) &&
-    dirStillHeld &&
-    !soft &&
-    f.framesSinceDirPress <= SMASH_INPUT_WINDOW;
+  // The one smash flick: smash attacks and smash-input specials both read it.
+  const flickAge = dirStillHeld && !soft ? f.framesSinceDirPress : NO_FLICK;
+  const smash = pressed(input, prev, Btn.Attack) && flickAge <= SMASH_INPUT_WINDOW;
 
   // SDI: one pulse per fresh direction press, and at most one every four frames.
   // The rate limit rides on the hitlag counter because `FighterState` has no
@@ -293,6 +302,7 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     grabPressed: pressed(input, prev, Btn.Grab),
     downPressed: pressed(input, prev, Btn.Down),
     wantsDash: x !== 0 && !soft && f.framesSinceDirPress > DASH_THRESHOLD_FRAMES,
+    flickAge,
     smash,
     smashX: smash ? dir.x : 0,
     smashY: smash ? dir.y : 0,
@@ -602,14 +612,28 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
  * UNVERIFIED: the turn in the air and out of `dashStart`; the page names
  * neither. Not modelled: reversing one "in the first few frames" (same page).
  * Only a side special turns: the up, down and neutral specials keep the facing.
+ *
+ * `flick` is how many frames before this B press its smash flick was
+ * (`Intent.flickAge`), or `NO_FLICK` when B was not pressed this frame: within the
+ * move's own window it starts the move's smash version (`MoveDef.smashInput`;
+ * Plan 5, Task 13d), which turns as the side special does. A buffered B is never
+ * one, as a buffered attack is never a smash (UNVERIFIED for both: no source says
+ * what the buffer keeps of the stick).
  */
-export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot, stickX = 0, stick: Stick = { x: stickX, y: 0, soft: false }): boolean {
+export function beginSpecial(
+  f: FighterState,
+  ctx: StateContext,
+  slot: MoveSlot,
+  stickX = 0,
+  stick: Stick = { x: stickX, y: 0, soft: false },
+  flick = NO_FLICK,
+): boolean {
   // Begun in the air, an up special is the fighter's aerial one where it has one
   // of its own (Plan 5, Task 13b: `upBAir`, Link's aerial Spin Attack).
-  const own: MoveSlot = slot === "upB" && !f.grounded && ctx.def.moves.upBAir !== undefined ? "upBAir" : slot;
+  const own = smashVersion(ctx.def, slot === "upB" && !f.grounded && ctx.def.moves.upBAir !== undefined ? "upBAir" : slot, flick);
   const move = ctx.def.moves[own];
   if (move === undefined) return false;
-  if (own === "sideB" && stickX !== 0 && f.action !== "run") f.facing = stickX;
+  if (slot === "sideB" && stickX !== 0 && f.action !== "run") f.facing = stickX;
   startMove(f, "special", own);
   // An up special's stick on its first frame: its turn and aims (Plan 5, Task 13b).
   if (move.turn !== undefined || move.aim !== undefined) upSpecialStick(f, move, stick);
@@ -623,6 +647,16 @@ export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot,
     if (f.charge >= sc.frames) f.actionFrame = storedFullStart(sc);
   }
   return true;
+}
+
+/**
+ * The move a special press starts in `slot`: its smash version (`MoveDef.smashInput`)
+ * when the press came within that move's window of the smash flick (Plan 5, Task
+ * 13d), else the move itself.
+ */
+function smashVersion(def: FighterDef, slot: MoveSlot, flick: number): MoveSlot {
+  const smash = def.moves[slot]?.smashInput;
+  return smash !== undefined && flick <= smash.within && def.moves[smash.slot] !== undefined ? smash.slot : slot;
 }
 
 /**
@@ -857,6 +891,11 @@ export function landFromSpecialFall(f: FighterState, def: FighterDef): void {
   f.charge = lag;
 }
 
+/** The smash flick a B press this frame comes with (`beginSpecial`'s `flick`): none for a buffered B. */
+function specialFlick(intent: Intent): number {
+  return intent.specialPressed ? intent.flickAge : NO_FLICK;
+}
+
 /**
  * Everything a fighter who is free to act might do, in priority order.
  *
@@ -878,7 +917,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
       startMove(f, "grab", hasMove(ctx, slot) ? slot : "grab");
       return true;
     }
-    if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x, intent)) return true;
+    if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x, intent, specialFlick(intent))) return true;
     if (p.attack && beginAttack(f, ctx, groundAttackSlot(f, intent))) return true;
     if (p.jump) {
       startAction(f, "jumpSquat");
@@ -900,7 +939,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   // shield/grab can turn into a directional air dodge buffer, which can be a
   // misinput"; Plan 3, Task 20c).
   if ((p.shield || intent.shieldHeld) && startAirDodge(f, intent)) return true;
-  if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x, intent)) return true;
+  if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x, intent, specialFlick(intent))) return true;
   if (p.attack) {
     const slot = aerialSlot(f, intent);
     if (hasMove(ctx, slot)) {
@@ -1376,6 +1415,17 @@ export function onLanded(f: FighterState, ctx: StateContext, fromAir: boolean = 
     startAction(f, "specialLanding");
     f.combat.helplessMove = slot;
     f.charge = move.helpless.landingLag;
+    return;
+  }
+  // A special begun in the air with a landing lag of its own lands into it, as an
+  // aerial does (Plan 5, Task 13d: Samus's Super Missile, UltimateFrameData's
+  // "Landing lag" 30, https://ultimateframedata.com/samus; her Homing Missile has
+  // none there, and lands as below). UNVERIFIED: on any frame of the move, UFD giving
+  // no window, so one landing before its missile is out launches none; and only one
+  // begun in the air, as UFD's aerial column is.
+  if (move?.aerialLandingLag !== undefined && fromAir) {
+    startAction(f, "landingLag");
+    f.charge = move.aerialLandingLag;
     return;
   }
   // A tumble that reaches the floor lies down: in hitstun, one too slow to

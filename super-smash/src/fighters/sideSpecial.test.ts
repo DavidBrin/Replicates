@@ -38,7 +38,9 @@ describe("a side special pressed backward", () => {
     for (const air of [false, true]) {
       it(`turns ${def.id} round first, ${air ? "in the air" : "on the ground"}`, () => {
         const f = step(alone(def.id, air), [Btn.Left | Btn.Special, 0], { prevInputs: [0, 0] }).state.fighters[0];
-        expect([f.action, f.move, f.facing]).toEqual(["special", "sideB", -1]);
+        // Left and B pressed together are a smash input, so a side special with a
+        // smash version turns into that (Plan 5, Task 13d: Samus's and Link's).
+        expect([f.action, f.move, f.facing]).toEqual(["special", def.moves.sideB!.smashInput?.slot ?? "sideB", -1]);
       });
     }
   }

@@ -591,17 +591,23 @@ describe("a projectile fired into a wall from beside it", () => {
   // (offset 8, the roster's widest), the Thunder Jolt and Link's Remote Bomb (offset
   // 4: from 1 nearer the wall), and F.L.U.D.D.'s seven pumps, a stored full charge,
   // its owner held where it starts so that every pump's spawn is in the wall.
+  // Task 13d: a side special pressed with its direction is its smash version now,
+  // so the Homing Missile and the tilt Boomerang are pressed as a soft tilt, and the
+  // Super Missile and the smash-thrown Boomerang have rows of their own; each row
+  // names the move its press starts.
   it.each([
-    ["mario", "Fireball", Btn.Special, -84, {}, false],
-    ["fox", "Blaster", Btn.Special, -84, {}, false],
-    ["samus", "Homing Missile", Btn.Special | Btn.Right, -84, {}, false],
-    ["link", "Hero's Bow", Btn.Special, -84, {}, false],
-    ["link", "Boomerang", Btn.Special | Btn.Right, -84, {}, false],
-    ["samus", "stored full Charge Shot", Btn.Special, -84, { storedCharge: 112 }, false],
-    ["pikachu", "Thunder Jolt", Btn.Special, -83, {}, false],
-    ["mario", "F.L.U.D.D. water (stored full)", Btn.Down | Btn.Special, -84, { storedCharge: 80 }, true],
-    ["link", "Remote Bomb", Btn.Down | Btn.Special, -83, {}, false],
-  ] as const)("%s's %s never starts, or flies, inside it", (id, _name, key, x, combat, hover) => {
+    ["mario", "Fireball", Btn.Special, -84, {}, false, "neutralB"],
+    ["fox", "Blaster", Btn.Special, -84, {}, false, "neutralB"],
+    ["samus", "Homing Missile", Btn.Soft | Btn.Special | Btn.Right, -84, {}, false, "sideB"],
+    ["samus", "Super Missile", Btn.Special | Btn.Right, -84, {}, false, "sideBSmash"],
+    ["link", "Hero's Bow", Btn.Special, -84, {}, false, "neutralB"],
+    ["link", "Boomerang", Btn.Soft | Btn.Special | Btn.Right, -84, {}, false, "sideB"],
+    ["link", "smash-thrown Boomerang", Btn.Special | Btn.Right, -84, {}, false, "sideBSmash"],
+    ["samus", "stored full Charge Shot", Btn.Special, -84, { storedCharge: 112 }, false, "neutralB"],
+    ["pikachu", "Thunder Jolt", Btn.Special, -83, {}, false, "neutralB"],
+    ["mario", "F.L.U.D.D. water (stored full)", Btn.Down | Btn.Special, -84, { storedCharge: 80 }, true, "downB"],
+    ["link", "Remote Bomb", Btn.Down | Btn.Special, -83, {}, false, "downB"],
+  ] as const)("%s's %s never starts, or flies, inside it", (id, _name, key, x, combat, hover, slot) => {
     let s = createInitialState("finalDestination", [{ defId: id }, { defId: "kirby" }], RULES, 9);
     Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(x), y: fx(-30), facing: 1, intangible: 0, invincible: 0 });
     Object.assign(s.fighters[0].combat, combat);
@@ -614,6 +620,7 @@ describe("a projectile fired into a wall from beside it", () => {
       const before = s.nextProjectileId;
       s = step(s, now, { prevInputs: prev }).state;
       prev = now;
+      if (i === 0) expect(s.fighters[0].move, "the move its press starts").toBe(slot);
       launches += s.nextProjectileId - before;
       for (const p of s.projectiles) expect(insideSolidBody(FD, s.frame, p.x, p.y), `${p.defId} at age ${p.age}`).toBe(false);
     }

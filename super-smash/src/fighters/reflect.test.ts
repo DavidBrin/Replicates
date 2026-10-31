@@ -522,7 +522,8 @@ describe("what the Reflector reflects", () => {
     const s = duel("link", "fox");
     s.fighters[0].x = fx(30);
     s.fighters[1].x = fx(70);
-    const { events, states } = run(s, 300, (i) => [i === 0 ? Btn.Right | Btn.Special : 0, i >= 10 && i < 80 ? Btn.Down | Btn.Special : 0]);
+    // The tilt throw, a soft tilt: Right and B together are the smash throw (Plan 5, Task 13d).
+    const { events, states } = run(s, 300, (i) => [i === 0 ? Btn.Soft | Btn.Right | Btn.Special : 0, i >= 10 && i < 80 ? Btn.Down | Btn.Special : 0]);
     const reflected = events.findIndex((e) => e.reflects.length > 0);
     expect(reflected).toBeGreaterThan(0);
     const boomerang = (i: number) => states[i].projectiles.find((p) => p.defId === "boomerang");

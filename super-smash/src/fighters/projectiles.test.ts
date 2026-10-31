@@ -183,7 +183,9 @@ describe("Link's boomerang turns where its page says, and steers home (SmashWiki
   // deviation per frame when returning 0.75°"; the "Returning" row 3.0%, 70°, BK 50,
   // KS 40, radius 3.6; "After clashing with an attack": "Lifetime 60 frames",
   // "Horizontal speed -0.15", "Vertical speed 1.25", "Gravity 0.09", "Falling speed 1.4".
-  const SIDE_B = Btn.Right | Btn.Special;
+  // A soft tilt: Right and B pressed together are a smash input, the smash throw
+  // (Plan 5, Task 13d; `smashSpecial.test.ts`).
+  const SIDE_B = Btn.Soft | Btn.Right | Btn.Special;
   const BOOMERANG = () => projectileDef("link", "boomerang");
 
   it("carries the page's numbers", () => {
@@ -476,9 +478,13 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
     ["fox", "blaster", "fox_blaster_bullet Fly", "OFF"],
     ["samus", "chargeShot", "samus_cshot Shoot", "ON"],
     ["samus", "missile", "samus_missile Homing", "ON"],
+    // Plan 5, Task 13d: the Super Missile's article, both its states.
+    ["samus", "superMissile", "samus_supermissile Ready, Straight", "ON"],
     ["samus", "bomb", "samus_bomb Fall, BurstAttack", "ON"],
     ["link", "arrow", "link_bowarrow Fly", "ON"],
     ["link", "boomerang", "link_boomerang Fly, Turn", "ON"],
+    // Plan 5, Task 13d: the smash throw is the same article, thrown harder.
+    ["link", "boomerangSmash", "link_boomerang Fly, Turn", "ON"],
     ["pikachu", "thunderJolt", "pikachu_dengekidama, pikachu_dengeki Regular", "THRU"],
     ["kirby", "star", "kirby_starmissile Fly", "ON"],
     // No article script: an item (ITEM_KIND_LINKBOMB), with its own HP and "Hit by

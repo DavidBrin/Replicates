@@ -20,7 +20,11 @@
  *   the steps before it untouched): Samus fires once more and Link jabs into the
  *   shot. They clank (5% against 3%, within 9%): the shot is gone, and Link, on the
  *   ground and beaten by no more than 9%, freezes for the shot's hitlag and then
- *   rebounds (`rebound`, which no other golden match reaches).
+ *   rebounds (`rebound`, which no other golden match reaches);
+ * - the smash-input specials (Task 13d, ruling R-T11a: appended after frame 300,
+ *   the steps before it untouched): Samus's Super Missile waits, flies and hits
+ *   Link, and Link's smash-thrown Boomerang hits Samus, turns and comes home. No
+ *   other golden match smash-inputs a special.
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added; the pins in
@@ -40,6 +44,8 @@ const B = Btn.Special;
 const A = Btn.Attack;
 const D = Btn.Down;
 const J = Btn.Jump;
+const L = Btn.Left;
+const R = Btn.Right;
 
 const STEPS: readonly ScriptStep[] = [
   // The bomb.
@@ -69,6 +75,16 @@ const STEPS: readonly ScriptStep[] = [
   //                                    freezes 8 (the shot's 5%) and rebounds 16 frames,
   //                                    248 to 263, standing on 264; to 300, the trace's
   //                                    next sample
+  // The smash-input specials (Task 13d, appended after frame 300, ruling R-T11a).
+  [1, R | B, 0], //                301: Samus presses Right and B together, a smash
+  [119, 0, 0], //                       input: her Super Missile, out on 321; it waits
+  //                                    26 frames at 0.18, flies from 347 and hits Link
+  //                                    on 368 (12%, ×1.2 one-on-one: 14.4%); he lands
+  //                                    on 410
+  [1, 0, L | B], //                421: Link throws the Boomerang with a smash input:
+  [179, 0, 0], //                       out on 447 at 3.1, it hits Samus on 473 (9.6%,
+  //                                    ×1.2: 11.52%), turns on 507 (age 60) and is
+  //                                    caught on 566; to 600, the trace's last sample
 ];
 
 export const PROJECTILE_LAB: LabMatch = {
@@ -77,7 +93,7 @@ export const PROJECTILE_LAB: LabMatch = {
   fighters: ["samus", "link"],
   seed: 1013,
   rules: { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true },
-  frames: 300,
+  frames: 600,
   setup(state: GameState) {
     const [samus, link] = state.fighters;
     Object.assign(samus, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-30), y: 0, facing: 1, intangible: 0, invincible: 0 });

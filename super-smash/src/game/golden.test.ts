@@ -43,9 +43,11 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * ruling R-T8e): Kirby against Mario, the spit and the swallow, and a 200-frame
  * crawl lab (`goldenCrawlLab.ts`, Task 12, ruling R-T8e): Pikachu crawls, down
  * tilts out of the crawl, and crawls off the stage's edge onto the ledge, and a
- * 200-frame projectile lab (`goldenProjectileLab.ts`, Task 13c, ruling R-T8e):
- * Samus's bomb settles and goes off on its timer, her Charge Shot and Link's arrow
- * clank, and a Charge Shot flies out its life.
+ * projectile lab (`goldenProjectileLab.ts`, Task 13c, ruling R-T8e; 300 frames after
+ * its fix round 1, 600 after Task 13d): Samus's bomb settles and goes off on its
+ * timer, her Charge Shot and Link's arrow clank, a Charge Shot flies out its life,
+ * one clanks with Link's jab and he rebounds, and the smash-input specials, Samus's
+ * Super Missile and Link's smash-thrown Boomerang, each land their hit.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -262,6 +264,11 @@ const MATCHES: readonly Match[] = [
  * landing during one is the `specialLanding` the helpless fall already lands in. The
  * four CPU matches reach 42 between them, up from 40: they rebound off a clank and
  * throw and are thrown now, and none trumps a ledge. All 58 are visited.
+ * Plan 5 Task 13d (smash-input specials) adds no action either: a side special's
+ * smash version (`sideBSmash`) is a move in `special`, and the Super Missile lands
+ * into the aerials' `landingLag`. The projectile lab, appended after its 300 (ruling
+ * R-T11a), now also tumbles Samus into `tumbleFall`, `downed` and `getUp`, which the
+ * CPU matches and the states lab already reach. All 58 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -492,6 +499,8 @@ interface Played {
   readonly hitKinds: ReadonlySet<string>;
   /** What the match's projectiles came to (`ProjectilePath`): how many projectiles reached each. */
   readonly projectilePaths: ReadonlyMap<ProjectilePath, number>;
+  /** Every projectile launched, by definition id (Plan 5, Task 13d). */
+  readonly launched: ReadonlySet<string>;
   /** The first few frames that broke `invariantBreaks`, if any did. */
   readonly invariantBreaks: readonly string[];
 }
@@ -512,6 +521,7 @@ function play(match: Match): Played {
   const actions = new Set<ActionState>();
   const soft = new Set<SoftPath>();
   const hitKinds = new Set<string>();
+  const launched = new Set<string>();
   /** The paths each projectile (by `instanceId`) reached. */
   const reached = new Map<number, Set<ProjectilePath>>();
   const breaks: string[] = [];
@@ -533,6 +543,7 @@ function play(match: Match): Played {
       set.add(path);
       reached.set(id, set);
     }
+    for (const p of out.state.projectiles) if (!state.projectiles.some((q) => q.instanceId === p.instanceId)) launched.add(p.defId);
     state = out.state;
     prev = inputs;
     hits += out.events.hits.length;
@@ -544,7 +555,7 @@ function play(match: Match): Played {
   }
   const projectilePaths = new Map<ProjectilePath, number>();
   for (const set of reached.values()) for (const path of set) projectilePaths.set(path, (projectilePaths.get(path) ?? 0) + 1);
-  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, invariantBreaks: breaks };
+  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, launched, invariantBreaks: breaks };
 }
 
 describe("engine golden trace", () => {
@@ -777,6 +788,16 @@ describe("engine golden trace", () => {
   // and Marth in special fall. The script and the five labs are byte-identical. So
   // now: hits 34/32/22/19, 6, 0, 1, 4, 1 and 0; shield hits 1/6/0/0, 3, 0, 0, 0, 0
   // and 0; KOs 1/0/1/1, 1, 2, 0, 0, 0 and 0.
+  // Plan 5 Task 13d (a side special pressed within its move's published window of a
+  // smash flick is its smash version: Samus's Super Missile, Link's smash-thrown
+  // Boomerang; Samus's missiles out at a time; the Super Missile's landing lag) left
+  // the nine other traces byte-identical, and the projectile lab's first 300 frames:
+  // no golden CPU presses a side special fresh (the CPUs' side specials come out of
+  // the buffer, never a smash), and no golden match had more missiles out than the
+  // limits allow. The projectile lab appends frames 301-600 (ruling R-T11a): the
+  // Super Missile hits Link on 368 and the smash-thrown Boomerang hits Samus on 473
+  // (`expectSmashSpecials`). So now: hits 34/32/22/19, 6, 0, 1, 4, 1 and 2; shield
+  // hits 1/6/0/0, 3, 0, 0, 0, 0 and 0; KOs 1/0/1/1, 1, 2, 0, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -822,6 +843,14 @@ describe("engine golden trace", () => {
     expect(Object.fromEntries(lab.projectilePaths), "the projectile lab's projectiles, by what they came to").toEqual({ expired: 2, settled: 1, exploded: 1, clanked: 3 });
   }
 
+  // Plan 5, Task 13d: the projectile lab smash-inputs both side specials, and each
+  // lands its hit there (`goldenProjectileLab.ts`); no other golden match does.
+  function expectSmashSpecials(): void {
+    const lab = played.get(PROJECTILE_LAB.name)!;
+    expect(["superMissile", "boomerangSmash"].filter((id) => !lab.launched.has(id)), "smash-input specials the projectile lab no longer launches").toEqual([]);
+    expect(lab.hits, "the Super Missile on Link and the smash-thrown Boomerang on Samus").toBe(2);
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -831,6 +860,7 @@ describe("engine golden trace", () => {
   it("visits every action state and every soft-stick path", expectCoverage);
   it("lands every kind of hit the scripted match lands", expectScriptHits);
   it("lets a projectile expire, settle, explode and clank", expectProjectilePaths);
+  it("smash-inputs both side specials in the projectile lab", expectSmashSpecials);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -840,6 +870,7 @@ describe("engine golden trace", () => {
       expectCoverage();
       expectScriptHits();
       expectProjectilePaths();
+      expectSmashSpecials();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;

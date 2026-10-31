@@ -75,6 +75,12 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // Plan 5, Task 13b: an up special begun in the air (rubendal Motions: Link's
   // `special_air_hi`, the motion of `game_specialairhi`).
   upBAir: "special_air_hi",
+  // Plan 5, Task 13d: a side special's smash version, the replica's name. Samus's
+  // Super Missile plays `special_s` in the game (rubendal Motions: `game_specials`,
+  // CancelFrame 58; her Homing Missile's is `special`, `game_special`, 55), the name
+  // `sideB` already carries here; Link's smash throw plays his throw's
+  // (`MoveDef.motionOf`).
+  sideBSmash: "special_s_smash",
 };
 
 /**
@@ -211,7 +217,9 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
     const b = beats.get(frame)!;
     commands.push({ op: "frame", frame }, ...b.close, ...b.open);
   }
-  return { name: `game_${SLOT_MOTION[move.slot].replace(/_/g, "")}`, motion: SLOT_MOTION[move.slot], commands };
+  // A move that plays another's motion (`MoveDef.motionOf`; Plan 5, Task 13d) runs under its name.
+  const motion = SLOT_MOTION[move.motionOf ?? move.slot];
+  return { name: `game_${motion.replace(/_/g, "")}`, motion, commands };
 }
 
 /**

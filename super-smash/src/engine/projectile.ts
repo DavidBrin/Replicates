@@ -249,6 +249,14 @@ export function advanceProjectile(
     if (speed < def.drag.minSpeed) return { alive: false, prevX, prevY };
     p.vx = p.vx >= 0 ? speed : -speed;
   }
+  // A missile that waits, then flies (Plan 5, Task 13d: Samus's Super Missile,
+  // SmashWiki "Samus (SSBU)/Side special", https://www.ssbwiki.com/Samus_(SSBU)/Side_special:
+  // "Period before accelerating 26 frames", "Acceleration 0.16", "Maximum speed
+  // 4.2"): from that frame of its life it gains its acceleration a frame along its
+  // way, up to its most. UNVERIFIED: that the first gain comes on that frame (age
+  // 26, its wait ages 0 to 25) and adds to the speed it waited at.
+  const a = def.accelerate;
+  if (a !== undefined && p.age >= a.after) setSpeed(p, p.vx, p.vy, Math.min(length(p.vx, p.vy) + a.perFrame, a.maxSpeed));
   p.vy = fall(p.vy, def.gravity, def.maxFall);
   p.x += p.vx;
   p.y += p.vy;
@@ -518,6 +526,18 @@ function meetUnderside(p: ProjectileState, rule: SurfaceRule, i: number, y: numb
   p.y = y;
   p.vy = -p.vy;
   return true;
+}
+
+/**
+ * How many of `def` the fighter in port `owner` has out (`ProjectileDef.maxOut`; Plan
+ * 5, Task 13d), from its moveset (`source`). UNVERIFIED: that one a reflector sent back
+ * is out of the count, a reflection making it the reflector's (SmashWiki "Reflect":
+ * reflected projectiles "change ownership from the original user to the reflector").
+ */
+export function projectilesOut(projectiles: readonly ProjectileState[], owner: number, source: string, def: ProjectileDef): number {
+  let n = 0;
+  for (const p of projectiles) if (p.owner === owner && p.source === source && p.defId === def.id) n += 1;
+  return n;
 }
 
 /** Has this projectile already connected with that port? */

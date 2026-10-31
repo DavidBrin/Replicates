@@ -1025,8 +1025,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 
 /* ------------------------------------------------------------ projectiles -- */
 
-/** Painters for this fighter's own projectiles, keyed by projectile def id. */
-export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
+/** This fighter's projectile painters, one per look (`projectiles` keys them by def id). */
+const OWN = {
   /**
    * The Charge Shot itself.
    *
@@ -1190,4 +1190,12 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
     circle(ctx, 0, 0, r * 0.24);
     if (hot > 0.5) glow(ctx, 0, 0, r * 3.2, withAlpha(FIRE, 0.35 + 0.3 * life), withAlpha(FIRE, 0.16));
   },
-};
+} satisfies Record<string, ProjectilePainter>;
+
+/**
+ * Painters for this fighter's own projectiles, keyed by projectile def id. The Super
+ * Missile (Plan 5, Task 13d) is painted as the missile for now (UNVERIFIED stand-in:
+ * SmashWiki "Missile" draws it with "a fatter body and a green nose"; the
+ * presentation's to paint).
+ */
+export const projectiles: Readonly<Record<string, ProjectilePainter>> = { ...OWN, superMissile: OWN.missile };

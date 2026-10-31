@@ -204,7 +204,10 @@ export type MoveSlot =
   | "inhaleSpit"
   // Plan 5, Task 13b: an up special begun in the air, where the fighter has one of
   // its own (SSBU's `special_air_hi`; Link's aerial Spin Attack).
-  | "upBAir";
+  | "upBAir"
+  // Plan 5, Task 13d: a side special's smash-input version (`MoveDef.smashInput`):
+  // Samus's Super Missile, Link's smash-thrown Boomerang.
+  | "sideBSmash";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -445,6 +448,18 @@ export interface ProjectileDef {
    * absent, `vy` stays as uncharged.
    */
   readonly charged?: { readonly hitbox: ChargedHitbox; readonly vx: number; readonly vy?: number; readonly partial?: PartialCharge };
+  /**
+   * After `after` frames of its life it gains `perFrame` a frame along its way, up to
+   * `maxSpeed` (Plan 5, Task 13d: Samus's Super Missile, "Period before accelerating
+   * 26 frames", "Acceleration 0.16", "Maximum speed 4.2"). Q12 but `after`.
+   */
+  readonly accelerate?: { readonly after: number; readonly perFrame: number; readonly maxSpeed: number };
+  /**
+   * No more of it than this are out for one owner at once: a move that would launch
+   * another launches nothing (Plan 5, Task 13d: Samus's "Maximum Homing Missiles at a
+   * time 2", "Maximum Super Missiles at a time 1"; `spawnDueProjectiles`).
+   */
+  readonly maxOut?: number;
   /** Drawing hint for the renderer. */
   readonly visual: "arrow" | "bomb" | "boomerang" | "energy" | "fire" | "spark" | "missile";
   /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */
@@ -838,6 +853,26 @@ export interface MoveDef {
    * (Plan 5, Task 4b). See `HelplessDef`.
    */
   readonly helpless?: HelplessDef;
+  /**
+   * A smash input makes this move another (Plan 5, Task 13d, ruling P5-R29): the
+   * special pressed within `within` frames of a fresh direction press still held,
+   * not a soft tilt (the smash attacks' own flick, `Intent.flickAge`; DECISIONS
+   * D7), starts the move in `slot` instead: Samus's Missile her Super Missile,
+   * Link's Boomerang its smash throw. `within` is the move's published window.
+   */
+  readonly smashInput?: { readonly within: number; readonly slot: MoveSlot };
+  /**
+   * A special begun in the air that lands while still out lands into this many
+   * frames of lag, as an aerial does (`onLanded`; Plan 5, Task 13d: Samus's Super
+   * Missile). Not `landingLag`, an aerial's.
+   */
+  readonly aerialLandingLag?: number;
+  /**
+   * The move plays `motionOf`'s motion: the same clip on the same clock, so the bake
+   * gives it nothing of its own and refuses one of another length (Plan 5, Task 13d:
+   * Link's smash throw plays his throw's, `special_s1` for both in the game).
+   */
+  readonly motionOf?: MoveSlot;
   /**
    * In the air, the move's animation runs to this frame (Plan 5: Mario's Cape,
    * SmashWiki's "Animation length"). It is interruptible from `totalFrames` + 1

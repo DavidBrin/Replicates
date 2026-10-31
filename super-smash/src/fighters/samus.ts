@@ -712,14 +712,22 @@ const legacy: FighterDef = {
       // Two variants off one input. A *tilt* fires the homing missile below —
       // 8% at a flat 0 degrees, living 120 frames (SmashWiki "Samus
       // (SSBU)/Side special", https://www.ssbwiki.com/Samus_(SSBU)/Side_special:
-      // Homing Missile "Lifetime 120 frames", "Missile 18-137"). A *smash* fires a Super
-      // Missile: 12% at 65 degrees, faster and straight, which only starts
-      // moving forward around frame 50, and that delay is exactly why she can
-      // act before it arrives and follow it in. Both are reflectable.
+      // Homing Missile "Lifetime 120 frames", "Missile 18-137"). A *smash* fires the
+      // Super Missile, a move of its own (`sideBSmash`, Plan 5, Task 13d). Both are
+      // reflectable.
       //
       // UNMODELLED: the homing. `ProjectileDef` has no steering field, so what
       // is encoded is a straight missile at the homing variant's damage. That
-      // is a deliberate simplification, not a transcription slip.
+      // is a deliberate simplification, not a transcription slip. Published, not
+      // modelled (Task 13d): its "Initial speed 1.15" and deceleration (the 1.5
+      // below is the legacy table's), "Interruptible (aerial) 60", and both
+      // missiles' aerial "Horizontal speed divisor 2", "Air friction 0.0025" and
+      // movement "enabled starting on frame 35".
+      //
+      // The smash input (Plan 5, Task 13d): B pressed within "Smash input window 5
+      // frames" of a smash flick (the page's move parameters) fires the Super
+      // Missile: the same 5 as the smash attacks' window here (`SMASH_INPUT_WINDOW`).
+      smashInput: { within: 5, slot: "sideBSmash" },
       hitboxes: [],
       projectiles: [
         {
@@ -732,6 +740,8 @@ const legacy: FighterDef = {
           gravity: fx(0),
           lifetime: 120,
           destroyOnHit: true,
+          // "Maximum Homing Missiles at a time 2" (the page's move parameters; Task 13d).
+          maxOut: 2,
           visual: "missile",
           // samus_missile `Homing`: `Reflectable=true`.
           reflectable: true,
@@ -748,6 +758,67 @@ const legacy: FighterDef = {
             knockbackGrowth: fx(25),
             effect: "fire",
             // samus_missile `Homing`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5, Task 13c).
+          },
+        },
+      ],
+    },
+
+    sideBSmash: {
+      slot: "sideBSmash",
+      name: "Super Missile",
+      // Plan 5, Task 13d (ruling P5-R29): the smash-input side special. SmashWiki
+      // "Samus (SSBU)/Side special" (https://www.ssbwiki.com/Samus_(SSBU)/Side_special,
+      // revision 1708939): "Super Missile 21-96", "Interruptible (grounded) 58",
+      // "Interruptible (aerial) 62" (its `game_specialairs` runs FT_MOTION_RATE 2 from
+      // 58 to its CancelFrame 60: 62; UltimateFrameData's "57/59" counts the air's 59).
+      // Its script is `game_specials` (rubendal 13.0.1: `special_s`, the weapon flag on
+      // 21, CancelFrame 58), its own motion and animation in the game.
+      // UltimateFrameData (https://ultimateframedata.com/samus), "Side B (Super
+      // Missle)": "Landing lag 30", where the Homing Missile has none.
+      totalFrames: 57,
+      aerialTotalFrames: 61,
+      aerialLandingLag: 30,
+      hitboxes: [],
+      projectiles: [
+        {
+          // samus_supermissile: it waits, then flies straight. The page's Super
+          // Missile parameters: "Initial speed 0.18", "Period before accelerating 26
+          // frames", "Lifetime upon accelerating 50 frames" (26 + 50 = 76, "21-96"),
+          // "Acceleration 0.16", "Maximum speed 4.2"; its row, `Ready` and `Straight`
+          // alike: 12.0%, 65°, BK 50, KS 65, radius 2.5, flame. UltimateFrameData's
+          // "lasts until frame 87" and "21—70" disagree with the page's 76 frames;
+          // the page's parameters are followed. UNVERIFIED: the spawn offset, the
+          // Homing Missile's legacy one (the page's "Missile X offset 1u" names no
+          // point it is measured from).
+          // Published, not modelled: "Rotation speed 2", its shield damage 5.
+          id: "superMissile",
+          spawnFrame: 21,
+          offsetX: fx(8.0),
+          offsetY: fx(6.5),
+          vx: fx(0.18),
+          vy: fx(0),
+          gravity: fx(0),
+          lifetime: 76,
+          accelerate: { after: 26, perFrame: fx(0.16), maxSpeed: fx(4.2) },
+          destroyOnHit: true,
+          // "Maximum Super Missiles at a time 1".
+          maxOut: 1,
+          visual: "missile",
+          // samus_supermissile `Ready`, `Straight`: `Reflectable=true`.
+          reflectable: true,
+          hitbox: {
+            id: 0,
+            startFrame: 0,
+            endFrame: 75,
+            x: fx(0),
+            y: fx(0),
+            radius: fx(2.5),
+            damage: fx(12.0),
+            angle: fx(65),
+            baseKnockback: fx(50),
+            knockbackGrowth: fx(65),
+            effect: "fire",
+            // samus_supermissile `Ready`, `Straight`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON`.
           },
         },
       ],

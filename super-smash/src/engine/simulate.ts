@@ -96,6 +96,7 @@ import {
   projectileAlreadyHit,
   projectileHitbox,
   projectileHitboxActive,
+  projectilesOut,
   spawnProjectile,
 } from "./projectile";
 import { chargedHitbox } from "./specialCharge";
@@ -1237,6 +1238,12 @@ function spawnDueProjectiles(
       // A copied neutral special fires the copied fighter's projectile, at its ×1.2
       // (Plan 5, Task 9, ruling R-T9a): its definition is looked up by `source`.
       const source = f.combat.copy !== "" && f.move === "neutralB" ? f.combat.copy : defs[i].id;
+      // No more out at once than it may have (Plan 5, Task 13d: Samus's "Maximum Homing
+      // Missiles at a time 2", "Maximum Super Missiles at a time 1", SmashWiki "Samus
+      // (SSBU)/Side special"): the move plays on and launches nothing. UNVERIFIED: that
+      // nothing is launched (no source says what the move does at the limit), and that
+      // the two missiles count apart, each against its own limit, as the page lists them.
+      if (def.maxOut !== undefined && projectilesOut(s.projectiles, f.port, source, def) >= def.maxOut) continue;
       const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move));
       // One that would start inside the stage's solid body (its owner beside a wall
       // or under the stage, facing it) is never launched: it is in the wall from

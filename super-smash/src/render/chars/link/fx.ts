@@ -794,8 +794,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
   },
 };
 
-/** Painters for this fighter’s own projectiles, keyed by projectile def id. */
-export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
+/** This fighter's projectile painters, one per look (`projectiles` keys them by def id). */
+const OWN = {
   /**
    * The arrow. Translated to the projectile but not rotated, so it noses over
    * as gravity takes it — which for an arrow is the whole tell that the shot is
@@ -907,4 +907,11 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
     glow(ctx, 0, 0, r * (dying ? 3.2 : 2.2), `rgba(95,230,224,${0.2 + lit * 0.3})`);
     bombBody(ctx, r, lit);
   },
-};
+} satisfies Record<string, ProjectilePainter>;
+
+/**
+ * Painters for this fighter's own projectiles, keyed by projectile def id. The
+ * smash-thrown Boomerang (Plan 5, Task 13d) is the same article thrown harder, and
+ * is painted as the Boomerang.
+ */
+export const projectiles: Readonly<Record<string, ProjectilePainter>> = { ...OWN, boomerangSmash: OWN.boomerang };

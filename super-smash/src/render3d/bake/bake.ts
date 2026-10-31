@@ -252,13 +252,25 @@ export interface MotionSampler {
   readonly turn?: (k: number) => number;
 }
 
-/** The sampler for each slot's active script motion. */
+/**
+ * The sampler for each slot's active script motion. A move that plays another's
+ * motion (`MoveDef.motionOf`; Plan 5, Task 13d: Link's smash throw) bakes none of its
+ * own, and must last that motion's frames: the same clip on the same clock.
+ */
 export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & { slot: MoveSlot }> {
   const out = new Map<MotionKind, MotionSampler & { slot: MoveSlot }>();
   for (const slot of Object.keys(def.moves) as MoveSlot[]) {
     const move = def.moves[slot];
     const script = gameScriptFor(def, slot);
     if (move === undefined || script === null) continue;
+    if (move.motionOf !== undefined) {
+      const of = def.moves[move.motionOf];
+      const theirs = gameScriptFor(def, move.motionOf);
+      if (of === undefined || theirs === null || theirs.motion !== script.motion || scriptTiming(theirs, of.totalFrames).frames !== scriptTiming(script, move.totalFrames).frames) {
+        throw new Error(`bake ${def.id}: ${def.id} ${slot} plays ${move.motionOf}'s motion for a length of its own`);
+      }
+      continue;
+    }
     if (out.has(script.motion)) throw new Error(`bake ${def.id}: slots ${out.get(script.motion)!.slot} and ${slot} share motion ${script.motion}`);
     const clip = clipFor(def.id, SLOT_POSE[slot]);
     const timing = scriptTiming(script, move.totalFrames);

@@ -83,9 +83,17 @@ const SLOT_CANDIDATES = {
  * Slots only some fighters import, by fighter: a move the game runs for that
  * fighter alone (Plan 5, Task 13b: Link's aerial Spin Attack, `SpecialAirHi`,
  * the `upBAir` slot; SmashWiki "Link (SSBU)/Up special" gives its own timeline).
+ * A slot here replaces the shared candidates for that fighter.
+ *
+ * Plan 5, Task 13d: a side special's smash version, `sideBSmash`. Samus's Homing
+ * Missile is `Special` (rubendal Motions: `special`, CancelFrame 55, the weapon flag
+ * on 18) and her Super Missile `SpecialS` (`special_s`, CancelFrame 58, the flag on
+ * 21), so her side special is `Special`, not the shared candidates' `SpecialS`.
+ * Link's smash throw is his throw's `SpecialS1`, one script for both.
  */
 const EXTRA_SLOTS = {
-  link: { upBAir: ["SpecialAirHi"] },
+  samus: { sideB: ["Special"], sideBSmash: ["SpecialS"] },
+  link: { upBAir: ["SpecialAirHi"], sideBSmash: ["SpecialS1"] },
 };
 
 const HIT_STATUS = new Set(["HIT_STATUS_NORMAL", "HIT_STATUS_XLU", "HIT_STATUS_INVINCIBLE", "HIT_STATUS_OFF"]);

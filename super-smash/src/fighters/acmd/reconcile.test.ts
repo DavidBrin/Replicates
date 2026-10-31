@@ -46,13 +46,16 @@ import { withLimbScripts } from "./limb";
  * A script's `CancelFrame` is a motion frame, compared here in game frames
  * through its `FT_MOTION_RATE` (`gameFrameOfMotion`, Task 7 fix round 1): that
  * took 8 entries out (60 → 52), each one the legacy table agreeing with UFD and
- * the script both, once the frames were counted alike. Two that stay are slot
- * gaps, not disagreements: the importer maps Samus's neutral B to
+ * the script both, once the frames were counted alike. One that stays is a slot
+ * gap, not a disagreement: the importer maps Samus's neutral B to
  * `game_specialnstart`, the 13-frame charge start (UFD
  * https://ultimateframedata.com/samus: "Takes 13 frames to enter charge state";
- * the shot, 44 total, is the legacy move and has no imported script), and her
- * side B to `game_specials`, the Super Missile (UFD 57), against the legacy
- * Homing Missile (UFD 54).
+ * the shot, 44 total, is the legacy move and has no imported script). Her side B
+ * was the other, mapped to `game_specials`, the Super Missile (UFD 57), against the
+ * legacy Homing Missile (UFD 54); Plan 5 Task 13d maps it to the Homing Missile's
+ * own `game_special` (first actionable 55, as the legacy move) and the Super
+ * Missile's to its own slot, `sideBSmash` (58, as its move), so the entry is gone
+ * (37 → 36); Link's smash throw is reconciled against his throw's `game_specials1`.
  *
  * Plan 5 Task 8 gave Donkey Kong his own throws back: his forward throw is the
  * lift (`game_throwf`, no box, first actionable 16) and his back throw is

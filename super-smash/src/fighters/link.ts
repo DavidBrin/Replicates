@@ -15,7 +15,7 @@
  */
 
 import { fx } from "@/engine/fixed";
-import type { FighterDef } from "@/engine/types";
+import type { FighterDef, ProjectileDef } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { LINK } from "./acmd/generated/link";
 import { FIGHTER_PARAMS } from "./params";
@@ -24,6 +24,78 @@ import { FIGHTER_PARAMS } from "./params";
  * and about as wide, with the sword adding reach but no hurtbox. */
 const HEIGHT = 12.4;
 const HALF_WIDTH = 2.1;
+
+/**
+ * Link's Boomerang (the side special's projectile), thrown with a tilt input; the
+ * smash throw (`sideBSmash`, Plan 5, Task 13d) is the same article thrown harder.
+ */
+const BOOMERANG: ProjectileDef = {
+  // Out, decelerating, then back — `returns` is the whole move. It
+  // lives 125 frames on a tilt throw, frames 27-151 (SmashWiki "Link
+  // (SSBU)/Side special", https://www.ssbwiki.com/Link_(SSBU)/Side_special:
+  // "Lifetime 125 frames (tilt)", "Tilt input hitboxes (clean, late,
+  // returning) 27-36, 37-71, 72-151"); a *smash* input throws it further
+  // and harder (8% → 9.6% clean) and stretches that to 167 (27-192): the
+  // `sideBSmash` move's (Plan 5, Task 13d). Link catches it in a 9-frame
+  // animation, which is skipped if he is mid-attack.
+  //
+  // The return leg does only 3% but drags victims back toward him,
+  // which is what makes it a combo starter into his sword rather than
+  // a poke. It does not die on contact — it keeps going.
+  //
+  // Its flight is the page's Boomerang parameters (Plan 5, Task 13c): out at
+  // "Initial speed 2.4 (tilt)", slowing by "Deceleration 0.047" until it
+  // would be under "Minimum speed 0.3", which is frame 45 of its life, where
+  // the returning hitbox starts (72 − 27); back up to "Maximum returning
+  // speed 3", steering at Link by "Angle deviation per frame when returning
+  // 0.75°" (its sine and cosine below). Not modelled: "Distance spent
+  // turning back 16", the clean hit's 8% giving way to the late 6% on frame
+  // 10 (the box below is the clean one, at the replica's radius), and the
+  // floor's "Downward ground collision range −0.5u".
+  id: "boomerang",
+  spawnFrame: 27,
+  offsetX: fx(9.0),
+  offsetY: fx(7.0),
+  vx: fx(2.4),
+  vy: fx(0),
+  gravity: fx(0),
+  lifetime: 125,
+  destroyOnHit: false,
+  returns: {
+    deceleration: fx(0.047),
+    minSpeed: fx(0.3),
+    maxSpeed: fx(3.0),
+    homing: { sin: fx(0.0130896), cos: fx(0.9999143) },
+    // The "Returning" row: 3.0%, 70°, BK 50, KS 40, radius 3.6
+    // (link_boomerang `Turn`).
+    hit: { damage: fx(3.0), angle: fx(70), baseKnockback: fx(50), knockbackGrowth: fx(40), radius: fx(3.6) },
+  },
+  // A clank it loses knocks it away (Plan 5, Task 13c): "After clashing with
+  // an attack": "Lifetime 60 frames", "Horizontal speed -0.15", "Vertical
+  // speed 1.25", "Gravity 0.09", "Falling speed 1.4".
+  clash: { lifetime: 60, vx: fx(-0.15), vy: fx(1.25), gravity: fx(0.09), maxFall: fx(1.4) },
+  // A floor its way home steers it into it comes off (fix round 1, ruling
+  // R-T13c-c): "Minimum bounce angle off ground 16°", "Angle difference to go
+  // through floor instead of bouncing off 30°" (`skimFloor`).
+  skim: { minAngle: fx(16), throughAngle: fx(30) },
+  visual: "boomerang",
+  // link_boomerang `Fly`: `Reflectable=true`.
+  reflectable: true,
+  hitbox: {
+    id: 0,
+    startFrame: 0,
+    endFrame: 124,
+    x: fx(0),
+    y: fx(0),
+    radius: fx(3.0),
+    damage: fx(8.0),
+    angle: fx(70),
+    baseKnockback: fx(80),
+    knockbackGrowth: fx(40),
+    // link_boomerang `Fly` and `Turn`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5,
+    // Task 13c).
+  },
+};
 
 /** The hand-authored moveset; `link` below runs its root-bone moves from the imported scripts. */
 const legacy: FighterDef = {
@@ -646,75 +718,46 @@ const legacy: FighterDef = {
       slot: "sideB",
       name: "Boomerang",
       totalFrames: 45,
+      // The smash input (Plan 5, Task 13d): B within 8 frames of a smash flick throws
+      // it as `sideBSmash`. SmashWiki "Control stick" (https://www.ssbwiki.com/Control_stick,
+      // revision 2062569), "Stick sensitivity": "'Smashed' side special moves - 7/8/9
+      // frames" (low, normal, high), which "applies to ... only the following side
+      // special moves: Link ... - Boomerang": 8, the default setting's. Smash
+      // attacks' window is the replica's own 5 (`SMASH_INPUT_WINDOW`, DECISIONS D7).
+      smashInput: { within: 8, slot: "sideBSmash" },
+      hitboxes: [],
+      projectiles: [BOOMERANG],
+    },
+
+    sideBSmash: {
+      slot: "sideBSmash",
+      name: "Boomerang (smash)",
+      // Plan 5, Task 13d (ruling P5-R29): the Boomerang thrown with a smash input.
+      // SmashWiki "Link (SSBU)/Side special" (https://www.ssbwiki.com/Link_(SSBU)/Side_special,
+      // revision 1840696): one "Throw (successful)" timing for both throws,
+      // "Interruptible 46", and one motion in the game (rubendal 13.0.1: `special_s1`,
+      // `game_specials1`, CancelFrame 46), so it plays the throw's (`motionOf`).
+      totalFrames: 45,
+      motionOf: "sideB",
       hitboxes: [],
       projectiles: [
         {
-          // Out, decelerating, then back — `returns` is the whole move. It
-          // lives 125 frames on a tilt throw, frames 27-151 (SmashWiki "Link
-          // (SSBU)/Side special", https://www.ssbwiki.com/Link_(SSBU)/Side_special:
-          // "Lifetime 125 frames (tilt)", "Tilt input hitboxes (clean, late,
-          // returning) 27-36, 37-71, 72-151"); a *smash* input throws it further
-          // and harder (8% → 9.6% clean) and stretches that to 167 (27-192). Link
-          // catches it in a 9-frame animation, which is skipped if he is
-          // mid-attack.
-          //
-          // The return leg does only 3% but drags victims back toward him,
-          // which is what makes it a combo starter into his sword rather than
-          // a poke. It does not die on contact — it keeps going.
-          //
-          // Its flight is the page's Boomerang parameters (Plan 5, Task 13c): out at
-          // "Initial speed 2.4 (tilt)", slowing by "Deceleration 0.047" until it
-          // would be under "Minimum speed 0.3", which is frame 45 of its life, where
-          // the returning hitbox starts (72 − 27); back up to "Maximum returning
-          // speed 3", steering at Link by "Angle deviation per frame when returning
-          // 0.75°" (its sine and cosine below). Not modelled: "Distance spent
-          // turning back 16", the smash throw's 3.1 and 167 frames, the clean hit's
-          // 8% giving way to the late 6% on frame 10 (the box below is the clean
-          // one, at the replica's radius), and the floor's "Downward ground collision
-          // range −0.5u".
-          id: "boomerang",
-          spawnFrame: 27,
-          offsetX: fx(9.0),
-          offsetY: fx(7.0),
-          vx: fx(2.4),
-          vy: fx(0),
-          gravity: fx(0),
-          lifetime: 125,
-          destroyOnHit: false,
-          returns: {
-            deceleration: fx(0.047),
-            minSpeed: fx(0.3),
-            maxSpeed: fx(3.0),
-            homing: { sin: fx(0.0130896), cos: fx(0.9999143) },
-            // The "Returning" row: 3.0%, 70°, BK 50, KS 40, radius 3.6
-            // (link_boomerang `Turn`).
-            hit: { damage: fx(3.0), angle: fx(70), baseKnockback: fx(50), knockbackGrowth: fx(40), radius: fx(3.6) },
-          },
-          // A clank it loses knocks it away (Plan 5, Task 13c): "After clashing with
-          // an attack": "Lifetime 60 frames", "Horizontal speed -0.15", "Vertical
-          // speed 1.25", "Gravity 0.09", "Falling speed 1.4".
-          clash: { lifetime: 60, vx: fx(-0.15), vy: fx(1.25), gravity: fx(0.09), maxFall: fx(1.4) },
-          // A floor its way home steers it into it comes off (fix round 1, ruling
-          // R-T13c-c): "Minimum bounce angle off ground 16°", "Angle difference to go
-          // through floor instead of bouncing off 30°" (`skimFloor`).
-          skim: { minAngle: fx(16), throughAngle: fx(30) },
-          visual: "boomerang",
-          // link_boomerang `Fly`: `Reflectable=true`.
-          reflectable: true,
-          hitbox: {
-            id: 0,
-            startFrame: 0,
-            endFrame: 124,
-            x: fx(0),
-            y: fx(0),
-            radius: fx(3.0),
-            damage: fx(8.0),
-            angle: fx(70),
-            baseKnockback: fx(80),
-            knockbackGrowth: fx(40),
-            // link_boomerang `Fly` and `Turn`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5,
-            // Task 13c).
-          },
+          // The page's smash-throw numbers: "Initial speed ... 3.1 (smash)", "Lifetime
+          // ... 167 frames (smash)" (its hitboxes "27-36, 37-86, 87-192"), and "If thrown
+          // with a smash attack input, the Boomerang's clean and late hits have their
+          // damage multiplied by 1.2×" ("Smash input damage multiplier 1.2"): the clean
+          // 8.0 here is 9.6; the returning 3% is not multiplied. With the tilt throw's
+          // "Deceleration 0.047" and "Minimum speed 0.3" it turns on frame 60 of its
+          // flight, where the returning hit starts (87 − 27). UNVERIFIED: that the 1.2
+          // reaches the knockback too (it multiplies the box's damage here). Published,
+          // not modelled, as for the tilt throw: "Distance spent turning back ... 24
+          // (smash)", the late 7.2% (6.0 × 1.2) from frame 10, "Rotation speed ... 26°
+          // (smash)".
+          ...BOOMERANG,
+          id: "boomerangSmash",
+          vx: fx(3.1),
+          lifetime: 167,
+          hitbox: { ...BOOMERANG.hitbox, endFrame: 166, damage: fx(9.6) },
         },
       ],
     },

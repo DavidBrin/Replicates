@@ -16,6 +16,7 @@ import {
   projectileHitbox,
   projectileHitboxActive,
   projectilesDueOnFrame,
+  projectilesOut,
   spawnProjectile,
 } from "./projectile";
 import { platformCentreX } from "./physics";
@@ -406,6 +407,41 @@ describe("flight", () => {
     let alive = true;
     for (let i = 0; i < 5 && alive; i++) alive = advanceProjectile(p, ARROW, STAGE, null, i).alive;
     expect(alive).toBe(false);
+  });
+});
+
+describe("accelerating (Plan 5, Task 13d)", () => {
+  /** A rocket: waits 3 frames at 0.5, then gains 1 a frame, never past 2.5. */
+  const ROCKET: ProjectileDef = { ...ARROW, id: "rocket", vx: fx(0.5), accelerate: { after: 3, perFrame: fx(1), maxSpeed: fx(2.5) } };
+
+  it("keeps its speed through its wait, then gains `perFrame` a frame up to `maxSpeed`", () => {
+    const p = spawnProjectile(ROCKET, fighter(), 1);
+    const speeds: number[] = [];
+    for (let i = 1; i <= 6; i++) {
+      const was = p.x;
+      advanceProjectile(p, ROCKET, STAGE, null, i);
+      speeds.push(p.x - was);
+    }
+    expect(speeds).toEqual([fx(0.5), fx(0.5), fx(1.5), fx(2.5), fx(2.5), fx(2.5)]);
+  });
+
+  it("speeds up the way it flies: sent back, it gains backward", () => {
+    const p = spawnProjectile(ROCKET, fighter(), 1);
+    p.vx = -p.vx;
+    for (let i = 1; i <= 4; i++) advanceProjectile(p, ROCKET, STAGE, null, i);
+    expect([p.vx, p.vy]).toEqual([-fx(2.5), 0]);
+  });
+});
+
+describe("how many are out (Plan 5, Task 13d)", () => {
+  it("counts one owner's of one definition from one moveset", () => {
+    const owner = fighter();
+    const mine = spawnProjectile(ARROW, owner, 1, "zoner");
+    const other = { ...spawnProjectile(ARROW, owner, 2, "zoner"), owner: 1 };
+    const copied = spawnProjectile(ARROW, owner, 3, "kirby");
+    const kind = { ...spawnProjectile(ARROW, owner, 4, "zoner"), defId: "dart" };
+    expect(projectilesOut([mine, other, copied, kind], 0, "zoner", ARROW)).toBe(1);
+    expect(projectilesOut([mine, mine], 0, "zoner", ARROW)).toBe(2);
   });
 });
 

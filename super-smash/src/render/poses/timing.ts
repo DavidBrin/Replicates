@@ -197,6 +197,10 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   // Plan 5, Task 13b: the aerial up special borrows the up special's clip
   // (UNVERIFIED: no aerial clip is authored; the bake times it to its own script).
   upBAir: "upB",
+  // Plan 5, Task 13d: a side special's smash version borrows the side special's clip
+  // (UNVERIFIED for Samus's Super Missile, whose own animation is unauthored here;
+  // the bake times it to its own 57 frames). Link's smash throw is his throw's.
+  sideBSmash: "sideB",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */

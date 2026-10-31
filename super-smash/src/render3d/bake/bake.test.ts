@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { airDodgeCharge, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
 import { BONE_POSE_STRIDE } from "@/engine/acmd/bones";
+import { gameScriptFor } from "@/engine/acmd/legacy";
 import { clipTimeOfFrame, MOTION_OF_ACTION, OPEN_ENDED_FRAMES, statusDuration, statusMotion } from "@/engine/acmd/poseClock";
 import { dodgeIntangible, groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from "@/engine/groundDodge";
 import { STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
@@ -17,6 +18,7 @@ import {
   bakeFighter,
   fighterPoser,
   motionSamplers,
+  moveSamplers,
   poseWorld,
   sampleAt,
   statusMotionSpecs,
@@ -249,5 +251,28 @@ describe("a move's clip time (DECISIONS D34, in motion frames)", () => {
     expect(attackClipTime(undefined, 6, 20, 11)).toBe(0.5);
     // A box live on the first frame has no wind-up to stretch.
     expect(attackClipTime(0.4, 1, 20, 11)).toBe(0.5);
+  });
+});
+
+describe("the move motions the bake plays (Plan 5, Task 13d)", () => {
+  it("bake the Super Missile on its own motion, its 57 frames, and Link's smash throw on none: it plays his throw's", () => {
+    const samus = fighterOf("samus");
+    const link = fighterOf("link");
+    const own = gameScriptFor(samus, "sideBSmash")!.motion;
+    expect(own).not.toBe(gameScriptFor(samus, "sideB")!.motion);
+    const samusMoves = moveSamplers(samus);
+    expect(samusMoves.get(own)).toMatchObject({ slot: "sideBSmash", clock: { kind: "script", frames: 57 } });
+    expect(samusMoves.get(gameScriptFor(samus, "sideB")!.motion)).toMatchObject({ slot: "sideB", clock: { kind: "script", frames: 54 } });
+    // `MoveDef.motionOf`: the smash throw runs the throw's motion, on the same clock.
+    expect(gameScriptFor(link, "sideBSmash")!.motion).toBe(gameScriptFor(link, "sideB")!.motion);
+    const linkMoves = moveSamplers(link);
+    expect([...linkMoves.values()].map((m) => m.slot)).not.toContain("sideBSmash");
+    expect(linkMoves.get(gameScriptFor(link, "sideB")!.motion)).toMatchObject({ slot: "sideB", clock: { kind: "script", frames: 45 } });
+  });
+
+  it("refuses a move that plays another's motion for a length of its own", () => {
+    const link = fighterOf("link");
+    const longer = { ...link, moves: { ...link.moves, sideBSmash: { ...link.moves.sideBSmash!, totalFrames: 50 } } };
+    expect(() => moveSamplers(longer)).toThrow(/link sideBSmash plays sideB's motion/);
   });
 });

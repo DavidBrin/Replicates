@@ -52,6 +52,7 @@ export const LINK: ReferenceFighter = {
     getUpAttack: "game_downattacku",
     finalSmash: "game_final",
     upBAir: "game_specialairhi",
+    sideBSmash: "game_specials1",
   },
   scripts: {
     game_attack11: script("game_attack11", "attack_11", [

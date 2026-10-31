@@ -37,7 +37,7 @@ export const SAMUS: ReferenceFighter = {
     uair: "game_attackairhi",
     dair: "game_attackairlw",
     neutralB: "game_specialnstart",
-    sideB: "game_specials",
+    sideB: "game_special",
     upB: "game_specialhi",
     downB: "game_speciallw",
     grab: "game_catch",
@@ -50,6 +50,7 @@ export const SAMUS: ReferenceFighter = {
     ledgeAttack: "game_cliffattack",
     getUpAttack: "game_downattacku",
     finalSmash: "game_final",
+    sideBSmash: "game_specials",
   },
   scripts: {
     game_attack11: script("game_attack11", "attack_11", [
@@ -285,11 +286,9 @@ export const SAMUS: ReferenceFighter = {
       unknown("ArticleModule::generate_article_enable(FIGHTER_SAMUS_GENERATE_ARTICLE_CSHOT)"),
       setFlag("FIGHTER_SAMUS_STATUS_SPECIAL_N_FLAG_BULLET_DISP"),
     ]),
-    game_specials: script("game_specials", "special_s", [
-      frame(21),
+    game_special: script("game_special", "special", [
+      frame(18),
       setFlag("FIGHTER_SAMUS_STATUS_SPECIAL_S_WORK_FLAG_WEAPON"),
-      frame(58),
-      motionRate(1),
     ]),
     game_specialhi: script("game_specialhi", "special_hi", [
       setFlag("FIGHTER_SAMUS_STATUS_SPECIAL_HI_FLAG_DISABLE_LR"),
@@ -454,6 +453,12 @@ export const SAMUS: ReferenceFighter = {
       frame(12),
       clearAll(),
     ]),
+    game_specials: script("game_specials", "special_s", [
+      frame(21),
+      setFlag("FIGHTER_SAMUS_STATUS_SPECIAL_S_WORK_FLAG_WEAPON"),
+      frame(58),
+      motionRate(1),
+    ]),
   },
   faf: {
     game_attack11: 18,
@@ -471,7 +476,7 @@ export const SAMUS: ReferenceFighter = {
     game_attackairhi: 40,
     game_attackairlw: 49,
     game_specialnstart: 14,
-    game_specials: 58,
+    game_special: 55,
     game_speciallw: 49,
     game_catch: 60,
     game_catchdash: 68,
@@ -482,6 +487,7 @@ export const SAMUS: ReferenceFighter = {
     game_throwlw: 40,
     game_cliffattack: 56,
     game_downattacku: 46,
+    game_specials: 58,
   },
   calculatorWindows: {
     game_attack11: [[0, 3, 4], [1, 3, 4], [2, 3, 4]],

@@ -97,6 +97,8 @@ const FX_FALLBACK: Partial<Record<MoveSlot, MoveSlot>> = {
   dashGrab: "grab",
   // Plan 5, Task 13b: an aerial up special of its own (Link's) paints the up special's effect.
   upBAir: "upB",
+  // Plan 5, Task 13d: a side special's smash version paints the side special's.
+  sideBSmash: "sideB",
 };
 
 /** What this fighter paints for this move, if anything. */
