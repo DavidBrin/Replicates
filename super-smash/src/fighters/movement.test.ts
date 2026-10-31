@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { airBrakeFromDef, airDodgeFromDef, sideDodgeTravel } from "@/ai/behaviours";
-import { ONE, fx, mul, toFloat } from "@/engine/fixed";
+import { ONE, approach, fx, mul, toFloat } from "@/engine/fixed";
 import { emptyKinetic, initialRiseStep, jumpLaunchSpeed, jumpRiseSpeeds } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { LEDGE_HANG_MIN, ROLL_DISTANCE, onLanded } from "@/engine/states";
@@ -273,7 +273,9 @@ describe("scripted momentum after a full hop's initial rise (Task 18)", () => {
     throw new Error(`${id} never starts up-special in the first airborne frames`);
   }
 
-  it.each(["mario", "samus"] as const)("%s: up-special on the first actionable airborne frame ends the initial rise", (id) => {
+  // Mario's and Marth's rises are momentum windows; Samus's Screw Attack is a
+  // launch since Plan 5, Task 13b (its published initial speed), with no window.
+  it.each(["mario", "marth"] as const)("%s: up-special on the first actionable airborne frame ends the initial rise", (id) => {
     const n = firstPress(id);
     const frames = hopThenUpB(id, n);
     const first = frames.findIndex((f) => f.kinetic.motionX !== 0 || f.kinetic.motionY !== 0);
@@ -283,17 +285,23 @@ describe("scripted momentum after a full hop's initial rise (Task 18)", () => {
     expect(frames[first].kinetic.jumpInitial).toBe(0);
   });
 
-  it.each(["mario", "samus"] as const)("%s: the hold's velocity carries on into drift and gravity", (id) => {
+  it.each(["mario", "marth"] as const)("%s: the hold's velocity is handed on to drift and gravity as its window says", (id) => {
     const p = FIGHTER_PARAMS[id];
     const frames = hopThenUpB(id, firstPress(id));
     const first = frames.findIndex((f) => f.kinetic.motionY !== 0);
     const over = frames.findIndex((f, i) => i > first && f.kinetic.motionY === 0);
     expect(over, `${id}: the hold ended`).toBeGreaterThan(first);
-    // Handed to gravity on the hold's last frame, which gravity then acts on as well.
-    expect(frames[over].vy).toBe(frames[over - 1].kinetic.motionY - p.air_accel_y);
+    // Handed on, on the hold's last frame, as the window's `endSpeed` says (Plan 5,
+    // Task 13b: a rise hands on no upward speed, the sideways all of it), and drift
+    // and gravity act on it that frame as well. The stick is not sideways: air friction.
+    const w = FIGHTERS.find((d) => d.id === id)!.moves.upB!.momentum![0];
+    const prev = frames[over - 1].kinetic;
+    // On the hold's last frame the fighter's own gravity (Marth's "Gravity after jump" is from the next).
+    expect(frames[over].vy).toBe(mul(prev.motionY, w.endSpeed?.y ?? ONE) - p.air_accel_y);
+    expect(frames[over].vx).toBe(approach(mul(prev.motionX, w.endSpeed?.x ?? ONE), 0, p.air_brake_x));
   });
 
-  it.each(["mario", "samus"] as const)("%s: the height a hold gains does not depend on when in the hop it starts", (id) => {
+  it.each(["mario", "marth"] as const)("%s: the height a hold gains does not depend on when in the hop it starts", (id) => {
     // Height from the hold's first frame to the peak. The hop keeps rising a little
     // while the move winds up, so a later press peaks higher; what the move itself
     // adds must be the same.

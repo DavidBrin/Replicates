@@ -601,14 +601,36 @@ const legacy: FighterDef = {
     upB: {
       slot: "upB",
       name: "Spinning Kong",
+      // Plan 5, Task 13b: SmashWiki "Donkey Kong (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_special). Grounded,
+      // "Interruptible 105": 104 frames, and it stays on the ground (the legacy
+      // lift is gone: the page's grounded parameters are ground ones only), steered
+      // by "Ground acceleration 0.034", "Maximum ground speed 1.1", "Ground friction
+      // 0.015", and after the last hit (62) "Ground friction after last hit 0.04".
+      // UNVERIFIED: that the stick still steers after the last hit.
       totalFrames: 104,
-      momentum: [{ frame: 6, x: fx(0.85), y: fx(1.9), hold: 18 }],
+      phases: [
+        { from: 1, to: 62, ground: { accel: fx(0.034), speed: fx(1.1), brake: fx(0.015) } },
+        { from: 63, ground: { accel: fx(0.034), speed: fx(1.1), brake: fx(0.04) } },
+      ],
+      // Aerial, "Animation length 70", from "Initial vertical speed in midair 0.9",
+      // steered by "Air acceleration 0.05" up to "Maximum air speed 1.7". UNVERIFIED
+      // reading of "Gravity multiplier 0.07" as the gravity itself (0.07 a frame):
+      // as a multiplier of his 0.085 he would rise for the whole move, about 48,
+      // against the page's "If Donkey Kong lands from the aerial version before
+      // undergoing helplessness" and SmashWiki "Donkey Kong (SSBU)"'s "offers almost
+      // no vertical recovery"; as the gravity he tops out about 5.8 up and comes
+      // back down. That landing lands into the grounded one at its frame 63.
+      fromAir: {
+        totalFrames: 70,
+        launch: { vy: fx(0.9) },
+        phases: [{ from: 1, air: { add: fx(0.05), mul: 0, speed: fx(1.7) }, gravity: fx(0.07) }],
+        landsAt: 63,
+      },
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Donkey Kong (SSBU)/Up special"
       // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_special): "Helplessness
       // landing lag 38 frames" (the landing's "Interruptible 39"). UNVERIFIED: the
       // drift; the page publishes no helplessness multiplier, so his own air speed.
-      // Not modelled: "If Donkey Kong lands from the aerial version before undergoing
-      // helplessness, he transitions to frame 63 of the grounded version."
       helpless: { landingLag: 38, airSpeed: fx(1) },
       hitboxes: [
         {

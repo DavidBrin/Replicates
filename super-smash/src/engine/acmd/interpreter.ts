@@ -51,6 +51,8 @@ export interface ActiveMomentum {
   readonly until: number;
   /** Its `y` is set only in the air (`MoveDef.momentum`, Plan 5 Task 8 fix round 1). */
   readonly airOnly?: boolean;
+  /** Its place in the legacy `MoveDef.momentum` list, for what the move says of it (Plan 5, Task 13b: `windowVelocity`). */
+  readonly order?: number;
 }
 
 export interface ScriptFrameState {
@@ -399,7 +401,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
   for (const w of windows) {
     if (gameFrame < w.start || gameFrame > w.until || w.order >= best) continue;
     best = w.order;
-    momentum = { x: w.x, y: w.y, until: w.until, ...(w.airOnly ? { airOnly: true } : {}) };
+    momentum = { x: w.x, y: w.y, until: w.until, order: w.order, ...(w.airOnly ? { airOnly: true } : {}) };
   }
 
   return {

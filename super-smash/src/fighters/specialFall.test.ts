@@ -34,14 +34,17 @@ const BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
  * "Helplessness air speed multiplier". UNVERIFIED where a page publishes no
  * multiplier: the fighter's own air speed (× 1).
  */
-const PUBLISHED: Readonly<Record<string, { readonly landingLag: number; readonly airSpeed: number; readonly url: string; readonly aerialOnly?: true }>> = {
+const PUBLISHED: Readonly<
+  Record<string, { readonly landingLag: number; readonly airSpeed: number; readonly url: string; readonly aerialOnly?: true; readonly airAccel?: number }>
+> = {
   // "Helplessness air speed multiplier 0.6", "Landing lag 30 frames".
   mario: { landingLag: 30, airSpeed: fx(0.6), url: "https://www.ssbwiki.com/Mario_(SSBU)/Up_special" },
   // "Helplessness landing lag 38 frames"; no multiplier published (UNVERIFIED × 1).
   donkeyKong: { landingLag: 38, airSpeed: fx(1), url: "https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_special" },
   // "Air speed multiplier ... 0.909 (helpless)", "Landing lag 30 frames".
   // Only "if in the air" (SmashWiki "Helpless"; fix round 1).
-  link: { landingLag: 30, airSpeed: fx(0.909), url: "https://www.ssbwiki.com/Link_(SSBU)/Up_special", aerialOnly: true },
+  // "Additional air acceleration ... 0.025 (helpless)" (Plan 5, Task 13b).
+  link: { landingLag: 30, airSpeed: fx(0.909), url: "https://www.ssbwiki.com/Link_(SSBU)/Up_special", aerialOnly: true, airAccel: fx(0.025) },
   // "Landing lag 24 frames", "Helplessness air speed multiplier 0.66".
   samus: { landingLag: 24, airSpeed: fx(0.66), url: "https://www.ssbwiki.com/Samus_(SSBU)/Up_special" },
   // "Landing (cutter)": "Interruptible 31"; UltimateFrameData's landing lag 30
@@ -126,7 +129,10 @@ describe("every up special's published special fall", () => {
   for (const def of FIGHTERS) {
     it(`${def.id}'s is ${PUBLISHED[def.id].url}'s`, () => {
       const p = PUBLISHED[def.id];
-      expect(def.moves.upB?.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...(p.aerialOnly ? { aerialOnly: true } : {}) });
+      const accel = p.airAccel !== undefined ? { airAccel: p.airAccel } : {};
+      expect(def.moves.upB?.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...(p.aerialOnly ? { aerialOnly: true } : {}), ...accel });
+      // An aerial up special of its own (Plan 5, Task 13b: Link's) falls the same way, begun in the air.
+      if (def.moves.upBAir !== undefined) expect(def.moves.upBAir.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...accel });
     });
   }
 
@@ -140,14 +146,19 @@ describe("every up special's published special fall", () => {
 });
 
 describe("an up special used in the air", () => {
-  for (const def of FIGHTERS) {
+  // Kirby's Final Cutter does not end in the air (Plan 5, Task 13b; SmashWiki
+  // "Helpless": "the move does not end until Kirby lands on the ground"): it is
+  // pinned below, and lands into its special landing (`upSpecial.test.ts`).
+  for (const def of FIGHTERS.filter((d) => d.id !== "kirby")) {
     it(`leaves ${def.id} helpless when it ends, and a second one before landing does nothing`, () => {
       const start = scene(def.id, { x: fx(-200), y: 0 });
       const frames = run(start, 140, (i) => (i === 0 ? Btn.Up | Btn.Special : 0));
       const end = frames.findIndex((s) => s.fighters[0].action !== "special");
       expect(end, "the up special never ended").toBeGreaterThan(0);
       const f = frames[end].fighters[0];
-      expect([f.action, f.grounded, f.combat.helplessMove]).toEqual(["specialFall", false, "upB"]);
+      // The aerial up special where the fighter has one of its own (Link's, Task 13b).
+      const slot = def.moves.upBAir !== undefined ? "upBAir" : "upB";
+      expect([f.action, f.grounded, f.combat.helplessMove]).toEqual(["specialFall", false, slot]);
       // Up and B again, then every other button, a frame apart: nothing comes out.
       const presses = [Btn.Up | Btn.Special, 0, Btn.Special, 0, Btn.Jump, 0, Btn.Attack, 0, Btn.Shield, 0, Btn.Grab, 0];
       const after = run(frames[end], presses.length, (i) => presses[i]);
@@ -160,20 +171,31 @@ describe("an up special used in the air", () => {
   }
 });
 
+describe("Kirby's Final Cutter used in the air", () => {
+  it("does not end in the air, and a second up special during its descent does nothing", () => {
+    const frames = run(scene("kirby", { x: fx(-200), y: fx(60) }), 50, (i) => (i === 0 ? Btn.Up | Btn.Special : 0));
+    const f = frames[49].fighters[0];
+    expect([f.action, f.move, f.actionFrame]).toEqual(["special", "upB", 48]);
+    const after = run(frames[49], 4, (i) => (i % 2 === 0 ? Btn.Up | Btn.Special : 0));
+    for (const s of after) expect([s.fighters[0].action, s.fighters[0].move, s.fighters[0].actionFrame]).toEqual(["special", "upB", 48]);
+  });
+});
+
 describe("Link's Spin Attack", () => {
   // SmashWiki "Helpless" (https://www.ssbwiki.com/Helpless): "Spin Attack makes
   // Link ... helpless after the move was used if in the air"; the grounded one
-  // only if its platform goes. The replica's grounded Spin Attack lifts off
-  // (its momentum, Task 13b), so it must end free to act, not helpless.
-  it("leaves Link free to act when begun on the ground, though it ends in the air", () => {
+  // only if its platform goes. Since Plan 5, Task 13b the grounded one stays on
+  // the ground (the page gives it no movement), so it ends standing, free to act.
+  it("leaves Link free to act when begun on the ground", () => {
     const ground = scene("link", { action: "stand", grounded: true, platform: 0, x: fx(-30), y: 0 });
     const frames = run(ground, 160, (i) => (i === 0 ? Btn.Up | Btn.Special : 0));
     const end = frames.findIndex((s) => s.fighters[0].action !== "special");
-    expect(frames[end - 1].fighters[0].grounded, "airborne as it ends").toBe(false);
-    expect(frames[end].fighters[0]).toMatchObject({ action: "fall", combat: { helplessMove: null } });
+    expect(frames[end - 1].fighters[0].grounded, "on the ground as it ends").toBe(true);
+    expect(frames[end].fighters[0]).toMatchObject({ action: "stand", combat: { helplessMove: null } });
     expect(frames.slice(end).some((s) => s.fighters[0].action === "specialFall" || s.fighters[0].action === "specialLanding")).toBe(false);
+    // On the ground a jump starts with its squat.
     const [jumped] = run(frames[end], 1, () => Btn.Jump);
-    expect(jumped.fighters[0].action).toBe("jump");
+    expect(jumped.fighters[0].action).toBe("jumpSquat");
   });
 
   it("tells where the move began by the airtime, at the boundary", () => {

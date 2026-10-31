@@ -53,11 +53,17 @@ const MOVES: [string, MoveSlot, MoveDef][] = FIGHTERS.flatMap((f) =>
     .map((slot): [string, MoveSlot, MoveDef] => [f.id, slot, f.moves[slot]!]),
 );
 
-/** The legacy momentum rule (`applyMoveMomentum` before Task 15): first entry whose window holds. */
+/**
+ * The legacy momentum rule (`applyMoveMomentum` before Task 15): first entry whose
+ * window holds, and its place in the list (Plan 5, Task 13b: what the move says of
+ * that window, its aim and its hand-off, is read by it).
+ */
 function legacyMomentum(move: MoveDef, frame: number) {
-  for (const m of move.momentum ?? []) {
+  const windows = move.momentum ?? [];
+  for (let order = 0; order < windows.length; order++) {
+    const m = windows[order];
     const until = m.frame + (m.hold ?? 0);
-    if (frame >= m.frame && frame <= until) return { x: m.x, y: m.y, until, ...(m.airOnly === true ? { airOnly: true } : {}) };
+    if (frame >= m.frame && frame <= until) return { x: m.x, y: m.y, until, order, ...(m.airOnly === true ? { airOnly: true } : {}) };
   }
   return null;
 }

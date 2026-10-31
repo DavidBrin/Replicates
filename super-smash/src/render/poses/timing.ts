@@ -194,6 +194,9 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   // Plan 5, Task 9: Kirby's swallow and spit borrow his Inhale's clip.
   inhaleSwallow: "neutralB",
   inhaleSpit: "neutralB",
+  // Plan 5, Task 13b: the aerial up special borrows the up special's clip
+  // (UNVERIFIED: no aerial clip is authored; the bake times it to its own script).
+  upBAir: "upB",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */

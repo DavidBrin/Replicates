@@ -756,8 +756,22 @@ const legacy: FighterDef = {
     upB: {
       slot: "upB",
       name: "Screw Attack",
-      totalFrames: 56,
-      momentum: [{ frame: 4, x: fx(0.45), y: fx(2.9), hold: 16 }],
+      // Plan 5, Task 13b: SmashWiki "Samus (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Samus_(SSBU)/Up_special): grounded "Animation length
+      // 38", aerial 47 (was 56 for both). The rise is published physics, not a
+      // scripted window: "Initial grounded speed 0.35 (horizontal), 2.8 (vertical)"
+      // under her own gravity, about 53 up (the legacy window rose her 100), steered
+      // by "Air acceleration 0.017" up to "Air speed 0.57". UNVERIFIED: the aerial
+      // one's launch, unpublished, is the grounded one's.
+      totalFrames: 38,
+      fromAir: { totalFrames: 47 },
+      launch: { vx: fx(0.35), vy: fx(2.8) },
+      phases: [{ from: 1, air: { add: fx(0.017), mul: 0, speed: fx(0.57) } }],
+      // "Stick sensitivity to reverse 0.25": held back, the move turns her round.
+      // UNVERIFIED window: no frame is published; SmashWiki "B-reversing"
+      // (https://www.ssbwiki.com/B-reversing): in Ultimate "the direction input must
+      // be within 4 frames of the special input", so frames 1-4.
+      turn: [1, 4],
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Samus (SSBU)/Up special"
       // (https://www.ssbwiki.com/Samus_(SSBU)/Up_special): "Landing lag 24 frames"
       // (the landing's "Interruptible 25"; UltimateFrameData's 24,

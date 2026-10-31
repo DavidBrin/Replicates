@@ -723,17 +723,25 @@ const legacy: FighterDef = {
       slot: "upB",
       name: "Spin Attack",
       totalFrames: 76,
-      momentum: [{ frame: 6, x: fx(0.35), y: fx(2.5), hold: 13 }],
       // The imported `game_specialhi` is the from-release timeline (Plan 5, Task 13
       // fix round 1, ruling R-T13f): SmashWiki "Link (SSBU)/Up special"
       // (https://www.ssbwiki.com/Link_(SSBU)/Up_special, revision 1987976), grounded,
       // "Charges between 3-4", hits "7-8, 9-13 (4-5, 6-10)", "14-23, 24-39 (11-20,
       // 21-36)", "Interruptible (from release) 77 (74)". So the script starts 3
-      // frames in, and its boxes come out on 7-39, its end on 76. UNVERIFIED: what
-      // those 3 frames hold; no start script is imported, and here they set nothing.
-      // The grounded charge is not modelled. The rise above keeps its own frames,
-      // as authored against these boxes.
+      // frames in, and its boxes come out on 7-39, its end on 76. The 3 frames are
+      // its start motion, `special_hi_start`, whose `game_specialhistart` is
+      // published with no body (rubendal 13.0.1,
+      // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Link/data.json):
+      // they set nothing (Plan 5, Task 13b; was UNVERIFIED).
       scriptLead: 3,
+      // The grounded charge (Plan 5, Task 13b): held B holds it on frame 3 ("Charges
+      // between 3-4") for up to "Maximum charge time 60 frames", where it goes on its
+      // own (SmashWiki "Charge", https://www.ssbwiki.com/Charge: Spin Attack
+      // "Automatically activates at full charge"); its boxes deal "1 + 0.6 * (charge
+      // frames / 60)" times their damage, "up to 1.6×" ("Maximum charge damage
+      // multiplier 1.6"). It stays on the ground: the page's grounded move has no
+      // movement (the legacy lift is gone; the aerial one is `upBAir`).
+      specialCharge: { mode: "hold", frames: 60, loopFrame: 3, atFull: "release", partial: { kind: "multiply", by: fx(0.6) } },
       // Ends helpless when used in the air (Plan 5, Task 4b): SmashWiki "Link
       // (SSBU)/Up special" (https://www.ssbwiki.com/Link_(SSBU)/Up_special): "Air
       // speed multiplier ... 0.909 (helpless)", "Landing lag 30 frames" (the
@@ -741,11 +749,9 @@ const legacy: FighterDef = {
       // landing lag 30, https://ultimateframedata.com/link). Only the aerial one
       // (fix round 1): SmashWiki "Helpless" (https://www.ssbwiki.com/Helpless),
       // "Spin Attack makes Link ... helpless after the move was used if in the
-      // air"; the grounded one only if its platform goes, and here it lifts off
-      // (its momentum, Task 13b). Not modelled: its "Additional air acceleration
-      // ... 0.025 (helpless)", as no source says which of the two air
-      // accelerations (`air_accel_x_add`, `air_accel_x_mul`) it replaces.
-      helpless: { landingLag: 30, airSpeed: fx(0.909), aerialOnly: true },
+      // air"; the grounded one only if its platform goes. Begun in the air it is
+      // `upBAir` now (Task 13b), which carries its own.
+      helpless: { landingLag: 30, airSpeed: fx(0.909), aerialOnly: true, airAccel: fx(0.025) },
       hitboxes: [
         {
           id: 0,
@@ -786,6 +792,60 @@ const legacy: FighterDef = {
           knockbackGrowth: fx(84),
           effect: "slash",
         },
+      ],
+    },
+    // Plan 5, Task 13b: the aerial Spin Attack, its own move (SSBU's
+    // `special_air_hi`; the brief's "SpecialAirHi"), SmashWiki "Link (SSBU)/Up
+    // special" (https://www.ssbwiki.com/Link_(SSBU)/Up_special), aerial: front hits
+    // 8-9, 16-17, 22-23, 31-32, back hits 12-13, 19-20, 26-27, 38-39, final hit 47,
+    // 48, 49, "Animation length 91". The game runs its imported
+    // `game_specialairhi` (`limb.json`: its back hits 3 and 4 ride `sword2`); this
+    // table is that script's boxes as spheres for the plain roster, each at its
+    // capsule's middle (UNVERIFIED: the two `sword2` ones at x −9, y 9, behind him).
+    // Not modelled: the back hits' position vector ("All back hits use a position
+    // vector with offsets [10, 20] for 10 frames"; `set_vec_target_pos`), and the
+    // "Jostling is also disabled during frames 26-49".
+    upBAir: {
+      slot: "upBAir",
+      name: "Spin Attack (aerial)",
+      totalFrames: 91,
+      // "Initial vertical speed 2.4" under "Gravity multiplier 0.55" (his gravity
+      // ×0.55: the rise tops out on frame 46, as "The ending attributes apply on
+      // frame 48" has it, about 56 up). Rising, "Additional air acceleration 0.22"
+      // and "Air speed multiplier 0.5"; from frame 48, "0.01" and "Air speed on
+      // ending 0.8" (UNVERIFIED reading: ×0.8 his air speed, the brief's "0.8
+      // ending multiplier"). The legacy one-move Spin Attack rose 62 on a window.
+      launch: { vy: fx(2.4) },
+      phases: [
+        { from: 1, to: 47, air: { add: fx(0.22), speedMul: fx(0.5) }, gravityMul: fx(0.55) },
+        { from: 48, air: { add: fx(0.01), speedMul: fx(0.8) }, gravityMul: fx(0.55) },
+      ],
+      // "Landing lag 30 frames"; "Air speed multiplier ... 0.909 (helpless)",
+      // "Additional air acceleration ... 0.025 (helpless)".
+      helpless: { landingLag: 30, airSpeed: fx(0.909), airAccel: fx(0.025) },
+      // Distinct ids for the compiled table (the script's front hits are all its id 0, its back hits id 1).
+      hitboxes: [
+        // Front hit 1: 4.0%, 367°, FKB 107, KBG 100, set weight, r 6, top (0, 10, 14.5→8.0).
+        { id: 0, startFrame: 8, endFrame: 9, x: fx(11.25), y: fx(10), radius: fx(6), damage: fx(4), angle: fx(367), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(107), setWeight: true, transcendent: true, effect: "slash" },
+        // Back hit 1: 2.0%, 145°, FKB 95, r 5, top (0, 11.5→11.0, −12.0→−9.0), behind.
+        { id: 1, startFrame: 12, endFrame: 13, x: fx(-10.5), y: fx(11.25), radius: fx(5), damage: fx(2), angle: fx(145), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(95), lr: "back", transcendent: true, effect: "slash" },
+        // Front hit 2: 2.0%, 367°, FKB 107, set weight, r 6, top (0, 6.0→7.5, 15.0→8.0).
+        { id: 2, startFrame: 16, endFrame: 17, x: fx(11.5), y: fx(6.75), radius: fx(6), damage: fx(2), angle: fx(367), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(107), setWeight: true, transcendent: true, effect: "slash" },
+        // Back hit 2: 2.0%, 145°, FKB 95, r 5, top (0, 11.5→11.0, −12.5→−9.0).
+        { id: 3, startFrame: 19, endFrame: 20, x: fx(-10.75), y: fx(11.25), radius: fx(5), damage: fx(2), angle: fx(145), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(95), lr: "back", transcendent: true, effect: "slash" },
+        // Front hit 3: 2.0%, 83°, FKB 71, set weight, r 6, top (0, 10.0→10.5, 15.0→8.0).
+        { id: 4, startFrame: 22, endFrame: 23, x: fx(11.5), y: fx(10.25), radius: fx(6), damage: fx(2), angle: fx(83), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(71), setWeight: true, transcendent: true, effect: "slash" },
+        // Back hit 3: 2.0%, 150°, FKB 95, r 5, sword2 (2.0→5.5, 0, 0).
+        { id: 5, startFrame: 26, endFrame: 27, x: fx(-9), y: fx(9), radius: fx(5), damage: fx(2), angle: fx(150), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(95), lr: "back", transcendent: true, effect: "slash" },
+        // Front hit 4: 2.0%, 69°, FKB 62, set weight, r 7, top (0, 14.0→12.5, 12.5→8.0).
+        { id: 6, startFrame: 31, endFrame: 32, x: fx(10.25), y: fx(13.25), radius: fx(7), damage: fx(2), angle: fx(69), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(62), setWeight: true, transcendent: true, effect: "slash" },
+        // Back hit 4: 2.0%, 160°, FKB 95, r 5, sword2 (2.0→5.5, 0, 0).
+        { id: 7, startFrame: 38, endFrame: 39, x: fx(-9), y: fx(9), radius: fx(5), damage: fx(2), angle: fx(160), baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(95), lr: "back", transcendent: true, effect: "slash" },
+        // Front hit 5, early, mid and late: 4.0%, 361°, BKB 30, KBG 200, hitlag ×2,
+        // r 7.5, top (0, 7.5→9.5, 14.0→7.5), (0, 13.0→12.5, 15.5→7.5), (0, 19.0→14.0, 12.5→7.5).
+        { id: 8, startFrame: 47, endFrame: 47, x: fx(10.75), y: fx(8.5), radius: fx(7.5), damage: fx(4), angle: fx(361), baseKnockback: fx(30), knockbackGrowth: fx(200), hitlagMultiplier: fx(2), transcendent: true, effect: "slash" },
+        { id: 9, startFrame: 48, endFrame: 48, x: fx(11.5), y: fx(12.75), radius: fx(7.5), damage: fx(4), angle: fx(361), baseKnockback: fx(30), knockbackGrowth: fx(200), hitlagMultiplier: fx(2), transcendent: true, effect: "slash" },
+        { id: 10, startFrame: 49, endFrame: 49, x: fx(10), y: fx(16.5), radius: fx(7.5), damage: fx(4), angle: fx(361), baseKnockback: fx(30), knockbackGrowth: fx(200), hitlagMultiplier: fx(2), transcendent: true, effect: "slash" },
       ],
     },
 

@@ -863,8 +863,31 @@ const legacy: FighterDef = {
     upB: {
       slot: "upB",
       name: "Super Jump Punch",
-      totalFrames: 55,
-      momentum: [{ frame: 4, x: fx(0.5), y: fx(2.9), hold: 12 }],
+      // Plan 5, Task 13b: SmashWiki "Mario (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Mario_(SSBU)/Up_special), "Animation length 37"
+      // (was 55, so his helplessness started late).
+      totalFrames: 37,
+      // The rise is the animation's, which no source publishes: UNVERIFIED, the
+      // legacy 2.9 a frame, on frames 4-18, so that it tops out with the page's
+      // "Hit 7 17-18", the launcher at the top of the punch (was 4-16). It ends with
+      // no upward speed handed on (`endSpeed`; UNVERIFIED: SSBU moves him by the
+      // animation's translation, which eases out at the top of the punch): about 47
+      // up. Handing the full 2.9 on, as before, rose him 81, half again Samus's
+      // published Screw Attack (about 54) where SmashWiki "Mario (SSBU)"
+      // (https://www.ssbwiki.com/Mario_(SSBU)) calls his distance "merely average"
+      // and "Samus (SSBU)" hers "only average". The stick read on frame 4 aims it.
+      momentum: [{ frame: 4, x: fx(0.5), y: fx(2.9), hold: 15, aimAt: 4, endSpeed: { y: 0 } }],
+      // "Stick sensitivity to angle 0.5", "Maximum angle deviation 12°": a full
+      // tilt turns the rise 12° toward its side (UNVERIFIED that a soft one turns it half).
+      aim: { kind: "tilt", max: fx(12) },
+      // "Optional reverse 3"; "To B-reverse it, the control stick has to be held
+      // backward on frame 3" ("Stick sensitivity to reverse 0.3": any tilt back).
+      turn: [3, 3],
+      // "Grounded height multiplier 1.1", "Aerial height multiplier 1.08".
+      rise: { ground: fx(1.1), air: fx(1.08) },
+      // "Air speed multiplier on startup 0.67": UNVERIFIED reading, his speed
+      // coming in ×0.67 on the move's first frame.
+      launch: { vxMul: fx(0.67) },
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Mario (SSBU)/Up special"
       // (https://www.ssbwiki.com/Mario_(SSBU)/Up_special): "Helplessness air speed
       // multiplier 0.6", "Landing lag 30 frames" (the landing's "Interruptible 31";

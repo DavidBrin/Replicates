@@ -410,7 +410,9 @@ describe("holding a mouthful", () => {
     const s = holdingMario();
     const kirby = s.fighters[0];
     const ctx = { def: KIRBY, stage: FD, frame: 1, fighters: s.fighters } as StateContext;
-    Object.assign(kirby, { action: "special", move: "upB", grounded: true, platform: 0 });
+    // His side special: the up special lands into its own special landing since
+    // Plan 5, Task 13b, which is not how "any special" lands.
+    Object.assign(kirby, { action: "special", move: "sideB", grounded: true, platform: 0 });
     onLanded(kirby, ctx);
     expect(kirby.action).toBe("land");
     Object.assign(kirby, { action: "special", move: "inhaleSwallow", actionFrame: 3 });

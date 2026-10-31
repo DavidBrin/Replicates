@@ -732,11 +732,32 @@ const legacy: FighterDef = {
     upB: {
       slot: "upB",
       name: "Quick Attack",
-      totalFrames: 52,
+      // Plan 5, Task 13b: SmashWiki "Pikachu (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Pikachu_(SSBU)/Up_special), "Animation length 69"
+      // (was 52).
+      totalFrames: 69,
+      // Each leg is "Dash travel speed 11" for "Dash duration 5 frames", the second
+      // at "Travel speed multiplier for second dash 0.9": 55 and 49.5 units (was 157
+      // sideways), on its hit's frames, 15-19 and 29-33. Each goes the way the stick
+      // points (`aim` "legs", "Stick sensitivity to choose an angle 0.5"), the first
+      // read as it starts, up with the stick at rest (SmashWiki "Quick Attack",
+      // https://www.ssbwiki.com/Quick_Attack: "in the direction in which the player's
+      // control stick is tilted, or upwards if it is not tilted"), the second on the
+      // "Earliest continuable (hit 1 → 2) 20" frame, refused unless it turns at least
+      // "Minimum angle difference for second dash 35°". He "briefly holds still" at
+      // the beginning, middle and end (same page): still on frames 1-10 ("Period
+      // before gravity applies during startup 10 frames") and 21-27, and each dash
+      // stops dead. UNVERIFIED: frames 21-27 still, and a stop to zero.
       momentum: [
-        { frame: 8, x: fx(0.9), y: fx(4.6), hold: 6 },
-        { frame: 20, x: fx(4.4), y: fx(1.4), hold: 6 },
+        { frame: 1, x: 0, y: 0, hold: 10 },
+        { frame: 15, x: 0, y: fx(11), hold: 5, aimAt: 15, endSpeed: { x: 0, y: 0 } },
+        { frame: 21, x: 0, y: 0, hold: 7 },
+        { frame: 29, x: 0, y: fx(9.9), hold: 5, aimAt: 20, second: true, endSpeed: { x: 0, y: 0 } },
       ],
+      aim: { kind: "legs", minTurn: fx(35) },
+      // "Horizontal speed multiplier on ending 0.6": UNVERIFIED reading, the ending's
+      // drift tops out at 0.6 of his air speed (as Link's "Air speed on ending").
+      phases: [{ from: 34, air: { speedMul: fx(0.6) } }],
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Pikachu (SSBU)/Up special"
       // (https://www.ssbwiki.com/Pikachu_(SSBU)/Up_special): "Helplessness air speed
       // multiplier 0.4", "Landing lag 24 frames" (the landing's "Interruptible 25";

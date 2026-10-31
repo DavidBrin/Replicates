@@ -858,8 +858,24 @@ const legacy: FighterDef = {
     upB: {
       slot: "upB",
       name: "Dolphin Slash",
-      totalFrames: 55,
-      momentum: [{ frame: 5, x: fx(0.6), y: fx(3.5), hold: 11 }],
+      // Plan 5, Task 13b: SmashWiki "Marth (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Marth_(SSBU)/Up_special), "Animation length 39" (was 55).
+      totalFrames: 39,
+      // The rise is the animation's, unpublished: UNVERIFIED, the legacy 3.5 a frame,
+      // held to frame 18 (was 16) so that a grounded one clears Battlefield's top
+      // platform (47.19), which the page says "he can land on ... if angled high",
+      // 49 up; it hands no upward speed on (UNVERIFIED: SmashWiki "Dolphin Slash",
+      // https://www.ssbwiki.com/Dolphin_Slash: "After jumping up, Marth stalls in the
+      // air for some time before he starts falling"), and then "Gravity after jump
+      // 0.06". Handing the 3.5 on rose him 117. "Aerial height multiplier 1.1". The
+      // stick read on frame 5 aims it: "Stick sensitivity to angle 0.5", "Maximum
+      // angle deviation 20°". No reverse is published for Ultimate.
+      momentum: [{ frame: 5, x: fx(0.6), y: fx(3.5), hold: 14, aimAt: 5, endSpeed: { y: 0 } }],
+      aim: { kind: "tilt", max: fx(20) },
+      rise: { ground: fx(1), air: fx(1.1) },
+      phases: [{ from: 20, gravity: fx(0.06) }],
+      // "Horizontal speed multiplier on startup 0.66", on the move's first frame.
+      launch: { vxMul: fx(0.66) },
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Marth (SSBU)/Up special"
       // (https://www.ssbwiki.com/Marth_(SSBU)/Up_special): "Helplessness air speed
       // multiplier 0.4", "Landing lag 24 frames" (the landing's "Interruptible 25";

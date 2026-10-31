@@ -743,11 +743,29 @@ const legacy: FighterDef = {
     upB: {
       slot: "upB",
       name: "Fire Fox",
-      totalFrames: 91,
-      // Frame 20, not 42: the wind-up has to be shorter than the fall it is
-      // supposed to save you from, and at 42 Fox reached the ground before the
-      // burst ever fired.
-      momentum: [{ frame: 20, x: fx(1.3), y: fx(4.3), hold: 16 }],
+      // Plan 5, Task 13b: SmashWiki "Fox (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Fox_(SSBU)/Up_special), "Animation length 86" (was
+      // 91, UltimateFrameData's total "when traveling along the ground").
+      totalFrames: 86,
+      // The charge hangs him in place (SmashWiki "Fox (SSBU)": "it stops him in place
+      // until he launches himself in the chosen direction"): "Horizontal speed
+      // multiplier on startup 0.8" as it starts, the stick doing nothing and
+      // "Friction on startup 0.02" bleeding it, no gravity for the "Period before
+      // applying startup gravity 12 frames", then "Startup gravity 0.015". UNVERIFIED:
+      // his fall stopped as it starts (the page gives no vertical startup speed).
+      launch: { vxMul: fx(0.8), vy: 0 },
+      phases: [
+        { from: 1, to: 12, noControl: true, brake: fx(0.02), gravity: 0 },
+        { from: 13, to: 42, noControl: true, brake: fx(0.02), gravity: fx(0.015) },
+      ],
+      // The dash: "Initial speed 3.8" for the "Dash duration 30 frames", 43-72 (the
+      // clean hit's 43), losing "Dash friction 0.1" a frame after its "Period before
+      // applying dash friction 6 frames". It goes the way the stick points on "Frame
+      // to decide dash angle 30", one of eight (SmashWiki "Fox (SSBU)": "with up to 8
+      // angles to choose from"); at rest, up (UNVERIFIED: the move list's "Rockets
+      // skyward"). The legacy dash fired on frame 20, at a fixed 73°.
+      momentum: [{ frame: 43, x: 0, y: fx(3.8), hold: 30, aimAt: 30, decel: { after: 6, by: fx(0.1) } }],
+      aim: { kind: "octant" },
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Fox (SSBU)/Up special"
       // (https://www.ssbwiki.com/Fox_(SSBU)/Up_special): "Helplessness air speed
       // multiplier 0.85", "Landing lag 20 frames"; UltimateFrameData's 20

@@ -426,11 +426,14 @@ describe("recover, now that the up special leaves the fighter helpless (Plan 5, 
   const pressesOver = (ctx: (f: number) => BehaviourContext): number[] => Array.from({ length: 12 }, (_, f) => recover(ctx(f)).input);
   const fires = (inputs: number[]) => inputs.some((i) => held(i, Btn.Special) && held(i, Btn.Up));
 
-  it("takes each fighter's own up special, frame by frame as its script runs it, and its helpless drift at the published multiplier", () => {
-    expect(UP_B.totalFrames).toBe(MARIO.moves.upB!.totalFrames);
-    expect(UP_B.momentum).toHaveLength(UP_B.totalFrames);
-    // `momentum: [{ frame: 4, x: 0.5, y: 2.9, hold: 12 }]`: frames 4 to 16.
-    expect(UP_B.momentum.map((m, i) => (m === null ? 0 : i + 1)).filter((n) => n > 0)).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+  it("takes each fighter's own up special, the one it uses in the air, and its helpless drift at the published multiplier", () => {
+    // Since Plan 5, Task 13b the model runs the move (`upBPath`) rather than read a
+    // momentum list: it carries the move's length, how it is aimed, and the fall.
+    expect(UP_B.slot).toBe("upB");
+    // SmashWiki "Mario (SSBU)/Up special": "Animation length 37".
+    expect(UP_B.totalFrames).toBe(37);
+    expect(UP_B.aim).toBe("tilt");
+    expect(UP_B.wallJump).toBe(true);
     // SmashWiki "Mario (SSBU)/Up special": "Helplessness air speed multiplier 0.6".
     expect(UP_B.helplessDrift).toBe(mul(fighterParams(MARIO).air_speed_x_stable, fx(0.6)));
   });

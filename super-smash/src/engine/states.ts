@@ -74,6 +74,8 @@ import {
 } from "./kinetic";
 import { fighterParams } from "./params";
 import { STATUS_TABLE, changeStatus } from "./status/kind";
+import { begunInAir, moveLaunch, movePhase, phaseParams, upSpecialStick, windowEndSpeed, windowVelocity } from "./upSpecial";
+import type { Stick } from "./upSpecial";
 import type { StatusTable } from "./status/kind";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type { Footstool, FootstoolHead } from "./footstool";
@@ -601,11 +603,16 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
  * neither. Not modelled: reversing one "in the first few frames" (same page).
  * Only a side special turns: the up, down and neutral specials keep the facing.
  */
-export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot, stickX = 0): boolean {
-  const move = ctx.def.moves[slot];
+export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot, stickX = 0, stick: Stick = { x: stickX, y: 0, soft: false }): boolean {
+  // Begun in the air, an up special is the fighter's aerial one where it has one
+  // of its own (Plan 5, Task 13b: `upBAir`, Link's aerial Spin Attack).
+  const own: MoveSlot = slot === "upB" && !f.grounded && ctx.def.moves.upBAir !== undefined ? "upBAir" : slot;
+  const move = ctx.def.moves[own];
   if (move === undefined) return false;
-  if (slot === "sideB" && stickX !== 0 && f.action !== "run") f.facing = stickX;
-  startMove(f, "special", slot);
+  if (own === "sideB" && stickX !== 0 && f.action !== "run") f.facing = stickX;
+  startMove(f, "special", own);
+  // An up special's stick on its first frame: its turn and aims (Plan 5, Task 13b).
+  if (move.turn !== undefined || move.aim !== undefined) upSpecialStick(f, move, stick);
   // A stored charge comes back out (Plan 5): a full one is released as its move
   // says (`StoredFullCharge.start`: Giant Punch from its loop frame, Charge Shot
   // after its entry); a partial one keeps charging from where it left off.
@@ -652,6 +659,9 @@ export function moveEndFrame(f: FighterState, move: MoveDef): number {
   // (SSBU)/Down special" (revision 2041256) gives both timelines' "Interruptible
   // (from cancel)" as 32 after the cancel, the air's 78 and the ground's 60.
   if (move.aerialTotalFrames !== undefined && (!f.grounded || (move.stone !== undefined && f.combat.stoneEndedAir))) return move.aerialTotalFrames;
+  // An up special begun in the air plays its aerial animation's length (Plan 5,
+  // Task 13b: `MoveDef.fromAir`), wherever it is now.
+  if (move.fromAir?.totalFrames !== undefined && begunInAir(f)) return move.fromAir.totalFrames;
   return move.totalFrames;
 }
 
@@ -822,7 +832,7 @@ export function startSpecialFall(f: FighterState, slot: MoveSlot): void {
 export function endsHelpless(f: FighterState, move: MoveDef): boolean {
   const h = move.helpless;
   if (h === undefined || f.grounded) return false;
-  return h.aerialOnly !== true || f.airTime > f.actionFrame;
+  return h.aerialOnly !== true || begunInAir(f);
 }
 
 /** The `HelplessDef` of the move that left `f` helpless, or undefined when it is not. */
@@ -868,7 +878,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
       startMove(f, "grab", hasMove(ctx, slot) ? slot : "grab");
       return true;
     }
-    if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x)) return true;
+    if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x, intent)) return true;
     if (p.attack && beginAttack(f, ctx, groundAttackSlot(f, intent))) return true;
     if (p.jump) {
       startAction(f, "jumpSquat");
@@ -890,7 +900,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   // shield/grab can turn into a directional air dodge buffer, which can be a
   // misinput"; Plan 3, Task 20c).
   if ((p.shield || intent.shieldHeld) && startAirDodge(f, intent)) return true;
-  if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x)) return true;
+  if (p.special && beginSpecial(f, ctx, specialSlot(intent), intent.x, intent)) return true;
   if (p.attack) {
     const slot = aerialSlot(f, intent);
     if (hasMove(ctx, slot)) {
@@ -1160,7 +1170,11 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   const run = live ? moveScriptFrame(ctx.def, f) : null;
   // The script's momentum, or the legacy move's where an imported script publishes none (Plan 5, Task 13).
   const m = run === null ? null : moveMomentum(ctx.def, f, run);
-  if (run === null || m === null) {
+  const move = f.move === null ? undefined : ctx.def.moves[f.move];
+  // As the move's data aims, scales and slows it (Plan 5, Task 13b: `windowVelocity`);
+  // a refused second leg sets nothing.
+  const v = run === null || m === null ? null : windowVelocity(move, m, run.gameFrame, f);
+  if (run === null || m === null || v === null) {
     // No hold is live: the move ended, was cut short (a landing clears `move`
     // mid-hold, so its last frame never ran) or has not reached its momentum.
     // Whatever velocity a hold left becomes drift and gravity's; no-op if none.
@@ -1171,11 +1185,33 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   // them straight through the stage — a grounded Stone fell out of the world.
   // A Stone used on the ground simply sits there, as it does in the real game.
   // So does a rise that only the air allows (`airOnly`; Plan 5, Task 8 fix round 1).
-  kineticMotion(f, m.x * (f.facing >= 0 ? 1 : -1), f.grounded && (m.y < 0 || m.airOnly === true) ? 0 : m.y);
+  kineticMotion(f, v.x * (f.facing >= 0 ? 1 : -1), f.grounded && (v.y < 0 || m.airOnly === true) ? 0 : v.y);
   const holding = run.gameFrame < m.until;
-  // On the last frame of the hold, drift and gravity take over this very frame.
-  if (!holding) kineticEndMotion(f);
+  // On the last frame of the hold, drift and gravity take over this very frame,
+  // from what the window hands on (`MoveMomentum.endSpeed`; Plan 5, Task 13b).
+  if (!holding) {
+    const end = windowEndSpeed(move, m);
+    f.kinetic.motionX = mul(f.kinetic.motionX, end.x);
+    f.kinetic.motionY = mul(f.kinetic.motionY, end.y);
+    kineticEndMotion(f);
+  }
   return holding;
+}
+
+/**
+ * An up special's launch (Plan 5, Task 13b; `MoveDef.launch`, `fromAir.launch`):
+ * on its frame the move sets the velocity outright, its published "initial
+ * speed", and nothing else moves the fighter that frame. Returns true on it.
+ */
+function applyMoveLaunch(f: FighterState, ctx: StateContext): boolean {
+  if (f.action !== "special" || f.move === null) return false;
+  const move = ctx.def.moves[f.move];
+  const l = move === undefined ? undefined : moveLaunch(move, f);
+  if (l === undefined || moveFrameOf(f.actionFrame) !== (l.frame ?? 1)) return false;
+  if (l.vxMul !== undefined) kineticSetX(f, mul(f.vx, l.vxMul));
+  if (l.vx !== undefined) kineticSetX(f, l.vx * (f.facing >= 0 ? 1 : -1));
+  if (l.vy !== undefined) kineticSetY(f, l.vy);
+  return true;
 }
 
 /**
@@ -1204,6 +1240,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   // Scripted movement outranks everything below it — that is the point of a
   // move that carries its own — but only for as long as it is held.
   if (f.hitstun <= 0 && applyMoveMomentum(f, ctx)) return;
+  if (f.hitstun <= 0 && applyMoveLaunch(f, ctx)) return;
 
   if (f.hitstun > 0) {
     kineticReel(f, fighterParams(ctx.def), hitstunGravityOptions(f).balloon === true);
@@ -1227,12 +1264,20 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   const stall = f.action === "special" && f.move !== null ? ctx.def.moves[f.move]?.stall : undefined;
   const restricted = stall?.airFriction !== undefined && (stall.everyUse === true || f.combat.stalling);
   // A helpless fall drifts no faster than its move allows (Plan 5, Task 4b:
-  // `HelplessDef.airSpeed`, each page's "Helplessness air speed multiplier").
+  // `HelplessDef.airSpeed`, each page's "Helplessness air speed multiplier"), and
+  // accelerates as its page says where it says (Task 13b: `HelplessDef.airAccel`).
   const helpless = f.action === "specialFall" ? helplessOf(f, ctx.def) : undefined;
+  // An up special's own air control, friction, gravity and ground control on the
+  // stretch it is on (Plan 5, Task 13b: `MovePhase`).
+  const phaseMove = f.action === "special" && f.move !== null ? ctx.def.moves[f.move] : undefined;
+  const phase = phaseMove === undefined ? undefined : movePhase(phaseMove, f);
+  const moving =
+    helpless?.airAccel !== undefined ? { ...params, air_accel_x_add: helpless.airAccel } : phase !== undefined ? phaseParams(params, phase) : params;
   kineticExec(f, type, {
-    stickX: intent.x,
+    stickX: phase?.noControl === true ? 0 : intent.x,
     stickMag: intent.soft ? ONE >> 1 : ONE,
-    params,
+    params: moving,
+    ...(phase?.ground !== undefined ? { groundControl: phase.ground } : {}),
     ...(restricted ? { airFriction: stall.airFriction } : {}),
     ...(helpless !== undefined ? { airSpeedMax: mul(params.air_speed_x_stable, helpless.airSpeed) } : {}),
     // A status that walks faster or slower than the fighter's walk (Plan 5: the carry).
@@ -1249,8 +1294,11 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
  * Landing during an aerial pays that move's landing lag — unless the move
  * auto-cancels, which is the whole reason `autoCancelBefore`/`After` exist and
  * the reason a rising nair is safe while a falling one is not.
+ *
+ * `fromAir` is where the move it lands in began (`begunInAir`), read by the
+ * caller before the collision that landed it reset the airtime (Plan 5, Task 13b).
  */
-export function onLanded(f: FighterState, ctx: StateContext): void {
+export function onLanded(f: FighterState, ctx: StateContext, fromAir: boolean = begunInAir(f)): void {
   const p = fighterParams(ctx.def);
   // Heavy if the fighter spent `landing_heavy_frame` frames at full fall
   // speed (SmashWiki "Lag", normal landing); read before it is reset.
@@ -1305,6 +1353,29 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
       const stone = move.stone;
       if (stone !== undefined && f.combat.stoneFrames === 0 && moveFrameOf(f.actionFrame) === stone.ground[0]) f.combat.stoneFrames = 1;
     }
+    return;
+  }
+  // Landing during an up special that ends helpless takes the move's own landing
+  // lag, as its helpless fall would have (Plan 5, Task 13b; SmashWiki "Lag",
+  // https://www.ssbwiki.com/Lag, "Special landing"): the special landing, for its
+  // `HelplessDef.landingLag` (Kirby's Final Cutter: its "Landing (cutter)",
+  // "Interruptible 31"). Donkey Kong's aerial Spinning Kong instead lands into its
+  // grounded one (`fromAir.landsAt`; SmashWiki "Donkey Kong (SSBU)/Up special",
+  // https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_special: "If Donkey Kong lands from
+  // the aerial version before undergoing helplessness, he transitions to frame 63
+  // of the grounded version"). UNVERIFIED for every other up special's frames:
+  // no page says a landing in its startup is not this landing.
+  if (move?.helpless !== undefined && f.move !== null && (move.helpless.aerialOnly !== true || fromAir)) {
+    const landsAt = move.fromAir?.landsAt;
+    if (landsAt !== undefined && fromAir) {
+      f.actionFrame = actionFrameOf(landsAt);
+      clearHitRecord(f);
+      return;
+    }
+    const slot = f.move;
+    startAction(f, "specialLanding");
+    f.combat.helplessMove = slot;
+    f.charge = move.helpless.landingLag;
     return;
   }
   // A tumble that reaches the floor lies down: in hitstun, one too slow to

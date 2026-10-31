@@ -22,7 +22,8 @@ export type Klass = Dir | `SWEEP ${Dir}`;
  * ahead, his up-throw sword above, Pikachu's down-throw hip press below, his
  * pummel ahead. Plan 5 Task 13's smashes and Spin Attack (ruling P5-R17):
  * forward smashes forward, up smashes up, and the down smashes and Spin Attack,
- * which hit in front and behind, a forward sweep.
+ * which hit in front and behind, a forward sweep. Plan 5 Task 13b's: Link's aerial
+ * Spin Attack, front and back hits, a forward sweep.
  */
 export const DIRECTION: Readonly<Record<string, Klass>> = {
   "mario bair": "B",
@@ -49,6 +50,7 @@ export const DIRECTION: Readonly<Record<string, Klass>> = {
   "link jab3": "F",
   "link nair": "F",
   "link upB": "SWEEP F",
+  "link upBAir": "SWEEP F",
   "link uthrow": "U",
   "link utilt": "U",
   "samus bair": "B",

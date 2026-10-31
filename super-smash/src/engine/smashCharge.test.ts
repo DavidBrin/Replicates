@@ -176,8 +176,9 @@ describe("a special's charge loop, for every special that charges on B and swing
     ),
   );
 
-  it("covers Giant Punch, Hammer Flip, Shield Breaker and Skull Bash, so the rule below is not vacuous", () => {
-    expect(charging.map((c) => c.name).sort()).toEqual(["donkeyKong neutralB", "kirby sideB", "marth neutralB", "pikachu sideB"]);
+  it("covers Giant Punch, Hammer Flip, Shield Breaker, Skull Bash and the Spin Attack, so the rule below is not vacuous", () => {
+    // Link's grounded Spin Attack charges since Plan 5, Task 13b ("Charges between 3-4").
+    expect(charging.map((c) => c.name).sort()).toEqual(["donkeyKong neutralB", "kirby sideB", "link upB", "marth neutralB", "pikachu sideB"]);
   });
 
   it.each(charging.map((c) => [c.name, c.move] as const))("%s loops before its earliest live frame", (_name, move) => {

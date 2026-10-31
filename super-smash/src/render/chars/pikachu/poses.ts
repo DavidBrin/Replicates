@@ -1020,11 +1020,14 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * out if it differs from the first by thirty degrees — so the clip has to
    * show two distinct launches and the beat between them, not one leap.
    *
-   * The displacement itself belongs to the engine (`momentum` at frames 8 and
-   * 20), so the offsets here stay small and cancel: what sells a zip is the
-   * body stretched to a streak along the direction of travel and *held* there
-   * for a few frames, which is what `hold` easing is for. Frame 14 is the first
-   * hitbox and frame 28 the second, which land at `t` 0.28 and 0.55.
+   * The displacement itself belongs to the engine (`momentum` on frames 15-19
+   * and 29-33), so the offsets here stay small and cancel: what sells a zip is
+   * the body stretched to a streak along the direction of travel and *held*
+   * there for a few frames, which is what `hold` easing is for. Frame 14 is the
+   * first hitbox and frame 28 the second, which land at `t` 0.28 and 0.47 of the
+   * move's 69 frames (Plan 5, Task 13b: SmashWiki "Pikachu (SSBU)/Up special",
+   * "Animation length 69"; the keys after the strike moved with it, the beat to
+   * frame 20 and the end of the zip to 36, as they were on its old 52).
    */
   upB: {
     loop: false,
@@ -1060,7 +1063,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       },
       {
         // The beat between the two dashes: he is briefly a compact ball again.
-        t: 0.4,
+        t: 0.36,
         pose: P({
           torso: 8, head: -6,
           thighR: 150, shinR: 50, footR: -74,
@@ -1073,7 +1076,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       },
       {
         // Zip two: forward. Same stretch, laid over on its side.
-        t: 0.55,
+        t: 0.47,
         pose: P({
           torso: 2, head: 12,
           thighR: 224, shinR: -16, footR: -62,
@@ -1089,7 +1092,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         ease: "hold",
       },
       {
-        t: 0.7,
+        t: 0.57,
         pose: P({ torso: 6, head: 4, thighR: 190, shinR: 16, footR: -72, thighL: 206, shinL: 14, footL: -70 }),
         offsetX: 0.4,
         offsetY: 0.15,

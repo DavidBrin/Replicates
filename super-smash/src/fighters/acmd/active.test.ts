@@ -271,9 +271,10 @@ describe("what render, the CPU and the charge hold read of an activated move", (
   // Plan 5 Task 7: +28 throws and pummels on the root bone, +6 on limbs. Task 13: +5 on
   // the root (Mario's down smash and Fireball, Pikachu's smashes and Thunder Jolt) and +9
   // on limbs, three more held (P5-R16).
-  it("activates 71 slots, and the bake 65 more", () => {
+  // The bake's 66th: Link's aerial Spin Attack (Plan 5, Task 13b).
+  it("activates 71 slots, and the bake 66 more", () => {
     expect(ACTIVE).toHaveLength(71);
-    expect(LIMB).toHaveLength(65);
+    expect(LIMB).toHaveLength(66);
   });
 
   it.each(SYNCED)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {

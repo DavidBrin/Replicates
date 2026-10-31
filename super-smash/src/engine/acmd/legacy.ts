@@ -72,6 +72,9 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // the replica's).
   inhaleSwallow: "special_n_swallow",
   inhaleSpit: "special_n_spit",
+  // Plan 5, Task 13b: an up special begun in the air (rubendal Motions: Link's
+  // `special_air_hi`, the motion of `game_specialairhi`).
+  upBAir: "special_air_hi",
 };
 
 /**

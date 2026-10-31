@@ -79,6 +79,15 @@ const SLOT_CANDIDATES = {
   finalSmash: ["Final", "FinalStart"],
 };
 
+/**
+ * Slots only some fighters import, by fighter: a move the game runs for that
+ * fighter alone (Plan 5, Task 13b: Link's aerial Spin Attack, `SpecialAirHi`,
+ * the `upBAir` slot; SmashWiki "Link (SSBU)/Up special" gives its own timeline).
+ */
+const EXTRA_SLOTS = {
+  link: { upBAir: ["SpecialAirHi"] },
+};
+
 const HIT_STATUS = new Set(["HIT_STATUS_NORMAL", "HIT_STATUS_XLU", "HIT_STATUS_INVINCIBLE", "HIT_STATUS_OFF"]);
 
 async function fetchJson(url, file) {
@@ -302,7 +311,7 @@ async function importFighter(f) {
   const scripts = [];
   const faf = {};
   const used = new Set(["script"]);
-  for (const [slot, candidates] of Object.entries(SLOT_CANDIDATES)) {
+  for (const [slot, candidates] of Object.entries({ ...SLOT_CANDIDATES, ...(EXTRA_SLOTS[f.id] ?? {}) })) {
     const name = candidates.find((c) => texts.has(c));
     if (name === undefined) continue;
     const key = `game_${name.toLowerCase()}`;

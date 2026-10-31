@@ -201,7 +201,10 @@ export type MoveSlot =
   | "cargoDthrow"
   // Plan 5, Task 9: Kirby's swallow and spit, from the mouthful.
   | "inhaleSwallow"
-  | "inhaleSpit";
+  | "inhaleSpit"
+  // Plan 5, Task 13b: an up special begun in the air, where the fighter has one of
+  // its own (SSBU's `special_air_hi`; Link's aerial Spin Attack).
+  | "upBAir";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -614,6 +617,92 @@ export interface HelplessDef {
    * air"). Begun on the ground, it ends free to act wherever it ends.
    */
   readonly aerialOnly?: boolean;
+  /**
+   * The fall's own air acceleration, Q12 (Plan 5, Task 13b): the page's
+   * "Additional air acceleration ... (helpless)", which stands for the fighter's
+   * `air_accel_x_add` while it falls. Absent: the fighter's own.
+   */
+  readonly airAccel?: number;
+}
+
+/**
+ * How the stick aims an up special's momentum (Plan 5, Task 13b). A window aims
+ * where it names the frame its stick is read on (`MoveMomentum.aimAt`):
+ * - `"tilt"`: the window turns by up to `max` degrees (Q12) toward the stick's
+ *   side, the page's "Maximum angle deviation";
+ * - `"octant"`: the window flies, at its own speed, the way the stick points, one
+ *   of the eight directions (Fox: "up to 8 angles"); with the stick at rest, the
+ *   way the window is authored;
+ * - `"legs"`: each aimed window is a leg the stick points (Pikachu); a leg marked
+ *   `second` comes out only if it turns at least `minTurn` degrees (Q12) from the
+ *   leg before.
+ */
+export type MoveAim =
+  | { readonly kind: "tilt"; readonly max: number }
+  | { readonly kind: "octant" }
+  | { readonly kind: "legs"; readonly minTurn: number };
+
+/**
+ * A stretch of an up special's own physics, on move frames `from`..`to` (to the
+ * move's end without `to`), outside its momentum windows (Plan 5, Task 13b):
+ * the page's published air control, gravity and ground control while the move
+ * runs. Every field left out is the fighter's own.
+ */
+export interface MovePhase {
+  readonly from: number;
+  readonly to?: number;
+  /**
+   * Air control: `add` and `mul` stand for `air_accel_x_add` and
+   * `air_accel_x_mul` (a page's single "Air acceleration" is `add` with `mul` 0),
+   * and the top speed is `speed`, or the fighter's air speed × `speedMul`. Q12.
+   */
+  readonly air?: { readonly add?: number; readonly mul?: number; readonly speed?: number; readonly speedMul?: number };
+  /** The stick does not drift the fighter: drift bleeds by `brake` (Q12; the fighter's air friction without one). */
+  readonly noControl?: boolean;
+  readonly brake?: number;
+  /** Ground control while the move runs on the ground: toward the stick's side at `accel` up to `speed`, else bleeding by `brake`. Q12. */
+  readonly ground?: { readonly accel: number; readonly speed: number; readonly brake: number };
+  /** Gravity, Q12 a frame: `gravity` outright, or the fighter's × `gravityMul`. */
+  readonly gravity?: number;
+  readonly gravityMul?: number;
+}
+
+/**
+ * The velocity an up special sets on move frame `frame` (1 without one), Q12
+ * (Plan 5, Task 13b): `vx` facing-relative and `vy` outright where given; `vxMul`
+ * scales the horizontal speed the fighter brings in.
+ */
+export interface MoveLaunch {
+  readonly frame?: number;
+  readonly vx?: number;
+  readonly vy?: number;
+  readonly vxMul?: number;
+}
+
+/** One window of a move's scripted movement (`MoveDef.momentum`). */
+export interface MoveMomentum {
+  frame: number;
+  x: number;
+  y: number;
+  hold?: number;
+  /**
+   * Its vertical speed is set only in the air: on the ground the floor holds
+   * the fighter, and only the horizontal speed is set (Plan 5, Task 8 fix round
+   * 1: Donkey Kong's cargo down throw boosts him up "in the air").
+   */
+  airOnly?: boolean;
+  /** The move frame the stick aims this window on (`MoveDef.aim`; Plan 5, Task 13b). */
+  aimAt?: number;
+  /** A second leg (`MoveAim` `"legs"`): it comes out only if it turns far enough from the first. */
+  second?: boolean;
+  /**
+   * What the window hands on when it ends, as multipliers of its velocity (Q12;
+   * 1 without one): `y` 0 for a rise the animation eases out of, both 0 for a
+   * dash that stops dead (Plan 5, Task 13b).
+   */
+  endSpeed?: { x?: number; y?: number };
+  /** Its speed falls by `by` a frame (Q12) after its first `after` frames (Fox's dash friction; Task 13b). */
+  decel?: { after: number; by: number };
 }
 
 /** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */
@@ -863,18 +952,40 @@ export interface MoveDef {
    * impulse is clawed back to the fighter's ordinary fall speed on the next
    * frame — which is the difference between a stone and a puffball.
    */
-  readonly momentum?: readonly {
-    frame: number;
-    x: number;
-    y: number;
-    hold?: number;
-    /**
-     * Its vertical speed is set only in the air: on the ground the floor holds
-     * the fighter, and only the horizontal speed is set (Plan 5, Task 8 fix round
-     * 1: Donkey Kong's cargo down throw boosts him up "in the air").
-     */
-    airOnly?: boolean;
-  }[];
+  readonly momentum?: readonly MoveMomentum[];
+  /** How the stick aims the move's momentum (Plan 5, Task 13b). See `MoveAim`. */
+  readonly aim?: MoveAim;
+  /**
+   * Move frames (first, last) on which the stick held back turns the fighter
+   * round (Plan 5, Task 13b): an up special's published reverse.
+   */
+  readonly turn?: readonly [number, number];
+  /** Multipliers (Q12) on a rising window's speed, begun on the ground and in the air: the page's "height multiplier". */
+  readonly rise?: { readonly ground: number; readonly air: number };
+  /** Velocity the move sets as it starts (Plan 5, Task 13b). See `MoveLaunch`. */
+  readonly launch?: MoveLaunch;
+  /** The move's own physics outside its momentum windows (Plan 5, Task 13b). See `MovePhase`. */
+  readonly phases?: readonly MovePhase[];
+  /**
+   * The move begun in the air, where it differs (Plan 5, Task 13b): its own
+   * length (the aerial "Animation length"), launch and physics, and the frame
+   * of the grounded move it lands into (`landsAt`; Donkey Kong's "transitions to
+   * frame 63 of the grounded version"). Where it began is read off the airtime
+   * (`begunInAir`).
+   */
+  readonly fromAir?: {
+    readonly totalFrames?: number;
+    readonly launch?: MoveLaunch;
+    readonly phases?: readonly MovePhase[];
+    readonly landsAt?: number;
+  };
+  /**
+   * In the air the move holds this move frame until it lands, grabs a ledge or
+   * passes a blast line (Plan 5, Task 13b: Kirby's Final Cutter, SmashWiki
+   * "Helpless": "the move does not end until Kirby lands on the ground"). The
+   * window live on it carries the fall.
+   */
+  readonly descentHold?: number;
   /** What this move launches, if anything. See `ProjectileDef`. */
   readonly projectiles?: readonly ProjectileDef[];
 }

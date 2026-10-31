@@ -19,6 +19,7 @@ import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
 import { specialChargeMain } from "../specialCharge";
 import { stoneMain } from "../stone";
+import { upSpecialStick } from "../upSpecial";
 import { reflectorMain, specialStallExec } from "../reflect";
 import { liftCargo } from "./cargo";
 import { releaseHeld, struggleInGrab } from "./grab";
@@ -57,6 +58,14 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.action === "special" && move.holdLoop !== undefined) holdLoopMain(f, intent, move.holdLoop);
   // A special that holds a stone (Plan 5, Task 13 fix round 2, R-T13j: Kirby's Stone).
   if (f.action === "special" && move.stone !== undefined) stoneMain(f, intent, move.stone);
+  // An up special's stick: its turn and its aims (Plan 5, Task 13b: `upSpecial.ts`),
+  // and a descent that holds its frame until it lands (`MoveDef.descentHold`).
+  if (f.action === "special") {
+    if (move.turn !== undefined || move.aim !== undefined) upSpecialStick(f, move, intent);
+    if (move.descentHold !== undefined && !f.grounded && moveFrameOf(f.actionFrame) > move.descentHold) {
+      f.actionFrame = actionFrameOf(move.descentHold);
+    }
+  }
   // Charging a smash holds the animation on its hold frame (`smashHoldFrame`): the
   // move's published one where it has one (`MoveDef.smashHold`, the first frame of
   // SmashWiki's "Charges between", ruling R-T13i), else the frame before its script
@@ -168,6 +177,8 @@ function clearSpecialMove(f: FighterState): void {
   f.combat.stoneFrames = 0;
   f.combat.stoneTaken = 0;
   f.combat.stoneEndedAir = false;
+  f.combat.aimX = 0;
+  f.combat.aimY = 0;
 }
 
 export const STATUS_SPECIAL: FighterStatus = {

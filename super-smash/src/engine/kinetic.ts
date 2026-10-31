@@ -427,6 +427,13 @@ export interface KineticInput {
    * Donkey Kong's carry, ×1.1, `FighterStatus.walkMul`). Absent: his own walk.
    */
   readonly walkMul?: number;
+  /**
+   * On the ground, a move's own control (Plan 5, Task 13b: `MovePhase.ground`,
+   * Donkey Kong's grounded Spinning Kong): CONTROL goes toward the stick's side at
+   * `accel` up to `speed`, and with the stick at rest bleeds by `brake`. Absent:
+   * the fighter's ground friction, whatever the stick.
+   */
+  readonly groundControl?: { readonly accel: number; readonly speed: number; readonly brake: number };
 }
 
 /** One frame of gravity toward `terminal`, which is a positive speed. */
@@ -513,7 +520,11 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
     case "FALL":
     case "AIR_ESCAPE":
       k.controlX = f.grounded
-        ? approach(k.controlX, 0, p.ground_brake)
+        ? input.groundControl !== undefined
+          ? input.stickX === 0
+            ? approach(k.controlX, 0, input.groundControl.brake)
+            : approach(k.controlX, input.stickX * input.groundControl.speed, input.groundControl.accel)
+          : approach(k.controlX, 0, p.ground_brake)
         : input.airFriction !== undefined
           ? approach(k.controlX, 0, input.airFriction)
           : airControlX(k.controlX, input.stickX, p, input.airSpeedMax);

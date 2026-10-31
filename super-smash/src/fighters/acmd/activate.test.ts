@@ -59,7 +59,7 @@ import { cloneState, createInitialState, step } from "@/engine/simulate";
 import { hasSuperArmour, onLanded } from "@/engine/states";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { FighterDef, GameState, InputFrame, MatchRules, MoveSlot } from "@/engine/types";
+import type { FighterDef, GameState, InputFrame, MatchRules, MoveDef, MoveSlot } from "@/engine/types";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { moveTimingFor } from "@/render/poses/timing";
 import { STAGES } from "@/stages";
@@ -143,15 +143,18 @@ describe("the freed moves", () => {
 });
 
 describe("the legacy move's fallbacks", () => {
-  it("keep a legacy move's momentum when its imported script publishes none (Link's Spin Attack)", () => {
-    const game = withLimbScripts(link, BONES);
+  it("keep a legacy move's momentum when its imported script publishes none (Link's Spin Attack, forged)", () => {
+    // Link's grounded Spin Attack has had no window since Plan 5, Task 13b (the page
+    // gives it no movement): this one is the old rise, put back on a copy.
+    const rising: FighterDef = { ...link, moves: { ...link.moves, upB: { ...link.moves.upB!, momentum: [{ frame: 6, x: fx(0.35), y: fx(2.5), hold: 13 }] } } };
+    const game = withLimbScripts(rising, BONES);
     expect(LIMB_SCRIPT_SLOTS.link).toContain("upB");
     expect(game.scripts?.upB).toBe(gameScriptOf(link.moves.upB, REFERENCE_SCRIPTS.link.scripts.game_specialhi));
     const run = (g: number) => moveScriptFrame(game, at("upB", g - 1))!;
     expect(run(6).state.momentum).toBeNull();
     expect(moveMomentum(game, { move: "upB" }, run(5))).toBeNull();
-    expect(moveMomentum(game, { move: "upB" }, run(6))).toEqual({ x: fx(0.35), y: fx(2.5), until: 19 });
-    expect(moveMomentum(game, { move: "upB" }, run(19))).toEqual({ x: fx(0.35), y: fx(2.5), until: 19 });
+    expect(moveMomentum(game, { move: "upB" }, run(6))).toEqual({ x: fx(0.35), y: fx(2.5), until: 19, order: 0 });
+    expect(moveMomentum(game, { move: "upB" }, run(19))).toEqual({ x: fx(0.35), y: fx(2.5), until: 19, order: 0 });
     expect(moveMomentum(game, { move: "upB" }, run(20))).toBeNull();
   });
 
@@ -173,7 +176,7 @@ describe("the legacy move's fallbacks", () => {
     expect(move.momentum?.[0].airOnly).toBe(true);
     const def: FighterDef = { ...donkeyKong, scripts: { ...donkeyKong.scripts, cargoDthrow: bare } };
     const m = move.momentum![0];
-    expect(moveMomentum(def, { move: "cargoDthrow" }, moveScriptFrame(def, at("cargoDthrow", m.frame - 1))!)).toEqual({ x: m.x, y: m.y, until: m.frame + (m.hold ?? 0), airOnly: true });
+    expect(moveMomentum(def, { move: "cargoDthrow" }, moveScriptFrame(def, at("cargoDthrow", m.frame - 1))!)).toEqual({ x: m.x, y: m.y, until: m.frame + (m.hold ?? 0), order: 0, airOnly: true });
   });
 
   it("launch a legacy move's projectile on its own frame when the script launches nothing", () => {
@@ -279,13 +282,19 @@ describe("what keeps a move on its legacy frames (Plan 5 review)", () => {
   });
 
   it("keeps Inhale, the Counter, the cargo throws and every charging special on their legacy frames", () => {
+    // ...but a charge that loops inside the script's lead, before its first command
+    // (Plan 5, Task 13b: Link's Spin Attack, "Charges between 3-4" in its 3-frame
+    // start), times nothing the script runs.
+    const inLead = (move: MoveDef, k: keyof MoveDef) => k === "specialCharge" && move.specialCharge!.loopFrame <= (move.scriptLead ?? 0);
     for (const def of FIGHTERS) {
       const running = [...(ACTIVE_SCRIPT_SLOTS[def.id] ?? []), ...(LIMB_SCRIPT_SLOTS[def.id] ?? [])];
       for (const slot of running) {
         const move = def.moves[slot]!;
-        expect(PLAN5_BEHAVIOUR.filter((k) => move[k] !== undefined), `${def.id} ${slot}`).toEqual([]);
+        expect(PLAN5_BEHAVIOUR.filter((k) => move[k] !== undefined && !inLead(move, k)), `${def.id} ${slot}`).toEqual([]);
       }
     }
+    expect(LIMB_SCRIPT_SLOTS.link).toContain("upB");
+    expect(link.moves.upB!.specialCharge?.loopFrame).toBe(3);
     expect(kirby.scripts?.neutralB).toBeUndefined();
     expect(withLimbScripts(donkeyKong, BONES).scripts?.cargoFthrow).toBeUndefined();
   });
@@ -547,7 +556,7 @@ describe("Link's Spin Attack in the game", () => {
     expect([4, 5, 6, 7, 8].map((g) => runScript(led, g).attacks.length)).toEqual([0, 1, 1, 0, 0]);
   });
 
-  it("hits on 7-39 and is interruptible on 77, its rise from frame 6", () => {
+  it("hits on 7-39 and is interruptible on 77, and does not rise (Plan 5, Task 13b)", () => {
     const game = withLimbScripts(link, BONES);
     const move = game.moves.upB!;
     expect(move.totalFrames).toBe(76);
@@ -557,7 +566,7 @@ describe("Link's Spin Attack in the game", () => {
     expect(Math.min(...move.hitboxes.map((hb) => hb.startFrame))).toBe(7);
     expect(Math.max(...move.hitboxes.map((hb) => hb.endFrame))).toBe(39);
     const rise = (g: number) => moveMomentum(game, { move: "upB" }, moveScriptFrame(game, at("upB", g - 1))!);
-    expect([rise(5), rise(6), rise(19), rise(20)].map((m) => m !== null)).toEqual([false, true, true, false]);
+    expect([1, 5, 6, 19, 20, 76].map(rise)).toEqual([null, null, null, null, null, null]);
   });
 });
 

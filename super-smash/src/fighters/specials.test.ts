@@ -84,7 +84,17 @@ function run(state: GameState, input: InputFrame, frames: number): FighterState[
 const UP_SPECIAL = Btn.Up | Btn.Special;
 
 describe("every fighter can recover", () => {
-  for (const fighter of FIGHTERS) {
+  // Donkey Kong's recovers sideways (Plan 5, Task 13b): SmashWiki "Donkey Kong
+  // (SSBU)" (https://www.ssbwiki.com/Donkey_Kong_(SSBU)): Spinning Kong "has decently
+  // long horizontal recovery distance" but "offers almost no vertical recovery".
+  it("donkeyKong's up-special covers distance sideways", () => {
+    const state = airborne("donkeyKong");
+    const startX = toFloat(state.fighters[0].x);
+    const frames = run(state, UP_SPECIAL | Btn.Right, 70);
+    expect(Math.max(...frames.map((f) => toFloat(f.x))) - startX).toBeGreaterThan(60);
+  });
+
+  for (const fighter of FIGHTERS.filter((d) => d.id !== "donkeyKong")) {
     it(`${fighter.id}'s up-special gains height`, () => {
       const state = airborne(fighter.id);
       const startY = toFloat(state.fighters[0].y);
@@ -103,7 +113,9 @@ describe("every fighter can recover", () => {
       // input never reached the move, a fighter who happened to drift upward
       // would still look like a recovery.
       const frames = run(airborne(fighter.id), UP_SPECIAL, 10);
-      expect(frames.some((f) => f.action === "special" && f.move === "upB")).toBe(true);
+      // Its aerial one where it has one of its own (Link's, Plan 5, Task 13b).
+      const slot = fighter.moves.upBAir !== undefined ? "upBAir" : "upB";
+      expect(frames.some((f) => f.action === "special" && f.move === slot)).toBe(true);
     });
   }
 });

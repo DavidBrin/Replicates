@@ -66,9 +66,11 @@ function opsOf(script: AcmdScript): ReadonlySet<string> {
  */
 export function moveMomentum(def: Pick<FighterDef, "moves">, f: Pick<FighterState, "move">, run: MoveScriptFrame): ActiveMomentum | null {
   if (run.state.momentum !== null || f.move === null || opsOf(run.script).has("momentum")) return run.state.momentum;
-  for (const m of def.moves[f.move]?.momentum ?? []) {
+  const windows = def.moves[f.move]?.momentum ?? [];
+  for (let order = 0; order < windows.length; order++) {
+    const m = windows[order];
     const until = m.frame + (m.hold ?? 0);
-    if (run.gameFrame >= m.frame && run.gameFrame <= until) return { x: m.x, y: m.y, until, ...(m.airOnly === true ? { airOnly: true } : {}) };
+    if (run.gameFrame >= m.frame && run.gameFrame <= until) return { x: m.x, y: m.y, until, order, ...(m.airOnly === true ? { airOnly: true } : {}) };
   }
   return null;
 }

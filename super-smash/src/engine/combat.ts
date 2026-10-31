@@ -248,6 +248,14 @@ export interface CombatState {
    * outside it. Cleared when the rebound ends, however it ends (`STATUS_REBOUND`).
    */
   rebound: number;
+  /**
+   * Plan 5, Task 13b: the stick an up special's aimed window read on its frame
+   * (`MoveMomentum.aimAt`; `upSpecial.ts`), each axis Q12 (a soft tilt half), and
+   * (0, 0) for one at rest or a refused second leg. Per move, as `stoneFrames`:
+   * cleared when the special starts and when it ends, however it ends.
+   */
+  aimX: number;
+  aimY: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -297,6 +305,8 @@ export function emptyCombat(): CombatState {
     stoneTaken: 0,
     stoneEndedAir: false,
     rebound: 0,
+    aimX: 0,
+    aimY: 0,
   };
 }
 
@@ -344,5 +354,7 @@ export function cloneCombat(c: CombatState): CombatState {
     stoneTaken: c.stoneTaken,
     stoneEndedAir: c.stoneEndedAir,
     rebound: c.rebound,
+    aimX: c.aimX,
+    aimY: c.aimY,
   };
 }

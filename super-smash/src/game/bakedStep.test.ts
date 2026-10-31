@@ -283,8 +283,10 @@ describe("the ECB from bones in step() (Plan 4, Task 12; ruling R6)", () => {
     expect(mash(false)).toBe(fx(80) + roster("kirby").attributes.width);
   });
 
-  // Fix round 1 (C1): Link's up special rises at a set speed under the stage while its
-  // pose changes shape every frame. The underside stops it, and if the next pose is
+  // Fix round 1 (C1): Link's up special rose at a set speed under the stage while its
+  // pose changed shape every frame. Since Plan 5, Task 13b his aerial one is a launch
+  // that slows (its published initial speed and gravity), so Marth's Dolphin Slash,
+  // which rises at a set speed as its pose changes, stands in for it. The underside stops it, and if the next pose is
   // any taller, a "came from below" test that reads last frame's position with this
   // frame's top took it for a body already inside and let it rise through (the review
   // found Fox and Link doing so in 4 of 56 CPU matches). Whatever height it starts
@@ -294,7 +296,7 @@ describe("the ECB from bones in step() (Plan 4, Task 12; ruling R6)", () => {
     let grewAfterAStop = 0;
     for (let start = 30; start <= 50; start += 0.5) {
       const ctx = world(true);
-      const s = with1("link", ctx, falling(0));
+      const s = with1("marth", ctx, falling(0));
       s.fighters[1].y = bottom - fx(start);
       const frames = play(s, 50, (i) => [0, i === 0 ? Btn.Up | Btn.Special : 0], ctx);
       frames.forEach((fr, i) => {
@@ -302,11 +304,11 @@ describe("the ECB from bones in step() (Plan 4, Task 12; ruling R6)", () => {
         expect(f.y > bottom && f.y < 0, `from ${start} under: frame ${fr.state.frame} at y ${toFloat(f.y)}`).toBe(false);
         // The case itself: stopped with its head at the underside, then stopped there
         // again the next frame by a taller pose (where it used to rise through).
-        const e = bakedEcb(roster("link"), f, fr.state.frame, BAKE)!;
+        const e = bakedEcb(roster("marth"), f, fr.state.frame, BAKE)!;
         const next = frames[i + 1]?.state;
         if (next === undefined || f.y + e.top !== bottom) return;
         const g = next.fighters[1];
-        const taller = bakedEcb(roster("link"), g, next.frame, BAKE)!.top;
+        const taller = bakedEcb(roster("marth"), g, next.frame, BAKE)!.top;
         if (taller > e.top && g.y + taller === bottom) grewAfterAStop++;
       });
     }

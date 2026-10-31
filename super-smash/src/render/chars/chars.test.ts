@@ -269,6 +269,15 @@ describe("projectile ids", () => {
  * came out of a dash — which is most of the times a player actually grabs, and
  * these are the two moves whose entire graphic *is* the effect.
  */
+// Plan 5, Task 13b: Link's aerial Spin Attack is a move of its own (`upBAir`); its
+// ring is the up special's, or it would spin with no ring in the air.
+describe("an aerial up special paints what the up special paints", () => {
+  it("falls back to the up special's own painter (Link's Spin Attack ring)", () => {
+    expect(fxFor("link", "upB")).toBeDefined();
+    expect(fxFor("link", "upBAir")).toBe(fxFor("link", "upB"));
+  });
+});
+
 describe("a dash grab paints what a grab paints", () => {
   const grabbers = FIGHTERS.filter((f) => fxFor(f.id, "grab") !== undefined);
 

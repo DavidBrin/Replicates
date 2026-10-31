@@ -185,6 +185,7 @@ import {
 } from "./shield";
 import { absHitbox, scriptHitboxes, unplacedHitbox } from "./acmd/hitboxes";
 import { moveScriptFrame, moveSpawns, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
+import { begunInAir } from "./upSpecial";
 import { gameScriptFor } from "./acmd/legacy";
 import "./status";
 import { releaseHeld, struggleInGrab } from "./status/grab";
@@ -271,6 +272,60 @@ export const registryContext: SimContext = {
 
 /* ---------------------------------------------------------------- clone -- */
 
+/** A deep copy of one fighter: what `cloneState` makes of each (Plan 5, Task 13b: the CPU's up-special model runs one). */
+export function cloneFighter(f: FighterState): FighterState {
+  return {
+    port: f.port,
+    defId: f.defId,
+    costume: f.costume,
+    x: f.x,
+    y: f.y,
+    vx: f.vx,
+    vy: f.vy,
+    facing: f.facing,
+    grounded: f.grounded,
+    platform: f.platform,
+    action: f.action,
+    actionFrame: f.actionFrame,
+    move: f.move,
+    charge: f.charge,
+    damage: f.damage,
+    stocks: f.stocks,
+    jumpsUsed: f.jumpsUsed,
+    airDodged: f.airDodged,
+    fastFalling: f.fastFalling,
+    shortHop: f.shortHop,
+    shieldHealth: f.shieldHealth,
+    hitstun: f.hitstun,
+    hitlag: f.hitlag,
+    launchSpeed: f.launchSpeed,
+    pendingKnockback: f.pendingKnockback,
+    pendingAngle: f.pendingAngle,
+    pendingFacing: f.pendingFacing,
+    balloon: f.balloon,
+    intangible: f.intangible,
+    invincible: f.invincible,
+    grabbedBy: f.grabbedBy,
+    grabbing: f.grabbing,
+    grabTimer: f.grabTimer,
+    ledge: f.ledge === null ? null : { platform: f.ledge.platform, side: f.ledge.side },
+    ledgeRegrabs: f.ledgeRegrabs,
+    ledgeLockout: f.ledgeLockout,
+    airTime: f.airTime,
+    finalSmashReady: f.finalSmashReady,
+    staleQueue: f.staleQueue.slice(),
+    hitThisMove: f.hitThisMove.slice(),
+    framesSinceDirPress: f.framesSinceDirPress,
+    lastDirPressed: f.lastDirPressed,
+    bufferedAction:
+      f.bufferedAction === null
+        ? null
+        : ({ kind: f.bufferedAction.kind, frame: f.bufferedAction.frame } as FighterState["bufferedAction"]),
+    kinetic: cloneKinetic(f.kinetic),
+    combat: cloneCombat(f.combat),
+  };
+}
+
 /**
  * A genuine deep copy of the simulation state.
  *
@@ -283,59 +338,7 @@ export const registryContext: SimContext = {
  */
 export function cloneState(state: GameState): GameState {
   const fighters: FighterState[] = new Array(state.fighters.length);
-  for (let i = 0; i < state.fighters.length; i++) {
-    const f = state.fighters[i];
-    fighters[i] = {
-      port: f.port,
-      defId: f.defId,
-      costume: f.costume,
-      x: f.x,
-      y: f.y,
-      vx: f.vx,
-      vy: f.vy,
-      facing: f.facing,
-      grounded: f.grounded,
-      platform: f.platform,
-      action: f.action,
-      actionFrame: f.actionFrame,
-      move: f.move,
-      charge: f.charge,
-      damage: f.damage,
-      stocks: f.stocks,
-      jumpsUsed: f.jumpsUsed,
-      airDodged: f.airDodged,
-      fastFalling: f.fastFalling,
-      shortHop: f.shortHop,
-      shieldHealth: f.shieldHealth,
-      hitstun: f.hitstun,
-      hitlag: f.hitlag,
-      launchSpeed: f.launchSpeed,
-      pendingKnockback: f.pendingKnockback,
-      pendingAngle: f.pendingAngle,
-      pendingFacing: f.pendingFacing,
-      balloon: f.balloon,
-      intangible: f.intangible,
-      invincible: f.invincible,
-      grabbedBy: f.grabbedBy,
-      grabbing: f.grabbing,
-      grabTimer: f.grabTimer,
-      ledge: f.ledge === null ? null : { platform: f.ledge.platform, side: f.ledge.side },
-      ledgeRegrabs: f.ledgeRegrabs,
-      ledgeLockout: f.ledgeLockout,
-      airTime: f.airTime,
-      finalSmashReady: f.finalSmashReady,
-      staleQueue: f.staleQueue.slice(),
-      hitThisMove: f.hitThisMove.slice(),
-      framesSinceDirPress: f.framesSinceDirPress,
-      lastDirPressed: f.lastDirPressed,
-      bufferedAction:
-        f.bufferedAction === null
-          ? null
-          : ({ kind: f.bufferedAction.kind, frame: f.bufferedAction.frame } as FighterState["bufferedAction"]),
-      kinetic: cloneKinetic(f.kinetic),
-      combat: cloneCombat(f.combat),
-    };
-  }
+  for (let i = 0; i < state.fighters.length; i++) fighters[i] = cloneFighter(state.fighters[i]);
   const projectiles: ProjectileState[] = new Array(state.projectiles.length);
   for (let i = 0; i < state.projectiles.length; i++) {
     projectiles[i] = cloneProjectile(state.projectiles[i]);
@@ -798,6 +801,8 @@ export function step(
     if (f.action === "spatStar") continue; // riding a star: where it flies, it goes
 
     const before = launchBefore(f);
+    // Where the move it is in began, before a landing resets the airtime (Plan 5, Task 13b).
+    const fromAir = begunInAir(f);
     // The ECB from this frame's bones (Plan 4), or Plan 2's box without a bake.
     const ecb = ecbFor(i, f);
     // Which way is off the platform it stands on, for an edge stop that a push can override.
@@ -813,7 +818,8 @@ export function step(
       // The statuses that stop at the edge instead of sliding off it: the catch
       // statuses, the shield, the rolls, a waveland, a grounded attack's own movement
       // (`GROUND_EXIT`, `stopsAtEdge`; Plan 5, Task 12 fix rounds 2 and 3).
-      { cliffStop: stopsAtEdge(f, outward), ecb },
+      // Holding down in the air falls through a soft platform (`dropsThroughSoft`).
+      { cliffStop: stopsAtEdge(f, outward), ecb, ...(dropsThroughSoft(f, intents[i]) ? { passThroughSoft: true } : {}) },
     );
     // A wall that stopped the body is remembered for a wall jump, or a wall tech
     // jump (Plan 5, Task 10), before the tech below reads it.
@@ -823,7 +829,7 @@ export function step(
     const surface = outcome.landed ? "floor" : outcome.ceiling ? "ceiling" : outcome.wall !== 0 ? "wall" : null;
     const reaction = surface === null ? null : techOrBounce(f, surface, before, intents[i], outcome.wall);
     if (outcome.landed) {
-      if (reaction === null) onLanded(f, stateCtx(i));
+      if (reaction === null) onLanded(f, stateCtx(i), fromAir);
       // A bounce leaves the floor again at once: it touched down, but did not land.
       if (reaction !== "bounce") events.lands.push({ port: f.port, x: f.x, y: f.y });
     } else if (outcome.leftGround) {
@@ -3259,4 +3265,16 @@ export function resolveOutcome(s: GameState): GameState["outcome"] {
 /** Distance between two fighters, for the CPU and the camera. */
 export function fighterDistance(a: FighterState, b: FighterState): number {
   return abs(a.x - b.x) + abs(a.y - b.y);
+}
+
+/**
+ * Whether `f`, in the air, falls through soft platforms this frame (Plan 5, Task
+ * 13b): with the stick held down, in any falling state but a reel. SmashWiki
+ * "Helpless" (https://www.ssbwiki.com/Helpless): "holding down to drop through
+ * them"; the ability to fall through soft platforms "Starting in Super Smash Bros.
+ * Melee, this can be done at any time (not just when a character is helpless)".
+ * UNVERIFIED: that hitstun keeps a fighter on them (a reel reads no stick here).
+ */
+export function dropsThroughSoft(f: Pick<FighterState, "grounded" | "hitstun">, intent: Pick<Intent, "y">): boolean {
+  return !f.grounded && f.hitstun <= 0 && intent.y < 0;
 }

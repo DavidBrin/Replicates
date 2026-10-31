@@ -305,14 +305,15 @@ describe("the roster", () => {
     }
   });
 
-  it("auto-releases at full only Shield Breaker and Skull Bash; the bow and Hammer Flip hold (SmashWiki Charge)", () => {
+  it("auto-releases at full only Shield Breaker, Skull Bash and the Spin Attack; the bow and Hammer Flip hold (SmashWiki Charge)", () => {
     const atFull = FIGHTERS.flatMap((def) =>
       SPECIALS.flatMap((slot) => {
         const sc = def.moves[slot]?.specialCharge;
         return sc?.mode === "hold" ? [`${def.id} ${slot} ${sc.atFull}`] : [];
       }),
     ).sort();
-    expect(atFull).toEqual(["kirby sideB hold", "link neutralB hold", "marth neutralB release", "pikachu sideB release"]);
+    // Link's Spin Attack (Plan 5, Task 13b): "Automatically activates at full charge".
+    expect(atFull).toEqual(["kirby sideB hold", "link neutralB hold", "link upB release", "marth neutralB release", "pikachu sideB release"]);
   });
 });
 

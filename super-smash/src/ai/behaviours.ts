@@ -33,12 +33,15 @@ import {
   type FighterState,
   type GameState,
   type InputFrame,
+  type MoveAim,
   type MoveDef,
   type MoveSlot,
   type StageDef,
 } from "@/engine/types";
-import type { ActiveMomentum } from "@/engine/acmd/interpreter";
-import { moveMomentum, moveScriptFrame } from "@/engine/acmd/run";
+import { cloneFighter } from "@/engine/simulate";
+import { advanceFighter, applyMovement, interpretInput, updateInputTracking, type StateContext } from "@/engine/states";
+import { HARD_PLATFORM_DEPTH, integrate } from "@/engine/physics";
+import { WALL_JUMP_WINDOW } from "@/engine/wallJump";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
 import {
   AIR_DODGE_SLIDE_DISTANCE,
@@ -51,8 +54,7 @@ import {
   SDI_INPUT_INTERVAL,
   SMASH_INPUT_WINDOW,
 } from "@/engine/constants";
-import { ONE, abs, clamp, fx, magnitude, mul } from "@/engine/fixed";
-import { airControlX, gravityStep } from "@/engine/kinetic";
+import { ONE, abs, fx, magnitude, mul } from "@/engine/fixed";
 import { fighterParams, type FighterParams } from "@/engine/params";
 
 /* ------------------------------------------------------------------ stage -- */
@@ -394,97 +396,165 @@ export function airDodgeFromDef(def: FighterDef): AirDodgeAttributes {
 /**
  * What the CPU needs of its fighter's up special to judge a recovery (Plan 5,
  * Task 4b). The move leaves the fighter helpless, with no second try, so when
- * to spend it is decided by where it actually goes, which `upBPath` works out
- * by the engine's own rules (fix round 1): the move's scripted momentum as its
- * script runs it, the fighter's own drift and gravity around and after it, and
- * the helpless fall's cap after that.
+ * to spend it, and which way to hold the stick through it, is decided by where
+ * it actually goes. Since Task 13b that is found by running the engine's own
+ * per-frame rules on a copy of the fighter (`upBPath`): the move's aims, turn,
+ * launch, phases and windows (`engine/upSpecial.ts`), its drift and gravity,
+ * and the helpless fall after, exactly as `step()` runs them for a fighter
+ * alone in the air. Nothing here restates a rule, so nothing can drift from it.
  */
 export interface RecoveryMove {
+  readonly def: FighterDef;
+  /** The up special it uses in the air: its own aerial one where it has one (`upBAir`). */
+  readonly slot: MoveSlot;
+  /** Its length begun in the air (`MoveDef.fromAir`), the move frames before the helpless fall. */
   readonly totalFrames: number;
-  /** The script's live momentum on each of the move's game frames (index = frame − 1), or null. */
-  readonly momentum: readonly (ActiveMomentum | null)[];
   /** The fighter's own: air speed, accelerations and friction, gravity, fall speeds. */
   readonly params: FighterParams;
   /** The helpless fall's top drift speed, Q12 a frame (`HelplessDef.airSpeed`; the fighter's own air speed without one). */
   readonly helplessDrift: number;
+  /** How the stick aims it (`MoveDef.aim`), which decides the sticks worth trying (`upBSticks`). */
+  readonly aim: MoveAim["kind"] | "none";
+  /** The move frame its second leg is aimed on (Pikachu's 20), or 0. */
+  readonly secondAim: number;
+  /** It can wall jump, which must come before it (special fall refuses one; Plan 5, Task 10). */
+  readonly wallJump: boolean;
 }
 
 /**
- * A fighter's up special as `recover` judges it, read off the script the engine
- * runs (`moveScriptFrame`) with the engine's own momentum rule (`moveMomentum`:
- * an imported script publishes none, and the legacy move's is kept; Plan 5,
- * Task 13), or null when it has none or it moves the fighter nowhere of its own
- * (no momentum on any frame).
+ * A fighter's up special as `recover` judges it, or null when it has none. Its
+ * movement is no longer read off a momentum list (Task 13 put moves on their
+ * scripts, and Task 13b gave up specials launches, phases and aims): the model
+ * runs the move itself, so a move whose data changes keeps a working model.
  */
 export function recoveryFromDef(def: FighterDef): RecoveryMove | null {
-  const move = def.moves.upB;
+  const slot: MoveSlot = def.moves.upBAir !== undefined ? "upBAir" : "upB";
+  const move = def.moves[slot];
   if (move === undefined) return null;
-  const momentum = Array.from({ length: move.totalFrames }, (_, i) => {
-    const run = moveScriptFrame(def, { move: "upB", actionFrame: i });
-    return run === null ? null : moveMomentum(def, { move: "upB" }, run);
-  });
-  if (momentum.every((m) => m === null)) return null;
   const p = fighterParams(def);
-  return { totalFrames: move.totalFrames, momentum, params: p, helplessDrift: mul(p.air_speed_x_stable, move.helpless?.airSpeed ?? ONE) };
+  const second = (move.momentum ?? []).find((w) => w.second === true);
+  return {
+    def,
+    slot,
+    totalFrames: move.fromAir?.totalFrames ?? move.totalFrames,
+    params: p,
+    helplessDrift: mul(p.air_speed_x_stable, move.helpless?.airSpeed ?? ONE),
+    aim: move.aim?.kind ?? "none",
+    secondAim: second?.aimAt ?? 0,
+    wallJump: def.attributes.canWallJump,
+  };
 }
 
-/** One frame of an up special's path: where the fighter is, relative to where it used it, and its vertical speed. */
+/** One frame of an up special's path: where the fighter is, relative to where it was, its vertical speed, its facing, and whether it is helpless. */
 export interface PathPoint {
   readonly x: number;
   readonly y: number;
   readonly vy: number;
+  readonly facing: number;
+  readonly helpless: boolean;
 }
 
 /**
- * Where the up special takes the fighter, frame by frame from its first, with
- * the stick held `toward` (−1 or 1) throughout, for `frames` frames: the move,
- * then the helpless fall. The engine's rules, from `applyMovement`: on a frame
- * a momentum window is live its velocity is set (the energies zeroed); before
- * its last frame nothing else moves the fighter, and on that frame the velocity
- * becomes drift and gravity's; on every other frame air control steers it
- * (`airControlX`, toward the fighter's air speed, or within the helpless cap)
- * and gravity pulls toward the fall speed (`gravityStep`). Not modelled: a
- * launch still decaying, a jump's scheduled rise, a hit, a landing or a ledge
- * on the way (the caller reads those off the path).
+ * The stick through an up special: `first` held until the move reaches move
+ * frame `switchAt`, then `then` (a second leg aimed another way); the same for
+ * a move with one aim. Direction bits only.
+ */
+export interface UpBStick {
+  readonly first: InputFrame;
+  readonly then: InputFrame;
+  readonly switchAt: number;
+}
+
+const one = (stick: InputFrame): UpBStick => ({ first: stick, then: stick, switchAt: 0 });
+
+/** No floor, no ledge, no blast line in reach: the move's own path and nothing else. */
+const GHOST_STAGE: StageDef = {
+  id: "upBGhost",
+  name: "up special path",
+  series: "",
+  platforms: [],
+  blastZone: { left: -fx(100_000), right: fx(100_000), top: fx(100_000), bottom: -fx(100_000) },
+  spawns: [{ x: 0, y: 0 }],
+  theme: "",
+};
+
+/** Whether `f` is in the up special `r` models. */
+function inUpB(f: Pick<FighterState, "action" | "move">, r: RecoveryMove): boolean {
+  return f.action === "special" && (f.move === "upB" || f.move === r.slot);
+}
+
+/**
+ * Where the up special takes the fighter, frame by frame, for `frames` frames:
+ * started on the first of them (Up and Special pressed with `stick`'s first
+ * direction), or carried on from where it is if the fighter is already in it,
+ * then the helpless fall. Each frame is `step()`'s for one fighter alone in the
+ * air: the input read (`updateInputTracking`, `interpretInput`), the airtime,
+ * the status (`advanceFighter`), the movement (`applyMovement`) and the move
+ * (`integrate`), on a copy. Not modelled: a hit, a landing, a ledge or a wall on
+ * the way (the caller reads those off the path); a blast line is the caller's
+ * too. `stop`, if given, ends the path at the first point it accepts.
  */
 export function upBPath(
   r: RecoveryMove,
-  f: Pick<FighterState, "vx" | "vy" | "facing" | "fastFalling">,
-  toward: number,
+  self: FighterState,
+  stick: UpBStick | InputFrame,
   frames: number,
+  frame0 = 0,
+  stop?: (p: PathPoint) => boolean,
 ): PathPoint[] {
-  const p = r.params;
-  const terminal = f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable;
-  const side = f.facing >= 0 ? 1 : -1;
+  const plan = typeof stick === "number" ? one(stick) : stick;
+  const f = cloneFighter(self);
+  // The frame number is the one thing that changes: the buffer reads it.
+  const ctx: { -readonly [K in keyof StateContext]: StateContext[K] } = { def: r.def, stage: GHOST_STAGE, frame: frame0, fighters: [f] };
+  const started = inUpB(f, r);
+  // The move frame the next step runs: the press is move frame 1.
+  let moveFrame = started ? f.actionFrame + 2 : 1;
+  let prev: InputFrame = 0;
   const out: PathPoint[] = [];
-  let control = f.vx;
-  let gravity = f.vy;
-  let x = 0;
-  let y = 0;
-  for (let frame = 1; frame <= frames; frame++) {
-    const m = frame <= r.totalFrames ? r.momentum[frame - 1] : null;
-    if (m !== null) {
-      if (frame < m.until) {
-        x += m.x * side;
-        y += m.y;
-        out.push({ x, y, vy: m.y });
-        continue;
-      }
-      control = m.x * side;
-      gravity = m.y;
-    }
-    if (frame <= r.totalFrames) {
-      control = airControlX(control, toward, p);
-    } else {
-      const cap = r.helplessDrift;
-      control = clamp(airControlX(control, toward, p, cap), -cap, cap);
-    }
-    gravity = gravityStep(gravity, p.air_accel_y, terminal);
-    x += control;
-    y += gravity;
-    out.push({ x, y, vy: gravity });
+  for (let i = 0; i < frames; i++) {
+    const dir = moveFrame >= plan.switchAt && plan.switchAt > 0 ? plan.then : plan.first;
+    const input = dir | (i === 0 && !started ? Btn.Up | Btn.Special : 0);
+    ctx.frame = frame0 + i + 1;
+    updateInputTracking(f, input, prev);
+    const intent = interpretInput(f, input, prev);
+    if (f.hitstun > 0) f.hitstun -= 1;
+    if (!f.grounded && f.ledge === null) f.airTime += 1;
+    advanceFighter(f, intent, ctx);
+    applyMovement(f, intent, ctx);
+    integrate(f);
+    prev = input;
+    moveFrame += 1;
+    const p = { x: f.x - self.x, y: f.y - self.y, vy: f.vy, facing: f.facing, helpless: f.action === "specialFall" };
+    out.push(p);
+    if (stop?.(p) === true) break;
   }
   return out;
+}
+
+/**
+ * The sticks worth holding through the up special, toward the ledge first
+ * (`toward` −1 or 1): one side or none for a move the stick only drifts, turns
+ * or tilts; the octants that lead toward the stage for one it aims (Fox); and
+ * for one with two legs (Pikachu), pairs of them, the second turned from the
+ * first, after one leg alone. Few on purpose: each is a run of the move.
+ */
+export function upBSticks(r: RecoveryMove, toward: number): UpBStick[] {
+  const T: InputFrame = toward > 0 ? Btn.Right : Btn.Left;
+  const A: InputFrame = toward > 0 ? Btn.Left : Btn.Right;
+  if (r.aim === "octant") return [T | Btn.Up, T, Btn.Up, T | Btn.Down, 0].map(one);
+  if (r.aim === "legs") {
+    const firsts: InputFrame[] = [T | Btn.Up, Btn.Up, T];
+    const out: UpBStick[] = [];
+    for (const first of firsts) for (const then of [T | Btn.Up, T, Btn.Up]) if (then !== first) out.push({ first, then, switchAt: r.secondAim });
+    return [...out, ...firsts.map(one)];
+  }
+  return [T, 0, A].map(one);
+}
+
+/** The stick a plan holds on the move frame the fighter's next step runs (its first, outside the move). */
+export function upBStickNow(plan: UpBStick, self: FighterState, r: RecoveryMove): InputFrame {
+  const next = inUpB(self, r) ? self.actionFrame + 2 : 1;
+  return plan.switchAt > 0 && next >= plan.switchAt ? plan.then : plan.first;
 }
 
 /**
@@ -709,7 +779,10 @@ export const survive: Behaviour = (ctx) => {
 
 /**
  * Get back to the stage. Jump while jumps remain, up-B once they do not — and
- * at low levels, sometimes neither, which is where level-1 CPUs go to die.
+ * at low levels, sometimes neither, which is where level-1 CPUs go to die. A
+ * fighter that can wall jump kicks off the stage's wall first, where it is close
+ * under the ledge; the up special is pressed with the stick its own path says
+ * gets the fighter back, and that stick is held through it (Plan 5, Task 13b).
  */
 export const recover: Behaviour = (ctx) => {
   const { self } = ctx.view;
@@ -743,6 +816,23 @@ export const recover: Behaviour = (ctx) => {
 
   const offstage = isOffstage(self, stage);
   const belowStage = self.y < stage.groundY - fx(4);
+  const r = ctx.recovery;
+
+  // In its own up special (Plan 5, Task 13b): the stick aims the move and steers
+  // it, so this behaviour keeps it whatever else would press. Off the stage it
+  // holds the stick that, run on from here, gets it back (`upBPlan`), or with none
+  // that does the first of them, toward the stage; over the stage, none, so the
+  // move flies as authored and nothing aims it off (a second leg pressed away by
+  // another behaviour once took a Pikachu off Battlefield). At every level: like
+  // the helpless drift above, it is steering, not the button.
+  if (r !== null && inUpB(self, r)) {
+    if (self.grounded || (!offstage && !belowStage)) return { score: 950, input: 0 };
+    const nearer = self.x < 0 ? stage.leftLedge : stage.rightLedge;
+    const toward = nearer > self.x ? 1 : -1;
+    const plan = upBPlan(self, nearer, stage, r, ctx.view.frame) ?? upBSticks(r, toward)[0];
+    return { score: 950, input: upBStickNow(plan, self, r) };
+  }
+
   if (self.grounded || (!offstage && !belowStage)) return NOTHING;
 
   const nearerLedge = self.x < 0 ? stage.leftLedge : stage.rightLedge;
@@ -753,6 +843,23 @@ export const recover: Behaviour = (ctx) => {
   // roll never fails.
   if (ctx.rolls[ROLL_RECOVER] >= tuning.recoverySkill) {
     return { score: 900, input: drift };
+  }
+
+  // A wall jump first, where the fighter can make one: touching the stage's wall
+  // below the ledge, falling, it presses away from the wall (Plan 5, Task 13b; the
+  // Task 10 review). It gains height and costs no jump, and special fall refuses
+  // one (SmashWiki "Helpless", https://www.ssbwiki.com/Helpless: "unable to take
+  // any action"), so it has to come before the up special.
+  const side = self.combat.wallSide;
+  if (r !== null && r.wallJump && side !== 0 && self.combat.wallFrames <= WALL_JUMP_WINDOW && self.vy <= 0 && self.y < stage.groundY) {
+    return { score: 950, input: side < 0 ? Btn.Right : Btn.Left };
+  }
+
+  // ...and close to the wall under the ledge, it drifts into it to kick off it
+  // rather than spend the up special, unless waiting is no longer safe.
+  const underLedge = self.y < stage.groundY - fx(4) && self.y > stage.groundY - HARD_PLATFORM_DEPTH;
+  if (r !== null && r.wallJump && underLedge && abs(self.x - nearerLedge) <= WALL_SEEK_RANGE && !upBNowOrNever(self, stage, r, ctx.view.frame)) {
+    return { score: 950, input: drift };
   }
 
   const outOfJumps = self.jumpsUsed >= ctx.jumps;
@@ -766,12 +873,15 @@ export const recover: Behaviour = (ctx) => {
   // ledge is in its reach, or as soon as waiting longer would put the ledge
   // out of it; until then the fighter drifts closer, and jumps if it can.
   if (outOfJumps || deep) {
-    const r = ctx.recovery;
-    if (r !== null && !upBInReach(self, nearerLedge, stage, r) && !upBNowOrNever(self, stage, r)) {
+    // The stick it would hold through the up special, read off the move's own path
+    // (Plan 5, Task 13b: `upBPlan`), and pressed with it as the move starts.
+    const plan = r === null ? null : upBPlan(self, nearerLedge, stage, r, ctx.view.frame);
+    if (r !== null && plan === null && !upBNowOrNever(self, stage, r, ctx.view.frame)) {
       return { score: 950, input: drift | (!outOfJumps && jumping ? Btn.Jump : 0) };
     }
     const firing = pulse(ctx.view.frame, self.port, 6, 3);
-    return { score: 950, input: drift | (firing ? Btn.Special | Btn.Up : 0) };
+    const stick = plan === null ? drift : upBStickNow(plan, self, r!);
+    return { score: 950, input: (firing ? stick | Btn.Special | Btn.Up : drift) };
   }
 
   return { score: 900, input: drift | (jumping ? Btn.Jump : 0) };
@@ -785,49 +895,71 @@ export const recover: Behaviour = (ctx) => {
 const UPB_DECISION_FRAMES = 6;
 
 /**
+ * UNVERIFIED (CPU judgement, Plan 5, Task 13b): how far from the stage's wall,
+ * under the ledge, a fighter that can wall jump drifts into it to kick off it
+ * before it spends the up special.
+ */
+const WALL_SEEK_RANGE = fx(10);
+
+/**
  * UNVERIFIED (CPU judgement): helpless frames `upBInReach` follows past the
  * move's end, enough to come back down to a ledge from any up special's height.
  */
 const UPB_LOOKAHEAD_FRAMES = 120;
 
 /**
- * Whether the up special, used now with the stick held toward the stage, gets
- * the fighter back (Plan 5, Task 4b fix round 1): somewhere on its path
+ * Whether the up special, used now (or carried on) with `stick`, gets the
+ * fighter back (Plan 5, Task 4b fix round 1; Task 13b): somewhere on its path
  * (`upBPath`, the move and then the helpless fall) the fighter comes down on
  * the main stage, between its ledges, or is falling within a ledge grab of it
  * (`LEDGE_GRAB_RANGE_X`, less from behind, and `LEDGE_GRAB_RANGE_Y` below, as
  * `findLedgeGrab` measures; the body's own half-width, which only adds reach,
- * is left out). A path through a blast line does not.
+ * is left out). A path through a blast line does not, nor a helpless fall
+ * already below grabbing height, which can only go on down.
  */
-export function upBInReach(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove): boolean {
+export function upBInReach(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, stick: UpBStick | InputFrame = 0, frame0 = 0): boolean {
   const toward = ledge > self.x ? 1 : -1;
-  const range = self.facing === toward ? LEDGE_GRAB_RANGE_X : mul(LEDGE_GRAB_RANGE_X, LEDGE_GRAB_BACK_PENALTY);
   let prevY = self.y;
-  for (const p of upBPath(r, self, toward, r.totalFrames + UPB_LOOKAHEAD_FRAMES)) {
+  let reached = false;
+  upBPath(r, self, stick, r.totalFrames + UPB_LOOKAHEAD_FRAMES, frame0, (p) => {
     const x = self.x + p.x;
     const y = self.y + p.y;
-    if (x < stage.blastLeft || x > stage.blastRight || y < stage.blastBottom || y > stage.blastTop) return false;
+    if (x < stage.blastLeft || x > stage.blastRight || y < stage.blastBottom || y > stage.blastTop) return true;
     // How far past the ledge, toward the stage: positive is over it.
     const past = (x - ledge) * toward;
     const onStage = x >= stage.leftLedge && x <= stage.rightLedge;
-    if (past > 0 && onStage && p.vy <= 0 && prevY >= stage.groundY && y <= stage.groundY) return true;
+    if (past > 0 && onStage && p.vy <= 0 && prevY >= stage.groundY && y <= stage.groundY) return (reached = true);
     const drop = stage.groundY - y;
-    if (p.vy <= 0 && past <= 0 && -past <= range && drop >= 0 && drop <= LEDGE_GRAB_RANGE_Y) return true;
+    // Facing the ledge as the path faces it then (the move may have turned it).
+    const range = p.facing === toward ? LEDGE_GRAB_RANGE_X : mul(LEDGE_GRAB_RANGE_X, LEDGE_GRAB_BACK_PENALTY);
+    if (p.vy <= 0 && past <= 0 && -past <= range && drop >= 0 && drop <= LEDGE_GRAB_RANGE_Y) return (reached = true);
     prevY = y;
-  }
-  return false;
+    return p.helpless && drop > LEDGE_GRAB_RANGE_Y;
+  });
+  return reached;
+}
+
+/**
+ * The first stick, in `upBSticks`' order, with which the up special gets the
+ * fighter back from here, or null. Used before the move, to decide to spend it,
+ * and during it, to hold the stick that keeps it on course.
+ */
+export function upBPlan(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, frame0 = 0): UpBStick | null {
+  const toward = ledge > self.x ? 1 : -1;
+  for (const plan of upBSticks(r, toward)) if (upBInReach(self, ledge, stage, r, plan, frame0)) return plan;
+  return null;
 }
 
 /**
  * Whether it is now or never for the up special: a few more frames of falling
  * (`UPB_DECISION_FRAMES`) and the move's highest point, from the fighter's
- * speed now, would no longer lift it to grabbing height under the ledge. Then
- * `recover` spends it even out of reach, as the last thing left.
+ * speed now and with the stick at rest, would no longer lift it to grabbing
+ * height under the ledge. Then `recover` spends it even out of reach, as the
+ * last thing left.
  */
-export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryMove): boolean {
-  const path = upBPath(r, self, 0, r.totalFrames);
+export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryMove, frame0 = 0): boolean {
   let apex = 0;
-  for (const p of path) if (p.y > apex) apex = p.y;
+  for (const p of upBPath(r, self, 0, r.totalFrames, frame0)) if (p.y > apex) apex = p.y;
   const terminal = self.fastFalling ? r.params.dive_speed_y : r.params.air_speed_y_stable;
   return stage.groundY - LEDGE_GRAB_RANGE_Y - self.y + UPB_DECISION_FRAMES * terminal >= apex;
 }

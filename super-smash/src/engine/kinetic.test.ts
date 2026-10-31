@@ -639,8 +639,10 @@ describe("a scripted move started during a live launch (the engine, not the ener
     },
   };
 
-  it("Link's up-special, pressed mid-launch, ends the launch when its momentum starts", () => {
-    let state = createInitialState("finalDestination", [{ defId: "link" }, { defId: "link" }], RULES, 0x7a18, CTX);
+  // Mario's: Link's aerial Spin Attack has no momentum window since Plan 5, Task 13b
+  // (its rise is its published launch), so the window this pins is Mario's rise.
+  it("Mario's up-special, pressed mid-launch, ends the launch when its momentum starts", () => {
+    let state = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "mario" }], RULES, 0x7a18, CTX);
     for (const f of state.fighters) f.x = fx(f === state.fighters[0] ? 0 : 150);
     const f0 = state.fighters[0];
     f0.action = "fall";
@@ -662,7 +664,7 @@ describe("a scripted move started during a live launch (the engine, not the ener
       const f = state.fighters[0];
       const k = f.kinetic;
       // Ask the move's own script whether its momentum has begun, not the energies.
-      const inWindow = moveScriptFrame(CTX.fighter("link"), f)?.state.momentum != null;
+      const inWindow = moveScriptFrame(CTX.fighter("mario"), f)?.state.momentum != null;
       if (inWindow) framesInWindow++;
       momentumSeen ||= inWindow;
       if (!momentumSeen) {
@@ -726,7 +728,8 @@ describe("a momentum hold cut short by a landing", () => {
     let landed: FighterState | null = null;
     for (let i = 0; i < 80 && landed === null; i++) {
       const f = go(cutter);
-      if (f.action === "land") landed = f;
+      // Into the move's own landing lag since Plan 5, Task 13b ("Landing (cutter)").
+      if (f.action === "specialLanding") landed = f;
       else before = f;
     }
     // Guards against passing for the wrong reason: he really landed in the middle of the hold.

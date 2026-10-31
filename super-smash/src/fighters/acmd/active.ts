@@ -91,15 +91,41 @@ const COSMETIC_PREFIXES: readonly string[] = [
   "FT_LEAVE_NEAR_OTTOTTO",
 ];
 
+/**
+ * Engine calls with an effect the replica does not model, which an aerial up
+ * special's script may make and still run (Plan 5, Task 13b: Link's aerial Spin
+ * Attack, `game_specialairhi`, the one the brief asks to run):
+ * - `notify_event_msc_cmd(0x2127e37c07, GROUND_CLIFF_CHECK_KIND_*)`, the frame a
+ *   move starts to grab ledges (SmashWiki "Link (SSBU)/Up special": "The move enables
+ *   ledge grabs from the front starting on frame 15, and from behind starting on
+ *   frame 34"). The replica's ledge rule is the engine's own for every falling
+ *   fighter (`findLedgeGrab`); per-move ledge windows are not modelled.
+ * - the position vector its back hits set, `as_hash()const(1, hash40("top"), 10, 20,
+ *   10)` then `AttackModule::set_vec_target_pos()` (the page: "All back hits use a
+ *   position vector with offsets [10, 20] for 10 frames"): a pull toward a point,
+ *   not modelled; the box launches at its own angle.
+ * UNVERIFIED (both): what leaving them out changes in a match.
+ *
+ * Only in the `upBAir` slot. Accepted everywhere, they would also run Samus's and
+ * Marth's grounded `game_specialhi`, and Marth's clip lifts its sword boxes about
+ * twice as high as his legacy table reaches (the reach ratchet: up 16.0 → 33.8):
+ * a placement fault of the kind ruling P5-R16 holds, and outside this task.
+ */
+const UNMODELLED_PREFIXES: readonly string[] = [
+  "notify_event_msc_cmd(0x2127e37c07, GROUND_CLIFF_CHECK_KIND_",
+  'methodlib::L2CValue::as_hash()const(1, hash40("top"), 10, 20, 10)',
+  "AttackModule::set_vec_target_pos()",
+];
+
 /** Longer than any move: a box still live here is never cleared by its script. */
 const CLEARED_BY = 300;
 
-function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing: boolean): boolean {
+function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing: boolean, aerialUp = false): boolean {
   for (const c of commands) {
     if (c.op === "attack" || c.op === "catch") bones.add(c.params.bone);
     if (c.op === "attack" && isUnmodelledAutolink(c.params.angle)) return false;
     if (c.op === "loop") {
-      if (!runnable(c.body, bones, throwing)) return false;
+      if (!runnable(c.body, bones, throwing, aerialUp)) return false;
       continue;
     }
     // Only the throw status turns its fighter or stops it (`resolveThrows`).
@@ -108,7 +134,7 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
       continue;
     }
     if (c.op === "unknown") {
-      if (!COSMETIC_PREFIXES.some((p) => c.raw.startsWith(p))) return false;
+      if (!COSMETIC_PREFIXES.some((p) => c.raw.startsWith(p)) && !(aerialUp && UNMODELLED_PREFIXES.some((p) => c.raw.startsWith(p)))) return false;
       continue;
     }
     if (!RUN_OPS.has(c.op)) return false;
@@ -129,7 +155,11 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
  * the script publishes nothing (`moveMomentum`, `moveSpawns`, `moveSuperArmour`,
  * `smashHoldFrame`; Task 13); a back throw's `turnAt`, which only places the
  * turn in the compiled script, a script turning by its own `REVERSE_LR` (Task 7,
- * P5-R7); and `helpless`, the fall that follows whatever ends the move. Tasks 14
+ * P5-R7); and `helpless`, the fall that follows whatever ends the move. Nor the
+ * up specials' `aim`, `turn`, `rise`, `launch`, `phases`, `fromAir` and
+ * `descentHold` (Task 13b), which the engine reads off the move whatever script
+ * runs it (`upSpecial.ts`); and a `specialCharge` that loops inside the script's
+ * lead, before its first command (`chargeInLead`: Link's Spin Attack). Tasks 14
  * and 16 add a Final Smash's phases and a rehit.
  */
 export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
@@ -149,6 +179,17 @@ export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
   "copyDamage",
 ];
 
+/**
+ * A charge that loops inside the move's script lead (`MoveDef.scriptLead`), on a
+ * frame before the imported script's first command, is timed against nothing the
+ * script runs: the script carries the move whatever the charge holds (Plan 5, Task
+ * 13b: Link's Spin Attack, "Charges between 3-4" in its 3-frame start).
+ */
+function chargeInLead(move: MoveDef): boolean {
+  const sc = move.specialCharge;
+  return sc !== undefined && sc.loopFrame <= (move.scriptLead ?? 0);
+}
+
 /** Plan 3's bones: the root alone, the only bone `LEGACY_BONE_TABLE` places. */
 export const ROOT_BONE_ONLY = (bone: string): boolean => bone === "top";
 
@@ -164,10 +205,10 @@ export function activatable(
   placeable: (bone: string) => boolean = ROOT_BONE_ONLY,
 ): boolean {
   if (move === undefined) return false;
-  if (PLAN5_BEHAVIOUR.some((k) => move[k] !== undefined)) return false;
+  if (PLAN5_BEHAVIOUR.some((k) => move[k] !== undefined && !(k === "specialCharge" && chargeInLead(move)))) return false;
   const lifted = liftScript(script);
   const bones = new Set<string>();
-  if (!runnable(lifted.commands, bones, THROW_SLOTS.has(slot))) return false;
+  if (!runnable(lifted.commands, bones, THROW_SLOTS.has(slot), slot === "upBAir")) return false;
   // A throw lands by ATK_HIT_ABS, a projectile special by its spawn (Task 13):
   // either may hang no box on a bone at all.
   const lands = function lands(c: AcmdCommand): boolean {

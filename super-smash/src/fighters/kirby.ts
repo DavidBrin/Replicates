@@ -883,10 +883,27 @@ const legacy: FighterDef = {
       slot: "upB",
       name: "Final Cutter",
       totalFrames: 60,
+      // Plan 5, Task 13b: SmashWiki "Kirby (SSBU)/Up special"
+      // (https://www.ssbwiki.com/Kirby_(SSBU)/Up_special). The rise starts straight
+      // up ("Horizontal speed at the start of the jump 0"; was 0.2), at the legacy
+      // 3.2 a frame on frames 3-14 (UNVERIFIED: the animation's), and hands no upward
+      // speed on (UNVERIFIED, `endSpeed`): about 38 on the ground, where SmashWiki
+      // "Final Cutter" (https://www.ssbwiki.com/Final_Cutter) has him slash "upwards a
+      // bit less than the height of Falco's full jump" (50.51, rubendal's calculator
+      // data); handing the 3.2 on rose him 64. "Aerial height multiplier 0.8". The
+      // descent, the legacy -3.4 (UNVERIFIED), falls on until he lands (`descentHold`;
+      // SmashWiki "Helpless", https://www.ssbwiki.com/Helpless: "the move does not end
+      // until Kirby lands on the ground, grabs the edge of a stage, or bypasses the
+      // lower blast line"), on frame 49, its descending hit's last.
       momentum: [
-        { frame: 3, x: fx(0.2), y: fx(3.2), hold: 12 },
-        { frame: 24, x: fx(0.2), y: fx(-3.4), hold: 14 },
+        { frame: 3, x: 0, y: fx(3.2), hold: 12, endSpeed: { y: 0 } },
+        { frame: 24, x: fx(0.2), y: fx(-3.4), hold: 26 },
       ],
+      descentHold: 49,
+      rise: { ground: fx(1), air: fx(0.8) },
+      // "Stick sensitivity to reverse 0.25"; the window is UNVERIFIED, frames 1-4,
+      // as Samus's (SmashWiki "B-reversing": "within 4 frames of the special input").
+      turn: [1, 4],
       // Ends helpless (Plan 5, Task 4b): SmashWiki "Helpless"
       // (https://www.ssbwiki.com/Helpless) lists Final Cutter, whose helplessness
       // shows "only when landing on the ground", for the lag of SmashWiki "Kirby

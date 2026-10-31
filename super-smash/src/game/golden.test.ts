@@ -257,6 +257,11 @@ const MATCHES: readonly Match[] = [
  * R-T13c-a). No golden CPU match and no other lab rebounds, so the projectile lab,
  * this task's own (ruling R-T13c-f), appends 100 frames after its 200: Link jabs into
  * a Charge Shot and rebounds. All 58 are visited.
+ * Plan 5 Task 13b (the up specials as published; the CPU recovers with them) adds
+ * no action: an aerial up special of its own (`upBAir`) is a move in `special`, and a
+ * landing during one is the `specialLanding` the helpless fall already lands in. The
+ * four CPU matches reach 42 between them, up from 40: they rebound off a clank and
+ * throw and are thrown now, and none trumps a ledge. All 58 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -762,6 +767,16 @@ describe("engine golden trace", () => {
   // only golden meeting of several boxes is the projectile lab's on frame 240, where
   // every pair already weighed the shot as the stronger. It is one clank event now,
   // not three; the counts above stand.
+  // Plan 5 Task 13b (the up specials aim, turn, travel and last as their pages
+  // publish and land into their own landing lag; a falling fighter holding down
+  // drops through a soft platform; the CPU runs its up special's own path, aims it
+  // and wall jumps first) moved the four CPU matches: mario-fox from the 201-300
+  // sample, donkeyKong-pikachu from 701-800, link-samus from 101-200 and kirby-marth
+  // from 501-600. Hits 34, 32, 22 and 19; shield hits 1, 6, 0 and 0; KOs 1, 0, 1 and
+  // 1 (were 34/22/18/30, 2/1/0/1 and 1/2/1/0): Mario during a Cape, as before; Link
+  // and Marth in special fall. The script and the five labs are byte-identical. So
+  // now: hits 34/32/22/19, 6, 0, 1, 4, 1 and 0; shield hits 1/6/0/0, 3, 0, 0, 0, 0
+  // and 0; KOs 1/0/1/1, 1, 2, 0, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
