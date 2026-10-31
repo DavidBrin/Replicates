@@ -274,11 +274,14 @@ export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & {
     if (out.has(script.motion)) throw new Error(`bake ${def.id}: slots ${out.get(script.motion)!.slot} and ${slot} share motion ${script.motion}`);
     const clip = clipFor(def.id, SLOT_POSE[slot]);
     const timing = scriptTiming(script, move.totalFrames);
+    // A move whose clip strikes elsewhere than its first box (`MoveDef.clipStrike`;
+    // Plan 5, Task 17 fix round 1: Zero Laser fires on the laser, not the charge).
+    const strikeAt = move.clipStrike === undefined ? timing.firstActive : runScript(script, move.clipStrike).motionFrame;
     out.set(script.motion, {
       slot,
       clip,
       clock: { kind: "script", frames: timing.frames },
-      time: (k) => attackClipTime(clip.strike, timing.firstActive, timing.frames, k),
+      time: (k) => attackClipTime(clip.strike, strikeAt, timing.frames, k),
     });
   }
   return out;

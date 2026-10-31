@@ -185,6 +185,32 @@ export function interpolatePosition(
   return { x: px + (cx - px) * t, y: py + (cy - py) * t };
 }
 
+/**
+ * Where each fighter is drawn off its sim position this frame, in world units
+ * along x: nowhere, but for a Final Smash's user whose part names a `sceneGap`
+ * (`FinalPhase.sceneGap`; Plan 5, Task 17 fix round 1, ruling R-T17d) with a
+ * fighter it trapped nearer than that ahead of it, which is drawn backed off to
+ * the gap. The trapped fighter stays where the sim has it, as do both in the sim.
+ * The overlay and the 3D presenter both draw through this.
+ */
+export function sceneDrawShift(game: GameState, defs: readonly (FighterDef | null | undefined)[]): number[] {
+  const shift = game.fighters.map(() => 0);
+  if (game.cinematic < 0) return shift;
+  const user = game.fighters.find((f) => f.port === game.cinematic);
+  if (user === undefined || user.move === null) return shift;
+  const gap = defs[user.port]?.moves[user.move]?.final?.sceneGap;
+  if (gap === undefined) return shift;
+  let need = 0;
+  for (const f of game.fighters) {
+    if (f.action !== "finalTrapped" || f.combat.trappedBy !== user.port) continue;
+    const ahead = (f.x - user.x) * user.facing;
+    if (ahead >= 0 && ahead < gap) need = Math.max(need, gap - ahead);
+  }
+  const at = game.fighters.indexOf(user);
+  if (need > 0) shift[at] = -user.facing * toFloat(need);
+  return shift;
+}
+
 /* ----------------------------------------------------------------- render -- */
 
 /**
@@ -256,11 +282,13 @@ export function drawScene(
 
   if (state.showBlastZone) drawBlastZone(ctx, stage, camera);
 
-  const drawn = state.current.fighters.map<DrawnFighter>((fighter) => {
+  // A Final Smash's user backed off a fighter it trapped too close (R-T17d).
+  const shift = sceneDrawShift(game, state.fighters);
+  const drawn = state.current.fighters.map<DrawnFighter>((fighter, i) => {
     const previous = state.previous?.fighters.find((f) => f.port === fighter.port);
     const pos = interpolatePosition(previous, fighter, interpolationAlpha);
     const def = state.fighters[fighter.port] ?? null;
-    return { fighter, x: pos.x, y: pos.y, def, rig: getCharacterRig(def?.id) };
+    return { fighter, x: pos.x + shift[i], y: pos.y, def, rig: getCharacterRig(def?.id) };
   });
 
   // Whoever is doing something goes on top.

@@ -71,9 +71,20 @@ export function charKey(id: string | null | undefined): string {
   return id ? id.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
 }
 
+/**
+ * Clips a fighter that authors none plays as another clip of its own, rather
+ * than as the shared library's: a Final Smash's scene and finishing blow are the
+ * fighter's own neutral special (Plan 5, Task 17 fix round 1; Donkey Kong authors
+ * his barrage and uppercut).
+ */
+export const POSE_FALLBACK: Readonly<Partial<Record<PoseName, PoseName>>> = { finalAttack: "neutralB", finalEnd: "neutralB" };
+
 /** The clip `fighterId` plays for `name` — their own if they have one. */
 export function clipFor(fighterId: string | null | undefined, name: PoseName): PoseClip {
-  return CHARACTER_POSES[charKey(fighterId)]?.[name] ?? POSE_LIBRARY[name];
+  const own = CHARACTER_POSES[charKey(fighterId)]?.[name];
+  if (own !== undefined) return own;
+  const fallback = POSE_FALLBACK[name];
+  return fallback !== undefined ? clipFor(fighterId, fallback) : POSE_LIBRARY[name];
 }
 
 /** Whether this fighter authors their own version of a clip. */

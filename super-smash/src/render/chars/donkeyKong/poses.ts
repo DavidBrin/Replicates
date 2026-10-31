@@ -15,7 +15,7 @@
  */
 
 import { jab as sharedJab } from "../../poses/attacks";
-import { P, swapLimbSides, type PoseClip } from "../../poses/clip";
+import { P, swapLimbSides, type Keyframe, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
 /**
@@ -53,6 +53,53 @@ const ROLL_BALL = {
   upperArmR: 116, forearmR: 86, handR: 16,
   upperArmL: 124, forearmL: 80, handL: 14,
 };
+
+/** Jungle Rush's barrage: its first punch's frame and its length (`donkeyKong.ts` `finalAttack`). */
+const BARRAGE_FIRST = 6;
+const BARRAGE_FRAMES = 132;
+/** Where the clip's strike key sits: on the first punch, as `attackClipTime` maps it. */
+const BARRAGE_STRIKE = 0.05;
+
+/** Clip time of the barrage's move frame `f` past its first punch (`attackClipTime`'s second piece). */
+function barrageTime(f: number): number {
+  return BARRAGE_STRIKE + ((1 - BARRAGE_STRIKE) * (f - BARRAGE_FIRST)) / (BARRAGE_FRAMES - BARRAGE_FIRST);
+}
+
+/** The barrage's legs and spine: the Giant Punch's guard, braced, spine no further over. */
+const BARRAGE_STANCE = {
+  thighR: 134, shinR: 54, footR: -102,
+  thighL: 224, shinL: -20, footL: -100,
+} as const;
+
+/** The guard, and a punch thrown with each arm while the other stays up. */
+const BARRAGE_GUARD = P({
+  hip: 8, torso: 22, head: -20, ...BARRAGE_STANCE,
+  upperArmR: 118, forearmR: -72, handR: -14,
+  upperArmL: 176, forearmL: -56, handL: -12,
+});
+const BARRAGE_NEAR = P({
+  hip: 9, torso: 25, head: -22, ...BARRAGE_STANCE,
+  upperArmR: 62, forearmR: -4, handR: 0,
+  upperArmL: 178, forearmL: -60, handL: -12,
+});
+const BARRAGE_FAR = P({
+  hip: 9, torso: 25, head: -22, ...BARRAGE_STANCE,
+  upperArmR: 122, forearmR: -76, handR: -14,
+  upperArmL: 64, forearmL: -4, handL: 0,
+});
+
+/** The guard, then a punch on each of the barrage's four-frame beats, then the guard again. */
+function barrageKeys(): Keyframe[] {
+  const keys: Keyframe[] = [{ t: 0, pose: BARRAGE_GUARD, offsetX: -0.2, offsetY: -0.4, ease: "in" }];
+  let near = true;
+  for (let f = BARRAGE_FIRST; f <= BARRAGE_FRAMES - 6; f += 4) {
+    keys.push({ t: barrageTime(f), pose: near ? BARRAGE_NEAR : BARRAGE_FAR, offsetX: -0.1, offsetY: -0.42, scaleX: 1.03, ease: "out" });
+    near = !near;
+  }
+  keys.push({ t: barrageTime(BARRAGE_FRAMES - 2), pose: BARRAGE_GUARD, offsetX: -0.2, offsetY: -0.4 });
+  keys.push({ t: 1, pose: BARRAGE_GUARD, offsetX: -0.2, offsetY: -0.4 });
+  return keys;
+}
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
   /**
@@ -1112,6 +1159,81 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         }),
         offsetX: 0.0, offsetY: -0.06,
       },
+    ],
+  },
+
+  /**
+   * Jungle Rush's barrage, the Final Smash's scene (Plan 5, Task 17 fix round 1,
+   * ruling R-T17d): fists traded straight out from a boxer's guard, in place.
+   *
+   * It played the Giant Punch's clip, as every scene does that authors none
+   * (`SLOT_POSE`), and that clip's contact is a diving overhand that pitches his
+   * spine 62° and throws chest, head and arm a body's length forward, through
+   * the fighter the punch had just trapped. The sim does not place the trapped
+   * fighter: it stays where it was caught, 8 to 28 units ahead, so the scene
+   * stays where they both are and the barrage is drawn as what it is, punches
+   * that reach without the body following them.
+   *
+   * The guard is the Giant Punch's own (its recovery's "boxer's guard"), with
+   * the spine pitched no further than it; the punches alternate near and far
+   * arm, one every four frames from the barrage's first on its frame 6 of 132,
+   * as its boxes land (`donkeyKong.ts`, `barrage(…)` every 4). Presentation
+   * choice, every number: the game's barrage animation is not published.
+   */
+  finalAttack: {
+    loop: false,
+    strike: BARRAGE_STRIKE,
+    keys: barrageKeys(),
+  },
+
+  /**
+   * Jungle Rush's uppercut, the Final Smash's finishing blow (Plan 5, Task 17 fix
+   * round 1, ruling R-T17d): down out of the guard and straight up, the near fist
+   * over his head, on the end's frame 7 (`donkeyKong.ts`, its one box), then back
+   * into the guard. It played the Giant Punch's dive too, through the fighter it
+   * launches. Presentation choice, every number.
+   */
+  finalEnd: {
+    loop: false,
+    strike: 0.12,
+    keys: [
+      {
+        t: 0,
+        pose: P({
+          hip: 10, torso: 24, head: -22,
+          thighR: 128, shinR: 70, footR: -110,
+          thighL: 228, shinL: -30, footL: -96,
+          upperArmR: 160, forearmR: -40, handR: -10,
+          upperArmL: 176, forearmL: -56, handL: -12,
+        }),
+        offsetX: -0.2, offsetY: -0.6,
+        ease: "in",
+      },
+      {
+        t: 0.12,
+        pose: P({
+          hip: 2, torso: 4, head: -10,
+          thighR: 162, shinR: 20, footR: -92,
+          thighL: 202, shinL: -6, footL: -92,
+          upperArmR: -6, forearmR: -4, handR: 0,
+          upperArmL: 190, forearmL: -34, handL: -8,
+        }),
+        offsetX: -0.1, offsetY: 0.2, scaleY: 1.04,
+        ease: "out",
+      },
+      {
+        t: 0.3,
+        pose: P({
+          hip: 3, torso: 6, head: -12,
+          thighR: 160, shinR: 24, footR: -94,
+          thighL: 204, shinL: -8, footL: -92,
+          upperArmR: 2, forearmR: -8, handR: -2,
+          upperArmL: 186, forearmL: -38, handL: -8,
+        }),
+        offsetX: -0.1, offsetY: 0.12, scaleY: 1.02,
+      },
+      { t: 0.75, pose: BARRAGE_GUARD, offsetX: -0.2, offsetY: -0.4 },
+      { t: 1, pose: BARRAGE_GUARD, offsetX: -0.2, offsetY: -0.4 },
     ],
   },
 

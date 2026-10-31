@@ -7,8 +7,9 @@ import { LEGACY_BAKE } from "@/engine/acmd/bakeTables";
 import { bakedEcb, ECB_BODY_BONES, ECB_TOP_BONES, fighterHurtboxes, localHurtboxes, restEcb } from "@/engine/acmd/hurtboxes";
 import { poseIndexOf } from "@/engine/acmd/poseClock";
 import { fx, toFloat } from "@/engine/fixed";
-import { hurtboxCapsule } from "@/engine/hitbox";
+import { capsulesOverlap, hurtboxCapsule } from "@/engine/hitbox";
 import { FIGHTERS } from "@/fighters";
+import { withLimbScripts } from "@/fighters/acmd/limb";
 import { makeFighter } from "@/render/testFixtures";
 import { hurtBonesFor } from "@/render3d/skeletons/hurtBones";
 import { readBakeFromDisk } from "./bakeNode";
@@ -119,6 +120,71 @@ describe("the ECB from bones (Plan 4)", () => {
       expect(body.length, def.id).toBe(1);
       expect(rest.half, def.id).toBe(Math.max(...body.map((i) => Math.max(Math.abs(caps[i].x1), Math.abs(caps[i].x2)) + caps[i].r)));
     }
+  });
+});
+
+/**
+ * The status motions Plan 5 Task 17 gave clips of their own (ruling R-T17b): the
+ * footstooled fighter's (it played the grab's struggle, lifted a unit), Pikachu's
+ * crawl (the crouch's) and Link's failed throw (his throw's, its last pose held
+ * for 46-59). Their hurtboxes follow the clips, which is sim-visible geometry that
+ * neither `hurt.allow.json` (standing bodies) nor the reach file (move boxes) sees,
+ * so each motion's highest and lowest hurt top over its frames is pinned here
+ * (Task 17 fix round 1, the review's Minor 7), beside the alias's it replaced.
+ */
+describe("the hurt tops of the motions Task 17 gave clips (R-T17b)", () => {
+  const top = (caps: readonly { y1: number; y2: number; r: number }[]) => Math.max(...caps.map((c) => Math.max(c.y1, c.y2) + c.r));
+  const frames = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  /** The highest and lowest hurt top over `actionFrames`, in units. */
+  function tops(id: string, over: Partial<Parameters<typeof makeFighter>[0]>, actionFrames: number[]): [number, number] {
+    const def = FIGHTERS.find((f) => f.id === id)!;
+    const t = actionFrames.map((af) => toFloat(top(localHurtboxes(def, makeFighter({ defId: id, ...over, actionFrame: af }), 0, bake)!)));
+    return [Math.max(...t), Math.min(...t)];
+  }
+  const ROWS: readonly [string, string, Partial<Parameters<typeof makeFighter>[0]>, number[], [number, number]][] = [
+    ["pikachu", "crawl", { action: "crawl" }, frames(0, 31), [8.676, 8.51]],
+    ["pikachu", "crouch (the crawl's alias before)", { action: "crouch" }, frames(0, 83), [9.715, 9.597]],
+    ["mario", "footstooled", { action: "footstooled" }, frames(0, 29), [14.622, 10.245]],
+    ["mario", "grabbed (the footstooled's alias before)", { action: "grabbed" }, frames(0, 18), [16.026, 14.157]],
+    ["donkeyKong", "footstooled", { action: "footstooled" }, frames(0, 29), [31.384, 22.357]],
+    ["link", "failed throw, 46-59", { action: "special", move: "sideBFailed" }, frames(45, 58), [18.821, 17.9]],
+  ];
+  it.each(ROWS)("%s %s", (id, _label, over, af, [high, low]) => {
+    const [max, min] = tops(id, over, af);
+    expect(max).toBeCloseTo(high, 2);
+    expect(min).toBeCloseTo(low, 2);
+  });
+});
+
+/**
+ * Jungle Rush's barrage draws Donkey Kong into nobody (Plan 5, Task 17 fix round 1,
+ * ruling R-T17d). The sim leaves the trapped fighter where the punch caught it;
+ * the barrage played the Giant Punch's clip, whose diving contact carried Donkey
+ * Kong's chest and head through Mario. Measured on the drawn body, the hurt
+ * capsules of the head, trunk and legs (`ECB_TOP_BONES`; the punching arms may
+ * reach), against the trapped fighter's, at the golden lab's 18 units
+ * (`goldenFinalLab.ts`) and every distance further the punch can trap at (to 28).
+ */
+describe("Jungle Rush's barrage keeps Donkey Kong's body off the fighter it traps (R-T17d)", () => {
+  const def = (id: string) => withLimbScripts(FIGHTERS.find((f) => f.id === id)!, bake.bones);
+  /** The frames of `move`, up to `last`, on which Donkey Kong's body overlaps Mario trapped `gap` ahead. */
+  function into(move: "finalAttack" | "finalEnd", last: number, gap: number): number[] {
+    const dk = def("donkeyKong");
+    const bones = bake.hurtboxes("donkeyKong")!.map((h) => h.bone);
+    const out: number[] = [];
+    for (let af = 0; af <= last; af++) {
+      const body = fighterHurtboxes(dk, makeFighter({ defId: "donkeyKong", action: "special", move, actionFrame: af }), 0, bake)!.filter((_, i) => ECB_TOP_BONES.has(bones[i]));
+      const mario = fighterHurtboxes(def("mario"), makeFighter({ port: 1, action: "finalTrapped", actionFrame: af, x: fx(gap), facing: -1 }), 0, bake)!;
+      if (body.some((a) => mario.some((b) => capsulesOverlap(a, b)))) out.push(af);
+    }
+    return out;
+  }
+  // The scene draws Donkey Kong no nearer than `FinalPhase.sceneGap` (12) to the
+  // fighter trapped (`render/renderer.ts` `sceneDrawShift`), so the clips are
+  // held clear from there on out.
+  it.each([12, 15, 18, 22, 28])("Mario trapped %i ahead: the barrage, and the uppercut until it launches him (the end's frame 7)", (gap) => {
+    expect(into("finalAttack", def("donkeyKong").moves.finalAttack!.totalFrames - 1, gap)).toEqual([]);
+    expect(into("finalEnd", 6, gap)).toEqual([]);
   });
 });
 

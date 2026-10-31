@@ -53,6 +53,24 @@ export const FIGHTER_UNITS = 13;
 export const FRAME_MARGIN_X = 38;
 export const FRAME_MARGIN_Y = 30;
 
+/**
+ * A Final Smash's scene is a close-up (Plan 5, Task 17 fix round 1, ruling
+ * R-T17c): its user and the trapped fill the frame. Tighter margins, and a zoom
+ * ceiling past `MAX_ZOOM`, the KO punch-in's own (`MAX_ZOOM * 1.6`), which a
+ * one-on-one reaches. Presentation choice, every number: no source describes the
+ * camera during a scene (SmashWiki "Final Smash", https://www.ssbwiki.com/Final_Smash,
+ * says only that "During a Final Smash, the camera controls are disabled").
+ */
+export const SCENE_MARGIN_X = 16;
+export const SCENE_MARGIN_Y = 10;
+export const SCENE_MAX_ZOOM = MAX_ZOOM * 1.6;
+/**
+ * How tall a fighter is framed in the scene: more than `FIGHTER_UNITS`, so a
+ * tall one's head, port tag and raised fist stay in a close-up (Donkey Kong is 26
+ * units tall).
+ */
+export const SCENE_FIGHTER_UNITS = FIGHTER_UNITS * 2;
+
 export interface KoZoom {
   active: boolean;
   /** Frames remaining. */
@@ -150,7 +168,7 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
     // Combined with the ground kept in shot below, that put the platform across
     // the middle of the screen and gave the lower half of every frame to the
     // stage's underside, while the fighters crowded the top.
-    maxY = Math.max(maxY, y + FIGHTER_UNITS);
+    maxY = Math.max(maxY, y + (scene ? SCENE_FIGHTER_UNITS : FIGHTER_UNITS));
     count++;
   }
 
@@ -175,9 +193,9 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
     minY = Math.min(minY, toFloat(main.y) - 6);
   }
 
-  const width = maxX - minX + FRAME_MARGIN_X * 2;
-  const height = maxY - minY + FRAME_MARGIN_Y * 2;
-  const zoom = clamp(Math.min(VIEW_WIDTH / width, VIEW_HEIGHT / height), MIN_ZOOM, MAX_ZOOM);
+  const width = maxX - minX + (scene ? SCENE_MARGIN_X : FRAME_MARGIN_X) * 2;
+  const height = maxY - minY + (scene ? SCENE_MARGIN_Y : FRAME_MARGIN_Y) * 2;
+  const zoom = clamp(Math.min(VIEW_WIDTH / width, VIEW_HEIGHT / height), MIN_ZOOM, scene ? SCENE_MAX_ZOOM : MAX_ZOOM);
 
   let x = (minX + maxX) / 2;
   let y = (minY + maxY) / 2;
@@ -202,6 +220,8 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
 const FOLLOW_POSITION = 0.11;
 const FOLLOW_ZOOM_OUT = 0.14;
 const FOLLOW_ZOOM_IN = 0.045;
+/** Into a Final Smash's close-up, faster: a scene is seconds long (R-T17c; presentation choice). */
+const FOLLOW_ZOOM_IN_SCENE = 0.12;
 
 const TRAUMA_DECAY = 0.022;
 const MAX_SHAKE_PIXELS = 58;
@@ -251,7 +271,7 @@ export function updateCamera(
 
   cam.x += (cam.targetX - cam.x) * FOLLOW_POSITION;
   cam.y += (cam.targetY - cam.y) * FOLLOW_POSITION;
-  const zoomRate = cam.targetZoom < cam.zoom ? FOLLOW_ZOOM_OUT : FOLLOW_ZOOM_IN;
+  const zoomRate = cam.targetZoom < cam.zoom ? FOLLOW_ZOOM_OUT : state.cinematic >= 0 ? FOLLOW_ZOOM_IN_SCENE : FOLLOW_ZOOM_IN;
   cam.zoom += (cam.targetZoom - cam.zoom) * zoomRate;
 
   updateShake(cam);

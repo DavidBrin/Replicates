@@ -1032,7 +1032,9 @@ const legacy: FighterDef = {
       name: "Jungle Rush (barrage)",
       totalFrames: 132,
       intangible: [1, 132],
-      final: { phase: "attack", next: "finalEnd" },
+      // The drawing (Task 17 fix round 1, ruling R-T17d): no nearer than 12 to the
+      // fighter trapped, where the barrage's clip stays off its body.
+      final: { phase: "attack", next: "finalEnd", sceneGap: fx(12) },
       hitboxes: [
         ...barrage(0, 6, 18, 4, { damage: 1.2, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
         ...barrage(18, 79, 13, 4, { damage: 1.1, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
@@ -1044,7 +1046,7 @@ const legacy: FighterDef = {
       totalFrames: 61,
       aerialTotalFrames: 46,
       intangible: [1, 61],
-      final: { phase: "end" },
+      final: { phase: "end", sceneGap: fx(12) },
       hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true })],
     },
   },

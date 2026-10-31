@@ -220,7 +220,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * is no bone of the 2D rig (it rides `hip`, this file's header), the crawl's
    * direction is no part of the motion the sim picks (`statusMotion` reads no
    * velocity), and the page's point is a hurtbox the replica's hurt bones do not
-   * carry. So one clip plays both ways, the forward crawl's, tail low.
+   * carry. So one clip plays both ways, and the tail stays where the hip carries
+   * it, at about the crouch's angle (raised behind him, neither of the page's two),
+   * until a tail bone exists.
    *
    * A loop on the state's own frame, not paced by the ground covered as the walk
    * is: the back crawl's 0.5 against the forward 0.7 would jump the cycle's phase

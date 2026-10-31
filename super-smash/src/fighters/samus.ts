@@ -1174,6 +1174,12 @@ const legacy: FighterDef = {
       rehit: 10,
       clearAt: [69, 77, 81, 209],
       final: { phase: "start" },
+      // The drawing (Task 17 fix round 1, the controller's item 8): Samus holds her
+      // charge pose through the start and the clip's strike, her firing recoil, lands
+      // on the laser's first frame, 70, not on the charge box's 48. The game's own
+      // `final_start` animation is not in this pipeline (the clips are authored), so
+      // the start is held rather than played: `MoveDef.clipStrike`.
+      clipStrike: 70,
       hitboxes: [
         finalBox(0, 48, 68, { damage: 1, angle: 18, kbg: 100, fkb: 12, radius: 10, x: 17, y: 13, hitlag: 0, transcendent: true, effect: "electric" }),
         ...[48, 58, 68].map((f, i) => finalBox(1 + i, f, f, { damage: 0, angle: 18, kbg: 100, fkb: 30, radius: 20, x: -15, y: 13, hitlag: 0, transcendent: true, windbox: true })),

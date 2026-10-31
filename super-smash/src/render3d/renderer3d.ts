@@ -52,7 +52,7 @@ import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, FighterState, GameState, StageDef } from "@/engine/types";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
-import { interpolatePosition, type RenderState } from "@/render/renderer";
+import { interpolatePosition, sceneDrawShift, type RenderState } from "@/render/renderer";
 import { hitFlashAmount } from "@/render/vfx";
 import { fighterPoser } from "./bake/bake";
 import { applySideCamera, createSideCamera } from "./camera3d";
@@ -366,12 +366,15 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
 
       let shadowCount = 0;
       shields.fill(null);
+      // A Final Smash's user backed off a fighter it trapped too close, as the overlay draws it (R-T17d).
+      const shift = sceneDrawShift(game, rs.fighters);
       for (let i = 0; i < game.fighters.length; i++) {
         const f = game.fighters[i];
         const fighter = fighters[f.port] ?? null;
         const def = rs.fighters[f.port] ?? null;
         if (fighter === null || def === null) continue;
         const pos = interpolatePosition(previousOf(rs.previous, f.port), f, alpha);
+        pos.x += shift[i];
         fighter.update({
           f,
           x: pos.x,

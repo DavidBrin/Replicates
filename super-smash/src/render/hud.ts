@@ -195,13 +195,27 @@ export interface HudScene {
 
 /* --------------------------------------------------------------- drawing -- */
 
+/**
+ * Whether a Final Smash's scene takes the damage display off the screen: the part
+ * its user is in says so (`FinalPhase.hidesHud`; Plan 5, Task 17 fix round 1,
+ * ruling R-T17e: Team Star Fox). The whole panel goes, the percentage being what
+ * it shows; the timer and the end slate stay.
+ */
+export function sceneHidesDamage(state: GameState, defs: readonly (FighterDef | null | undefined)[]): boolean {
+  if (state.cinematic < 0) return false;
+  const user = state.fighters.find((f) => f.port === state.cinematic);
+  if (user === undefined || user.move === null) return false;
+  return defs[user.port]?.moves[user.move]?.final?.hidesHud === true;
+}
+
 export function drawHud(ctx: CanvasRenderingContext2D, scene: HudScene): void {
   const fighters = scene.state.fighters;
   const n = Math.max(1, fighters.length);
   const totalWidth = n * PANEL_WIDTH + (n - 1) * PANEL_GAP;
   const startX = (VIEW_WIDTH - totalWidth) / 2;
 
-  for (let i = 0; i < fighters.length; i++) {
+  const hidden = sceneHidesDamage(scene.state, scene.info.map((i) => i.def));
+  for (let i = 0; i < fighters.length && !hidden; i++) {
     drawDamagePanel(ctx, scene, fighters[i], startX + i * (PANEL_WIDTH + PANEL_GAP), PANEL_BASELINE_Y);
   }
 

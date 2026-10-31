@@ -179,6 +179,9 @@ function kickArc(
   ctx.restore();
 }
 
+/** The Homing Missile's launch frame, for a painter called with no move (the animation lab). */
+const MISSILE_LAUNCH = 18;
+
 /**
  * Where a run of frames sits in its own life: 1 on `from`, 0 by `from + span`,
  * and **0 before it starts**.
@@ -188,9 +191,6 @@ function kickArc(
  * and the symptom — a muzzle flash on the first frame of the wind-up — reads as
  * a timing bug in the *animation* rather than in the helper.
  */
-/** The Homing Missile's launch frame, for a painter called with no move (the animation lab). */
-const MISSILE_LAUNCH = 18;
-
 function decay(frame: number, from: number, span: number): number {
   if (frame < from) return 0;
   const k = 1 - (frame - from) / span;

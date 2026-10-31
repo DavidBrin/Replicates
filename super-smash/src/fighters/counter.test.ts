@@ -33,6 +33,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ATTACK, clearAll, frame, script, wait } from "@/engine/acmd/dsl";
+import { STRONG_COUNTER_WINDOW } from "@/audio";
 import { STRONG_COUNTER_DAMAGE, activeCounter, counterBubble, counterDamage } from "@/engine/counter";
 import { fx, mul, ONE, toFloat } from "@/engine/fixed";
 import { circle, contactPoint } from "@/engine/hitbox";
@@ -191,6 +192,20 @@ describe("Marth's Counter", () => {
     const caught = charged.events[at].counters[0].damage;
     expect(caught).toBeGreaterThan(fx(17.8));
     expect(charged.states[at].fighters[1].combat.counterDamage).toBe(counterDamage(COUNTER_DEF, caught));
+  });
+
+  it("lands its counterattack inside the audio's window for the strong catch's ring (Task 17 fix round 1)", () => {
+    // The ring plays on the counter user's first hit within STRONG_COUNTER_WINDOW
+    // frames of the catch (`audio/index.ts`). Mario's forward smash, plain and
+    // charged: Marth's counterattack strikes 24 frames after the catch.
+    for (const script of [FSMASH, (i: number): [InputFrame, InputFrame] => [i === 0 ? Btn.Right : i >= 1 && i <= 21 ? Btn.Right | Btn.Attack : 0, i === 24 ? COUNTER : 0]]) {
+      const { events } = run(duel("mario", 16), 90, script);
+      const caught = caughtAt(events);
+      const struck = events.findIndex((e, i) => i > caught && e.hits.some((h) => h.attacker === 1));
+      expect(caught).toBeGreaterThan(0);
+      expect(struck - caught).toBe(24);
+      expect(struck - caught).toBeLessThan(STRONG_COUNTER_WINDOW);
+    }
   });
 
   it("is beaten by a grab", () => {

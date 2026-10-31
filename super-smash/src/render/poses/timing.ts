@@ -202,12 +202,17 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   // (UNVERIFIED for Samus's Super Missile, whose own animation is unauthored here;
   // the bake times it to its own 57 frames). Link's smash throw is his throw's.
   sideBSmash: "sideB",
-  // Fix round 1: Link's failed throw is his throw's motion, held past its end.
+  // Fix round 1: Link's failed throw borrows his throw's clip; since Task 17 it is
+  // its own motion, the clip played across its own 59 frames (no held last pose).
   sideBFailed: "sideB",
   // Plan 5, Task 14: a Final Smash's scene and finishing blow borrow the neutral
   // special's clip, as its start does (UNVERIFIED: no Final Smash clip is authored).
-  finalAttack: "neutralB",
-  finalEnd: "neutralB",
+  // Task 17 fix round 1 (ruling R-T17d): the scene and the blow have poses of their
+  // own, the fighter's neutral special unless it authors one (`clipFor`): Donkey
+  // Kong's barrage and uppercut stay where he stands, where the Giant Punch dived
+  // through Mario.
+  finalAttack: "finalAttack",
+  finalEnd: "finalEnd",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */
@@ -514,6 +519,9 @@ export function moveTimingFor(
     first = strike;
     last = Math.max(last, strike);
   }
+  // A clip that strikes elsewhere than the first box (`MoveDef.clipStrike`; Plan 5,
+  // Task 17 fix round 1: Zero Laser), as the bake anchors it.
+  if (m.clipStrike !== undefined) first = m.clipStrike;
   // Converted out of the frame-data convention and into `actionFrame`, which is
   // what every caller here counts in. See `moveFrameOf`.
   return {

@@ -85,8 +85,11 @@ export interface HitThresholds {
  * Frames after a strong catch (`STRONG_COUNTER_DAMAGE`) within which its user's
  * next hit is the counterattack's, whose extra sound it then plays (Plan 5, Task
  * 17). SmashWiki "Marth (SSBU)/Down special": he "freezes for 21 frames alongside
- * the opponent before the counterattack proceeds", whose "Hitboxes 5-7" strike
- * by the 27th frame after the catch. A hit after the window is another move's.
+ * the opponent before the counterattack proceeds", whose "Hitboxes 5-7" follow.
+ * The counterattack's frame 1 is spent inside the freeze (`triggerCounter`), so
+ * its frame 5 lands 24 frames after the catch and its frame 7 26 (measured:
+ * `counter.test.ts`); the window covers the 28 frames after the catch, two to
+ * spare. A hit after it is another move's.
  */
 export const STRONG_COUNTER_WINDOW = 28;
 

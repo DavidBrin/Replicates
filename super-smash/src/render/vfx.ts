@@ -37,7 +37,9 @@ export type ParticleKind =
   | "afterimage"
   | "star"
   | "smoke"
-  | "ring";
+  | "ring"
+  // An additive light on the overlay (Plan 5, Task 17 fix round 1: the strong counter's flash).
+  | "glow";
 
 export interface Particle {
   kind: ParticleKind;
@@ -446,9 +448,16 @@ export function spawnClank(v: VfxState, x: number, y: number): void {
  * bright yellow flash". Round the user's body, not at the bubble: the page says
  * the user flashes. Presentation choice: its size, colour and length, which the
  * page does not give.
+ *
+ * The flash itself is an additive glow (`glow`, ruling R-T17f, fix round 1): a
+ * plain yellow ring fading over the dark stage read mustard, not bright, and the
+ * counterattack's intangibility ghosts the body it would light. Light added on
+ * the overlay brightens whatever is under it, the faded model included; its rim
+ * is added light too, so it fades toward the stage, never through olive. The
+ * sparks carry the shape outward.
  */
 export function spawnStrongCounterFlash(v: VfxState, x: number, y: number): void {
-  push(v, ring(x, y, STRONG_COUNTER_YELLOW, 7, 24));
+  push(v, { ...ring(x, y, STRONG_COUNTER_YELLOW, 10, 20), kind: "glow" });
   push(v, {
     kind: "burst",
     x,
@@ -1050,6 +1059,29 @@ export function drawParticles(
         ctx.beginPath();
         ctx.arc(s.x, s.y, r * grow, 0, Math.PI * 2);
         ctx.stroke();
+        break;
+      }
+      case "glow": {
+        // Additive, so it lights what it covers instead of tinting it: bright at
+        // its heart for the first frames, fading out from the edge in.
+        const radius = r * (1 + (1 - t) * 0.6);
+        const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius);
+        glow.addColorStop(0, withAlpha(p.colour, Math.min(1, t * 1.15)));
+        glow.addColorStop(0.5, withAlpha(p.colour, t * 0.55));
+        glow.addColorStop(1, withAlpha(p.colour, 0));
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        // Its rim, a bright edge as the light spreads.
+        ctx.strokeStyle = withAlpha(p.colour, t);
+        ctx.lineWidth = Math.max(2, r * 0.22 * t);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius * 0.92, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
         break;
       }
       case "smoke": {

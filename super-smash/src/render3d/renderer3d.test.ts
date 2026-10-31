@@ -393,6 +393,21 @@ describe("the 3D presenter", () => {
     expect(xs).toEqual([0, 2, 3].map((port) => expect.closeTo(toFloat(state.fighters[port].x), 9)));
   });
 
+  it("draws a Final Smash's user where the overlay does, backed off a fighter trapped too close (Plan 5, Task 17 fix round 1, R-T17d)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    // Donkey Kong (port 3) in Jungle Rush's barrage, Mario (port 0) trapped 9 ahead of him.
+    state.fighters[3] = { ...state.fighters[3], x: fx(-30), facing: 1, action: "special", move: "finalAttack", actionFrame: 10 };
+    state.fighters[0] = { ...state.fighters[0], x: fx(-21), facing: -1, action: "finalTrapped", actionFrame: 10 };
+    state.fighters[0].combat = { ...state.fighters[0].combat, trappedBy: 3 };
+    state.cinematic = 3;
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const scene = gl().scene!;
+    expect(scene.getObjectByName("fighter:3:donkeyKong")!.position.x).toBeCloseTo(-33, 9);
+    expect(scene.getObjectByName("fighter:0:mario")!.position.x).toBeCloseTo(-21, 9);
+  });
+
   it("lights the scene with the look's values, tone mapping off and sRGB out (UNVERIFIED by eye: pinned so any change is deliberate)", () => {
     const { presenter, rs, stage, gl } = setup();
     presenter.paint(rs, createCamera(stage), 1, []);

@@ -304,6 +304,9 @@ const SLOT_FOR: Partial<Record<PoseName, keyof typeof donkeyKong.moves>> = {
   bthrow: "bthrow",
   uthrow: "uthrow",
   dthrow: "dthrow",
+  // Plan 5, Task 17 fix round 1: Jungle Rush's barrage and uppercut.
+  finalAttack: "finalAttack",
+  finalEnd: "finalEnd",
 };
 
 describe("the strike key is the moment of contact, and is shaped like one", () => {

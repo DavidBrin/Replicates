@@ -1088,7 +1088,9 @@ const legacy: FighterDef = {
       name: "Team Star Fox (lasers)",
       totalFrames: 240,
       intangible: [1, 240],
-      final: { phase: "attack", next: "finalEnd" },
+      // Its scene removes the damage percentages (Task 17 fix round 1, ruling R-T17e:
+      // SmashWiki "Final Smash", Trivia, `FinalPhase.hidesHud`).
+      final: { phase: "attack", next: "finalEnd", hidesHud: true },
       hitboxes: [finalBox(0, 240, 240, { damage: 30, angle: 361, kbg: 80, fkb: 1, hitlag: 0, lr: "position" })],
     },
     finalEnd: {
@@ -1097,7 +1099,7 @@ const legacy: FighterDef = {
       totalFrames: 56,
       aerialTotalFrames: 46,
       intangible: [1, 56],
-      final: { phase: "end" },
+      final: { phase: "end", hidesHud: true },
       hitboxes: [finalBox(0, 1, 1, { damage: 10, angle: 55, kbg: 144, bkb: 70, hitlag: 0, lr: "position" })],
     },
   },

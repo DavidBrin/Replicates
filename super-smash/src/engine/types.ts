@@ -630,6 +630,23 @@ export interface FinalPhase {
    * 37 (Plan 5, Task 15). A whiff plays the whole part.
    */
   readonly nextAt?: number;
+  /**
+   * While this part plays the scene (`GameState.cinematic`), the damage display is
+   * off the screen (Plan 5, Task 17 fix round 1, ruling R-T17e). Presentation only:
+   * the sim never reads it. SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash),
+   * Trivia: "In Ultimate, seven Final Smashes remove the damage percentage", Team Star
+   * Fox among them, and only four of them "for the entire duration of the move".
+   */
+  readonly hidesHud?: true;
+  /**
+   * While this part plays the scene, its user is drawn no nearer than this (Q12,
+   * world units, along the way it faces) to a fighter it trapped, backed off from
+   * where the sim has it (Plan 5, Task 17 fix round 1, ruling R-T17d: Jungle Rush
+   * traps 8 to 28 units ahead and leaves the fighter caught there, inside Donkey
+   * Kong's bulk at the near end). Presentation only: the sim never reads it, and
+   * both fighters stay where they are in it.
+   */
+  readonly sceneGap?: number;
 }
 
 /**
@@ -958,6 +975,15 @@ export interface MoveDef {
    * Missile). Not `landingLag`, an aerial's.
    */
   readonly aerialLandingLag?: number;
+  /**
+   * The move frame its clip's strike key lands on (frame-data convention), where
+   * that is not its first live box's: the bake's clip timing (`moveSamplers`) and
+   * the 2D path's (`moveTimingFor`) anchor on it. Presentation only: the sim never
+   * reads it. Plan 5, Task 17 fix round 1: Zero Laser holds its charge pose
+   * through the start and fires on the laser's first frame, 70, where its start's
+   * 1% charge box from 48 made the clip strike on the charge.
+   */
+  readonly clipStrike?: number;
   /**
    * The move plays `motionOf`'s motion: the same clip on the same clock, so the bake
    * gives it nothing of its own, and a longer move holds that motion's last frame

@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { FIGHTERS, FIGHTER_IDS } from "@/fighters";
 import type { MoveSlot } from "@/engine/types";
 import { CHARACTER_POSES, CHARACTER_RIGS, MOVE_FX_KEYS, PROJECTILE_PAINTER_KEYS, fxFor } from ".";
-import { charKey, clipFor, overrides, type PoseOverrides } from "./poses";
+import { POSE_FALLBACK, charKey, clipFor, overrides, type PoseOverrides } from "./poses";
 import { getCharacterRig } from ".";
 import { POSE_LIBRARY, type PoseName } from "../poses/library";
 import { poseNameFor, samplePoseForFighter } from "../poses";
@@ -76,8 +76,18 @@ describe("a fighter's own clip wins", () => {
   it("falls through to the shared library where nothing is declared", () => {
     for (const id of FIGHTER_IDS) {
       for (const name of NAMES) {
-        if (overrides(id, name)) continue;
+        if (overrides(id, name) || POSE_FALLBACK[name] !== undefined) continue;
         expect(clipFor(id, name), `${id}.${name}`).toBe(POSE_LIBRARY[name]);
+      }
+    }
+  });
+
+  // Plan 5, Task 17 fix round 1: a Final Smash's scene is the fighter's own neutral special unless it authors one.
+  it("falls through to the fighter's own clip a fallback names, where it declares none of this one", () => {
+    for (const id of FIGHTER_IDS) {
+      for (const [name, fallback] of Object.entries(POSE_FALLBACK) as [PoseName, PoseName][]) {
+        if (overrides(id, name)) continue;
+        expect(clipFor(id, name), `${id}.${name}`).toBe(clipFor(id, fallback));
       }
     }
   });

@@ -11,17 +11,31 @@ import { fx } from "@/engine/fixed";
 import { FOOTSTOOL_GROUND_FRAMES } from "@/engine/footstool";
 import type { FighterState } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
+import { FINAL_LAB } from "@/game/goldenFinalLab";
+import { STAGES } from "@/stages";
 import { blendedPose, clipFrameFor, createPoseBlends } from "./blend";
-import { cameraTarget, createCamera, offscreenIndicators } from "./camera";
+import {
+  FIGHTER_UNITS,
+  SCENE_FIGHTER_UNITS,
+  SCENE_MARGIN_Y,
+  SCENE_MAX_ZOOM,
+  VIEW_HEIGHT,
+  cameraTarget,
+  createCamera,
+  offscreenIndicators,
+  updateCamera,
+  visibleBounds,
+} from "./camera";
 import { getCharacterRig } from "./characterArt";
 import { clipFor } from "./chars/poses";
-import { createHudState } from "./hud";
-import { createMockContext } from "./mockContext";
+import { createHudState, drawHud, sceneHidesDamage } from "./hud";
+import { assignmentsTo, callsOf, createMockContext } from "./mockContext";
 import { samplePose, type PoseClip, type PoseSample } from "./poses/clip";
 import { poseNameFor, poseTimeFor } from "./poses/timing";
-import { render, type RenderState } from "./renderer";
+import { render, sceneDrawShift, type RenderState } from "./renderer";
 import { resolve, type BoneName, type Rig } from "./skeleton";
-import { STRONG_COUNTER_YELLOW, createVfx, stepVfx } from "./vfx";
+import { STRONG_COUNTER_YELLOW, createVfx, drawParticles, stepVfx } from "./vfx";
+import { WORLD3D_PARTICLES } from "./renderer";
 import { makeDef, makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
 
 const stage = makeStage();
@@ -36,6 +50,18 @@ describe("a swallowed fighter", () => {
     const ctx = createMockContext() as unknown as CanvasRenderingContext2D;
     const { hidden } = render(ctx, renderState(state), null, createCamera(stage), 0);
     expect(hidden).toEqual([false, true]);
+  });
+
+  it("takes its port tag with it (the overlay draws nothing of it)", () => {
+    // "P2" is written twice for a fighter on screen: its tag, and its damage panel's label.
+    const written = (action: FighterState["action"], text: string) => {
+      const ctx = createMockContext();
+      const state = makeState({ fighters: [makeFighter({ port: 0, action: "inhaleHold" }), makeFighter({ port: 1, action })] });
+      render(ctx as unknown as CanvasRenderingContext2D, renderState(state), null, createCamera(stage), 0);
+      return callsOf(ctx, "fillText").filter((c) => c.args[0] === text).length;
+    };
+    expect(written("swallowed", "P2")).toBe(written("stand", "P2") - 1);
+    expect(written("swallowed", "P1")).toBe(written("stand", "P1"));
   });
 
   it("gets no magnifying glass: Kirby's shows where it is", () => {
@@ -60,6 +86,60 @@ describe("a Final Smash's scene", () => {
     expect(playing.x).toBeLessThan(0);
   });
 
+  /** The scene's 1v1 as the golden Final Smash lab stages it: Donkey Kong at −30, Mario trapped at −12 where he was caught. */
+  function finalLab() {
+    const fd = STAGES.find((s) => s.id === "finalDestination")!;
+    const state = makeState({ stageId: "finalDestination", fighters: [makeFighter({ port: 0, defId: "donkeyKong" }), makeFighter({ port: 1 })] });
+    FINAL_LAB.setup!(state);
+    Object.assign(state.fighters[0], { action: "special", move: "finalAttack" });
+    Object.assign(state.fighters[1], { action: "finalTrapped" });
+    state.fighters[1].combat.trappedBy = 0;
+    return { fd, state };
+  }
+
+  /** Every framed fighter, feet to `FIGHTER_UNITS` above them, inside the view a target gives. */
+  function framed(fd: ReturnType<typeof finalLab>["fd"], target: ReturnType<typeof cameraTarget>, fighters: readonly FighterState[]) {
+    const v = visibleBounds({ ...createCamera(fd), x: target.x, y: target.y, zoom: target.zoom });
+    return fighters.every((f) => {
+      const x = f.x / 4096;
+      const y = f.y / 4096;
+      return x >= v.left && x <= v.right && y >= v.bottom && y + FIGHTER_UNITS <= v.top;
+    });
+  }
+
+  it("closes in on a one-on-one: at least 1.4 times the zoom outside it, both fighters in the frame (ruling R-T17c)", () => {
+    const { fd, state } = finalLab();
+    const scene = cameraTarget({ ...state, cinematic: 0 }, fd);
+    const plain = cameraTarget({ ...state, cinematic: -1 }, fd);
+    expect(scene.zoom).toBeGreaterThanOrEqual(plain.zoom * 1.4);
+    // The lab's pair, 18 apart, is framed by its height, not its width: the
+    // close-up's tight side margins leave room across.
+    expect(scene.zoom).toBeCloseTo(VIEW_HEIGHT / (SCENE_FIGHTER_UNITS + 2 * SCENE_MARGIN_Y), 9);
+    expect(scene.zoom).toBeLessThanOrEqual(SCENE_MAX_ZOOM);
+    expect(framed(fd, scene, state.fighters)).toBe(true);
+    // Centred on the pair, not on the fighter using it.
+    expect(scene.x).toBeCloseTo((-30 + -12) / 2, 1);
+  });
+
+  it("keeps a trapped fighter caught far off in the frame, and its own glass", () => {
+    const { fd, state } = finalLab();
+    Object.assign(state.fighters[1], { x: fx(40) });
+    const scene = cameraTarget({ ...state, cinematic: 0 }, fd);
+    expect(framed(fd, scene, state.fighters)).toBe(true);
+    // A camera still on Donkey Kong alone leaves Mario off screen: the glass is his.
+    const cam = { ...createCamera(fd), x: -30, y: 6, zoom: SCENE_MAX_ZOOM };
+    expect(offscreenIndicators(cam, { ...state, cinematic: 0 }, fd).map((i) => i.port)).toEqual([1]);
+  });
+
+  it("gets there quickly: within a tenth of the close-up's zoom in 30 frames (presentation choice)", () => {
+    const { fd, state } = finalLab();
+    const cam = createCamera(fd);
+    for (let i = 0; i < 120; i++) updateCamera(cam, { ...state, cinematic: -1 }, fd, null);
+    const target = cameraTarget({ ...state, cinematic: 0 }, fd).zoom;
+    for (let i = 0; i < 30; i++) updateCamera(cam, { ...state, cinematic: 0 }, fd, null);
+    expect(cam.zoom).toBeGreaterThan(target * 0.9);
+  });
+
   it("gives the bystanders it stands still no magnifying glass, and keeps theirs once it is over", () => {
     const fighters = [
       makeFighter({ port: 0, x: fx(-20), action: "special", move: "finalAttack" }),
@@ -76,6 +156,42 @@ describe("a Final Smash's scene", () => {
   });
 });
 
+describe("Team Star Fox's scene (ruling R-T17e)", () => {
+  // SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash), Trivia: "In
+  // Ultimate, seven Final Smashes remove the damage percentage, either due to the
+  // presence of text boxes or pre-rendered cutscenes, these being All-Out Attack,
+  // Triple Finish, Team Star Fox, Team Star Wolf, Gigaslash, House of Boom, and
+  // Supernova"; only the last four "for the entire duration of the move".
+  const def = (id: string) => FIGHTERS.find((d) => d.id === id)!;
+  function scene(userId: string, move: "finalSmash" | "finalAttack" | "finalEnd", cinematic: number) {
+    const state = makeState({ cinematic, fighters: [makeFighter({ port: 0, defId: userId, action: "special", move }), makeFighter({ port: 1, action: "finalTrapped" })] });
+    state.fighters[1].combat.trappedBy = 0;
+    return { state, defs: [def(userId), def("mario")] };
+  }
+  /** Damage panels drawn: each writes its port's tag under the percent. */
+  function panels({ state, defs }: ReturnType<typeof scene>): number {
+    const ctx = createMockContext();
+    drawHud(ctx as unknown as CanvasRenderingContext2D, { state, info: defs.map((d) => ({ def: d, label: d.name, isCpu: false })), hud: createHudState() });
+    return callsOf(ctx, "fillText").filter((c) => c.args[0] === "P1" || c.args[0] === "P2").length;
+  }
+
+  it("takes the damage percentages off while its scene plays, as data on the move", () => {
+    expect(sceneHidesDamage(scene("fox", "finalAttack", 0).state, scene("fox", "finalAttack", 0).defs)).toBe(true);
+    expect(panels(scene("fox", "finalAttack", 0))).toBe(0);
+    expect(panels(scene("fox", "finalEnd", 0))).toBe(0);
+    // Not before the scene (its start part), nor once it is over.
+    expect(panels(scene("fox", "finalSmash", -1))).toBe(2);
+    expect(panels(scene("fox", "finalAttack", -1))).toBe(2);
+  });
+
+  it("leaves them for the other four cinematic Final Smashes", () => {
+    for (const id of ["donkeyKong", "marth", "kirby", "pikachu"]) {
+      expect(sceneHidesDamage(scene(id, "finalAttack", 0).state, scene(id, "finalAttack", 0).defs), id).toBe(false);
+      expect(panels(scene(id, "finalAttack", 0)), id).toBe(2);
+    }
+  });
+});
+
 describe("reflections and counters", () => {
   it("flash where they happened", () => {
     const v = createVfx();
@@ -84,6 +200,44 @@ describe("reflections and counters", () => {
     expect(reflected).toBeGreaterThan(0);
     stepVfx(v, makeEvents({ counters: [{ port: 1, x: fx(-10), y: fx(8), damage: fx(5) }] }), makeState());
     expect(v.particles.length).toBeGreaterThan(reflected);
+  });
+
+  it("lights a strong catch's user up brightly: an additive yellow glow on the overlay, full strength at its heart (ruling R-T17f)", () => {
+    const flash = (damage: number) => {
+      const v = createVfx();
+      const state = makeState({ fighters: [makeFighter({ port: 0, x: fx(-30) }), makeFighter({ port: 1, x: fx(40) })] });
+      stepVfx(v, makeEvents({ counters: [{ port: 1, x: fx(34), y: fx(8), damage }] }), state);
+      const ctx = createMockContext();
+      drawParticles(ctx as unknown as CanvasRenderingContext2D, v, createCamera(stage), WORLD3D_PARTICLES);
+      return ctx;
+    };
+    const strong = flash(STRONG_COUNTER_DAMAGE);
+    expect(assignmentsTo(strong, "globalCompositeOperation")).toContain("lighter");
+    const stops = callsOf(strong, "addColorStop").map((c) => c.args as [number, string]);
+    // Its heart: the flash's yellow, nearly opaque, a frame after the catch.
+    const heart = stops.find(([offset, colour]) => offset === 0 && colour.startsWith("rgba(255, 225, 74, "));
+    expect(heart).toBeDefined();
+    expect(Number(heart![1].slice(heart![1].lastIndexOf(",") + 1, -1))).toBeGreaterThan(0.9);
+    // A weak catch has none of it.
+    expect(assignmentsTo(flash(STRONG_COUNTER_DAMAGE - 1), "globalCompositeOperation")).not.toContain("lighter");
+  });
+
+  it("start where they happened: a reflection's clank and a counter's burst at the event's point", () => {
+    const at = (p: { x: number; y: number }, x: number, y: number) => Math.abs(p.x - x) < 1e-9 && Math.abs(p.y - y) < 1e-9;
+    const v = createVfx();
+    // Spawned, not yet aged: `ingestEvents` alone.
+    stepVfx(v, makeEvents({ reflects: [{ port: 0, x: fx(10), y: fx(6) }] }), makeState({ fighters: [makeFighter({ port: 0, x: fx(-30) })] }));
+    const clank = v.particles.find((p) => p.kind === "clank")!;
+    expect(at(clank, 10, 6)).toBe(true);
+    const w = createVfx();
+    stepVfx(w, makeEvents({ counters: [{ port: 1, x: fx(-10), y: fx(8), damage: fx(5) }] }), makeState({ fighters: [makeFighter({ port: 0 }), makeFighter({ port: 1, x: fx(30) })] }));
+    // The burst's ring stays where it was spawned; its sparks fly out from there.
+    const ring = w.particles.find((p) => p.kind === "ring")!;
+    expect(at(ring, -10, 8)).toBe(true);
+    const sparks = w.particles.filter((p) => p.kind === "spark");
+    expect(sparks.length).toBeGreaterThan(0);
+    // One `updateVfx` has run since: x += vx, y += vy, then vy += gravity and both × drag.
+    for (const p of sparks) expect(Math.hypot(p.x - p.vx / p.drag + 10, p.y - (p.vy / p.drag - p.gravity) - 8)).toBeLessThan(1e-6);
   });
 
   it("a strong catch, 13% or more, lights its user up yellow; a weaker one does not (SmashWiki \"Counterattack\", \"Marth (SSBU)/Down special\")", () => {
@@ -97,9 +251,9 @@ describe("reflections and counters", () => {
     const flash = yellow(STRONG_COUNTER_DAMAGE);
     expect(flash.length).toBeGreaterThan(0);
     // Round the user (port 1, at 40), not at the bubble where it caught.
-    const ring = flash.find((p) => p.kind === "ring")!;
-    expect(ring.x).toBeCloseTo(40, 0);
-    expect(ring.y).toBeGreaterThan(4);
+    const glow = flash.find((p) => p.kind === "glow")!;
+    expect(glow.x).toBeCloseTo(40, 0);
+    expect(glow.y).toBeGreaterThan(4);
   });
 });
 
@@ -125,7 +279,7 @@ describe("jumps that push off something (Task 17)", () => {
   it("a footstool stamps a ring and a puff under the jumper's feet", () => {
     const v = createVfx();
     stepVfx(v, makeEvents({ jumps: [{ port: 0, x: fx(3), y: fx(12), from: "head" }] }), facing(0, 1, { jumpsUsed: 1 }));
-    expect(v.particles.some((p) => p.kind === "ring" && Math.abs(p.x - 3) < 0.01)).toBe(true);
+    expect(v.particles.some((p) => p.kind === "ring" && Math.abs(p.x - 3) < 0.01 && Math.abs(p.y - 12) < 0.01)).toBe(true);
     expect(v.particles.some((p) => p.kind === "dust")).toBe(true);
   });
 
@@ -142,6 +296,20 @@ describe("jumps that push off something (Task 17)", () => {
     const v = createVfx();
     stepVfx(v, makeEvents(), facing(0, 1));
     expect(midairRings(v)).toHaveLength(1);
+  });
+
+  it("suppresses the jumper's midair ring alone: another fighter's midair jump on the same frame still rings", () => {
+    const v = createVfx();
+    const state = makeState({
+      fighters: [
+        makeFighter({ port: 0, x: fx(-20), grounded: false, action: "jump", actionFrame: 0, jumpsUsed: 2 }),
+        makeFighter({ port: 1, x: fx(30), grounded: false, action: "jump", actionFrame: 0, jumpsUsed: 2 }),
+      ],
+    });
+    stepVfx(v, makeEvents({ jumps: [{ port: 0, x: fx(-20), y: 0, from: "wall" }] }), state);
+    const midair = v.particles.filter((p) => p.kind === "ring" && p.size === 2.4);
+    expect(midair).toHaveLength(1);
+    expect(midair[0].x).toBeCloseTo(30, 9);
   });
 });
 
@@ -253,5 +421,73 @@ describe("stood on (Task 17: the footstool's \"animation of the player bouncing 
     for (let frame = 100; frame <= 104; frame++) drawn(blends, makeFighter({ action: "stand", actionFrame: frame }), frame);
     const f = makeFighter({ action: "footstooled", actionFrame: 0 });
     expect(drawn(blends, f, 105)).toEqual(samplePose(clipFor("mario", "footstooled"), 0));
+  });
+});
+
+describe("Jungle Rush's barrage (ruling R-T17d)", () => {
+  it("plays clips of Donkey Kong's own that punch in place; every other scene keeps the neutral special's", () => {
+    for (const d of FIGHTERS) {
+      for (const part of ["finalAttack", "finalEnd"] as const) {
+        const clip = clipFor(d.id, part);
+        if (d.id === "donkeyKong") expect(clip, `${d.id} ${part}`).not.toBe(clipFor(d.id, "neutralB"));
+        else expect(clip, `${d.id} ${part}`).toBe(clipFor(d.id, "neutralB"));
+      }
+    }
+    expect(poseNameFor({ action: "special", move: "finalAttack", jumpsUsed: 0, fastFalling: false })).toBe("finalAttack");
+    expect(poseNameFor({ action: "special", move: "finalEnd", jumpsUsed: 0, fastFalling: false })).toBe("finalEnd");
+    // In place: no lunge forward, and the spine never dives (the Giant Punch's
+    // contact pitches it 62 degrees and carries his chest and arm through Mario).
+    for (const part of ["finalAttack", "finalEnd"] as const) {
+      for (const k of clipFor("donkeyKong", part).keys) {
+        expect(k.offsetX ?? 0, part).toBeLessThanOrEqual(0.2);
+        expect(((k.pose.hip ?? 0) + (k.pose.torso ?? 0)) * (180 / Math.PI), part).toBeLessThanOrEqual(36);
+      }
+    }
+  });
+
+  it("draws Donkey Kong back from a fighter trapped closer than his 12 units, and only then (presentation; the sim keeps both where they are)", () => {
+    const dk = FIGHTERS.find((d) => d.id === "donkeyKong")!;
+    const defs = [dk, FIGHTERS.find((d) => d.id === "mario")!];
+    const shift = (gap: number, facing: 1 | -1, cinematic = 0, move: "finalAttack" | "finalEnd" | "finalSmash" = "finalAttack") => {
+      const state = makeState({
+        cinematic,
+        fighters: [
+          makeFighter({ port: 0, defId: "donkeyKong", x: fx(-30), facing, action: "special", move }),
+          makeFighter({ port: 1, x: fx(-30 + facing * gap), facing: -facing as 1 | -1, action: "finalTrapped" }),
+        ],
+      });
+      state.fighters[1].combat.trappedBy = 0;
+      return sceneDrawShift(state, defs);
+    };
+    // 9 ahead: three units back, the way he faces away; the trapped one stays put.
+    expect(shift(9, 1)).toEqual([-3, 0]);
+    expect(shift(9, -1)).toEqual([3, 0]);
+    expect(shift(8, 1, 0, "finalEnd")).toEqual([-4, 0]);
+    // At 12 and beyond, or outside the scene, or in a part that names no gap: nowhere.
+    expect(shift(12, 1)).toEqual([0, 0]);
+    expect(shift(18, 1)).toEqual([0, 0]);
+    expect(shift(9, 1, -1)).toEqual([0, 0]);
+    expect(shift(9, 1, 0, "finalSmash")).toEqual([0, 0]);
+  });
+
+  it("draws the overlay there too: Donkey Kong's tag moves back with him", () => {
+    const defs = [FIGHTERS.find((d) => d.id === "donkeyKong")!, FIGHTERS.find((d) => d.id === "mario")!];
+    const tagX = (cinematic: number) => {
+      const state = makeState({
+        cinematic,
+        fighters: [
+          makeFighter({ port: 0, defId: "donkeyKong", x: fx(-30), facing: 1, action: "special", move: "finalAttack", actionFrame: 10 }),
+          makeFighter({ port: 1, x: fx(-21), facing: -1, action: "finalTrapped", actionFrame: 10 }),
+        ],
+      });
+      state.fighters[1].combat.trappedBy = 0;
+      const ctx = createMockContext();
+      const cam = createCamera(stage);
+      render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), fighters: defs }, null, cam, 0);
+      return { x: callsOf(ctx, "fillText").find((c) => c.args[0] === "P1")!.args[1] as number, zoom: cam.zoom };
+    };
+    const scene = tagX(0);
+    const plain = tagX(-1);
+    expect(scene.x - plain.x).toBeCloseTo(-3 * scene.zoom, 6);
   });
 });

@@ -11,7 +11,7 @@ import type { ActionState, FighterDef } from "@/engine/types";
 import { FIGHTERS, getFighter } from "@/fighters";
 import { airDodgeClipTime } from "@/render/poses/airDodge";
 import { rollClipTime, rollTurnTime, spotDodgeClipTime } from "@/render/poses/groundDodgeTime";
-import { actionDurationFor, jumpTimingFor, poseSpinFor, samplePoseForFighter, type PosedFighter } from "@/render/poses/timing";
+import { actionDurationFor, jumpTimingFor, moveTimingFor, poseSpinFor, samplePoseForFighter, type PosedFighter } from "@/render/poses/timing";
 import { SKELETONS } from "../skeletons";
 import {
   attackClipTime,
@@ -305,6 +305,18 @@ describe("the move motions the bake plays (Plan 5, Task 13d)", () => {
     expect(at(44)).toEqual({ motion, frame: 45 });
     expect(at(58)).toEqual({ motion, frame: 59 });
     for (let k = 46; k <= 59; k++) expect(sampler.time(k)).toBeGreaterThan(sampler.time(k - 1));
+  });
+
+  it("bake Zero Laser's start on its charge pose until the laser fires on 70, not striking on the charge's 48 (Plan 5, Task 17 fix round 1)", () => {
+    // Task 16 fix round 1 gave Zero Laser its 69-frame start, whose 1% charge box
+    // from 48 is the move's first: the clip's strike (Samus's firing recoil) landed
+    // on the charge. `MoveDef.clipStrike` puts it on the laser.
+    const samus = fighterOf("samus");
+    const sampler = moveSamplers(samus).get(gameScriptFor(samus, "finalSmash")!.motion)!;
+    const strike = sampler.clip.strike!;
+    for (let k = 1; k <= 69; k++) expect(sampler.time(k), `frame ${k}`).toBeLessThan(strike);
+    expect(sampler.time(70)).toBeCloseTo(strike, 12);
+    expect(moveTimingFor(samus, "finalSmash")?.firstActive).toBe(69);
   });
 
   it("refuses a move that plays the motion of a move it does not have", () => {

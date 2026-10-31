@@ -67,7 +67,10 @@ export function counterBubble(f: FighterState, c: CounterDef): Capsule {
  * (https://www.ssbwiki.com/Counterattack): "In Super Smash Bros. Ultimate, an
  * additional visual effect occurs if a strong enough attack is countered, with
  * the user emitting a large, bright yellow flash"; UNVERIFIED that "strong
- * enough" is the same 13% (the page names no number).
+ * enough" is the same 13% (the page names no number). UNVERIFIED too, the reading
+ * of "deals": what is compared is the caught box's base damage × its charge, before
+ * staleness and before the one-on-one ×1.2, the value the counter multiplies (so
+ * a 12% move that would deal 14.4% in a one-on-one does not count).
  */
 export const STRONG_COUNTER_DAMAGE = fx(13);
 

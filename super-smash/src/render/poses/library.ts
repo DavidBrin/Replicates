@@ -104,6 +104,10 @@ export type PoseName =
   | "downB"
   // Plan 5, Task 5: the strike a counter returns (Marth's Counter).
   | "counterAttack"
+  // Plan 5, Task 17 fix round 1: a Final Smash's scene and its finishing blow
+  // (its `finalAttack` and `finalEnd` parts).
+  | "finalAttack"
+  | "finalEnd"
   | "fthrow"
   | "bthrow"
   | "uthrow"
@@ -181,4 +185,15 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
    * forward cut on any rig.
    */
   counterAttack: attacks.ftilt,
+
+  /**
+   * A Final Smash's scene, its `finalAttack` part (Plan 5, Task 17 fix round 1,
+   * ruling R-T17d). It borrows the neutral special's clip, as the Final Smash's
+   * start does (`SLOT_POSE`), and a fighter that authors no scene of its own
+   * plays its *own* neutral special's (`clipFor`'s `POSE_FALLBACK`), so this
+   * default is only the shared neutral special's, for a fighter with neither.
+   */
+  finalAttack: attacks.neutralB,
+  /** The finishing blow, its `finalEnd` part: likewise. */
+  finalEnd: attacks.neutralB,
 };
