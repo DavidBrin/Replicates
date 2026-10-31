@@ -1023,46 +1023,71 @@ const legacy: FighterDef = {
 
     // Plan 5, Task 15 — Volt Tackle. Sources: rubendal Data Viewer 13.0.1
     // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Pikachu/data.json),
-    // `game_final`, `game_finalattack`, `game_final2` and their motions'
-    // CancelFrames; SmashWiki "Volt Tackle" (https://www.ssbwiki.com/Volt_Tackle):
+    // `game_final`, `game_finaldash`, `game_finalattack`, `game_final2` and their
+    // motions' CancelFrames; SmashWiki "Volt Tackle" (https://www.ssbwiki.com/Volt_Tackle):
     // "If the tackle connects, Pikachu dashes around the stage to deal more damage
-    // and ends with an electric blast"; SmashWiki "Pikachu (SSBU)"
-    // (https://www.ssbwiki.com/Pikachu_(SSBU)): "0.3% (6 hits during startup), 1%
-    // (initial hit), 1.5% (loop), 20% (launch)"; SmashWiki "Final Smash"
+    // and ends with an electric blast", "the tackle ignores edges"; SmashWiki "Pikachu
+    // (SSBU)" (https://www.ssbwiki.com/Pikachu_(SSBU)): "0.3% (6 hits during startup),
+    // 1% (initial hit), 1.5% (loop), 20% (launch)", "Surrounds itself with electricity
+    // before dashing forwards"; SmashWiki "Final Smash"
     // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
-    // intangible".
-    // - The tackle, `game_final`: 0.3%, KBG 70, FKB 20, radius 5.5, two capsules on
-    //   `top` from 5 ahead to 5 behind, at 0 up (angle 70) and 10 up (angle 40),
-    //   hitlag ×0.2, ATTACK_SETOFF_KIND_OFF, ATTACK_LR_CHECK_POS, electric, from
-    //   frame 10 to 46: it traps, and the dashes follow at once (`nextAt` 10).
+    // intangible". Task 15 fix round 1, ruling R-T15h: the startup is in place, its
+    // sparks are ordinary hits, and the 1% initial hit traps.
+    // - The startup, `game_final` 10-46: 0.3%, KBG 70, FKB 20, radius 5.5, two
+    //   capsules on `top` from 5 ahead to 5 behind, at 0 up (angle 70) and 10 up
+    //   (angle 40), hitlag ×0.2, ATTACK_SETOFF_KIND_OFF, ATTACK_LR_CHECK_POS,
+    //   electric, `Rehit=6`: ordinary hits, not traps (`trap: false`, ruling R-T15j),
+    //   six of them, on 10, 16, 22, 28, 34 and 40. Pikachu stands still through it.
+    // - The initial hit, `game_final` 47-49: 1%, KBG 100, radius 5.5, the same two
+    //   capsules, at angle 50 with FKB 75 and at 30 with FKB 30, hitlag ×0.2, OFF,
+    //   electric: it traps, and the dashes follow at once (`nextAt` 47).
+    // - The tackle, `game_finaldash` from 50: 1%, angle 90, KBG 45, FKB 125, BKB 70,
+    //   radius 13, 3 up on `top`, hitlag ×0.2, OFF, POS, electric: the initial hit too,
+    //   where the dash meets somebody, and a trap.
     // - The dashes, `game_finalattack`: 1.5%, KBG 90, FKB 100, radius 13, hitlag
     //   ×0.2, OFF, electric. Their angle is 366; here 367 (ruling P5-R18,
     //   UNVERIFIED: the scene never reads it, and 366 is refused at load).
     // - The blast, `game_final2`: 20%, angle 70, KBG 82, BKB 70, radius 32, hitlag
-    //   ×0.7, OFF, POS, electric, on its frame 10 (with the final-finish cut-in);
-    //   final2's CancelFrame 80.
-    // UNVERIFIED: the tackle's speed (4.5 a frame on frames 10-46) and the whiff's
-    // length (80): SSBU moves Pikachu by status, unpublished. Alternative: the whiff
-    // ends in final_dash_end, CancelFrame 78 (game frame 55 at its FT_MOTION_RATE 0.7).
+    //   ×0.7, OFF, POS, electric, `set_force_reaction`, on its frame 10 (with the
+    //   final-finish cut-in); final2's CancelFrame 80. In the air, `game_finalair2`,
+    //   the same boxes: final_air2's CancelFrame 37, 36 frames (`aerialTotalFrames`,
+    //   read where Pikachu is when it could end; UNVERIFIED: the game picks final_air2
+    //   where the end begins).
+    // - The whiff: the tackle to 83, then final_dash_end, whose CancelFrame 78 comes on
+    //   game frame 55 at its FT_MOTION_RATE 0.7 (`gameFrameOfMotion`): 83 + 55 = 138.
+    //   It ignores edges, and takes no ledge (Task 14 fix round 1, ruling R-T14j).
+    // UNVERIFIED: the tackle's speed, 4.5 a frame on frames 47-83: SSBU moves Pikachu
+    // by status, unpublished.
+    // UNVERIFIED: the six sparks' frames (the page counts six; `Rehit=6` from 10 allows
+    // a seventh on 46), and that the 47-49 box and the dash's both trap: the scripts
+    // mark neither as the catch.
     // UNVERIFIED: the loop's eight hits, eight frames apart, and its length (70): the
     // game's are status-driven and unpublished.
-    // UNVERIFIED: which hit traps. Here the tackle's first 0.3% (so none of the
-    // startup's other five); alternative: the page's "1% (initial hit)" (`game_final`'s
-    // 47-49 box, or `game_finaldash`'s), one more hit and 1% more.
     // UNVERIFIED-simplified: `game_final2`'s 0% push on its frames 1-2 is not
     // modelled (an end box launches the trapped, so it would end the scene before
-    // the blast); each scene hit is the first frame of its window (`finalKit.ts`); the
-    // scene boxes' offsets are stand-ins: they reach the trapped wherever they are.
+    // the blast). The blast's box is a world box in its script ("anyone within range
+    // of the final blast will be impacted", Volt Tackle), but here it reaches only the
+    // trapped, as every end box does (Task 14's reading); and it goes off where the
+    // trap landed, not "at the center of the stage" (Volt Tackle). Each scene hit, and
+    // each spark, is the first frame of its window (`finalKit.ts`); the scene boxes'
+    // offsets are stand-ins: they reach the trapped wherever they are.
     finalSmash: {
       slot: "finalSmash",
       name: "Volt Tackle",
-      totalFrames: 80,
-      intangible: [1, 80],
-      momentum: [{ frame: 10, x: fx(4.5), y: fx(0), hold: 36 }],
-      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 10 },
+      totalFrames: 138,
+      intangible: [1, 138],
+      momentum: [{ frame: 47, x: fx(4.5), y: fx(0), hold: 36 }],
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 47 },
       hitboxes: [
-        finalBox(0, 10, 46, { damage: 0.3, angle: 70, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
-        finalBox(1, 10, 46, { damage: 0.3, angle: 40, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
+        // The startup's six sparks, two capsules each.
+        ...[10, 16, 22, 28, 34, 40].flatMap((f, i) => [
+          finalBox(2 * i, f, f, { damage: 0.3, angle: 70, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", trap: false }),
+          finalBox(2 * i + 1, f, f, { damage: 0.3, angle: 40, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", trap: false }),
+        ]),
+        // The initial hit, then the tackle.
+        finalBox(12, 47, 49, { damage: 1, angle: 50, kbg: 100, fkb: 75, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, effect: "electric" }),
+        finalBox(13, 47, 49, { damage: 1, angle: 30, kbg: 100, fkb: 30, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, effect: "electric" }),
+        finalBox(14, 50, 83, { damage: 1, angle: 90, kbg: 45, fkb: 125, bkb: 70, radius: 13, x: 0, y: 3, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
       ],
     },
     finalAttack: {
@@ -1077,9 +1102,10 @@ const legacy: FighterDef = {
       slot: "finalEnd",
       name: "Volt Tackle (blast)",
       totalFrames: 79,
+      aerialTotalFrames: 36,
       intangible: [1, 79],
       final: { phase: "end" },
-      hitboxes: [finalBox(0, 10, 10, { damage: 20, angle: 70, kbg: 82, bkb: 70, radius: 32, hitlag: 0.7, transcendent: true, lr: "position", effect: "electric" })],
+      hitboxes: [finalBox(0, 10, 10, { damage: 20, angle: 70, kbg: 82, bkb: 70, radius: 32, hitlag: 0.7, transcendent: true, lr: "position", effect: "electric", forceReaction: true })],
     },
   },
 

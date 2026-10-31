@@ -40,6 +40,10 @@ function canonical(hb: Hitbox) {
     windbox: hb.windbox === true,
     // A capsule's far end (ruling P5-R19), an axis it leaves out being the near end's.
     farEnd: hb.x2 === undefined && hb.y2 === undefined ? null : { x: hb.x2 ?? hb.x, y: hb.y2 ?? hb.y },
+    // A Final Smash start's ordinary hit (Plan 5, Task 15 fix round 1, ruling R-T15j),
+    // and a force reaction.
+    trap: hb.trap !== false,
+    forceReaction: hb.forceReaction === true,
   };
 }
 
@@ -213,6 +217,13 @@ describe("a legacy hitbox with a far end", () => {
     const script = legacyGameScript(move);
     const [got] = scriptHitboxes(runScript(script, 4), "t", script.motion, 4, LEGACY_BONE_TABLE);
     expect(got).toMatchObject({ x: 2 * ONE, y: 4 * ONE, x2: 9 * ONE, y2: 6 * ONE });
+  });
+
+  it("carries a Final Smash start's ordinary hit (`trap: false`) through the compile, and nothing for a trap", () => {
+    const move: MoveDef = { slot: "finalSmash", name: "Final", totalFrames: 10, hitboxes: [{ ...sphere, trap: false }, { ...sphere, id: 4 }] };
+    const script = legacyGameScript(move);
+    const got = scriptHitboxes(runScript(script, 4), "t", script.motion, 4, LEGACY_BONE_TABLE);
+    expect(got.map((h) => [h.id, h.trap])).toEqual([[3, false], [4, undefined]]);
   });
 
   it("compiles a grab box's far end too, as a CATCH's", () => {

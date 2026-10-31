@@ -1064,7 +1064,10 @@ const legacy: FighterDef = {
     // - The end, `game_finalend`: an ATTACK_ABS of 10%, angle 55, KBG 144, BKB 70,
     //   hitlag ×0, ATTACK_LR_CHECK_POS, set before its first frame; final_end's
     //   CancelFrame 66 comes on game frame 57 through its FT_MOTION_RATE 0.85 from
-    //   frame 1 (`gameFrameOfMotion`).
+    //   frame 1 (`gameFrameOfMotion`). In the air it is `game_finalairend`, the same
+    //   ATTACK_ABS with no rate: final_air_end's CancelFrame 47, 46 frames
+    //   (`aerialTotalFrames`, read where Fox is when it could end; Task 15 fix round 1;
+    //   UNVERIFIED: the game picks final_air_end where the end begins).
     // UNVERIFIED: that the scene ends with its hit, on 240 (final_visual_scene
     // publishes no CancelFrame), and that the end's ATTACK_ABS lands on its frame 1
     // (its status lands it; the script only sets it). An ATTACK_ABS has no box: the
@@ -1092,6 +1095,7 @@ const legacy: FighterDef = {
       slot: "finalEnd",
       name: "Team Star Fox (end)",
       totalFrames: 56,
+      aerialTotalFrames: 46,
       intangible: [1, 56],
       final: { phase: "end" },
       hitboxes: [finalBox(0, 1, 1, { damage: 10, angle: 55, kbg: 144, bkb: 70, hitlag: 0, lr: "position" })],

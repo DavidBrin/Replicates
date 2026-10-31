@@ -17,7 +17,7 @@ import { SMASH_CHARGE_MAX, SMASH_FULL_CHARGE_HOLD } from "../constants";
 import { smashHoldFrame } from "../acmd/run";
 import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
-import { nextFinalPhase } from "../final";
+import { endDash, inDash, nextFinalPhase } from "../final";
 import { specialChargeMain } from "../specialCharge";
 import { stoneMain } from "../stone";
 import { upSpecialStick } from "../upSpecial";
@@ -96,6 +96,10 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     startMove(f, "attack", move.followUp);
     return;
   }
+  // A dash that a second special press stops (`MoveDef.dashEnd`; Plan 5, Task 15 fix
+  // round 1, ruling R-T15f): SmashWiki "Marth (SSBU)" (https://www.ssbwiki.com/Marth_(SSBU)),
+  // "Pressing the special button again will cause him to stop mid-dash".
+  if (f.action === "special" && move.dashEnd?.special === true && intent.specialPressed && inDash(f, move)) endDash(f, move);
   // A Final Smash part with a `nextAt` goes on to its next part from that frame once
   // it has trapped anybody (Plan 5, Task 15: `final.ts`); a whiff plays it all.
   if (move.final?.nextAt !== undefined && moveFrameOf(f.actionFrame) >= move.final.nextAt && nextFinalPhase(f, ctx, move.final.next) !== null) {

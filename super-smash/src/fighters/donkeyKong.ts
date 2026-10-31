@@ -1004,12 +1004,19 @@ const legacy: FighterDef = {
     //   timeline, and `game_finalend` opens it on its frame 7, so the barrage lasts
     //   132 frames.
     // - The uppercut, `game_finalend`: 14%, angle 70, KBG 96, BKB 90, hitlag ×1, OFF,
-    //   POS, on its frame 7 (radius 15 and 11 up, its box 3's); final_end's
-    //   CancelFrame 70.
+    //   POS, `set_force_reaction`, on its frame 7 (radius 15 and 11 up, its box 3's).
+    //   Its script runs FT_MOTION_RATE(FSM=0.8) from frame 30, so final_end's
+    //   CancelFrame 70 comes on game frame 62 (`gameFrameOfMotion`; Task 15 fix round
+    //   1, ruling R-T15i): 61 frames. In the air it is `game_finalairend`, the same
+    //   boxes, with no rate: final_air_end's CancelFrame 47, 46 frames
+    //   (`aerialTotalFrames`, read where Donkey Kong is when it could end; UNVERIFIED:
+    //   the game picks final_air_end where the end begins).
     // UNVERIFIED-simplified: each scene hit is the first frame of its window (the
-    // page's "6-7" is one hit; `finalKit.ts`). The barrage's knockback (FKB 40) and
-    // the uppercut's `set_force_reaction` are the scene's: a trapped fighter is held,
-    // and has no armour. `DisableHitlag=true` is not modelled, as for every box.
+    // page's "6-7" is one hit; `finalKit.ts`). The barrage's knockback (FKB 40) is
+    // the scene's: a trapped fighter is held. `DisableHitlag=true` is not modelled,
+    // as for every box. The uppercut's boxes are world boxes in its script (no
+    // `set_catch_only_all`), but here they reach only the trapped, as every end box
+    // does (Task 14's reading).
     // UNVERIFIED: the scene boxes' x (the stand-in 10): they reach the trapped
     // wherever they are.
     finalSmash: {
@@ -1034,10 +1041,11 @@ const legacy: FighterDef = {
     finalEnd: {
       slot: "finalEnd",
       name: "Jungle Rush (uppercut)",
-      totalFrames: 69,
-      intangible: [1, 69],
+      totalFrames: 61,
+      aerialTotalFrames: 46,
+      intangible: [1, 61],
       final: { phase: "end" },
-      hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position" })],
+      hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true })],
     },
   },
 

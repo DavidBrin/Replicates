@@ -184,6 +184,7 @@ function attackHitbox(
     ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
     ...(a.collisionAttr === "collision_attr_turn" ? { reverse: true } : {}),
     ...(a.forceReaction === true ? { forceReaction: true } : {}),
+    ...(a.trap === false ? { trap: false } : {}),
     ...(a.whileGrounded !== undefined ? { whileGrounded: a.whileGrounded } : {}),
     // Plan 5, Task 6: `Flinchless=true` is a windbox. SmashWiki "Hitbox"
     // (https://www.ssbwiki.com/Hitbox): it "prevents the hitbox from inflicting

@@ -582,26 +582,27 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
     expect(states[0].fighters[0].finalSmashReady).toBe(0);
   });
 
-  it("clanks with nothing at its end: a bystander's jab where the end's box hangs leaves the launch alone", () => {
-    // Since Task 15 the scene stands everybody still through the end until its launch,
-    // so a bystander can only meet the end's box after it: here a box live on the end's
-    // frames 3-8, 100 out, on the stage, where a bystander can stand.
-    const ctx: SimContext = { fighter: () => defWith({ ...MOVES, finalEnd: { ...END, hitboxes: [{ ...END.hitboxes[0], x: fx(100), endFrame: 8 }] } }), stage: () => STAGE };
+  it("clanks with nothing at its end: a bystander's jab meets the end's box, both out on one step, and neither is stopped", () => {
+    // The scene stands everybody still through the end until its launch (Task 15), and
+    // the launch freezes the user, whose boxes are not out while it is frozen
+    // (`gatherHitboxes`). So a bystander meets the end's box only after both: here a box
+    // live on the end's frames 3-20, 100 out, on the stage, where a bystander can stand
+    // (Task 15 fix round 1, the review's Important 6).
+    const ctx: SimContext = { fighter: () => defWith({ ...MOVES, finalEnd: { ...END, hitboxes: [{ ...END.hitboxes[0], x: fx(100), endFrame: 20 }] } }), stage: () => STAGE };
     const straight = run(ready(RULES, ctx), 100, USE, ctx).states;
-    // The first frame the launch has ended the scene, with the end's box still to come.
-    const free = straight.findIndex((st) => st.fighters[0].move === "finalEnd" && st.cinematic === -1);
-    expect(free).toBeGreaterThan(0);
-    // The bystander stands where its jab meets that box (the user's at -10, 100 out),
-    // and jabs on its first frame out of the scene.
+    // The first step the user, out of its launch's freeze, has the end's box out again.
+    const launched = straight.findIndex((st) => st.fighters[0].move === "finalEnd" && st.fighters[1].action !== "finalTrapped");
+    const both = straight.findIndex((st, i) => i > launched && straight[i - 1].fighters[0].hitlag === 0 && st.fighters[0].move === "finalEnd" && st.fighters[0].actionFrame >= 2 && st.fighters[0].actionFrame <= 19);
+    expect(both).toBeGreaterThan(launched);
+    // The bystander stands where its jab meets that box (the user's at -10, 100 out), and
+    // jabs on the step before, so its box (the jab's frames 2-3) is out on that step.
     const s = ready(RULES, ctx);
     Object.assign(s.fighters[2], { x: fx(98), facing: -1 });
-    const { states, events } = run(s, 100, (i) => [i === 0 ? Btn.Special : 0, 0, i === free + 1 ? Btn.Attack : 0], ctx);
-    // A frame on which the jab's box (its frames 2-3) and the end's (3-8) are both out.
-    const met = states.findIndex((st) => {
-      const [user, , bystander] = st.fighters;
-      return user.move === "finalEnd" && user.actionFrame >= 2 && user.actionFrame <= 7 && bystander.move === "jab1" && bystander.actionFrame >= 1 && bystander.actionFrame <= 2;
-    });
-    expect(met).toBeGreaterThan(free);
+    const { states, events } = run(s, 100, (i) => [i === 0 ? Btn.Special : 0, 0, i === both - 1 ? Btn.Attack : 0], ctx);
+    const [user, , bystander] = states[both].fighters;
+    expect([user.move, user.hitlag, states[both - 1].fighters[0].hitlag]).toEqual(["finalEnd", 0, 0]);
+    expect([bystander.move, bystander.actionFrame, states[both - 1].fighters[2].hitlag]).toEqual(["jab1", 1, 0]);
+    expect(events[both].clanks).toEqual([]);
     expect(events.every((e) => e.clanks.length === 0)).toBe(true);
     expect(states.some((st) => st.fighters[2].action === "rebound")).toBe(false);
     const end = states[states.length - 1];
@@ -829,6 +830,78 @@ describe("the scene holds the match still, its user and the stage included (Task
     }
     expect(scene[0].fighters[2].vy).toBeLessThan(0);
     expect(events.filter((_, i) => paused[i]).flatMap((e) => e.hits).filter((h) => h.attacker !== 0)).toEqual([]);
+  });
+});
+
+/**
+ * A box of a trapping start that hits rather than traps (`Hitbox.trap` false; Task 15
+ * fix round 1, ruling R-T15j): Ultra Sword's 5% swing after its stun, Volt Tackle's
+ * startup sparks. It hits the world as any box does, unblockable and uncountered as
+ * every Final Smash box is (SmashWiki "Unblockable attack",
+ * https://www.ssbwiki.com/Unblockable_attack: an unblockable attack "cannot be
+ * defended against with a shield or a counterattack", and "in Ultimate, all Final
+ * Smashes are unblockable"); it reaches its user's trapped wherever they are, for
+ * damage only, as the scene's do; and like the scene's it keeps no hit record, so it
+ * is one frame long and leaves the start's trap free to catch whom it hit.
+ */
+describe("a start's ordinary hit (Task 15 fix round 1)", () => {
+  const STRIKE = box({ id: 1, startFrame: 3, endFrame: 3, damage: fx(4), angle: fx(45), baseKnockback: fx(60), knockbackGrowth: fx(100), trap: false });
+  const withStart = (hitboxes: Hitbox[]): SimContext => ({ fighter: () => defWith({ ...MOVES, finalSmash: { ...FINAL, hitboxes } }), stage: () => STAGE });
+
+  it("hits the world as an ordinary box: the victim reels, and is not trapped", () => {
+    const ctx = withStart([STRIKE]);
+    const { states } = run(ready(RULES, ctx), 40, USE, ctx);
+    expect(toFloat(states[2].fighters[1].damage)).toBeCloseTo(4 * 1.05, 2);
+    expect(states.some((st) => st.fighters[1].hitstun > 0)).toBe(true);
+    expect(states.every((st) => st.fighters[1].action !== "finalTrapped" && st.cinematic === -1)).toBe(true);
+  });
+
+  it("is unblockable: a shield does not stop it", () => {
+    const ctx = withStart([{ ...STRIKE, startFrame: 9, endFrame: 9 }]);
+    const { states, events } = run(ready(RULES, ctx), 20, (i) => [i === 0 ? Btn.Special : 0, Btn.Shield, 0], ctx);
+    expect(states[7].fighters[1].action).toBe("shield");
+    expect(toFloat(states[8].fighters[1].damage)).toBeCloseTo(4 * 1.05, 2);
+    expect(events.every((e) => e.shieldHits.length === 0)).toBe(true);
+  });
+
+  it("is not countered", () => {
+    const ctx = withStart([STRIKE]);
+    const { states, events } = run(ready(RULES, ctx), 20, (i) => [i === 0 ? Btn.Special : 0, i === 0 ? Btn.Down | Btn.Special : 0, 0], ctx);
+    expect(states[1].fighters[1].move).toBe("downB");
+    expect(events.every((e) => e.counters.length === 0)).toBe(true);
+    expect(toFloat(states[2].fighters[1].damage)).toBeCloseTo(4 * 1.05, 2);
+  });
+
+  it("reaches its user's trapped wherever they are, for damage only, and the world as any box does", () => {
+    // The trap on 5 catches the victim at 0; the hit on 12 is 90 out, on the bystander at 80.
+    const ctx = withStart([...FINAL.hitboxes, { ...STRIKE, startFrame: 12, endFrame: 12, x: fx(90) }]);
+    const { states } = run(ready(RULES, ctx), 20, USE, ctx);
+    expect(states[10].fighters[1].action).toBe("finalTrapped");
+    const at = states.findIndex((st) => st.fighters[2].damage > 0);
+    expect(toFloat(states[at].fighters[1].damage)).toBeCloseTo((5 + 4) * 1.05, 2);
+    expect(states[at].fighters[1].action).toBe("finalTrapped");
+    expect(toFloat(states[at].fighters[2].damage)).toBeCloseTo(4 * 1.05, 2);
+    expect(states.slice(at).some((st) => st.fighters[2].hitstun > 0)).toBe(true);
+  });
+
+  it("reads no hit record either: a fighter the trap met while invincible takes the ordinary hit after", () => {
+    // The trap on 5 lands on an invincible victim and is spent (`applyInvincibleHit`,
+    // which records the hit); the ordinary hit on 12, once that is over, still lands.
+    const ctx = withStart([...FINAL.hitboxes, { ...STRIKE, startFrame: 12, endFrame: 12 }]);
+    const s = ready(RULES, ctx);
+    s.fighters[1].invincible = 8;
+    const { states } = run(s, 20, USE, ctx);
+    expect(states.every((st) => st.fighters[1].action !== "finalTrapped")).toBe(true);
+    expect(toFloat(states[19].fighters[1].damage)).toBeCloseTo(4 * 1.05, 2);
+  });
+
+  it("keeps no hit record: the trap after it still catches the fighter it hit", () => {
+    // A hit that does not move its victim, on 3, then the trap on 5.
+    const ctx = withStart([{ ...STRIKE, baseKnockback: 0, knockbackGrowth: 0 }, ...FINAL.hitboxes]);
+    const { states } = run(ready(RULES, ctx), 12, USE, ctx);
+    expect(toFloat(states[2].fighters[1].damage)).toBeCloseTo(4 * 1.05, 2);
+    expect(states.some((st) => st.fighters[1].action === "finalTrapped")).toBe(true);
+    expect(toFloat(states[11].fighters[1].damage)).toBeCloseTo((4 + 5) * 1.05, 2);
   });
 });
 

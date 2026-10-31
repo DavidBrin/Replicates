@@ -859,8 +859,8 @@ describe("engine golden trace", () => {
   // soft platform in a tumble's fall with Down held. Every count is as it was.
   // Plan 5 Task 15 (five cinematic Final Smashes; the far-end compile, ruling
   // P5-R19; the scene through the end's launch) left the ten traces byte-identical:
-  // every golden match plays with the Smash Ball off, and no move they run gained a
-  // far end. It added the Final Smash lab (`goldenFinalLab.ts`, ruling P5-R14), which
+  // no golden match breaks a Smash Ball (the scripted match has it on, the others
+  // off), and no move they run gained a far end. It added the Final Smash lab (`goldenFinalLab.ts`, ruling P5-R14), which
   // stages Jungle Rush to reach `finalTrapped`: 33 hits (the trap, 31 punches, the
   // uppercut), no shield hit, no KO. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2 and
   // 33; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0
@@ -872,6 +872,12 @@ describe("engine golden trace", () => {
   // no golden fighter) and the Final Smash lab alone moves, from its 1-100 sample: its
   // user is intangible from the step the power is spent (ruling R-T14i), one step
   // sooner. Every count is as it was.
+  // Plan 5 Task 15's fix round 1 (Ultra Sword's ten blows, Volt Tackle's startup and
+  // trap, Critical Hit's edge stop, ruling R-T15e to R-T15h; a start's ordinary hit,
+  // R-T15j) left ten traces byte-identical: no other golden match uses a Final Smash.
+  // The Final Smash lab moves from its 301-400 sample alone: Jungle Rush's end is 61
+  // frames (its FT_MOTION_RATE 0.8 from 30, ruling R-T15i), so Donkey Kong stands on
+  // 304, not 312. Every count is as it was.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

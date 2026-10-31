@@ -162,6 +162,7 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     // move's angle as a meteor on its own (Plan 3, Task 16).
     meteor: hb.meteor === true,
     ...(hb.forceReaction === true ? { forceReaction: true } : {}),
+    ...(hb.trap === false ? { trap: false } : {}),
     ...(hb.whileGrounded !== undefined ? { whileGrounded: hb.whileGrounded } : {}),
   };
 }

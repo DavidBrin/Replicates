@@ -16,7 +16,8 @@
  * A scene box keeps no hit record (Task 14), so one live n frames would land n
  * times: each scene hit is authored one frame long, on the first frame of its
  * script's window (`barrage`, and a single `finalBox(id, f, f, …)`), and lands
- * once, as each published hit does.
+ * once, as each published hit does. So is a start's ordinary hit (`trap: false`,
+ * fix round 1, ruling R-T15j), which keeps no hit record either.
  */
 
 import { fx } from "@/engine/fixed";
@@ -45,6 +46,10 @@ export interface Hit {
   readonly lr?: Hitbox["lr"];
   /** The script's `collision_attr_*`, as the replica's effect; absent for normal. */
   readonly effect?: HitEffect;
+  /** `AttackModule::set_force_reaction`: through super armour (`Hitbox.forceReaction`; fix round 1). */
+  readonly forceReaction?: boolean;
+  /** False: in a trapping start, the box hits instead of trapping (`Hitbox.trap`; fix round 1, ruling R-T15j). */
+  readonly trap?: false;
 }
 
 /** One box, live on `from`–`to` (game frames). */
@@ -67,6 +72,8 @@ export function finalBox(id: number, from: number, to: number, h: Hit): Hitbox {
     ...(h.transcendent === true ? { transcendent: true } : {}),
     ...(h.lr !== undefined ? { lr: h.lr } : {}),
     ...(h.effect !== undefined ? { effect: h.effect } : {}),
+    ...(h.forceReaction === true ? { forceReaction: true } : {}),
+    ...(h.trap === false ? { trap: false } : {}),
   };
 }
 

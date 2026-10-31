@@ -103,6 +103,12 @@ export interface AttackParams {
    */
   readonly forceReaction?: boolean;
   /**
+   * REPLICA: false for a box of a trapping Final Smash part that hits instead
+   * (`Hitbox.trap`; Plan 5, Task 15 fix round 1, ruling R-T15j). The game decides a
+   * cutscene's catch in its statuses; only a legacy compilation sets it.
+   */
+  readonly trap?: boolean;
+  /**
    * REPLICA: the box is live only while its fighter is grounded (true) or
    * airborne (false) (`Hitbox.whileGrounded`; Plan 5, Task 13 fix round 1). SSBU
    * runs such boxes from separate statuses; only a legacy compilation sets it.

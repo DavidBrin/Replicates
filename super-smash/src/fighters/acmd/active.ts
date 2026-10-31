@@ -158,7 +158,8 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
  * P5-R7); and `helpless`, the fall that follows whatever ends the move. Nor the
  * up specials' `aim`, `turn`, `rise`, `launch`, `phases`, `fromAir` and
  * `descentHold` (Task 13b), which the engine reads off the move whatever script
- * runs it (`upSpecial.ts`); and a `specialCharge` that loops inside the script's
+ * runs it (`upSpecial.ts`), nor a dash's `dashEnd` (Task 15 fix round 1, read off
+ * the move's momentum window); and a `specialCharge` that loops inside the script's
  * lead, before its first command (`chargeInLead`: Link's Spin Attack). Task 14
  * adds a Final Smash's part (`final`): its trap, scene and launch are the engine's
  * reading of the move, and a cutscene script's boxes hang off `virtualfinalattack`

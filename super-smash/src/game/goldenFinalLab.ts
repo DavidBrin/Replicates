@@ -2,8 +2,9 @@
  * The golden trace's eleventh match: a cinematic Final Smash, staged (Plan 5,
  * Task 15; ruling P5-R14: new actions are visited, not exempted).
  *
- * Every golden match plays with the Smash Ball off, and no golden CPU breaks one,
- * so nothing else reaches `finalTrapped`. A lab's fighters are fixed for the
+ * No golden match breaks a Smash Ball (the scripted match plays with it on,
+ * `goldenScript.ts`; every other with it off), so nothing else reaches
+ * `finalTrapped`. A lab's fighters are fixed for the
  * match and every other lab's trace must stay as it is (rulings R-T8e, R-T11a):
  * granting standby in an existing lab's setup would change its digest from its
  * first sample (the digest reads `finalSmashReady`). So the Final Smash gets a
@@ -20,8 +21,9 @@
  *   with Mario in `finalTrapped` and the match otherwise still
  *   (`GameState.cinematic`), to 60.34%;
  * - the launch: the uppercut, the end's frame 7 (the end from frame 229, so 235),
- *   launches him at 77.98% into a tumble, 150 units up by frame 297; the lab ends
- *   with him falling.
+ *   launches him at 77.98% into a tumble, 150 units up by frame 297; Donkey Kong's
+ *   end is over on 304 (its 61 frames, fix round 1, ruling R-T15i), and the lab
+ *   ends with Mario falling.
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added (Plan 5, Task 15); the pins

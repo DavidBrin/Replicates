@@ -109,7 +109,7 @@ import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
 import { stopsAtEdge } from "./groundExit";
 import { dropsThroughSoft } from "./softDrop";
-import { FINAL_SMASH_READY, dropSmashBall, inCinematic, trapVictim, updateCinematic } from "./final";
+import { FINAL_SMASH_READY, dropSmashBall, endDash, inCinematic, inDash, trapVictim, updateCinematic } from "./final";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -572,10 +572,12 @@ interface Candidate {
   /**
    * A Final Smash's box (Plan 5, Task 14: `final.ts`): `trap` traps what it
    * touches; `hold` (the scene's) and `launch` (its end's) reach every fighter its
-   * user has trapped, wherever they are, for damage only or to launch. Null for
-   * every other box.
+   * user has trapped, wherever they are, for damage only or to launch; `strike`, a
+   * trapping part's box that hits instead (`Hitbox.trap` false; Task 15 fix round 1,
+   * ruling R-T15j), hits the world as an ordinary box and its user's trapped as a
+   * `hold` does. Null for every other box.
    */
-  readonly final: "trap" | "hold" | "launch" | null;
+  readonly final: "trap" | "hold" | "launch" | "strike" | null;
   suppressed: boolean;
 }
 
@@ -586,9 +588,9 @@ interface Candidate {
  * Smash boxes clank (SmashWiki "Priority" and "Final Smash" are silent); the
  * alternative is that every Final Smash box is transcendent.
  */
-function finalKind(final: FinalPhase | undefined): Candidate["final"] {
+function finalKind(final: FinalPhase | undefined, hb: Hitbox): Candidate["final"] {
   if (final === undefined) return null;
-  if (final.phase === "start") return final.trap === true ? "trap" : null;
+  if (final.phase === "start") return final.trap === true ? (hb.trap === false ? "strike" : "trap") : null;
   return final.phase === "attack" ? "hold" : "launch";
 }
 
@@ -886,6 +888,14 @@ export function step(
     // Which way is off the platform it stands on, for an edge stop that a push can override.
     const underfoot = f.grounded && f.platform >= 0 ? stage.platforms[f.platform] : undefined;
     const outward = underfoot === undefined ? 0 : f.x >= platformCentreX(underfoot, s.stageFrame) ? 1 : -1;
+    // A dash that ends at the edge on the ground stops there, and ends (`MoveDef.dashEnd`;
+    // Plan 5, Task 15 fix round 1, ruling R-T15f): SmashWiki "Critical Hit"
+    // (https://www.ssbwiki.com/Critical_Hit), "On the ground, the initial dash will follow
+    // the platform's contours, and the move will end without the user swinging if they
+    // reach the edge. In the air, the user will travel at high speed directly forward."
+    const dashing = f.action === "special" && f.move !== null ? defs[i].moves[f.move] : undefined;
+    const edgeEnds = dashing?.dashEnd?.edge === true && underfoot !== undefined && inDash(f, dashing);
+    const overEdge = edgeEnds && abs(f.x - platformCentreX(underfoot!, s.stageFrame)) > underfoot!.halfWidth;
     const outcome = resolveCollision(
       f,
       preIntegrate[i].x,
@@ -899,11 +909,12 @@ export function step(
       // Holding down in the air falls through a soft platform, in the statuses that
       // do (`SOFT_DROP`, `dropsThroughSoft`; ruling R-T13b-d).
       {
-        cliffStop: stopsAtEdge(f, outward),
+        cliffStop: stopsAtEdge(f, outward) || edgeEnds,
         ecb,
         ...(dropsThroughSoft(f, f.move === null ? undefined : defs[i].moves[f.move], intents[i]) ? { passThroughSoft: true } : {}),
       },
     );
+    if (overEdge) endDash(f, dashing!);
     // A wall that stopped the body is remembered for a wall jump, or a wall tech
     // jump (Plan 5, Task 10), before the tech below reads it.
     noteWallContact(f, outcome.wall);
@@ -1251,7 +1262,7 @@ function gatherHitboxes(
         destroyOnHit: false,
         onlyPort: run.state.catchOnly ? f.grabbing : null,
         damageMul: defs[i].moves[f.move]?.copyDamage ?? ONE,
-        final: finalKind(defs[i].moves[f.move]?.final),
+        final: finalKind(defs[i].moves[f.move]?.final, hb),
         suppressed: false,
       });
     }
@@ -1738,9 +1749,15 @@ function resolveHits(
       // (https://www.ssbwiki.com/Unblockable_attack), "Unblockable attacks can still
       // be avoided by intangibility". UNVERIFIED: that it catches nobody invincible
       // either (it lands as on any invincible fighter, `applyInvincibleHit`).
+      //
+      // A trapping part's ordinary hit (`strike`; Task 15 fix round 1, ruling R-T15j)
+      // reaches its user's trapped so too (Ultra Sword's 5% swing is the scene's first
+      // blow, SmashWiki "Ultra Sword": "After slicing the opponent nine times [...] a
+      // powerful tenth blow"), and the world below as any box does.
       const trapped = victim.action === "finalTrapped";
-      if (isSceneBox(c) ? !(trapped && victim.combat.trappedBy === c.attacker) : trapped) continue;
-      if (isSceneBox(c)) {
+      const ownTrapped = trapped && victim.combat.trappedBy === c.attacker;
+      if (isSceneBox(c) ? !ownTrapped : trapped && !(c.final === "strike" && ownTrapped)) continue;
+      if (isSceneBox(c) || ownTrapped) {
         const key = candidateKey(c);
         const incumbent = perSource.get(key);
         if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
@@ -2008,7 +2025,7 @@ function isInvincible(f: FighterState, def: FighterDef): boolean {
  * projectile's windbox (F.L.U.D.D.'s water) marks its own record, as before.
  */
 function unrecorded(c: Candidate): boolean {
-  return c.hitbox.windbox === true && c.projectile === null;
+  return (c.hitbox.windbox === true && c.projectile === null) || c.final === "strike";
 }
 
 /** Is `c` a box of a move that inhales (`MoveDef.inhale`, Plan 5, Task 9: Kirby's neutral special)? */
@@ -2050,6 +2067,10 @@ function recordSaysAlreadyHit(s: GameState, c: Candidate, port: number): boolean
 }
 
 function recordHit(c: Candidate, attacker: FighterState, port: number): void {
+  // A Final Smash start's ordinary hit keeps no record (Plan 5, Task 15 fix round 1,
+  // ruling R-T15j): a one-frame box that lands once, as a scene's does, which leaves
+  // the start's trap free to catch whom it hit (Volt Tackle's sparks, then its 1%).
+  if (c.final === "strike") return;
   if (c.projectile !== null) markProjectileHit(c.projectile, port);
   else markHit(attacker, port);
 }
@@ -2724,7 +2745,10 @@ function applyHit(
   // alternative: armour stops a trap as the Stone does, and the box lands on it as
   // an ordinary hit.
   const trapsStone = c.final === "trap" && stoneOf(victim, victimDef) !== null;
-  if ((c.final === "trap" && !trapsStone) || c.final === "hold") {
+  // A start's ordinary hit on its user's trapped is the scene's (Task 15 fix round 1,
+  // ruling R-T15j): damage and a freeze, and it stays trapped.
+  const onTrapped = c.final === "strike" && victim.action === "finalTrapped";
+  if ((c.final === "trap" && !trapsStone) || c.final === "hold" || onTrapped) {
     applyHeldHit(s, attacker, victim, c, contact, events);
     if (c.final === "trap") {
       clearPendingLaunch(victim);
@@ -2846,7 +2870,11 @@ function applyHit(
   // negation": hitting a shield enters the queue in Ultimate, perfect shield too).
   // The hit must reach the shield bubble too: a worn shield shrinks to 15% of
   // its radius and a hit that misses it lands on the body — a shield poke.
-  const onShield = hitReachesShield(victim, victimDef, c);
+  // A Final Smash's box takes no shield (Plan 5, Task 15 fix round 1: a start's
+  // ordinary hit; the trap and the scene never come here): SmashWiki "Unblockable
+  // attack" (https://www.ssbwiki.com/Unblockable_attack), "in Ultimate, all Final
+  // Smashes are unblockable", one that "cannot be defended against with a shield".
+  const onShield = c.final === null && hitReachesShield(victim, victimDef, c);
   enterStaleQueue(attacker, c.slot, onShield);
 
   /* ---- the shield path ---- */

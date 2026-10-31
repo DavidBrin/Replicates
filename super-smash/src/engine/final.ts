@@ -57,9 +57,10 @@
 import { kineticClear } from "./kinetic";
 import { SMASH_BALL_HEALTH } from "./constants";
 import { fx } from "./fixed";
+import { actionFrameOf, moveFrameOf } from "./hitbox";
 import { releaseGrab, startAction, startMove, updateDodgeIntangibility } from "./states";
 import type { StateContext } from "./states";
-import type { FighterDef, FighterState, GameState, MoveSlot } from "./types";
+import type { FighterDef, FighterState, GameState, MoveDef, MoveSlot } from "./types";
 
 /**
  * The ready flag the Smash Ball sets ("Standby Mode"). It lasts until it is used:
@@ -140,6 +141,29 @@ export function nextFinalPhase(f: FighterState, ctx: StateContext, next: MoveSlo
   kineticClear(f);
   startMove(f, "special", next);
   return next;
+}
+
+/**
+ * Is `f` in its move's dash, the first `momentum` window, which `MoveDef.dashEnd`
+ * may end early (Task 15 fix round 1, ruling R-T15f)?
+ */
+export function inDash(f: Pick<FighterState, "actionFrame">, move: MoveDef): boolean {
+  const w = move.dashEnd === undefined ? undefined : move.momentum?.[0];
+  if (w === undefined) return false;
+  const frame = moveFrameOf(f.actionFrame);
+  return frame >= w.frame && frame <= w.frame + (w.hold ?? 0);
+}
+
+/**
+ * End the dash `f` is in (`inDash`): it stops dead, and the move goes on from the
+ * frame after the window, this step, with whatever the window held (its boxes)
+ * passed. Critical Hit's whiff then plays its end, final_dash_end, "without the user
+ * swinging" (SmashWiki "Critical Hit", https://www.ssbwiki.com/Critical_Hit).
+ */
+export function endDash(f: FighterState, move: MoveDef): void {
+  const w = move.momentum![0];
+  kineticClear(f);
+  f.actionFrame = actionFrameOf(w.frame + (w.hold ?? 0) + 1);
 }
 
 /**

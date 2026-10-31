@@ -1182,25 +1182,37 @@ const legacy: FighterDef = {
     //   (`sword1`), hitlag ×0, ATTACK_SETOFF_KIND_OFF, ATTACK_LR_CHECK_POS: it traps,
     //   and the strike follows at once (`nextAt` 25, the dash's first frame here).
     // - The strike, `game_finalend`: 60%, angle 361, KBG 120, BKB 120, radius 18, 8
-    //   up and 16 ahead on `top`, hitlag ×1, OFF, cutting, on its frame 2;
-    //   final_end's CancelFrame 60.
+    //   up and 16 ahead on `top`, hitlag ×1, OFF, cutting, `set_force_reaction`, on
+    //   its frame 2; final_end's CancelFrame 60. In the air it is `game_finalairend`,
+    //   the same boxes: final_air_end's CancelFrame 50, 49 frames
+    //   (`aerialTotalFrames`, read where Marth is when it could end; UNVERIFIED: the
+    //   game picks final_air_end where the end begins).
+    // - The dash ends early (`dashEnd`; Task 15 fix round 1, ruling R-T15f): on the
+    //   ground at the platform's edge, where Marth stops, "the move will end without
+    //   the user swinging if they reach the edge" while "In the air, the user will
+    //   travel at high speed directly forward" (Critical Hit); and on a special press,
+    //   "Pressing the special button again will cause him to stop mid-dash" ("Marth
+    //   (SSBU)"). Either way the move goes on from frame 71: its whiff's end.
+    // - The whiff: the dash to 70, then final_dash_end, whose CancelFrame 85 comes on
+    //   game frame 48 at its FT_MOTION_RATE 0.6, then 0.5 from 50
+    //   (`gameFrameOfMotion`): 70 + 48 = 118 frames.
     // UNVERIFIED: the dash, 6 units a frame on frames 25-70 (from `game_finalstart`'s
-    // last command, on 25), and the whiff's length, final_dash_end's CancelFrame 85:
-    // SSBU moves Marth by his animation, which is unpublished, and loops the dash by
-    // status. Alternative: the dash's own length, then final_dash_end, whose
-    // FT_MOTION_RATE (0.6, then 0.5 from 50) brings its CancelFrame to game frame 48
-    // (`gameFrameOfMotion`).
+    // last command, on 25): SSBU moves Marth by his animation, which is unpublished,
+    // and loops the dash by status.
     // UNVERIFIED: the catch box's offset (8 ahead, 7 up): it hangs off the sword.
     // UNVERIFIED-simplified: the strike is one frame (its script's 2-5; it "only
-    // hits once", `finalKit.ts`). Not modelled: the dash stopping at a platform's
-    // edge ("the move will end without the user swinging if they reach the edge",
-    // Critical Hit), and special pressed again stopping it ("Marth (SSBU)").
+    // hits once", `finalKit.ts`). Its boxes are world boxes in its script (no
+    // `set_catch_only_all`; SmashWiki "Critical Hit": "it is also possible for a
+    // fighter to walk into the user's sword once it hits another opponent and still
+    // be given a OHKO"), but here they reach only the trapped, as every end box does
+    // (Task 14's reading).
     finalSmash: {
       slot: "finalSmash",
       name: "Critical Hit",
-      totalFrames: 85,
-      intangible: [1, 85],
+      totalFrames: 118,
+      intangible: [1, 118],
       momentum: [{ frame: 25, x: fx(6), y: fx(0), hold: 45 }],
+      dashEnd: { edge: true, special: true },
       final: { phase: "start", trap: true, next: "finalEnd", nextAt: 25 },
       hitboxes: [finalBox(0, 25, 70, { damage: 0, angle: 361, kbg: 0, radius: 10, x: 8, y: 7, hitlag: 0, transcendent: true, lr: "position" })],
     },
@@ -1208,9 +1220,10 @@ const legacy: FighterDef = {
       slot: "finalEnd",
       name: "Critical Hit (strike)",
       totalFrames: 59,
+      aerialTotalFrames: 49,
       intangible: [1, 59],
       final: { phase: "end" },
-      hitboxes: [finalBox(0, 2, 2, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 18, x: 16, y: 8, hitlag: 1, transcendent: true, effect: "slash" })],
+      hitboxes: [finalBox(0, 2, 2, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 18, x: 16, y: 8, hitlag: 1, transcendent: true, effect: "slash", forceReaction: true })],
     },
   },
 

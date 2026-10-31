@@ -19,7 +19,7 @@
   "kirby uthrow last": "legacy 58 / game_throwhi 51",
   "kirby uthrow lead": "legacy 10%/78°/bkb75/kbg74 / game_throwhi 7%/65°/bkb85/kbg95",
   "kirby uthrow faf": "legacy 87 / game_throwhi 80",
-  "kirby finalSmash last": "legacy 19 / game_finalstart 60",
+  "kirby finalSmash last": "legacy 54 / game_finalstart 60",
   "fox rapidJab first": "legacy 5 / game_attack100 1",
   "fox rapidJab last": "legacy 33 / game_attack100 8",
   "fox utilt lead": "legacy 8%/110°/bkb20/kbg110 / game_attackhi3 6%/110°/bkb20/kbg125",
@@ -35,7 +35,7 @@
   "pikachu upB first": "legacy 15 / game_specialhi1 1",
   "pikachu upB last": "legacy 33 / game_specialhi1 300",
   "pikachu downB hitboxes": "legacy some / game_speciallw none",
-  "pikachu finalSmash last": "legacy 46 / game_final 49",
+  "pikachu finalSmash last": "legacy 83 / game_final 49",
   "marth dashAttack lead": "legacy 13%/45°/bkb93/kbg58 / game_attackdash 10%/45°/bkb70/kbg55",
   "marth bair lead": "legacy 12.5%/361°/bkb40/kbg94 / game_attackairb 9%/361°/bkb40/kbg85",
   "marth finalSmash hitboxes": "legacy some / game_finalstart none"

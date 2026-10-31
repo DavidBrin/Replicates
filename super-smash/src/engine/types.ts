@@ -322,6 +322,15 @@ export interface Hitbox {
    * counterattack, SmashWiki "the hitboxes ignore most kinds of armor").
    */
   readonly forceReaction?: boolean;
+  /**
+   * False: a box of a Final Smash part that traps (`FinalPhase.trap`) which hits
+   * instead, as an ordinary box (Plan 5, Task 15 fix round 1, ruling R-T15j):
+   * Ultra Sword's 5% swing after its stun, Volt Tackle's startup sparks. It hits
+   * the world, unblockable and uncountered, and reaches its user's trapped wherever
+   * they are, for damage only; it keeps no hit record, so it is one frame long
+   * (`fighters/finalKit.ts`). Absent: the part's own rule.
+   */
+  readonly trap?: boolean;
   /** This hitbox grabs rather than damages. */
   readonly grabbing?: boolean;
   /**
@@ -984,6 +993,15 @@ export interface MoveDef {
   readonly inhale?: InhaleDef;
   /** Which part of a Final Smash this move is (Plan 5, Task 14: `final.ts`). See `FinalPhase`. */
   readonly final?: FinalPhase;
+  /**
+   * The dash the move carries its fighter on, its first `momentum` window, ends
+   * early: on the ground at a platform's edge, where it stops (`edge`), and when the
+   * special button is pressed during it (`special`). The fighter stops dead and the
+   * move goes on from the frame after the window, whatever the window held (its
+   * boxes) passed (`final.ts`, `endDash`). Plan 5, Task 15 fix round 1, ruling
+   * R-T15f: Critical Hit.
+   */
+  readonly dashEnd?: { readonly edge?: true; readonly special?: true };
   /**
    * A copied move's damage multiplier, on its hitboxes and its projectiles'
    * (Plan 5, Task 9: Kirby's Copy Ability, ×1.2; `withCopyAbility`). Q12.
