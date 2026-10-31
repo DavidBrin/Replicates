@@ -377,6 +377,12 @@ export interface StateContext {
   readonly stage: StageDef;
   readonly frame: number;
   /**
+   * The stage's clock (`GameState.stageFrame`; Plan 5, Task 14 fix round 1, ruling
+   * R-T14f), which a moving platform's position reads; `frame` stays the input
+   * buffer's. Absent outside `step`: then `frame`.
+   */
+  readonly stageFrame?: number;
+  /**
    * Everybody in the match, because a grab is the one thing in this file that
    * is not a property of a single fighter.
    *
@@ -1054,7 +1060,7 @@ export function finishLedgeOption(f: FighterState, intent: Intent, ctx: StateCon
   const p = ctx.stage.platforms[ledge.platform];
   const inward = -ledge.side;
   const distance = f.action === "ledgeRoll" ? LEDGE_ROLL_DISTANCE : LEDGE_GETUP_DISTANCE;
-  f.x = platformCentreX(p, ctx.frame) + ledge.side * p.halfWidth + inward * distance;
+  f.x = platformCentreX(p, ctx.stageFrame ?? ctx.frame) + ledge.side * p.halfWidth + inward * distance;
   f.y = p.y;
   kineticSet(f, 0, 0);
   f.grounded = true;
@@ -1419,6 +1425,11 @@ export function onLanded(f: FighterState, ctx: StateContext, fromAir: boolean = 
   // button (or its `maxFrames`) ends it on, and keeps the air's length after
   // (`moveEndFrame`, `CombatState.stoneEndedAir`).
   const move = f.action === "special" && f.move !== null ? ctx.def.moves[f.move] : undefined;
+  // A Final Smash lands as itself and plays on, whichever part it is in (Plan 5, Task
+  // 14 fix round 1, ruling R-T14d), as the carry and the mouthful do above: its scene
+  // is "unskippable" (SmashWiki "Final Smash"). UNVERIFIED: no source says what a
+  // landing does to a Final Smash begun in the air; SSBU runs each one's own statuses.
+  if (move?.final !== undefined) return;
   if (move?.landing !== undefined) {
     const ended = move.stone !== undefined && f.combat.stoneFrames >= move.stone.maxFrames;
     if (!ended && moveFrameOf(f.actionFrame) <= move.landing.through) {

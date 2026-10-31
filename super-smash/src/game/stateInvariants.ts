@@ -48,7 +48,7 @@ export function stageInvariantBreaks(s: GameState, stage: StageDef, frame: numbe
   for (const f of s.fighters) {
     stage.platforms.forEach((p, i) => {
       if (p.soft) return;
-      const inside = Math.abs(f.x - platformCentreX(p, s.frame)) < p.halfWidth && f.y < p.y && f.y > p.y - HARD_PLATFORM_DEPTH;
+      const inside = Math.abs(f.x - platformCentreX(p, s.stageFrame)) < p.halfWidth && f.y < p.y && f.y > p.y - HARD_PLATFORM_DEPTH;
       if (inside) out.push(`frame ${frame}, port ${f.port}: origin (${toFloat(f.x)}, ${toFloat(f.y)}) inside platform ${i} (${f.action})`);
     });
   }

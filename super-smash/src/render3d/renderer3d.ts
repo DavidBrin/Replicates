@@ -358,8 +358,10 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
     paint(rs, cam, alpha, hidden) {
       if (disposed || lost) return;
       const game = rs.current;
-      // Moving platforms where the sim has them this frame, before anything is drawn (the 2D art draws `game.frame` too).
-      stage.update(game.frame);
+      // Moving platforms where the sim has them this frame, before anything is drawn: on
+      // the stage's own clock, which a Final Smash's scene and a KO's freeze stop
+      // (`GameState.stageFrame`, Plan 5 Task 14 fix round 1).
+      stage.update(game.stageFrame);
       applySideCamera(camera, cam);
 
       let shadowCount = 0;

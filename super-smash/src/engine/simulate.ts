@@ -379,6 +379,7 @@ export function cloneState(state: GameState): GameState {
         : { kind: state.outcome.kind, placings: state.outcome.placings.slice() },
     freezeFrames: state.freezeFrames,
     cinematic: state.cinematic,
+    stageFrame: state.stageFrame,
   };
 }
 
@@ -474,6 +475,7 @@ export function createInitialState(
     outcome: null,
     freezeFrames: 0,
     cinematic: -1,
+    stageFrame: 0,
   };
 }
 
@@ -577,7 +579,13 @@ interface Candidate {
   suppressed: boolean;
 }
 
-/** What a move's boxes do in a Final Smash (Plan 5, Task 14). */
+/**
+ * What a move's boxes do in a Final Smash (Plan 5, Task 14). A trap box is a box in
+ * the world: it clanks, or not, by its own flags (`Hitbox.transcendent`; Task 15's
+ * carry their scripts' ATTACK_SETOFF_KIND_OFF). UNVERIFIED: no source says how Final
+ * Smash boxes clank (SmashWiki "Priority" and "Final Smash" are silent); the
+ * alternative is that every Final Smash box is transcendent.
+ */
 function finalKind(final: FinalPhase | undefined): Candidate["final"] {
   if (final === undefined) return null;
   if (final.phase === "start") return final.trap === true ? "trap" : null;
@@ -643,10 +651,26 @@ export function step(
 
   /* -- 1. hitlag and global freeze ---------------------------------------- */
 
+  // The whole match stands still for a KO's freeze, the stage's clock with it
+  // (`GameState.stageFrame`; Plan 5, Task 14 fix round 1, ruling R-T14f). UNVERIFIED:
+  // that the freeze stops moving platforms; no source gives a whole-game pause on a
+  // KO (`KO_FREEZE_FRAMES`), and it is read here as one.
   if (s.freezeFrames > 0) {
     s.freezeFrames -= 1;
     return { state: s, events };
   }
+
+  // A Final Smash's scene, as the last step left it, pauses this whole step (Plan 5,
+  // Task 14; fix round 1, ruling R-T14g): its user and the fighters it trapped play
+  // on, and everybody else, every projectile, the Smash Ball, the clock and the stage
+  // stand still (SmashWiki "Final Smash": "the game effectively pauses as an
+  // unskippable scene plays out"). Fighters and world freeze on the same steps: the
+  // step a scene starts on still runs everything, and the step its launch ends it on
+  // runs nothing but the scene.
+  const scene = s.cinematic;
+  const paused = scene >= 0;
+  // The stage's clock runs only while the match does (ruling R-T14f).
+  if (!paused) s.stageFrame += 1;
 
   // Where each hitbox was last frame, for the swept test in phase 6.
   const prevPos = s.fighters.map((f) => ({ x: f.x, y: f.y }));
@@ -674,6 +698,7 @@ export function step(
     def: defs[i],
     stage,
     frame: s.frame,
+    stageFrame: s.stageFrame,
     fighters: s.fighters,
     heads,
     footstools,
@@ -692,9 +717,9 @@ export function step(
   // charge frame would launch one every frame of the charge. A move *entered*
   // this tick is told apart from a held frame by `frozen` (see `spawnDueProjectiles`).
   const beforeActionFrame = s.fighters.map((f) => f.actionFrame);
-  // Who a Final Smash's scene stands still this frame (Plan 5, Task 14: `final.ts`),
-  // decided from the scene as the last frame left it: frozen as in hitlag, and more.
-  const stilled: boolean[] = s.fighters.map((f) => s.cinematic >= 0 && !inCinematic(s, f));
+  // Who a Final Smash's scene stands still this step (Plan 5, Task 14: `final.ts`):
+  // frozen as in hitlag, and more. Decided with `paused` (above, ruling R-T14g).
+  const stilled: boolean[] = s.fighters.map((f) => paused && !inCinematic(s, f));
 
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -771,9 +796,9 @@ export function step(
       // only if the victim is still standing on one.
       const releasing = f.hitlag === 0 && f.pendingFacing !== 0;
       if (releasing) applyAsdi(f, intent);
-      clampShiftToStage(f, shiftedFromX, shiftedFromY, stage, defs[i].attributes, s.frame, ecbFor(i, f));
+      clampShiftToStage(f, shiftedFromX, shiftedFromY, stage, defs[i].attributes, s.stageFrame, ecbFor(i, f));
       if (releasing) {
-        leaveGroundIfShiftedOff(f, stage, s.frame);
+        leaveGroundIfShiftedOff(f, stage, s.stageFrame);
         releasePendingLaunch(f, intent);
       }
       if (f.hitlag === 0) f.combat.victimFreeze = false;
@@ -816,10 +841,9 @@ export function step(
     if (f.grabbing >= 0 && f.action !== "dead" && !isHolding(f, defs[i])) releaseHeld(f, s.fighters);
   }
 
-  // The scene plays while a Final Smash's attack part holds somebody (Plan 5, Task
-  // 14): from here on this frame, projectiles, the Smash Ball and the clock wait.
+  // The scene plays while a Final Smash's attack or end part holds somebody (Plan 5,
+  // Tasks 14 and 15), decided now for the next step (`paused`, above).
   updateCinematic(s, defs);
-  const paused = s.cinematic >= 0;
 
   /* -- 4. physics ---------------------------------------------------------- */
 
@@ -831,6 +855,13 @@ export function step(
     // spat one rides its star (phase 6; Plan 5, Task 9). One trapped in a Final
     // Smash stays where the trap caught it (Task 14: `trapVictim`).
     if (captorOf(s, f) !== null || f.action === "spatStar" || f.action === "finalTrapped") continue;
+    // So does a Final Smash's user while its scene plays, in the air too, with no
+    // gravity or speed of its own (fix round 1, ruling R-T14d): the scene is
+    // "unskippable" (SmashWiki "Final Smash").
+    if (f.port === scene) {
+      kineticClear(f);
+      continue;
+    }
     applyMovement(f, intents[i], stateCtx(i));
     preIntegrate[i] = { x: f.x, y: f.y };
     integrate(f);
@@ -845,6 +876,7 @@ export function step(
     if (captorOf(s, f) !== null) continue; // held: the captor's floor is all it touches
     if (f.action === "spatStar") continue; // riding a star: where it flies, it goes
     if (f.action === "finalTrapped") continue; // trapped: no floor, wall or ledge until it is let go (Task 14)
+    if (f.port === scene) continue; // a scene's user: no landing or ledge cuts it short (fix round 1, R-T14d)
 
     const before = launchBefore(f);
     // Where the move it is in began, before a landing resets the airtime (Plan 5, Task 13b).
@@ -853,14 +885,14 @@ export function step(
     const ecb = ecbFor(i, f);
     // Which way is off the platform it stands on, for an edge stop that a push can override.
     const underfoot = f.grounded && f.platform >= 0 ? stage.platforms[f.platform] : undefined;
-    const outward = underfoot === undefined ? 0 : f.x >= platformCentreX(underfoot, s.frame) ? 1 : -1;
+    const outward = underfoot === undefined ? 0 : f.x >= platformCentreX(underfoot, s.stageFrame) ? 1 : -1;
     const outcome = resolveCollision(
       f,
       preIntegrate[i].x,
       preIntegrate[i].y,
       stage,
       defs[i].attributes,
-      s.frame,
+      s.stageFrame,
       // The statuses that stop at the edge instead of sliding off it: the catch
       // statuses, the shield, the rolls, a waveland, a grounded attack's own movement
       // (`GROUND_EXIT`, `stopsAtEdge`; Plan 5, Task 12 fix rounds 2 and 3).
@@ -890,11 +922,18 @@ export function step(
     // Hands full: a carrier, or a thrower in a cargo throw it began in the air, takes
     // no ledge (Plan 5, Task 8; a throw on the ground never reaches here); nor does
     // a full mouth, or the one held would be left in it on the ledge (Task 9).
-    // UNVERIFIED: no source says whether any of them can take one.
-    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw" && !holdsMouthful(f, defs[i])) {
-      const grab = findLedgeGrab(f, stage, s.frame, ecb.half, s.fighters);
+    // UNVERIFIED: no source says whether any of them can take one. Nor does a Final
+    // Smash, in any of its parts (Task 14 fix round 1, ruling R-T14j): SmashWiki
+    // "Volt Tackle" (https://www.ssbwiki.com/Volt_Tackle), "the tackle ignores edges,
+    // meaning it is fairly easy to self-destruct off the side blast line if the player
+    // misses". UNVERIFIED for every other start and for the scene and end parts, read
+    // from SmashWiki "Final Smash": "the game effectively pauses as an unskippable
+    // scene plays out".
+    const finalPart = f.action === "special" && f.move !== null && defs[i].moves[f.move]?.final !== undefined;
+    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw" && !holdsMouthful(f, defs[i]) && !finalPart) {
+      const grab = findLedgeGrab(f, stage, s.stageFrame, ecb.half, s.fighters);
       if (grab !== null) {
-        const pos = ledgePosition(stage, grab, s.frame);
+        const pos = ledgePosition(stage, grab, s.stageFrame);
         const frames =
           f.ledgeRegrabs >= LEDGE_REGRAB_LIMIT
             ? 0
@@ -942,7 +981,7 @@ export function step(
     if (captor === null || ridesCaptor(f, captor)) continue;
     const inside = f.action === "swallowed";
     const captorHalf = inside ? 0 : bodyHalf(defs[captor.port], bake, bones);
-    holdAtCaptor(f, captor, captorHalf, inside ? 0 : bodyHalf(defs[i], bake, bones), stage, s.frame);
+    holdAtCaptor(f, captor, captorHalf, inside ? 0 : bodyHalf(defs[i], bake, bones), stage, s.stageFrame);
   }
   pinHeldFighters(s, (captor) => bodyTop(defs[captor.port], bake, bones));
 
@@ -1244,7 +1283,7 @@ function advanceProjectiles(s: GameState, ctx: SimContext, stage: StageDef): Pre
     const def = projectileDefOf(ctx, p);
     if (def === undefined) continue;
     const owner = s.fighters[p.owner] ?? null;
-    const moved = advanceProjectile(p, def, stage, owner, s.frame);
+    const moved = advanceProjectile(p, def, stage, owner, s.stageFrame);
     prev.set(p.instanceId, { x: moved.prevX, y: moved.prevY });
     // A spat fighter rides its star, and is let go when it is gone (Plan 5, Task 9).
     if (def.ridden === true) carryStarRider(s, p, moved.alive, stage);
@@ -1317,7 +1356,7 @@ function spawnDueProjectiles(
       // that SSBU removes such an article rather than turning or placing it; no
       // source says. Kirby's spit then has no star, and its fighter comes out at him
       // (`resolveInhaleReleases`).
-      if (insideSolidBody(stage, s.frame, p.x, p.y)) continue;
+      if (insideSolidBody(stage, s.stageFrame, p.x, p.y)) continue;
       s.nextProjectileId += 1;
       s.projectiles.push(p);
       prev.set(p.instanceId, { x: p.x, y: p.y });
@@ -1418,7 +1457,9 @@ function resolveClanks(
       // fighter held) is not a hitbox in the world: nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
       // Nor is a Final Smash scene's box, which reaches the trapped wherever they
-      // are (Plan 5, Task 14): nothing clanks with it.
+      // are (Plan 5, Task 14): nothing clanks with it. UNVERIFIED: no source says how
+      // Final Smash boxes clank; the alternative is transcendent Final Smash boxes,
+      // which clank with nothing either (the same outcome for a scene's).
       if (isSceneBox(ca) || isSceneBox(cb)) continue;
       if (ca.projectile === null && cb.projectile === null && (!s.fighters[ca.attacker].grounded || !s.fighters[cb.attacker].grounded)) continue;
       if (!capsulesOverlap(capsuleOf(ca), capsuleOf(cb))) continue;
@@ -1692,7 +1733,11 @@ function resolveHits(
       // they are and with no hit record (its boxes are distinct, each to land), and
       // nothing else reaches them (Plan 5, Task 14: `final.ts`). UNVERIFIED: that a
       // bystander cannot hit a trapped fighter; while the scene plays it is stood
-      // still anyway, but before it (the trap's own move) nothing says.
+      // still anyway, but before it (the trap's own move) nothing says. A trap box
+      // catches nobody intangible (below): SmashWiki "Unblockable attack"
+      // (https://www.ssbwiki.com/Unblockable_attack), "Unblockable attacks can still
+      // be avoided by intangibility". UNVERIFIED: that it catches nobody invincible
+      // either (it lands as on any invincible fighter, `applyInvincibleHit`).
       const trapped = victim.action === "finalTrapped";
       if (isSceneBox(c) ? !(trapped && victim.combat.trappedBy === c.attacker) : trapped) continue;
       if (isSceneBox(c)) {
@@ -2670,7 +2715,16 @@ function applyHit(
   // out, UNVERIFIED for both). The trapped take these freezes without SDI
   // (UNVERIFIED: no source says; a held fighter's SDI is undone by its hold,
   // `holdAtCaptor`, and the trapped are held where the trap caught them).
-  if (c.final === "trap" || c.final === "hold") {
+  //
+  // Kirby in Stone is not trapped (fix round 1, ruling R-T14e): SmashWiki "Stone"
+  // (https://www.ssbwiki.com/Stone), "If a cinematic Final Smash is used on Kirby in
+  // Stone form, it will not work". The trap box then lands on the stone as any box
+  // does (the stone path, below). UNVERIFIED: the trap goes through every other
+  // armour, heavy (knockback), damage-threshold and super; no source says. The
+  // alternative: armour stops a trap as the Stone does, and the box lands on it as
+  // an ordinary hit.
+  const trapsStone = c.final === "trap" && stoneOf(victim, victimDef) !== null;
+  if ((c.final === "trap" && !trapsStone) || c.final === "hold") {
     applyHeldHit(s, attacker, victim, c, contact, events);
     if (c.final === "trap") {
       clearPendingLaunch(victim);
@@ -3320,7 +3374,9 @@ function resolveSmashBallHits(
   const target = circle(ball.x, ball.y, SMASH_BALL_RADIUS);
   for (const c of candidates) {
     // A catch-only box hits the fighter held and nothing else, and a Final Smash
-    // scene's box the trapped and nothing else (Plan 5, Task 14).
+    // scene's box the trapped and nothing else (Plan 5, Task 14). UNVERIFIED: no
+    // source says whether a Final Smash's boxes hit a Smash Ball; the alternative
+    // reads them as world boxes, as transcendent Final Smash boxes would still be.
     if (c.suppressed || c.onlyPort !== null || isSceneBox(c)) continue;
     const attacker = s.fighters[c.attacker];
     if (alreadyHit(attacker, SMASH_BALL_TARGET)) continue;

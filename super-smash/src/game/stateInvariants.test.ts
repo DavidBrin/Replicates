@@ -74,7 +74,7 @@ describe("no fighter inside the stage", () => {
     expect(stageInvariantBreaks(stateWith(SOFT.x, SOFT.y - fx(5)), STAGE, 1)).toEqual([]);
   });
 
-  it("measures a moving platform where it is on the state's frame", () => {
+  it("measures a moving platform where it is on the stage's clock (`stageFrame`, which a pause stops; Plan 5 Task 14 fix round 1)", () => {
     const sweeping: Platform = { ...HARD, motion: { kind: "sweep", amplitude: fx(30), periodFrames: 240 } };
     const stage: StageDef = { ...STAGE, platforms: [sweeping] };
     const frame = 60;
@@ -83,7 +83,9 @@ describe("no fighter inside the stage", () => {
     // Inside the platform where it is now, and outside where it started.
     const x = there + sweeping.halfWidth - fx(1);
     expect(Math.abs(x - platformCentreX(sweeping, 0))).toBeGreaterThan(sweeping.halfWidth);
-    expect(stageInvariantBreaks(stateWith(x, -fx(5), {}, frame), stage, 7)).toHaveLength(1);
+    // The match's frame is later than the stage's: a pause has stopped the stage.
+    expect(stageInvariantBreaks({ ...stateWith(x, -fx(5), {}, frame + 37), stageFrame: frame }, stage, 7)).toHaveLength(1);
+    expect(stageInvariantBreaks({ ...stateWith(x, -fx(5), {}, frame), stageFrame: frame + 37 }, stage, 7)).toHaveLength(0);
   });
 });
 

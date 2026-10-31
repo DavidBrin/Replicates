@@ -681,11 +681,12 @@ export const SMASH_BALL_HEALTH = fx(40);
 export const SMASH_BALL_DECAY = fx(2);
 export const SMASH_BALL_DECAY_INTERVAL = 60;
 export const SMASH_BALL_SPAWN_INTERVAL = 900;
-// Plan 5, Task 14: no standby limit. SmashWiki "Final Smash"
-// (https://www.ssbwiki.com/Final_Smash) gives a Smash Ball's Final Smash none;
-// only the Final Smash Meter's expires: "If a player doesn't use a Final Smash
-// granted by the Final Smash Meter in about 20 seconds, the effect will expire".
-// The ready flag is `FINAL_SMASH_READY` in `final.ts`.
+// Plan 5, Task 14: no standby limit. SmashWiki "Smash Ball"
+// (https://www.ssbwiki.com/Smash_Ball): "The Final Smash can then be unleashed at
+// any time by pressing the input for a neutral special move". Only the Final Smash
+// Meter's expires (SmashWiki "Final Smash", https://www.ssbwiki.com/Final_Smash: "As
+// of the 4.0.0 update, a charged FS Meter now has a time limit of 20 seconds"). The
+// ready flag is `FINAL_SMASH_READY` in `final.ts`.
 
 /** Sudden death starts everyone here. */
 export const SUDDEN_DEATH_DAMAGE = fx(300);

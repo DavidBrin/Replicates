@@ -225,7 +225,7 @@ export function resolveInhaleReleases(
       // underside) is not flown: the fighter comes out at Kirby, as with no star
       // (fix round 2; UNVERIFIED, nothing is published).
       const star = release.star;
-      if (star === undefined || insideSolidBody(stage, s.frame, kirby.x, kirby.y + star.offsetY)) startAction(victim, victim.grounded ? "stand" : "fall");
+      if (star === undefined || insideSolidBody(stage, s.stageFrame, kirby.x, kirby.y + star.offsetY)) startAction(victim, victim.grounded ? "stand" : "fall");
       else rideOutStar(victim, kirby, star);
       continue;
     }
@@ -316,7 +316,7 @@ export function carryOutStarRiders(s: GameState, fighterOf: (id: string) => Figh
     const speed = Math.max(0, star.speed - star.friction * f.actionFrame);
     const x = f.x + f.facing * mul(speed, cosDeg(star.angle));
     const y = f.y + mul(speed, sinDeg(star.angle));
-    if (insideSolidBody(stage, s.frame, x, y)) {
+    if (insideSolidBody(stage, s.stageFrame, x, y)) {
       leaveStar(f);
       continue;
     }

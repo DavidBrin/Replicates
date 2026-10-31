@@ -300,7 +300,7 @@ describe("the 3D presenter", () => {
     expect(times.size).toBe(drawn.length);
   });
 
-  it("draws everything at the frame it paints: moving platforms placed before the first draw, fighters on game.frame (Task 15 and 17 carries)", async () => {
+  it("draws everything at the frame it paints: moving platforms placed before the first draw on the stage's clock, fighters on game.frame (Task 15 and 17 carries; Plan 5 Task 14 fix round 1)", async () => {
     const { presenter, rs, state, stage, gl } = setup({ stageId: "smashville" });
     await presenter.ready;
     standAll(state);
@@ -319,6 +319,8 @@ describe("the 3D presenter", () => {
     const frame = Array.from({ length: 200 }, (_, k) => k + 1).find((k) => at(k).distanceTo(at(k + 1)) > 0.05)!;
     expect(frame).toBeDefined();
     state.frame = frame;
+    // The stage's clock, which a pause stops, behind the match's (`GameState.stageFrame`).
+    state.stageFrame = frame - 37;
     const mover = stage.platforms.findIndex((p) => p.motion);
     let platformX = Number.NaN;
     let headAt = new Vector3();
@@ -328,8 +330,9 @@ describe("the 3D presenter", () => {
       headAt = new Vector3().setFromMatrixPosition(scene.getObjectByName("fighter:0:mario")!.getObjectByName(head)!.matrixWorld);
     };
     presenter.paint(rs, createCamera(stage), 1, []);
-    expect(platformX).toBeCloseTo(toFloat(platformCentreX(stage.platforms[mover], frame)), 9);
-    expect(platformX).not.toBeCloseTo(toFloat(platformCentreX(stage.platforms[mover], frame + 1)), 3);
+    expect(platformX).toBeCloseTo(toFloat(platformCentreX(stage.platforms[mover], state.stageFrame)), 9);
+    expect(platformX).not.toBeCloseTo(toFloat(platformCentreX(stage.platforms[mover], state.stageFrame + 1)), 3);
+    expect(platformX).not.toBeCloseTo(toFloat(platformCentreX(stage.platforms[mover], frame)), 3);
     expect(headAt.distanceTo(at(frame))).toBeLessThan(1e-6);
     expect(headAt.distanceTo(at(frame + 1))).toBeGreaterThan(0.05);
     reference.dispose();

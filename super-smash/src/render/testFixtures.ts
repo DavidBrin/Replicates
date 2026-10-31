@@ -99,6 +99,7 @@ export function makeState(over: Partial<GameState> = {}): GameState {
     outcome: null,
     freezeFrames: 0,
     cinematic: -1,
+    stageFrame: 0,
     ...over,
   };
 }

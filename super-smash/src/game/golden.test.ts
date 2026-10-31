@@ -377,7 +377,9 @@ const DIRECTIONS = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
 /**
  * Everything a presentation layer (the renderer, the CPU, the HUD) reads, and
  * nothing Plan 2 adds. Exactly:
- * - the frame, the RNG seed, the global freeze, the timer and the outcome;
+ * - the frame, the RNG seed, the global freeze, the timer, the outcome, and the
+ *   stage's clock that moving platforms run on (`stageFrame`, Plan 5 Task 14 fix
+ *   round 1, ruling R-T14f: the 3D stage places them by it);
  * - per fighter: position, velocity, facing, grounded, action, action frame,
  *   move, charge, damage, stocks, hitstun, hitlag, shield, jumps used,
  *   intangible, invincible, fast fall, short hop, who it is grabbing, Final
@@ -390,6 +392,7 @@ function digest(s: GameState): number {
   x = mixInt(x, s.rngSeed);
   x = mixInt(x, s.freezeFrames);
   x = mixInt(x, s.timeRemaining);
+  x = mixInt(x, s.stageFrame);
   if (s.outcome === null) x = mixInt(x, 0);
   else {
     x = mixString(x, s.outcome.kind);
@@ -862,6 +865,13 @@ describe("engine golden trace", () => {
   // uppercut), no shield hit, no KO. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2 and
   // 33; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0
   // and 0.
+  // Plan 5 Task 14's fix round 1 adds the stage's clock (`stageFrame`, ruling R-T14f),
+  // which stops for a Final Smash's scene and a KO's freeze, to `digest`, so every
+  // trace's digests move from the first sample. With the field left out of `digest`,
+  // ten traces stay byte-identical (a KO's freeze stopping Smashville's platform moves
+  // no golden fighter) and the Final Smash lab alone moves, from its 1-100 sample: its
+  // user is intangible from the step the power is spent (ruling R-T14i), one step
+  // sooner. Every count is as it was.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

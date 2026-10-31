@@ -1566,6 +1566,13 @@ export interface GameState {
    * match for the cutscene. It is state, so a rollback replays it.
    */
   cinematic: number;
+  /**
+   * The stage's own clock, which moving platforms run on (`platformCentreX`; Plan 5,
+   * Task 14 fix round 1, ruling R-T14f): `frame`'s count of the steps the match was
+   * not paused for, so it stops while a Final Smash's scene plays and through a
+   * KO's freeze. Equal to `frame` in a match with neither.
+   */
+  stageFrame: number;
 }
 
 export interface MatchOutcome {

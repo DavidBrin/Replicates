@@ -113,6 +113,7 @@ function gameState(fighters: FighterState[], over: Partial<GameState> = {}): Gam
     outcome: null,
     freezeFrames: 0,
     cinematic: -1,
+    stageFrame: 0,
     ...over,
   };
 }

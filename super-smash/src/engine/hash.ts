@@ -284,6 +284,7 @@ export function hashState(state: GameState): number {
   h = mixInt(h, state.timeRemaining);
   h = mixInt(h, state.freezeFrames);
   h = mixInt(h, state.cinematic);
+  h = mixInt(h, state.stageFrame);
   if (state.outcome === null) {
     h = mixInt(h, 0);
   } else {

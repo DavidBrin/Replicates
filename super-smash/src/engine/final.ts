@@ -31,6 +31,12 @@
  * with somebody trapped. Scene boxes keep no hit record, so each is authored one
  * frame long and lands once (`fighters/finalKit.ts`).
  *
+ * While its scene plays, the user is held where it is, in the air too, and a
+ * landing never ends a part (fix round 1, ruling R-T14d); the stage's clock stops
+ * with everything else (`GameState.stageFrame`, ruling R-T14f); and the scene and
+ * the world freeze on the same steps (`step`, ruling R-T14g). Kirby in Stone is not
+ * trapped (ruling R-T14e, `applyHit`).
+ *
  * A Final Smash with no `trap` (Task 16's) is an ordinary, very large move.
  * SmashWiki "Unblockable attack" (https://www.ssbwiki.com/Unblockable_attack):
  * "in Ultimate, all Final Smashes are unblockable", an unblockable attack being
@@ -51,17 +57,36 @@
 import { kineticClear } from "./kinetic";
 import { SMASH_BALL_HEALTH } from "./constants";
 import { fx } from "./fixed";
-import { releaseGrab, startAction, startMove } from "./states";
+import { releaseGrab, startAction, startMove, updateDodgeIntangibility } from "./states";
 import type { StateContext } from "./states";
 import type { FighterDef, FighterState, GameState, MoveSlot } from "./types";
 
 /**
- * The ready flag the Smash Ball sets ("Standby Mode"). UNVERIFIED: that it lasts
- * until used — SmashWiki "Final Smash" gives the Final Smash Meter's version
- * "about 20 seconds" and the Smash Ball's none; the replica keeps it until it is
- * used, dropped (`dropSmashBall`) or the stock is lost.
+ * The ready flag the Smash Ball sets ("Standby Mode"). It lasts until it is used:
+ * SmashWiki "Smash Ball" (https://www.ssbwiki.com/Smash_Ball), "The Final Smash can
+ * then be unleashed at any time by pressing the input for a neutral special move",
+ * and "While a character is in standby mode, no Smash Balls will appear until the
+ * Final Smash is used (or the Smash Ball is dropped)"; SmashWiki "Final Smash" gives
+ * only the Meter's a limit, "As of the 4.0.0 update, a charged FS Meter now has a
+ * time limit of 20 seconds". It is also lost with a dropped ball (`dropSmashBall`)
+ * and, UNVERIFIED, with a stock (`step`'s KO).
  */
 export const FINAL_SMASH_READY = 1;
+
+/** The slots a Final Smash's parts are in: only a Final Smash is ever in them. */
+const FINAL_SLOTS: ReadonlySet<MoveSlot> = new Set<MoveSlot>(["finalSmash", "finalAttack", "finalEnd"]);
+
+/**
+ * Is anybody's Final Smash out? While one is, everybody else in standby is out of
+ * it, and has the power back once it is over (Plan 5, Task 14 fix round 1, ruling
+ * R-T14h): SmashWiki "Final Smash", "When a Final Smash is active, all other players
+ * on standby temporarily exit standby mode and regain it upon conclusion", and
+ * "only one Smash Ball or Final Smash can be present onscreen at any given time". So
+ * nobody else starts one, and no hit drops one, until it is over.
+ */
+export function finalSmashActive(s: { readonly fighters: readonly FighterState[] }): boolean {
+  return s.fighters.some((f) => f.action === "special" && f.move !== null && FINAL_SLOTS.has(f.move));
+}
 
 /** The fighters `user`'s Final Smash has trapped. */
 export function trappedBy(s: { readonly fighters: readonly FighterState[] }, user: number): FighterState[] {
@@ -70,12 +95,20 @@ export function trappedBy(s: { readonly fighters: readonly FighterState[] }, use
 
 /**
  * A neutral special with a Final Smash ready starts it, and spends it; anything
- * else leaves the power where it is. Returns true if it started.
+ * else leaves the power where it is, and so does somebody else's Final Smash out
+ * (`finalSmashActive`). Returns true if it started.
+ *
+ * The user is intangible from the step the power is spent (fix round 1, ruling
+ * R-T14i): SmashWiki "Final Smash", "Final Smashes are unblockable, make the user
+ * fully intangible". A move's own intangible window otherwise first holds on its
+ * second step (`advanceFighter` reads it before the status starts the move), and a
+ * hit on the first would cost the Final Smash it had just spent.
  */
 export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boolean): boolean {
-  if (!neutral || f.finalSmashReady <= 0 || ctx.def.moves.finalSmash === undefined) return false;
+  if (!neutral || f.finalSmashReady <= 0 || ctx.def.moves.finalSmash === undefined || finalSmashActive(ctx)) return false;
   f.finalSmashReady = 0;
   startMove(f, "special", "finalSmash");
+  updateDodgeIntangibility(f, ctx.def);
   return true;
 }
 
@@ -137,12 +170,14 @@ export function inCinematic(s: Pick<GameState, "cinematic">, f: FighterState): b
  * A hit that deals hitstun to a fighter in standby drops the Smash Ball's power,
  * and the ball roams again from where they are. SmashWiki "Final Smash" (In
  * competitive play): "Characters on Final Smash standby can also randomly drop it
- * from any hit that deals hitstun". UNVERIFIED: every such hit drops it here (the
- * page says "randomly", and publishes no chance); the dropped ball's HP (a fresh
- * one's 40) and the 10 units above the fighter it appears at.
+ * from any hit that deals hitstun". Not while somebody's Final Smash is out: then
+ * the fighter is not in standby, and has the power back after (`finalSmashActive`,
+ * ruling R-T14h). UNVERIFIED: every such hit drops it here (the page says
+ * "randomly", and publishes no chance); the dropped ball's HP (a fresh one's 40)
+ * and the 10 units above the fighter it appears at.
  */
-export function dropSmashBall(s: Pick<GameState, "smashBall">, f: FighterState): void {
-  if (f.finalSmashReady <= 0) return;
+export function dropSmashBall(s: Pick<GameState, "smashBall" | "fighters">, f: FighterState): void {
+  if (f.finalSmashReady <= 0 || finalSmashActive(s)) return;
   f.finalSmashReady = 0;
   if (s.smashBall.active) return;
   Object.assign(s.smashBall, { active: true, x: f.x, y: f.y + fx(10), vx: 0, vy: 0, health: SMASH_BALL_HEALTH, driftTimer: 0 });

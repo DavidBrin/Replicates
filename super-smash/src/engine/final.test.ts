@@ -18,13 +18,19 @@
 
 import { describe, expect, it } from "vitest";
 
+import { FIGHTERS } from "@/fighters";
+import { STAGES } from "@/stages";
+import { smashville } from "@/stages/smashville";
 import { ONE, fx, toFloat } from "./fixed";
 import { FINAL_SMASH_READY } from "./final";
 import { hashState } from "./hash";
+import { kineticSet } from "./kinetic";
+import { platformCentreX } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
+import { stoneOf } from "./stone";
 import { Btn } from "./types";
-import type { FighterAttributes, FighterDef, GameState, Hitbox, InputFrame, MatchRules, MoveDef, StageDef, StepEvents } from "./types";
+import type { FighterAttributes, FighterDef, GameState, Hitbox, InputFrame, MatchRules, MoveDef, ProjectileState, StageDef, StepEvents } from "./types";
 
 /* ------------------------------------------------------------- fixtures -- */
 
@@ -142,6 +148,16 @@ function run(s0: GameState, frames: number, script: (i: number) => InputFrame[],
 
 const USE = (i: number): InputFrame[] => [i === 0 ? Btn.Special : 0, 0, 0];
 
+/** The bystander's (port 2) shot, still, at (`x`, `y`): its box is 8 ahead of it (facing left) and 6 up. */
+function hangingShot(x: number, y: number): ProjectileState {
+  return { instanceId: 1, defId: "shot", owner: 2, x, y, vx: 0, vy: 0, facing: -1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1 };
+}
+
+/** For each of `states`, stepped on from `start`: whether its step began with `user`'s scene playing (a paused step, ruling R-T14g). */
+function pausedSteps(start: GameState, states: readonly GameState[], user = 0): boolean[] {
+  return states.map((_, i) => (i === 0 ? start : states[i - 1]).cinematic === user);
+}
+
 /* ---------------------------------------------------------------- tests -- */
 
 describe("a Final Smash", () => {
@@ -207,19 +223,47 @@ describe("a Final Smash", () => {
   it("lets no projectile hit while the scene plays: a shot hanging on the user, out of the scene's intangibility, does nothing", () => {
     // A scene the user is not intangible in; its start and end still are.
     const ctx: SimContext = { fighter: () => defWith({ ...MOVES, finalAttack: { ...SCENE, intangible: undefined } }), stage: () => STAGE };
-    const s = ready(RULES, ctx);
-    // The bystander's shot, still and clear of the floor, its box (8 ahead and 6 up of
-    // it, facing left) on the user's body.
-    s.projectiles.push({ instanceId: 1, defId: "shot", owner: 2, x: fx(-2), y: fx(4), vx: 0, vy: 0, facing: -1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1 });
-    s.nextProjectileId = 2;
-    // Untouchable until the start's own intangibility holds (from its second frame).
-    s.fighters[0].intangible = 3;
-    const { states, events } = run(s, 90, USE, ctx);
-    expect(states.some((st) => st.cinematic === 0)).toBe(true);
-    expect(states.every((st) => st.projectiles.length === 1)).toBe(true);
-    // Nothing on the scene's frames (the end's first frame, before its own
-    // intangibility holds, is open again).
-    expect(events.filter((_, i) => states[i].cinematic === 0).flatMap((e) => e.hits).filter((h) => h.attacker === 2)).toEqual([]);
+    const straight = run(ready(RULES, ctx), 90, USE, ctx).states;
+    // The step the scene starts on ends with `cinematic` set; every step after it,
+    // to the one its launch ends it on, is paused (ruling R-T14g).
+    const entry = straight.findIndex((st) => st.cinematic === 0);
+    expect(entry).toBeGreaterThan(0);
+    // Into that state, the bystander's shot, still and clear of the floor, its box
+    // (8 ahead and 6 up of it, facing left) on the user's body.
+    const s = cloneState(straight[entry]);
+    s.projectiles.push(hangingShot(fx(-2), fx(4)));
+    s.nextProjectileId += 1;
+    expect(s.fighters[0].intangible).toBe(0);
+    const { states, events } = run(s, 80, () => [0, 0, 0], ctx);
+    const paused = pausedSteps(s, states);
+    expect(paused.filter(Boolean).length).toBeGreaterThan(20);
+    for (const [i, st] of states.entries()) if (paused[i]) expect(st.projectiles[0].x, `step ${i}`).toBe(fx(-2));
+    expect(events.filter((_, i) => paused[i]).flatMap((e) => e.hits).filter((h) => h.attacker === 2)).toEqual([]);
+  });
+
+  it("freezes the fighters and the world together: both start on the step after the scene's, and both end after the launch's (ruling R-T14g)", () => {
+    // The bystander's shot in flight, the clock, a roaming Smash Ball, the stage clock.
+    const s = ready({ ...RULES, smashBall: true });
+    Object.assign(s.smashBall, { active: true, x: fx(40), y: fx(80), vx: fx(1), vy: 0, health: fx(40), driftTimer: 1000 });
+    const { states } = run(s, 100, (i) => [i === 4 ? Btn.Special : 0, 0, i === 0 ? Btn.Special : 0]);
+    const moved = (a: GameState, b: GameState) => ({
+      bystander: b.fighters[2].actionFrame !== a.fighters[2].actionFrame,
+      shot: b.projectiles[0]?.x !== a.projectiles[0]?.x,
+      clock: b.timeRemaining !== a.timeRemaining,
+      ball: b.smashBall.x !== a.smashBall.x,
+      stage: b.stageFrame !== a.stageFrame,
+    });
+    const all = { bystander: true, shot: true, clock: true, ball: true, stage: true };
+    const none = { bystander: false, shot: false, clock: false, ball: false, stage: false };
+    const entry = states.findIndex((st) => st.cinematic === 0);
+    const exit = states.findIndex((st, i) => i > entry && st.cinematic === -1);
+    expect([entry > 0, exit > entry]).toEqual([true, true]);
+    // The scene starts on `entry`: that step still runs the whole world...
+    expect(moved(states[entry - 1], states[entry])).toEqual(all);
+    // ...and every step after it stands it still, the launch's included...
+    for (let i = entry + 1; i <= exit; i++) expect(moved(states[i - 1], states[i]), `step ${i}`).toEqual(none);
+    // ...and the step after the launch's runs it all again.
+    expect(moved(states[exit], states[exit + 1])).toEqual(all);
   });
 
   it("stops the Smash Ball too, and a bystander's shield neither wears nor grows", () => {
@@ -346,20 +390,21 @@ describe("the trapped (Plan 5, Task 14)", () => {
   });
 
   it("are reached by their own user's scene alone, not by another's", () => {
-    // Port 2 is in a long Final Smash start of its own, with port 3 trapped in it,
-    // when port 0 traps port 1: port 0's scene reaches port 1 and not port 3.
-    const long = defWith({ ...MOVES, finalSmash: { ...FINAL, totalFrames: 300 } });
-    const ctx: SimContext = { fighter: (id) => (id === "u" ? long : DEF), stage: () => STAGE };
-    const s = createInitialState("s", [{ defId: "t" }, { defId: "t" }, { defId: "u" }, { defId: "t" }], RULES, 1, ctx);
-    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, facing: i === 0 ? 1 : -1, intangible: 0, x: [fx(-10), fx(0), fx(80), fx(100)][i], y: 0 }));
-    s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    // One Final Smash at a time (ruling R-T14h), so this is a state play cannot reach:
+    // as port 0's scene starts, port 2 is put in a Final Smash of its own with port 3
+    // trapped in it. Port 0's scene reaches port 1 and not port 3.
+    const s0 = createInitialState("s", [{ defId: "t" }, { defId: "t" }, { defId: "t" }, { defId: "t" }], RULES, 1, CTX);
+    s0.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, facing: i === 0 ? 1 : -1, intangible: 0, x: [fx(-10), fx(0), fx(80), fx(100)][i], y: 0 }));
+    s0.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    const straight = run(s0, 60, (i) => [i === 0 ? Btn.Special : 0, 0, 0, 0]).states;
+    const s = cloneState(straight[straight.findIndex((st) => st.cinematic === 0)]);
     Object.assign(s.fighters[2], { action: "special", move: "finalSmash", actionFrame: 10 });
     Object.assign(s.fighters[3], { action: "finalTrapped" });
     s.fighters[3].combat.trappedBy = 2;
-    const { states } = run(s, 90, (i) => [i === 0 ? Btn.Special : 0, 0, 0, 0], ctx);
-    const scene = states.filter((st) => st.cinematic === 0);
-    expect(scene.length).toBeGreaterThan(20);
-    for (const st of scene) {
+    const { states } = run(s, 80, () => [0, 0, 0, 0]);
+    const paused = pausedSteps(s, states);
+    expect(paused.filter(Boolean).length).toBeGreaterThan(20);
+    for (const st of states.filter((_, i) => paused[i])) {
       expect(st.fighters[3].action).toBe("finalTrapped");
       expect(st.fighters[3].damage).toBe(0);
     }
@@ -444,7 +489,7 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
   });
 
   it("is dropped when its holder is hit: the Smash Ball roams again from where they are (SmashWiki \"Smash Ball\")", () => {
-    const s = ready();
+    const s = ready({ ...RULES, smashBall: true });
     // The victim jabs the one in standby before they use it.
     const { states } = run(s, 6, (i) => [0, i === 0 ? Btn.Attack : 0, 0]);
     const end = states[states.length - 1];
@@ -454,17 +499,39 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
     expect(Math.abs(end.smashBall.x - end.fighters[0].x)).toBeLessThan(fx(10));
   });
 
-  it("is dropped only by a hit that deals hitstun: a fighter in standby keeps it through the trap and the scene, and drops it at the launch", () => {
-    const s = ready();
+  it("is kept through somebody else's Final Smash, its launch included (SmashWiki \"Final Smash\": other players on standby \"regain it upon conclusion\")", () => {
+    const s = ready({ ...RULES, smashBall: true });
     s.fighters[1].finalSmashReady = FINAL_SMASH_READY;
-    const { states } = run(s, 90, USE);
-    // The scene up to the launch, which runs in it since Task 15.
-    const scene = states.filter((st) => st.cinematic === 0 && st.fighters[1].action === "finalTrapped");
-    expect(scene.length).toBeGreaterThan(0);
-    for (const st of scene) expect(st.fighters[1].finalSmashReady).toBe(FINAL_SMASH_READY);
+    const { states } = run(s, 130, USE);
+    expect(states.some((st) => st.cinematic === 0)).toBe(true);
     const end = states[states.length - 1];
-    expect(end.fighters[1].finalSmashReady).toBe(0);
-    expect(end.smashBall.active).toBe(true);
+    // Launched by the end's hitstun, and the user's Final Smash over...
+    expect(end.fighters[1].action).not.toBe("finalTrapped");
+    expect(end.fighters[0].action).toBe("stand");
+    // ...and the power still the victim's: no ball came out.
+    for (const st of states) expect(st.fighters[1].finalSmashReady).toBe(FINAL_SMASH_READY);
+    expect(states.every((st) => !st.smashBall.active)).toBe(true);
+  });
+
+  it("is not used while somebody else's Final Smash is out: B then is the neutral special, and the power is kept", () => {
+    const s = ready();
+    s.fighters[2].finalSmashReady = FINAL_SMASH_READY;
+    // The bystander presses B while the user's start plays, before any trap.
+    const { states } = run(s, 4, (i) => [i === 0 ? Btn.Special : 0, 0, i === 2 ? Btn.Special : 0]);
+    expect(states[2].fighters[0].move).toBe("finalSmash");
+    expect(states[2].fighters[2].move).toBe("neutralB");
+    expect(states[3].fighters[2].finalSmashReady).toBe(FINAL_SMASH_READY);
+  });
+
+  it("is dropped by a projectile's hit too, if it deals hitstun", () => {
+    const s = ready({ ...RULES, smashBall: true });
+    // The bystander's shot, on the standby user's body.
+    s.projectiles.push(hangingShot(fx(-2), fx(4)));
+    s.nextProjectileId = 2;
+    const { states } = run(s, 3, () => [0, 0, 0]);
+    expect(states[0].fighters[0].hitstun).toBeGreaterThan(0);
+    expect(states[0].fighters[0].finalSmashReady).toBe(0);
+    expect(states[0].smashBall.active).toBe(true);
   });
 
   it("is kept through a hit that deals no hitstun: armour takes the damage, and the power stays", () => {
@@ -481,7 +548,7 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
     expect(end.smashBall.active).toBe(false);
   });
 
-  it("is kept with no time limit, until used (UNVERIFIED: SmashWiki gives the Smash Ball's none)", () => {
+  it("is kept with no time limit, until used (SmashWiki \"Smash Ball\": \"unleashed at any time\")", () => {
     const s = ready({ ...RULES, smashBall: true });
     const { states } = run(s, 1_000, () => [0, 0, 0]);
     expect(states[states.length - 1].fighters[0].finalSmashReady).toBe(FINAL_SMASH_READY);
@@ -549,6 +616,219 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
     const { states } = run(s, 90, USE);
     expect(states.some((st) => st.cinematic === 0)).toBe(true);
     expect(states[states.length - 1].smashBall.health).toBe(fx(40));
+  });
+});
+
+describe("the scene holds the match still, its user and the stage included (Task 14 fix round 1)", () => {
+  /** Both in the air at `y`, the user with the power. */
+  function aloft(y: number): GameState {
+    const s = ready();
+    for (const f of s.fighters.slice(0, 2)) Object.assign(f, { action: "fall", grounded: false, platform: -1, y });
+    return s;
+  }
+
+  it("plays an aerial Final Smash's scene out in full: its user hangs where the scene began, and the trapped is launched (ruling R-T14d)", () => {
+    const ground = ready();
+    const groundStates = run(ground, 140, USE).states;
+    const s = aloft(fx(40));
+    const { states } = run(s, 140, USE);
+    // The paused steps: from the one after the scene's first to its launch's.
+    const paused = pausedSteps(s, states);
+    const scene = states.filter((_, i) => paused[i]);
+    expect(scene.length).toBe(pausedSteps(ground, groundStates).filter(Boolean).length);
+    expect(scene.length).toBeGreaterThan(40);
+    // The user was still in the air when the scene began, and stays where it began.
+    expect(scene[0].fighters[0].grounded).toBe(false);
+    expect(new Set(scene.map((st) => `${st.fighters[0].x},${st.fighters[0].y},${st.fighters[0].vx},${st.fighters[0].vy}`)).size).toBe(1);
+    // Every part played: the trap, the scene's three hits and the end's launch.
+    const end = states[states.length - 1];
+    expect(toFloat(end.fighters[1].damage)).toBeCloseTo(21 * 1.05, 2);
+    expect(states.some((st, i) => i > 0 && states[i - 1].fighters[1].action === "finalTrapped" && st.fighters[1].hitstun > 0)).toBe(true);
+    expect(states.some((st) => st.fighters[0].move === "finalEnd")).toBe(true);
+  });
+
+  it("does not land out of a Final Smash: a part it lands in plays on (UNVERIFIED: no source says what a landing does to one)", () => {
+    // Just above the floor, with nobody in reach: it lands in the start, which plays on.
+    const s = aloft(fx(3));
+    s.fighters[1].x = fx(120);
+    const { states } = run(s, 16, USE);
+    const landed = states.findIndex((st) => st.fighters[0].grounded);
+    expect(landed).toBeGreaterThan(0);
+    expect(landed).toBeLessThan(12);
+    for (const st of states.slice(landed, 15)) expect([st.fighters[0].action, st.fighters[0].move]).toEqual(["special", "finalSmash"]);
+  });
+
+  it("does not trap Kirby in his Stone, which takes the hit as a stone takes any (SmashWiki \"Stone\")", () => {
+    // SmashWiki "Stone" (https://www.ssbwiki.com/Stone), Trivia: "If a cinematic Final
+    // Smash is used on Kirby in Stone form, it will not work." Donkey Kong's Jungle
+    // Rush (its detection punch, 12%, frames 29-34) on the real Kirby, in Stone from
+    // his Down+B pressed on step 10.
+    const game: SimContext = { fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+    let s = createInitialState("finalDestination", [{ defId: "donkeyKong" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 3, game);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? 0 : 22), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    let prev: InputFrame[] = [0, 0];
+    const states: GameState[] = [];
+    const events: StepEvents[] = [];
+    for (let i = 0; i < 60; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, i === 10 ? Btn.Down | Btn.Special : 0];
+      const out = step(s, now, { prevInputs: prev, ctx: game });
+      s = out.state;
+      prev = now;
+      states.push(s);
+      events.push(out.events);
+    }
+    // In Stone when the punch comes out...
+    expect(stoneOf(states[27].fighters[1], game.fighter("kirby"))).not.toBeNull();
+    // ...it lands on the stone (a hit of no damage), and traps nobody: no scene.
+    expect(events.flatMap((e) => e.hits).filter((h) => h.attacker === 0)).toEqual([expect.objectContaining({ victim: 1, damage: 0 })]);
+    expect(states.every((st) => st.fighters[1].action !== "finalTrapped" && st.cinematic === -1)).toBe(true);
+    expect(states[59].fighters[1].damage).toBe(0);
+    expect(states[40].fighters[1].combat.stoneTaken).toBeGreaterThan(0);
+  });
+
+  it("stands the stage still too: a bystander on Smashville's moving platform rides out a 168-frame scene on it (ruling R-T14f)", () => {
+    // A scene of 150 frames and three freezes: 168 paused steps and more.
+    const long = defWith({ ...MOVES, finalAttack: { ...SCENE, totalFrames: 150, intangible: [1, 150] } });
+    const ctx: SimContext = { fighter: () => long, stage: () => smashville };
+    const s = createInitialState("smashville", [{ defId: "t" }, { defId: "t" }, { defId: "t" }], RULES, 1, ctx);
+    const deck = smashville.platforms[0];
+    const moving = smashville.platforms[1];
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, facing: i === 0 ? 1 : -1, intangible: 0, x: [fx(-30), fx(-20), 0][i], y: deck.y }));
+    Object.assign(s.fighters[2], { platform: 1, x: platformCentreX(moving, s.stageFrame), y: moving.y });
+    s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    const { states } = run(s, 260, USE, ctx);
+    const paused = pausedSteps(s, states);
+    expect(paused.filter(Boolean).length).toBeGreaterThanOrEqual(168);
+    const at = (st: GameState) => platformCentreX(moving, st.stageFrame);
+    const scene = states.filter((_, i) => paused[i]);
+    // The platform does not move while the scene plays, nor the bystander on it...
+    expect(new Set(scene.map(at)).size).toBe(1);
+    expect(new Set(scene.map((st) => st.fighters[2].x)).size).toBe(1);
+    // ...and after it, the bystander is still standing on it, carried as it moves again.
+    const after = states[paused.lastIndexOf(true) + 10];
+    expect([after.fighters[2].grounded, after.fighters[2].platform]).toEqual([true, 1]);
+    expect(Math.abs(after.fighters[2].x - at(after))).toBeLessThan(moving.halfWidth);
+  });
+
+  it("carries a projectile resting on the moving platform by the stage's clock, which a pause has put behind the match's", () => {
+    const ctx: SimContext = { fighter: () => DEF, stage: () => smashville };
+    const s = createInitialState("smashville", [{ defId: "t" }, { defId: "t" }, { defId: "t" }], RULES, 1, ctx);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, intangible: 0, x: [fx(-60), fx(-50), fx(-40)][i], y: smashville.platforms[0].y }));
+    const moving = smashville.platforms[1];
+    // After 200 paused steps, a still shot resting on the platform (`ProjectileState.ground`).
+    Object.assign(s, { frame: 300, stageFrame: 100 });
+    s.projectiles.push({ ...hangingShot(platformCentreX(moving, 100), moving.y), ground: 1 });
+    s.nextProjectileId = 2;
+    const { states } = run(s, 40, () => [0, 0, 0], ctx);
+    for (const st of states) expect(st.projectiles[0].x - platformCentreX(moving, st.stageFrame)).toBe(0);
+    expect(states[39].projectiles[0].x).not.toBe(s.projectiles[0].x);
+  });
+
+  it("stands the stage still in a KO's freeze too (UNVERIFIED: the KO freeze read as the whole match paused)", () => {
+    const s = ready();
+    s.freezeFrames = 5;
+    const { states } = run(s, 7, () => [0, 0, 0]);
+    expect(states.map((st) => st.frame - st.stageFrame)).toEqual([1, 2, 3, 4, 5, 5, 5]);
+  });
+
+  it("keeps an airborne user in its scene beside a ledge it would take: no ledge cuts the scene short", () => {
+    const straight = run(aloft(fx(40)), 60, USE).states;
+    const entry = straight.findIndex((st) => st.cinematic === 0);
+    expect(entry).toBeGreaterThan(0);
+    // As the scene starts, the user is put where a fall takes the ledge (see "stay
+    // where the trap caught them").
+    const s = cloneState(straight[entry]);
+    Object.assign(s.fighters[0], { x: fx(152), y: fx(-5), facing: -1 });
+    const { states } = run(s, 20, () => [0, 0, 0]);
+    for (const st of states) expect([st.fighters[0].action, st.fighters[0].ledge, st.cinematic]).toEqual(["special", null, 0]);
+  });
+
+  it("lands a projectile's hit on the step after the launch's, not on it: the world's freeze ends with the fighters' (ruling R-T14g)", () => {
+    const straight = run(ready(), 120, USE).states;
+    const entry = straight.findIndex((st) => st.cinematic === 0);
+    const exit = straight.findIndex((st, i) => i > entry && st.cinematic === -1);
+    expect([entry > 0, exit > entry]).toEqual([true, true]);
+    // As the scene starts, the victim's shot, still, its box on the stilled bystander
+    // (at 80; the box 8 ahead of the shot, facing left, and 6 up).
+    const s = cloneState(straight[entry]);
+    s.projectiles.push({ ...hangingShot(fx(88), fx(4)), owner: 1 });
+    s.nextProjectileId += 1;
+    const { events } = run(s, exit - entry + 3, () => [0, 0, 0]);
+    const onBystander = events.map((e) => e.hits.filter((h) => h.victim === 2).length);
+    // Steps entry+1 .. exit are paused: nothing; the step after exit lands it.
+    expect(onBystander.slice(0, exit - entry)).toEqual(new Array(exit - entry).fill(0));
+    expect(onBystander[exit - entry]).toBe(1);
+  });
+
+  it("takes no ledge in any part of a Final Smash: Pikachu's whiffed Volt Tackle runs past Final Destination's edges (ruling R-T14j; SmashWiki \"Volt Tackle\": \"the tackle ignores edges\")", () => {
+    const game: SimContext = { fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+    for (const facing of [-1, 1]) {
+      let s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 3, game);
+      s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? -30 : -30 - 20 * facing), y: 0, facing, intangible: 0 }));
+      // Mario is behind Pikachu, out of the tackle's way: a whiff.
+      s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+      let prev: InputFrame[] = [0, 0];
+      let inMove = 0;
+      for (let i = 0; i < 120; i++) {
+        const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
+        s = step(s, now, { prevInputs: prev, ctx: game }).state;
+        prev = now;
+        const pika = s.fighters[0];
+        if (pika.action === "special" && pika.move === "finalSmash") inMove++;
+        expect(pika.action, `facing ${facing}, step ${i}`).not.toBe("ledgeHang");
+      }
+      expect(inMove, `facing ${facing}`).toBeGreaterThan(40);
+    }
+  });
+
+  it("plays an aerial Final Smash begun beside the edge out in full: its user takes no ledge before the scene (ruling R-T14j, UNVERIFIED for the scene and end parts)", () => {
+    // The user falls past the right ledge (150) facing it, in reach of it, and traps a
+    // victim above the stage's edge.
+    const s = ready();
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(154), y: fx(2), facing: -1 });
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, x: fx(146), y: fx(2), facing: 1 });
+    const { states } = run(s, 110, USE);
+    expect(states.every((st) => st.fighters[0].action !== "ledgeHang")).toBe(true);
+    expect(pausedSteps(s, states).filter(Boolean).length).toBe(pausedSteps(ready(), run(ready(), 110, USE).states).filter(Boolean).length);
+    expect(toFloat(Math.max(...states.map((st) => st.fighters[1].damage)))).toBeCloseTo(21 * 1.05, 2);
+    expect(states.some((st, i) => i > 0 && states[i - 1].fighters[1].action === "finalTrapped" && st.fighters[1].hitstun > 0)).toBe(true);
+  });
+
+  it("makes its user intangible from the step the power is spent (SmashWiki \"Final Smash\": \"make the user fully intangible\")", () => {
+    // The victim's jab is out (its frames 2-3) on the step the user presses B.
+    const s = ready();
+    Object.assign(s.fighters[1], { action: "attack", move: "jab1", actionFrame: 0, x: fx(-2) });
+    const { states, events } = run(s, 3, USE);
+    expect(states[0].fighters[0].intangible).toBeGreaterThan(0);
+    expect(events[0].hits).toEqual([]);
+    expect(states[2].fighters[0].damage).toBe(0);
+    expect(states[2].fighters[0].move).toBe("finalSmash");
+  });
+
+  it("holds an airborne, moving bystander, and one whose attack is out, still through the scene: no move, no hit", () => {
+    const s0 = createInitialState("s", [{ defId: "t" }, { defId: "t" }, { defId: "t" }, { defId: "t" }], RULES, 1, CTX);
+    s0.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, facing: i === 0 ? 1 : -1, intangible: 0, x: [fx(-10), 0, fx(80), fx(100)][i], y: 0 }));
+    s0.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    const straight = run(s0, 60, (i) => [i === 0 ? Btn.Special : 0, 0, 0, 0]).states;
+    const entry = straight.findIndex((st) => st.cinematic === 0);
+    expect(entry).toBeGreaterThan(0);
+    // As the scene starts: port 2 falls and drifts just above port 3's jab, whose box
+    // (8 ahead of it, 6 up, radius 6) is out on its held frame.
+    const s = cloneState(straight[entry]);
+    Object.assign(s.fighters[2], { action: "fall", grounded: false, platform: -1, x: fx(92), y: fx(14) });
+    kineticSet(s.fighters[2], fx(0.5), fx(-1));
+    Object.assign(s.fighters[3], { action: "attack", move: "jab1", actionFrame: 1, x: fx(100), facing: -1 });
+    s.fighters[3].hitThisMove.length = 0;
+    const { states, events } = run(s, 60, () => [0, 0, 0, 0]);
+    const paused = pausedSteps(s, states);
+    expect(paused.filter(Boolean).length).toBeGreaterThan(20);
+    const scene = states.filter((_, i) => paused[i]);
+    for (const port of [2, 3]) {
+      expect(new Set(scene.map((st) => { const f = st.fighters[port]; return `${f.x},${f.y},${f.vx},${f.vy},${f.actionFrame}`; })).size, `port ${port}`).toBe(1);
+    }
+    expect(scene[0].fighters[2].vy).toBeLessThan(0);
+    expect(events.filter((_, i) => paused[i]).flatMap((e) => e.hits).filter((h) => h.attacker !== 0)).toEqual([]);
   });
 });
 

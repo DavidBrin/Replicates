@@ -98,6 +98,7 @@ function state(over: Partial<GameState> = {}): GameState {
     outcome: null,
     freezeFrames: 0,
     cinematic: -1,
+    stageFrame: 0,
     ...over,
   };
 }
@@ -158,6 +159,7 @@ describe("hashState", () => {
       ["timeRemaining", (s) => (s.timeRemaining += 1)],
       ["freezeFrames", (s) => (s.freezeFrames += 1)],
       ["cinematic", (s) => (s.cinematic = 1)],
+      ["stageFrame", (s) => (s.stageFrame += 1)],
       ["nextProjectileId", (s) => (s.nextProjectileId += 1)],
       ["rules.mode", (s) => (s.rules = { ...s.rules, mode: "time" })],
       ["rules.stocks", (s) => (s.rules = { ...s.rules, stocks: 2 })],
