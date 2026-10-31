@@ -1190,18 +1190,21 @@ describe("registry", () => {
     expect(() => registryContext.fighter("tester")).toThrow();
   });
 
-  // Plan 3, Task 17 fix round 1: a `MoveDef` hitbox the legacy compile reads and a projectile's
-  // are spheres, so a far end on one is refused, by fighter and move, rather than dropped. Plan 3,
-  // Task 18: a slot a script overrides is not compiled, and its table may be the script's own boxes
+  // Plan 3, Task 17 fix round 1: a projectile's hitbox is a sphere, so a far end on one is
+  // refused, by fighter and move, rather than dropped. A `MoveDef` hitbox the legacy compile
+  // reads was refused too until Plan 5 (ruling P5-R19, Task 15): the compile now carries its
+  // far end into the capsule (`attackFromHitbox`), so it registers. Plan 3, Task 18: a slot a
+  // script overrides is not compiled, and its table may be the script's own boxes
   // (`withReferenceScripts`), whose far ends the renderer and the CPU read.
   describe("refuses, at registration, a far end (x2/y2) where a sphere is meant", () => {
     const extended = (over: Partial<Hitbox>): Hitbox => hitbox({ ...over });
 
-    it("on a MoveDef hitbox, by fighter and move", () => {
+    it("but registers a MoveDef hitbox's far end, which the compile carries (ruling P5-R19)", () => {
       clearRegistry();
       const capsule: FighterDef = { ...DEF, moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [extended({ x2: fx(12), y2: fx(6) })] }) } };
-      expect(() => registerFighters([capsule])).toThrow(/tester jab1.*hitbox 0.*far end \(x2\/y2\)/);
-      expect(() => registryContext.fighter("tester")).toThrow();
+      expect(() => registerFighters([capsule])).not.toThrow();
+      expect(registryContext.fighter("tester")).toBe(capsule);
+      clearRegistry();
     });
 
     it("but not on a MoveDef hitbox whose slot a script overrides: nothing compiles it", () => {

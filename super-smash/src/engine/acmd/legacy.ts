@@ -105,15 +105,23 @@ function situationOf(hb: Hitbox): AttackParams["situation"] {
 }
 
 /**
- * A legacy hitbox as `ATTACK` arguments on the root bone. A legacy hitbox is a
- * sphere: one with a far end (`x2`/`y2`) is refused rather than compiled to a
- * sphere, which would quietly shrink the move; a capsule is scripted with
- * `ATTACK(..., X2, Y2, Z2)` (Plan 3, Task 17).
+ * A legacy hitbox's far end as `ATTACK`/`CATCH` arguments on the root bone (Plan
+ * 5, ruling P5-R19): its facing-relative `x2` the script's `Z2` and its `y2` the
+ * `Y2`, as the near end's are (`X2` stays absent: the root bone's X is 0 for both
+ * ends). An axis it leaves out is the near end's (`scriptHitboxes`). Plan 3, Task
+ * 17 refused a far end here, since the compile then dropped it and quietly shrank
+ * the move; it now keeps it, so a `MoveDef` table may hold a capsule (Jungle
+ * Rush's detection punch, Task 15).
+ */
+function farEndOf(hb: Hitbox): Pick<AttackParams, "y2" | "z2"> {
+  return { ...(hb.y2 !== undefined ? { y2: hb.y2 } : {}), ...(hb.x2 !== undefined ? { z2: hb.x2 } : {}) };
+}
+
+/**
+ * A legacy hitbox as `ATTACK` arguments on the root bone, its far end included
+ * when it has one (`farEndOf`): a capsule, `ATTACK(..., X2, Y2, Z2)`.
  */
 export function attackFromHitbox(hb: Hitbox): AttackParams {
-  if (hb.x2 !== undefined || hb.y2 !== undefined) {
-    throw new Error(`legacy hitbox ${hb.id} has a far end (x2/y2): a legacy hitbox is a sphere`);
-  }
   return {
     id: hb.id,
     part: 0,
@@ -127,6 +135,7 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     x: 0,
     y: hb.y,
     z: hb.x,
+    ...farEndOf(hb),
     hitlag: hb.hitlagMultiplier ?? ONE,
     sdi: ONE,
     // A transcendent box is the published no-clank setting (`cannotClank`, Plan 5
@@ -198,6 +207,7 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
           x: 0,
           y: hb.y,
           z: hb.x,
+          ...farEndOf(hb),
           status: "FIGHTER_STATUS_KIND_CAPTURE_PULLED",
           situation: situationOf(hb),
         },

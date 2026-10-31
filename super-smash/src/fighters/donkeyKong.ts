@@ -14,6 +14,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { barrage, finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { DONKEY_KONG } from "./acmd/generated/donkeyKong";
 import { FIGHTER_PARAMS } from "./params";
@@ -977,6 +978,66 @@ const legacy: FighterDef = {
           knockbackGrowth: fx(45),
         },
       ],
+    },
+
+    // Plan 5, Task 15 — Jungle Rush. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Donkey%20Kong/data.json),
+    // `game_finalstart`, `game_finalattack`, `game_finalend` and their motions'
+    // CancelFrames; SmashWiki "Donkey Kong (SSBU)/Final Smash"
+    // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Final_Smash): Detection "29-34",
+    // hits 1-18 "6-7, 10-11, … 74-75", hits 19-31 "79, 83, … 127", "Final hit
+    // 139-140"; SmashWiki "Jungle Rush" (https://www.ssbwiki.com/Jungle_Rush): "If
+    // the first hit doesn't make contact, the whole attack fails", "a barrage of 31
+    // more rapid punches", "33 total hits"; SmashWiki "Donkey Kong (SSBU)"
+    // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)): "12% (initial hit), 1.2% (rapid
+    // hits 1-18), 1.1% (rapid hits 19-31), 14% (final hit), 61.9% (maximum)";
+    // SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash): Final Smashes
+    // "make the user fully intangible".
+    // - The detection punch: 12%, angle 361, KBG 0, BKB 0, radius 13, a capsule on
+    //   `top` 10 up from 8 to 28 ahead, hitlag ×5, ATTACK_SETOFF_KIND_OFF,
+    //   ATTACK_LR_CHECK_POS, frames 29-34: it traps. The script raises
+    //   FIGHTER_DONKEY_STATUS_FINAL_FLAG_TO_ATTACK on 37, where the barrage starts
+    //   (`nextAt`). A whiff plays final_start to its CancelFrame, 97.
+    // - The barrage, `game_finalattack`'s two loops: 18 × 1.2% from its frame 6 and
+    //   13 × 1.1% from 79, one every 4 frames; the lead box's angle 135, KBG 100, FKB
+    //   40, radius 8.5, hitlag ×0.4, OFF. The uppercut lands on 139-140 of the same
+    //   timeline, and `game_finalend` opens it on its frame 7, so the barrage lasts
+    //   132 frames.
+    // - The uppercut, `game_finalend`: 14%, angle 70, KBG 96, BKB 90, hitlag ×1, OFF,
+    //   POS, on its frame 7 (radius 15 and 11 up, its box 3's); final_end's
+    //   CancelFrame 70.
+    // UNVERIFIED-simplified: each scene hit is the first frame of its window (the
+    // page's "6-7" is one hit; `finalKit.ts`). The barrage's knockback (FKB 40) and
+    // the uppercut's `set_force_reaction` are the scene's: a trapped fighter is held,
+    // and has no armour. `DisableHitlag=true` is not modelled, as for every box.
+    // UNVERIFIED: the scene boxes' x (the stand-in 10): they reach the trapped
+    // wherever they are.
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Jungle Rush",
+      totalFrames: 96,
+      intangible: [1, 96],
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 37 },
+      hitboxes: [finalBox(0, 29, 34, { damage: 12, angle: 361, kbg: 0, radius: 13, x: 8, y: 10, x2: 28, y2: 10, hitlag: 5, transcendent: true, lr: "position" })],
+    },
+    finalAttack: {
+      slot: "finalAttack",
+      name: "Jungle Rush (barrage)",
+      totalFrames: 132,
+      intangible: [1, 132],
+      final: { phase: "attack", next: "finalEnd" },
+      hitboxes: [
+        ...barrage(0, 6, 18, 4, { damage: 1.2, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
+        ...barrage(18, 79, 13, 4, { damage: 1.1, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
+      ],
+    },
+    finalEnd: {
+      slot: "finalEnd",
+      name: "Jungle Rush (uppercut)",
+      totalFrames: 69,
+      intangible: [1, 69],
+      final: { phase: "end" },
+      hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position" })],
     },
   },
 

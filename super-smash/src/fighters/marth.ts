@@ -49,6 +49,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { MARTH } from "./acmd/generated/marth";
 import { FIGHTER_PARAMS } from "./params";
@@ -1165,6 +1166,51 @@ const legacy: FighterDef = {
           knockbackGrowth: fx(57),
         },
       ],
+    },
+
+    // Plan 5, Task 15 — Critical Hit. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Marth/data.json),
+    // `game_finalstart`, `game_finaldash`, `game_finalend` and their motions'
+    // CancelFrames; SmashWiki "Critical Hit" (https://www.ssbwiki.com/Critical_Hit):
+    // "If the attack connects, it has the potential to be a one-hit KO", "Critical
+    // Hit only hits once"; SmashWiki "Marth (SSBU)"
+    // (https://www.ssbwiki.com/Marth_(SSBU)): "60%", "lunges in one direction,
+    // attacking the first opponent he connects"; SmashWiki "Final Smash"
+    // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
+    // intangible".
+    // - The dash's catch box, `game_finaldash`: 0%, angle 361, radius 10 on the sword
+    //   (`sword1`), hitlag ×0, ATTACK_SETOFF_KIND_OFF, ATTACK_LR_CHECK_POS: it traps,
+    //   and the strike follows at once (`nextAt` 25, the dash's first frame here).
+    // - The strike, `game_finalend`: 60%, angle 361, KBG 120, BKB 120, radius 18, 8
+    //   up and 16 ahead on `top`, hitlag ×1, OFF, cutting, on its frame 2;
+    //   final_end's CancelFrame 60.
+    // UNVERIFIED: the dash, 6 units a frame on frames 25-70 (from `game_finalstart`'s
+    // last command, on 25), and the whiff's length, final_dash_end's CancelFrame 85:
+    // SSBU moves Marth by his animation, which is unpublished, and loops the dash by
+    // status. Alternative: the dash's own length, then final_dash_end, whose
+    // FT_MOTION_RATE (0.6, then 0.5 from 50) brings its CancelFrame to game frame 48
+    // (`gameFrameOfMotion`).
+    // UNVERIFIED: the catch box's offset (8 ahead, 7 up): it hangs off the sword.
+    // UNVERIFIED-simplified: the strike is one frame (its script's 2-5; it "only
+    // hits once", `finalKit.ts`). Not modelled: the dash stopping at a platform's
+    // edge ("the move will end without the user swinging if they reach the edge",
+    // Critical Hit), and special pressed again stopping it ("Marth (SSBU)").
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Critical Hit",
+      totalFrames: 85,
+      intangible: [1, 85],
+      momentum: [{ frame: 25, x: fx(6), y: fx(0), hold: 45 }],
+      final: { phase: "start", trap: true, next: "finalEnd", nextAt: 25 },
+      hitboxes: [finalBox(0, 25, 70, { damage: 0, angle: 361, kbg: 0, radius: 10, x: 8, y: 7, hitlag: 0, transcendent: true, lr: "position" })],
+    },
+    finalEnd: {
+      slot: "finalEnd",
+      name: "Critical Hit (strike)",
+      totalFrames: 59,
+      intangible: [1, 59],
+      final: { phase: "end" },
+      hitboxes: [finalBox(0, 2, 2, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 18, x: 16, y: 8, hitlag: 1, transcendent: true, effect: "slash" })],
     },
   },
 

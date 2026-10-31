@@ -156,12 +156,12 @@ export function throwStrikeFrame(script: AcmdScript): number | null {
  * - An extended (capsule) ATTACK or CATCH loads like any other (Plan 3, Task
  *   17): its far end is on the same bone as its near end, so the bone check
  *   above covers both.
- * - A `MoveDef` hitbox with a far end (`x2`/`y2`) throws where the `MoveDef`
- *   is what runs: the legacy compile reads a sphere, and a capsule is scripted
- *   instead. Where a script overrides the slot the compile never reads it, and
- *   the table may be the script's own boxes, capsules included
- *   (`withReferenceScripts`; the renderer and the CPU read far ends, Plan 3,
- *   Task 18).
+ * - A `MoveDef` hitbox with a far end (`x2`/`y2`) loads: the legacy compile
+ *   carries it into the capsule (`attackFromHitbox`; Plan 5, ruling P5-R19,
+ *   which ended Plan 3 Task 17's refusal here). Where a script overrides the
+ *   slot the compile never reads it, and the table may be the script's own
+ *   boxes, capsules included (`withReferenceScripts`; the renderer and the CPU
+ *   read far ends, Plan 3, Task 18).
  * - A projectile's hitbox with a far end throws whatever runs the slot: a
  *   projectile is a sphere.
  * - A hitbox with an autolink angle the engine does not model (363°, 366°,
@@ -172,7 +172,7 @@ export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
   const slots = new Set([...Object.keys(def.moves), ...Object.keys(def.scripts ?? {})] as MoveSlot[]);
   const scratch = newBonePose();
   for (const slot of slots) {
-    refuseFarEnds(def, slot);
+    refuseProjectileFarEnds(def, slot);
     refuseUnmodelledProjectileAngles(def, slot);
     const script = gameScriptFor(def, slot);
     if (script === null) continue;
@@ -210,19 +210,12 @@ function refuseUnmodelledProjectileAngles(def: FighterDef, slot: MoveSlot): void
 }
 
 /**
- * Throw for a far end (`x2`/`y2`) on a hitbox of the legacy `MoveDef` in `slot`
- * that the legacy compile would read (no script overrides the slot), or on one
- * of its projectiles.
+ * Throw for a far end (`x2`/`y2`) on the hitbox of a projectile `slot` throws: a
+ * projectile is a sphere. A `MoveDef` hitbox's far end compiles (ruling P5-R19).
  */
-function refuseFarEnds(def: FighterDef, slot: MoveSlot): void {
+function refuseProjectileFarEnds(def: FighterDef, slot: MoveSlot): void {
   const move = def.moves[slot];
   if (move === undefined) return;
-  const compiled = def.scripts?.[slot] === undefined;
-  for (const hb of compiled ? move.hitboxes : []) {
-    if (hb.x2 !== undefined || hb.y2 !== undefined) {
-      throw new Error(`${def.id} ${slot}: hitbox ${hb.id} has a far end (x2/y2): a MoveDef hitbox is a sphere, script a capsule`);
-    }
-  }
   for (const p of move.projectiles ?? []) {
     if (p.hitbox.x2 !== undefined || p.hitbox.y2 !== undefined) {
       throw new Error(`${def.id} ${slot}: projectile "${p.id}" hitbox has a far end (x2/y2): a projectile's hitbox is a sphere`);

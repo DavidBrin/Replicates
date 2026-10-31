@@ -96,6 +96,11 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     startMove(f, "attack", move.followUp);
     return;
   }
+  // A Final Smash part with a `nextAt` goes on to its next part from that frame once
+  // it has trapped anybody (Plan 5, Task 15: `final.ts`); a whiff plays it all.
+  if (move.final?.nextAt !== undefined && moveFrameOf(f.actionFrame) >= move.final.nextAt && nextFinalPhase(f, ctx, move.final.next) !== null) {
+    return;
+  }
   // `totalFrames` is UFD's "Total frames" T: the move's frames 1..T, and the
   // fighter acts on frame T + 1, this one (`handOff`). A stored full charge
   // ends on its own published frame (`moveEndFrame`, Plan 5).

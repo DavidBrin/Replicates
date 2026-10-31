@@ -23,6 +23,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { FOX } from "./acmd/generated/fox";
 import { FIGHTER_PARAMS } from "./params";
@@ -1039,6 +1040,61 @@ const legacy: FighterDef = {
           knockbackGrowth: fx(100),
         },
       ],
+    },
+
+    // Plan 5, Task 15 — Team Star Fox. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Fox/data.json),
+    // `game_finallockon`, `game_finalvisualscene`, `game_finalend` and their
+    // motions' CancelFrames; SmashWiki "Team Star Fox"
+    // (https://www.ssbwiki.com/Team_Star_Fox): "Anyone hit by the reticle will be
+    // sent into a cutscene where the fighter in his Arwing fires their lasers,
+    // creating an explosion which launches the opponent"; SmashWiki "Fox (SSBU)"
+    // (https://www.ssbwiki.com/Fox_(SSBU)): "3% (trapping hit), 30% (lasers), 10%
+    // (end)"; SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash): Final
+    // Smashes "make the user fully intangible".
+    // - The reticle, `game_finallockon`: 3%, angle 80, KBG 100, FKB 200, radius 18,
+    //   a capsule on `top` 14 up from 20 to 36 ahead, hitlag ×0.4,
+    //   ATTACK_SETOFF_KIND_OFF, frames 28-31: it traps. The script clears it on 32
+    //   with FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_CLEAR_ATTACK, where the scene starts
+    //   (`nextAt`). A whiff plays final_lock_on to its CancelFrame, 85.
+    // - The lasers, `game_finalvisualscene`: one ATTACK_ABS of 30%, angle 361, KBG
+    //   80, FKB 1, hitlag ×0, set on 230 and landed by
+    //   FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_ABS_HIT on 240 (the Arwings' shots
+    //   before it are flags, for show).
+    // - The end, `game_finalend`: an ATTACK_ABS of 10%, angle 55, KBG 144, BKB 70,
+    //   hitlag ×0, ATTACK_LR_CHECK_POS, set before its first frame; final_end's
+    //   CancelFrame 66 comes on game frame 57 through its FT_MOTION_RATE 0.85 from
+    //   frame 1 (`gameFrameOfMotion`).
+    // UNVERIFIED: that the scene ends with its hit, on 240 (final_visual_scene
+    // publishes no CancelFrame), and that the end's ATTACK_ABS lands on its frame 1
+    // (its status lands it; the script only sets it). An ATTACK_ABS has no box: the
+    // lasers' and the end's offsets are the stand-ins (`finalKit.ts`), and they reach
+    // the trapped wherever they are.
+    // UNVERIFIED: the reticle's ATTACK_LR_CHECK_SPEED, unmodelled: it traps, and
+    // launches nothing.
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Team Star Fox",
+      totalFrames: 84,
+      intangible: [1, 84],
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 32 },
+      hitboxes: [finalBox(0, 28, 31, { damage: 3, angle: 80, kbg: 100, fkb: 200, radius: 18, x: 20, y: 14, x2: 36, y2: 14, hitlag: 0.4, transcendent: true })],
+    },
+    finalAttack: {
+      slot: "finalAttack",
+      name: "Team Star Fox (lasers)",
+      totalFrames: 240,
+      intangible: [1, 240],
+      final: { phase: "attack", next: "finalEnd" },
+      hitboxes: [finalBox(0, 240, 240, { damage: 30, angle: 361, kbg: 80, fkb: 1, hitlag: 0, lr: "position" })],
+    },
+    finalEnd: {
+      slot: "finalEnd",
+      name: "Team Star Fox (end)",
+      totalFrames: 56,
+      intangible: [1, 56],
+      final: { phase: "end" },
+      hitboxes: [finalBox(0, 1, 1, { damage: 10, angle: 55, kbg: 144, bkb: 70, hitlag: 0, lr: "position" })],
     },
   },
 

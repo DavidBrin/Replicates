@@ -19,6 +19,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef, Hitbox } from "@/engine/types";
+import { finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { KIRBY } from "./acmd/generated/kirby";
 import { FIGHTER_PARAMS } from "./params";
@@ -1206,6 +1207,64 @@ const legacy: FighterDef = {
           knockbackGrowth: fx(180),
         },
       ],
+    },
+
+    // Plan 5, Task 15 — Ultra Sword. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Kirby/data.json),
+    // `game_finalstart`, `game_finalattack` and their motions' CancelFrames;
+    // SmashWiki "Ultra Sword" (https://www.ssbwiki.com/Ultra_Sword): "The Final
+    // Smash deals a total of 40% damage", "Make sure the first swing connects with
+    // an opponent, or nothing else happens!"; SmashWiki "Final Smash"
+    // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
+    // intangible".
+    // - The first swing, `game_finalstart`: 3%, angle 22, KBG 100, FKB 30, radius
+    //   10, 8 up and 15 ahead on `top`, hitlag ×0, ATTACK_SETOFF_KIND_OFF,
+    //   paralysing, frames 17-19: it traps. A whiff plays final_start to its
+    //   CancelFrame, 87.
+    // - The slashes, `game_finalattack`: eight of 2.6%, angle 367, KBG 140, FKB 20,
+    //   radius 12, hitlag ×0.5, OFF, cutting, opening on its frames 21, 35, 48, 59,
+    //   71, 83, 97 and 109; it raises FIGHTER_KIRBY_STATUS_WORK_ID_FLAG_FINAL_SWING_HOLD
+    //   on 110, where this part ends.
+    // - The last slash, the sword grown: 16%, angle 45, KBG 95, BKB 75, radius 10,
+    //   hitlag ×0.5, OFF, cutting, on `game_finalattack`'s frame 173, here frame 63
+    //   of the end; final_attack's CancelFrame 219 is 110 + 108 + 1.
+    // 3 + 8 × 2.6 + 16 = 39.8: the page's "total of 40%".
+    // UNVERIFIED: the scene from the start's frame 22 (`nextAt`): the script raises
+    // no hand-over flag (22 is its camera's last change after the swing).
+    // UNVERIFIED: SmashWiki "Kirby (SSBU)" (https://www.ssbwiki.com/Kirby_(SSBU))
+    // lists "3% (stun), 5% (hit 1), 2.5% (hits 2-9), 16% (hit 10)", and "Ultra
+    // Sword" "slicing the opponent nine times" before "a powerful tenth blow". The 5%
+    // is `game_finalstart`'s swing on 54-60, on the sword (`haver`) and not
+    // caught-only; it is not modelled, so the scene has nine blows for 39.8%.
+    // Alternative: it is the scene's first blow, ten blows for 44.8% (and a whiff
+    // swings it at the world).
+    // UNVERIFIED-simplified: each scene hit is the first frame of its window
+    // (`finalKit.ts`); the scene boxes' offsets are stand-ins (the script hangs them
+    // off `virtualfinalattack` bones and the sword): they reach the trapped wherever
+    // they are.
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Ultra Sword",
+      totalFrames: 86,
+      intangible: [1, 86],
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 22 },
+      hitboxes: [finalBox(0, 17, 19, { damage: 3, angle: 22, kbg: 100, fkb: 30, radius: 10, x: 15, y: 8, hitlag: 0, transcendent: true, effect: "paralyze" })],
+    },
+    finalAttack: {
+      slot: "finalAttack",
+      name: "Ultra Sword (slashes)",
+      totalFrames: 110,
+      intangible: [1, 110],
+      final: { phase: "attack", next: "finalEnd" },
+      hitboxes: [21, 35, 48, 59, 71, 83, 97, 109].map((f, i) => finalBox(i, f, f, { damage: 2.6, angle: 367, kbg: 140, fkb: 20, radius: 12, hitlag: 0.5, transcendent: true, effect: "slash" })),
+    },
+    finalEnd: {
+      slot: "finalEnd",
+      name: "Ultra Sword (last slash)",
+      totalFrames: 108,
+      intangible: [1, 108],
+      final: { phase: "end" },
+      hitboxes: [finalBox(0, 63, 63, { damage: 16, angle: 45, kbg: 95, bkb: 75, radius: 10, hitlag: 0.5, transcendent: true, effect: "slash" })],
     },
   },
 

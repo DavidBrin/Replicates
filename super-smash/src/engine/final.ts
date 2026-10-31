@@ -24,7 +24,12 @@
  *   wherever they are (SSBU hangs them off `virtualfinalattack` bones, which the
  *   scene places; the replica has none), for damage only.
  * - `end`: the finishing blow, which also reaches every fighter trapped, and
- *   launches.
+ *   launches. The scene stands the match still through it until the launch
+ *   (Task 15).
+ *
+ * A part goes on to the next when it ends, or from its `nextAt` frame (Task 15),
+ * with somebody trapped. Scene boxes keep no hit record, so each is authored one
+ * frame long and lands once (`fighters/finalKit.ts`).
  *
  * A Final Smash with no `trap` (Task 16's) is an ordinary, very large move.
  * SmashWiki "Unblockable attack" (https://www.ssbwiki.com/Unblockable_attack):
@@ -91,26 +96,31 @@ export function trapVictim(user: FighterState, victim: FighterState, fighters: r
 }
 
 /**
- * Called when a Final Smash part's move ends: on to the next part if anybody is
- * trapped, else the move is over. Returns the slot started, or null.
+ * Called when a Final Smash part's move ends, or reaches its `nextAt` (Task 15):
+ * on to the next part if anybody is trapped, else nothing. Returns the slot
+ * started, or null. The scene plays where the trap landed: whatever carried the
+ * user there (Critical Hit's dash, Volt Tackle's tackle) stops (`kineticClear`).
  */
 export function nextFinalPhase(f: FighterState, ctx: StateContext, next: MoveSlot | undefined): MoveSlot | null {
   if (next === undefined) return null;
   if (trappedBy(ctx, f.port).length === 0) return null;
+  kineticClear(f);
   startMove(f, "special", next);
   return next;
 }
 
 /**
  * The cinematic, decided once a frame after the state machines have run: it
- * plays while a fighter's move is an `attack` part with somebody trapped.
+ * plays while a fighter's move is an `attack` or `end` part with somebody still
+ * trapped. The end's finishing blow launches them, and that ends it (Task 15).
  */
 export function updateCinematic(s: GameState, defs: readonly FighterDef[]): void {
   s.cinematic = -1;
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     if (f.action !== "special" || f.move === null) continue;
-    if (defs[i].moves[f.move]?.final?.phase !== "attack") continue;
+    const phase = defs[i].moves[f.move]?.final?.phase;
+    if (phase !== "attack" && phase !== "end") continue;
     if (trappedBy(s, f.port).length > 0) {
       s.cinematic = f.port;
       return;

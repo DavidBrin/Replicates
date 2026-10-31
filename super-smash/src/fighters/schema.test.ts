@@ -429,6 +429,9 @@ describe("hitbox values", () => {
   it.each(each)("%s gives every damaging hitbox a plausible damage", (_name, fighter) => {
     for (const { slot, hitbox } of everyHitbox(fighter)) {
       if (hitbox.grabbing) continue;
+      // A Final Smash's finishing blow is in a class of its own (Plan 5:
+      // Critical Hit is 60%).
+      if (slot === "finalSmash" || slot === "finalAttack" || slot === "finalEnd") continue;
       // Kirby's fully charged Hammer Flip is the largest single hit in the game
       // at 35%; nothing here should exceed it.
       expect(

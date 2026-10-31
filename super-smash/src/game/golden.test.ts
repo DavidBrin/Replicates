@@ -26,12 +26,13 @@ import { INHALE_LAB } from "./goldenInhaleLab";
 import { CRAWL_LAB } from "./goldenCrawlLab";
 import { STATES_LAB } from "./goldenStatesLab";
 import { PROJECTILE_LAB } from "./goldenProjectileLab";
+import { FINAL_LAB } from "./goldenFinalLab";
 import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./projectilePaths";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Ten matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Eleven matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
@@ -48,7 +49,10 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * settles and goes off on its timer, her Charge Shot and Link's arrow clank, a Charge
  * Shot flies out its life, one clanks with Link's jab and he rebounds, the smash-input
  * specials, Samus's Super Missile and Link's smash-thrown Boomerang, each land their
- * hit, and Link throws with his Boomerang out, which fails.
+ * hit, and Link throws with his Boomerang out, which fails; and a 400-frame Final
+ * Smash lab (`goldenFinalLab.ts`, Task 15, ruling P5-R14): Donkey Kong, given the
+ * Smash Ball's power in its setup, traps Mario in Jungle Rush, plays its scene and
+ * launches him.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -183,11 +187,17 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => PROJECTILE_LAB.inputs(frame);
     },
   },
+  {
+    ...FINAL_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => FINAL_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the ten matches must visit between them: all 59 but the one
- * exempted, by name, as not yet reachable (`NotYetVisited`, below). A `Record`
+ * Every `ActionState` the eleven matches must visit between them: all 59. A `Record`
  * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
@@ -276,22 +286,13 @@ const MATCHES: readonly Match[] = [
  * rebounds or is shield-stunned any more, which the script and the labs reach. All
  * 58 are visited.
  * Plan 5 Task 14 added `finalTrapped`, a fighter caught in a cinematic Final Smash.
- * No fighter has a Final Smash until Task 15, so no golden match can trap anybody:
- * it is the one action exempted (ruling P5-R14), with its reason, and Task 15 drops
- * the exemption by staging a Final Smash in a golden lab. The ten traces were
- * byte-identical with the Final Smash engine in. All 58 others are visited.
+ * No fighter had a Final Smash until Task 15, so no golden match could trap anybody:
+ * it was the one action exempted, by name (ruling P5-R14). Task 15 gave five
+ * fighters theirs and staged one in an eleventh match, the Final Smash lab
+ * (`goldenFinalLab.ts`), which traps Mario, and dropped the exemption. All 59 are
+ * visited.
  */
-/**
- * An action no golden match can reach yet, and why (ruling P5-R14: new actions are
- * visited, not exempted; `finalTrapped` alone waits for Task 15). The coverage pin
- * skips it, and fails once a match reaches it, so the exemption cannot outlive its
- * reason.
- */
-interface NotYetVisited {
-  readonly notYetVisited: string;
-}
-
-const MUST_VISIT: Record<ActionState, true | NotYetVisited> = {
+const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
   walk: true,
   dashStart: true,
@@ -344,10 +345,7 @@ const MUST_VISIT: Record<ActionState, true | NotYetVisited> = {
   cargoCarry: true,
   cargoHeld: true,
   footstooled: true,
-  finalTrapped: {
-    notYetVisited:
-      "no fighter has a Final Smash before Plan 5 Task 15, so no golden match can trap anybody; Task 15 removes this exemption by staging a Final Smash in a golden lab",
-  },
+  finalTrapped: true,
   inhaleHold: true,
   swallowed: true,
   spatStar: true,
@@ -488,7 +486,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all ten matches.
+ * on every frame of all eleven matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -856,6 +854,14 @@ describe("engine golden trace", () => {
   // Plan 5 Task 13b's fix round 2 (a tumble's fall lands on a soft platform, ruling
   // R-T13b-g) left every trace byte-identical: no golden fighter comes down onto a
   // soft platform in a tumble's fall with Down held. Every count is as it was.
+  // Plan 5 Task 15 (five cinematic Final Smashes; the far-end compile, ruling
+  // P5-R19; the scene through the end's launch) left the ten traces byte-identical:
+  // every golden match plays with the Smash Ball off, and no move they run gained a
+  // far end. It added the Final Smash lab (`goldenFinalLab.ts`, ruling P5-R14), which
+  // stages Jungle Rush to reach `finalTrapped`: 33 hits (the trap, 31 punches, the
+  // uppercut), no shield hit, no KO. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2 and
+  // 33; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0
+  // and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -870,13 +876,8 @@ describe("engine golden trace", () => {
   // states and soft-stick paths visited are pinned, not just counted.
   function expectCoverage(): void {
     const actions = new Set(all.flatMap((p) => [...p.actions]));
-    const listed = Object.keys(MUST_VISIT) as ActionState[];
-    const unvisited = listed.filter((a) => MUST_VISIT[a] === true && !actions.has(a));
+    const unvisited = (Object.keys(MUST_VISIT) as ActionState[]).filter((a) => !actions.has(a));
     expect(unvisited, "action states no match reaches").toEqual([]);
-    // The exemptions, by name, and none a match reaches by now (P5-R14).
-    const exempt = listed.filter((a) => MUST_VISIT[a] !== true);
-    expect(exempt, "action states exempted as not yet visited").toEqual(["finalTrapped"]);
-    expect(exempt.filter((a) => actions.has(a)), "exempted action states a match reaches now: drop the exemption").toEqual([]);
     const soft = new Set(all.flatMap((p) => [...p.soft]));
     expect(SOFT_PATHS.filter((p) => !soft.has(p)), "Btn.Soft paths no match takes").toEqual([]);
   }

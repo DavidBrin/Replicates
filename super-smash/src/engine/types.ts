@@ -245,12 +245,14 @@ export interface Hitbox {
   /**
    * The far end of an extended hitbox (smash-script `ATTACK`/`CATCH` `X2, Y2, Z2`),
    * facing-relative like `x`/`y`: the box is the capsule between the two, `radius`
-   * wide (Plan 3, Task 17). Absent for a sphere. Only a script's hitboxes
+   * wide (Plan 3, Task 17). Absent for a sphere. A script's hitboxes
    * (`scriptHitboxes`) carry it, and so does a `MoveDef` table that is a
    * script's own boxes (`withReferenceScripts`, Plan 3, Task 18), which the
    * renderer and the CPU read with their far ends. A hand-authored `MoveDef`
-   * hitbox the legacy compile reads and a projectile's `hitbox` are spheres,
-   * and `registerFighters` refuses one with a far end.
+   * hitbox may have one too: the legacy compile carries it into the capsule
+   * (`attackFromHitbox`; Plan 5, ruling P5-R19: Jungle Rush's detection punch).
+   * A projectile's `hitbox` is a sphere, and `registerFighters` refuses one with
+   * a far end.
    */
   readonly x2?: number;
   readonly y2?: number;
@@ -568,12 +570,19 @@ export interface CounterDef {
  * One part of a Final Smash (Plan 5, Task 14: `final.ts`): the `start` (its boxes
  * trap what they touch when `trap` is set), the scene's `attack` hits, and the
  * `end` that launches. `next` is the slot that follows when this part ends with
- * somebody trapped.
+ * somebody trapped, or, with `nextAt`, from that frame of this part on (Task 15).
  */
 export interface FinalPhase {
   readonly phase: "start" | "attack" | "end";
   readonly trap?: boolean;
   readonly next?: MoveSlot;
+  /**
+   * With somebody trapped, go on to `next` on this frame of the part (quoted from
+   * one), rather than when the part ends: the frame the script hands over to the
+   * scene, as Donkey Kong's raises FIGHTER_DONKEY_STATUS_FINAL_FLAG_TO_ATTACK on
+   * 37 (Plan 5, Task 15). A whiff plays the whole part.
+   */
+  readonly nextAt?: number;
 }
 
 /**

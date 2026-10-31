@@ -17,6 +17,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { barrage, finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { PIKACHU } from "./acmd/generated/pikachu";
 import { FIGHTER_PARAMS } from "./params";
@@ -1018,6 +1019,67 @@ const legacy: FighterDef = {
           hitlagMultiplier: fx(1),
         },
       ],
+    },
+
+    // Plan 5, Task 15 — Volt Tackle. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Pikachu/data.json),
+    // `game_final`, `game_finalattack`, `game_final2` and their motions'
+    // CancelFrames; SmashWiki "Volt Tackle" (https://www.ssbwiki.com/Volt_Tackle):
+    // "If the tackle connects, Pikachu dashes around the stage to deal more damage
+    // and ends with an electric blast"; SmashWiki "Pikachu (SSBU)"
+    // (https://www.ssbwiki.com/Pikachu_(SSBU)): "0.3% (6 hits during startup), 1%
+    // (initial hit), 1.5% (loop), 20% (launch)"; SmashWiki "Final Smash"
+    // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
+    // intangible".
+    // - The tackle, `game_final`: 0.3%, KBG 70, FKB 20, radius 5.5, two capsules on
+    //   `top` from 5 ahead to 5 behind, at 0 up (angle 70) and 10 up (angle 40),
+    //   hitlag ×0.2, ATTACK_SETOFF_KIND_OFF, ATTACK_LR_CHECK_POS, electric, from
+    //   frame 10 to 46: it traps, and the dashes follow at once (`nextAt` 10).
+    // - The dashes, `game_finalattack`: 1.5%, KBG 90, FKB 100, radius 13, hitlag
+    //   ×0.2, OFF, electric. Their angle is 366; here 367 (ruling P5-R18,
+    //   UNVERIFIED: the scene never reads it, and 366 is refused at load).
+    // - The blast, `game_final2`: 20%, angle 70, KBG 82, BKB 70, radius 32, hitlag
+    //   ×0.7, OFF, POS, electric, on its frame 10 (with the final-finish cut-in);
+    //   final2's CancelFrame 80.
+    // UNVERIFIED: the tackle's speed (4.5 a frame on frames 10-46) and the whiff's
+    // length (80): SSBU moves Pikachu by status, unpublished. Alternative: the whiff
+    // ends in final_dash_end, CancelFrame 78 (game frame 55 at its FT_MOTION_RATE 0.7).
+    // UNVERIFIED: the loop's eight hits, eight frames apart, and its length (70): the
+    // game's are status-driven and unpublished.
+    // UNVERIFIED: which hit traps. Here the tackle's first 0.3% (so none of the
+    // startup's other five); alternative: the page's "1% (initial hit)" (`game_final`'s
+    // 47-49 box, or `game_finaldash`'s), one more hit and 1% more.
+    // UNVERIFIED-simplified: `game_final2`'s 0% push on its frames 1-2 is not
+    // modelled (an end box launches the trapped, so it would end the scene before
+    // the blast); each scene hit is the first frame of its window (`finalKit.ts`); the
+    // scene boxes' offsets are stand-ins: they reach the trapped wherever they are.
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Volt Tackle",
+      totalFrames: 80,
+      intangible: [1, 80],
+      momentum: [{ frame: 10, x: fx(4.5), y: fx(0), hold: 36 }],
+      final: { phase: "start", trap: true, next: "finalAttack", nextAt: 10 },
+      hitboxes: [
+        finalBox(0, 10, 46, { damage: 0.3, angle: 70, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
+        finalBox(1, 10, 46, { damage: 0.3, angle: 40, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
+      ],
+    },
+    finalAttack: {
+      slot: "finalAttack",
+      name: "Volt Tackle (dashes)",
+      totalFrames: 70,
+      intangible: [1, 70],
+      final: { phase: "attack", next: "finalEnd" },
+      hitboxes: barrage(0, 6, 8, 8, { damage: 1.5, angle: 367, kbg: 90, fkb: 100, radius: 13, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
+    },
+    finalEnd: {
+      slot: "finalEnd",
+      name: "Volt Tackle (blast)",
+      totalFrames: 79,
+      intangible: [1, 79],
+      final: { phase: "end" },
+      hitboxes: [finalBox(0, 10, 10, { damage: 20, angle: 70, kbg: 82, bkb: 70, radius: 32, hitlag: 0.7, transcendent: true, lr: "position", effect: "electric" })],
     },
   },
 

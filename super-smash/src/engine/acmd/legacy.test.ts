@@ -38,6 +38,8 @@ function canonical(hb: Hitbox) {
     meteor: hb.meteor === true,
     grabbing: hb.grabbing === true,
     windbox: hb.windbox === true,
+    // A capsule's far end (ruling P5-R19), an axis it leaves out being the near end's.
+    farEnd: hb.x2 === undefined && hb.y2 === undefined ? null : { x: hb.x2 ?? hb.x, y: hb.y2 ?? hb.y },
   };
 }
 
@@ -171,8 +173,10 @@ describe("legacy moves compiled to game_ scripts", () => {
   });
 });
 
-// Plan 3, Task 17 fix round 1: a legacy hitbox is a sphere, and a far end on one would be
-// dropped without a word and the move quietly shrunk. A capsule is scripted (`ATTACK(..., X2, Y2, Z2)`).
+// Plan 3, Task 17 fix round 1 refused a far end on a legacy hitbox, which the compile then
+// dropped. Plan 5 (ruling P5-R19, Task 15: Jungle Rush's detection punch) compiles it: the
+// far end goes into `ATTACK(..., X2, Y2, Z2)` on the root bone as the near end does,
+// facing-relative x as the script's Z and y as its Y, so the move keeps its whole box.
 describe("a legacy hitbox with a far end", () => {
   const sphere: Hitbox = {
     id: 3,
@@ -188,14 +192,33 @@ describe("a legacy hitbox with a far end", () => {
   };
 
   it.each([
-    ["x2", { x2: ONE }],
-    ["y2", { y2: ONE }],
-  ])("is refused loudly for %s, naming the box", (_, far) => {
-    expect(() => attackFromHitbox({ ...sphere, ...far })).toThrow(/hitbox 3.*far end \(x2\/y2\)/);
+    ["x2 alone", { x2: 7 * ONE }, { z2: 7 * ONE }],
+    ["y2 alone", { y2: 5 * ONE }, { y2: 5 * ONE }],
+    ["both", { x2: 7 * ONE, y2: 5 * ONE }, { y2: 5 * ONE, z2: 7 * ONE }],
+  ])("compiles %s as the capsule's far end, the other axis staying the near end's", (_, far, params) => {
+    const compiled = attackFromHitbox({ ...sphere, ...far });
+    expect(compiled).toMatchObject({ id: 3, size: ONE, ...params });
+    expect(compiled.x2).toBeUndefined();
+    for (const k of ["y2", "z2"] as const) if (!(k in params)) expect(compiled[k], k).toBeUndefined();
   });
 
-  it("compiles a sphere as it always did", () => {
-    expect(attackFromHitbox(sphere)).toMatchObject({ id: 3, size: ONE });
+  it("compiles a sphere as it always did, with no far end", () => {
+    const compiled = attackFromHitbox(sphere);
+    expect(compiled).toMatchObject({ id: 3, size: ONE });
+    for (const k of ["x2", "y2", "z2"] as const) expect(compiled[k], k).toBeUndefined();
+  });
+
+  it("puts the far end where the move's table has it", () => {
+    const move: MoveDef = { slot: "jab1", name: "Jab", totalFrames: 10, hitboxes: [{ ...sphere, x: 2 * ONE, y: 4 * ONE, x2: 9 * ONE, y2: 6 * ONE }] };
+    const script = legacyGameScript(move);
+    const [got] = scriptHitboxes(runScript(script, 4), "t", script.motion, 4, LEGACY_BONE_TABLE);
+    expect(got).toMatchObject({ x: 2 * ONE, y: 4 * ONE, x2: 9 * ONE, y2: 6 * ONE });
+  });
+
+  it("compiles a grab box's far end too, as a CATCH's", () => {
+    const move: MoveDef = { slot: "grab", name: "Grab", totalFrames: 10, hitboxes: [{ ...sphere, grabbing: true, x2: 7 * ONE }] };
+    const c = legacyGameScript(move).commands.find((cmd) => cmd.op === "catch");
+    expect(c?.op === "catch" ? c.params : null).toMatchObject({ id: 3, z: 0, z2: 7 * ONE });
   });
 });
 

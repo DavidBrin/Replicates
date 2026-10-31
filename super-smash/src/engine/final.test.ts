@@ -363,7 +363,8 @@ describe("the trapped (Plan 5, Task 14)", () => {
       expect(st.fighters[3].action).toBe("finalTrapped");
       expect(st.fighters[3].damage).toBe(0);
     }
-    expect(toFloat(scene[scene.length - 1].fighters[1].damage)).toBeCloseTo(11 * 1.05, 2);
+    // The scene runs through the end's launch (Task 15), so its last frame has all 21%.
+    expect(toFloat(scene[scene.length - 1].fighters[1].damage)).toBeCloseTo(21 * 1.05, 2);
   });
 
   it("are let go by a KO, which clears `trappedBy`", () => {
@@ -457,7 +458,8 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
     const s = ready();
     s.fighters[1].finalSmashReady = FINAL_SMASH_READY;
     const { states } = run(s, 90, USE);
-    const scene = states.filter((st) => st.cinematic === 0);
+    // The scene up to the launch, which runs in it since Task 15.
+    const scene = states.filter((st) => st.cinematic === 0 && st.fighters[1].action === "finalTrapped");
     expect(scene.length).toBeGreaterThan(0);
     for (const st of scene) expect(st.fighters[1].finalSmashReady).toBe(FINAL_SMASH_READY);
     const end = states[states.length - 1];
@@ -514,18 +516,27 @@ describe("a Final Smash meets a fighter who is busy (Plan 5 review)", () => {
   });
 
   it("clanks with nothing at its end: a bystander's jab where the end's box hangs leaves the launch alone", () => {
-    // The end's box 100 out, on the stage, where a bystander can stand.
-    const ctx: SimContext = { fighter: () => defWith({ ...MOVES, finalEnd: { ...END, hitboxes: [{ ...END.hitboxes[0], x: fx(100) }] } }), stage: () => STAGE };
+    // Since Task 15 the scene stands everybody still through the end until its launch,
+    // so a bystander can only meet the end's box after it: here a box live on the end's
+    // frames 3-8, 100 out, on the stage, where a bystander can stand.
+    const ctx: SimContext = { fighter: () => defWith({ ...MOVES, finalEnd: { ...END, hitboxes: [{ ...END.hitboxes[0], x: fx(100), endFrame: 8 }] } }), stage: () => STAGE };
     const straight = run(ready(RULES, ctx), 100, USE, ctx).states;
-    // The end's box is out on its move frame 3, actionFrame 2.
-    const live = straight.findIndex((st) => st.fighters[0].move === "finalEnd" && st.fighters[0].actionFrame === 2);
-    expect(live).toBeGreaterThan(0);
+    // The first frame the launch has ended the scene, with the end's box still to come.
+    const free = straight.findIndex((st) => st.fighters[0].move === "finalEnd" && st.cinematic === -1);
+    expect(free).toBeGreaterThan(0);
     // The bystander stands where its jab meets that box (the user's at -10, 100 out),
-    // and jabs so that its box is out on the same frame.
+    // and jabs on its first frame out of the scene.
     const s = ready(RULES, ctx);
     Object.assign(s.fighters[2], { x: fx(98), facing: -1 });
-    const { states } = run(s, 100, (i) => [i === 0 ? Btn.Special : 0, 0, i === live - 1 ? Btn.Attack : 0], ctx);
-    expect(states[live].fighters[2].move).toBe("jab1");
+    const { states, events } = run(s, 100, (i) => [i === 0 ? Btn.Special : 0, 0, i === free + 1 ? Btn.Attack : 0], ctx);
+    // A frame on which the jab's box (its frames 2-3) and the end's (3-8) are both out.
+    const met = states.findIndex((st) => {
+      const [user, , bystander] = st.fighters;
+      return user.move === "finalEnd" && user.actionFrame >= 2 && user.actionFrame <= 7 && bystander.move === "jab1" && bystander.actionFrame >= 1 && bystander.actionFrame <= 2;
+    });
+    expect(met).toBeGreaterThan(free);
+    expect(events.every((e) => e.clanks.length === 0)).toBe(true);
+    expect(states.some((st) => st.fighters[2].action === "rebound")).toBe(false);
     const end = states[states.length - 1];
     expect(toFloat(end.fighters[1].damage)).toBeCloseTo(21 * 1.05, 2);
     expect(end.fighters[1].hitstun > 0 || end.fighters[1].vy !== 0).toBe(true);
