@@ -305,8 +305,9 @@ export function kineticLaunch(
  * SSBU-Calculator `js/knockback.js` resets gravity on a floor bounce and keeps
  * it on a wall or ceiling bounce (`resetGravity`, L136-146:
  * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L136-L146).
- * The caller passes 0 for a floor and the gravity the fighter had before the
- * collision for the others (a ceiling stop has already zeroed it). The balloon
+ * The caller passes 0 for a floor and, for the others, the gravity the
+ * collision left (`techOrBounce`): a wall's stop keeps it, a ceiling stop has
+ * already zeroed it (`resolveCollision`'s `kineticSetY`). The balloon
  * speed-up is disarmed, as in `kineticLaunch`, and so is set weight's fall
  * (Task 16b); whether the game carries either through a bounce is UNVERIFIED
  * (`damage_fly_reflect_reaction_frame_mul` shortens the hitstun, which the

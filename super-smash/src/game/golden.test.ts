@@ -357,6 +357,11 @@ const MATCHES: readonly Match[] = [
  * action; one side-recovery roll an episode) adds no action. The four CPU matches
  * reach 44 between them, as before: link-samus ledge-jumps, and none ledge-attacks
  * any more, which the script does. All 59 are visited.
+ * Task 18's fix round 3 (the parry places a swing where its own momentum carries it;
+ * a floor met too fast to tech spends no roll; before its hold, `tech` keeps Down out
+ * of the frame and holds nothing; a ceiling stop is no floor met) adds no action. The
+ * four CPU matches reach 47 between them, up from 44: kirby-marth crouches again, and two
+ * are shield-stunned again; none loses an action the four reached. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1098,6 +1103,23 @@ describe("engine golden trace", () => {
   // byte-identical. So now: hits 40/43/29/27, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield
   // hits 4/11/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/1/0, 1, 2, 0, 0, 0, 0, 0, 2
   // and 1.
+  // Plan 5 Task 18's fix round 3 (rulings R-T18m and R-T18p to R-T18r: the parry places
+  // a swing where its own velocity carries it by its hit frame, swept from that step's
+  // start; a floor met faster than a press can tech spends no roll; before its hold,
+  // `tech` keeps Down out of the frame where it held a decided neutral, which took the
+  // frame from every other behaviour; a ceiling bounce keeps the ceiling stop's zeroed
+  // gravity, and a ceiling stop is no floor met) moved three CPU matches, each from the
+  // first such frame where another behaviour now steers the level-9 CPU: donkeyKong-
+  // pikachu on 277 (the 201-300 sample), kirby-marth on 961 (901-1000) and link-samus
+  // on 1036 (1001-1100), all three `approach`, drifting toward the opponent. mario-fox
+  // has no such frame, and every CPU decision in it is as before: its trace is
+  // byte-identical. The four tech 18 times between them (15 before) and lie down 4
+  // times (7). Hits 43, 26 and 25; shield hits 15, 0 and 2; KOs 0, 0 and 1 (were
+  // 43/29/27, 11/0/0 and 0/1/0): Samus's self-destruct on 1948 is gone, and Marth goes
+  // by a hit, tumbling at 129.5% on 3469. No golden CPU decides a parry. The script and
+  // the eight labs are byte-identical. So now: hits 40/43/26/25, 6, 0, 1, 4, 1, 2, 33,
+  // 54 and 0; shield hits 4/15/0/2, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0,
+  // 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

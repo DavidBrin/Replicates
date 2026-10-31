@@ -54,7 +54,7 @@ import { HARD_PLATFORM_DEPTH, integrate, platformCentreX } from "@/engine/physic
 import { WALL_JUMP_WINDOW, WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
 import { smashHoldFrame } from "@/engine/acmd/run";
-import { actionFrameOf, capsulesOverlap, deepestReach, hitboxWorldPos, hurtboxCapsule, type Capsule } from "@/engine/hitbox";
+import { actionFrameOf, capsulesOverlap, deepestReach, hitboxWorldPos, hurtboxCapsule, sweptCapsuleOverlaps, type Capsule } from "@/engine/hitbox";
 import { fighterHurtboxes } from "@/engine/acmd/hurtboxes";
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { shieldBubble } from "@/engine/shield";
@@ -76,10 +76,12 @@ import {
   SDI_INPUT_INTERVAL,
   SHIELD_MIN_HOLD,
   SMASH_INPUT_WINDOW,
+  BOUNCE_FLOOR_LAUNCH_RATIO,
+  TECH_FLOOR_MAX_SPEED,
   TECH_LOCKOUT,
   TECH_WINDOW,
 } from "@/engine/constants";
-import { ONE, abs, fx, magnitude, mul } from "@/engine/fixed";
+import { ONE, abs, byRatio, fx, magnitude, mul } from "@/engine/fixed";
 import { fighterParams, type FighterParams } from "@/engine/params";
 
 /* ------------------------------------------------------------------ stage -- */
@@ -399,6 +401,12 @@ export interface BehaviourResult {
    * fumble would count the level's unreliability twice.
    */
   readonly decided?: boolean;
+  /**
+   * Buttons kept out of whatever input wins the frame, whoever wins it
+   * (`decideCpu`), this behaviour's score or none. `tech` keeps Down out while a
+   * fast fall would carry the fighter past its decision frame (ruling R-T18q).
+   */
+  readonly forbid?: InputFrame;
 }
 
 export type Behaviour = (ctx: BehaviourContext) => BehaviourResult;
@@ -1031,9 +1039,14 @@ export const tech: Behaviour = (ctx) => {
     if (!rollsNow(ctx, self, fall, window, wall)) return NOTHING;
     return { score: 1100, input: window ? Btn.Shield | towardX(self.x, 0) : Btn.Shield, decided: true };
   }
-  if (floor === null) return NOTHING;
+  // Before the hold, a fast fall that would carry it past its decision frame:
+  // Down kept out of whatever wins (ruling R-T18q), and nothing else taken.
+  if (floor === null) return fall && fastFallsNear(def, self, ctx.stage, ctx.view.frame, ctx.state.stageFrame) ? { score: 0, input: 0, forbid: Btn.Down } : NOTHING;
   const hold: BehaviourResult = { score: 1100, input: floor.stick, decided: true };
   if (floor.frames > TECH_LEAD || floorBounced(def, self)) return hold;
+  // A window's press techs no floor met faster than the engine allows: that
+  // contact is not the landing the roll is for (ruling R-T18p), the next is.
+  if (window && floor.speed > TECH_FLOOR_MAX_SPEED) return hold;
   if (!rollsNow(ctx, self, fall, window, floor.frames)) return hold;
   return { score: 1100, input: window ? Btn.Shield | floor.stick : Btn.Shield, decided: true };
 };
@@ -1097,67 +1110,94 @@ export const TECH_HOLD = TECH_LEAD + 3;
  * in the hitstun toward the middle first (its window press's), then neutral,
  * then away; after it, and through its air dodge, neutral first (the dodge's
  * press is), then toward the middle, then away. Each is the engine's own fall
- * with that stick held from now (`framesToFloor`), so the one it holds keeps its
- * count falling by one a frame. After the hitstun a fast fall is a stick too: one
- * that would bring a floor within `horizon` is held off with neutral, its count
- * then past `horizon`.
+ * with that stick held from now (`floorContact`), so the one it holds keeps its
+ * count falling by one a frame, with the launch's speed as it meets the floor.
  */
-export function floorHold(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0 = 0, horizon = TECH_HOLD): { readonly stick: InputFrame; readonly frames: number } | null {
+export function floorHold(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0 = 0, horizon = TECH_HOLD): { readonly stick: InputFrame; readonly frames: number; readonly speed: number } | null {
   const inward = towardX(self.x, 0);
   const sides = inward === Btn.Right ? [Btn.Right, Btn.Left] : [Btn.Left, Btn.Right];
   const sticks = self.action === "tumble" && inward !== 0 ? [inward, 0, inward === Btn.Left ? Btn.Right : Btn.Left] : [0, ...sides];
   for (const stick of sticks) {
-    const frames = framesToFloor(def, self, stage, frame0, horizon, stageFrame0, stick);
-    if (frames !== null) return { stick, frames };
+    const contact = floorContact(def, self, stage, frame0, horizon, stageFrame0, stick);
+    if (contact !== null) return { stick, ...contact };
   }
-  // A fast fall (Down, pressed fresh) that would bring a floor that near: held off,
-  // neutral, until the fall comes that near on its own (the frames left are more).
-  const fastFalls = self.action === "tumbleFall" && !self.fastFalling;
-  if (fastFalls && framesToFloor(def, self, stage, frame0, horizon, stageFrame0, Btn.Down, true) !== null) return { stick: 0, frames: horizon + 1 };
   return null;
 }
 
 /**
- * Whether this tumble has already met the floor (ruling R-T18h: one tech roll a
- * tumble for the floor), so a landing after it gets no decision. The CPU keeps no
- * memory, so it reads what meeting the floor leaves on the fighter: the gravity
- * energy zeroed there, by a bounce (`kineticReflect`, which also disarms the
- * launch's speed-up) or a landing. A wall's or a ceiling's bounce keeps it, and a
- * launch from a hit zeroes it too but restarts the tumble (`actionFrame` 0):
+ * Whether, in a tumble's fall with no floor within `TECH_HOLD` under any stick it
+ * could hold (`floorHold`), a fast fall (Down, pressed fresh) would bring one that
+ * near: it would carry the fighter past the frame `tech` decides on, so `tech`
+ * keeps Down out of the input until the fall comes that near on its own, and
+ * leaves every other button to whatever wins (ruling R-T18q).
+ */
+function fastFallsNear(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0: number): boolean {
+  return !self.fastFalling && framesToFloor(def, self, stage, frame0, TECH_HOLD, stageFrame0, Btn.Down, true) !== null;
+}
+
+/**
+ * Whether this tumble has already met the floor at a speed a press could tech
+ * (rulings R-T18h, R-T18p: one tech roll a tumble for the floor, spent on the first
+ * contact that can be teched), so a landing after it gets no decision. The CPU keeps
+ * no memory, so it reads what meeting the floor leaves on the fighter:
  *
- *  - in the hitstun, its speed-up disarmed, the gravity energy is a whole number
- *    of the reel's frames from zero, fewer than the tumble has run (a launch's own
- *    fall, sped up or not, has had at least one a frame since its frame 0);
- *  - after it (`tumbleFall`), the gravity energy is short of the fall speed and a
- *    whole number of the fall's frames from zero, or of a balloon reel's and then
- *    this fall's own: a tumble's own fall reaches the fall speed before its
- *    hitstun runs out (`TUMBLE_HITSTUN` frames at the roster's gravities), or, a
- *    balloon one that stops short (Fox's), is no whole number of them
- *    (`defence.test.ts` pins both), so it was zeroed since, by a bounce or by
- *    lying down and sliding off an edge.
+ *  - the gravity energy zeroed there, by a bounce (`kineticReflect`, which also
+ *    disarms the launch's speed-up) or a landing. A wall's bounce keeps it, and a
+ *    launch from a hit zeroes it too but restarts the tumble (`actionFrame` 0).
+ *    - In the hitstun, its speed-up disarmed, the gravity energy is a whole number
+ *      of the reel's frames from zero, fewer than the tumble has run (a launch's
+ *      own fall, sped up or not, has had at least one a frame since its frame 0).
+ *    - After it (`tumbleFall`), the gravity energy is short of the fall speed and
+ *      a whole number of the fall's frames from zero, or of a balloon reel's and
+ *      then this fall's own: a tumble's own fall reaches the fall speed before its
+ *      hitstun runs out (`TUMBLE_HITSTUN` frames at the roster's gravities), or, a
+ *      balloon one that stops short (Fox's), is no whole number of them
+ *      (`defence.test.ts` pins both), so it was zeroed since, by a bounce or by
+ *      lying down and sliding off an edge.
+ *  - not a ceiling's (ruling R-T18r): a ceiling's stop zeroes the gravity energy
+ *    too, and its bounce keeps that zero (`techOrBounce`), but the stop takes the
+ *    launch's rise away (`kineticSetY`) and the bounce sends it down, while a floor
+ *    bounce sends it up (`|y|`). So a launch going down, or level with what is left
+ *    of it still moving, is a ceiling's, not a floor's;
+ *  - the contact's speed, read back: the bounce leaves 0.9 of it (`byRatio`), and
+ *    the launch has lost `LAUNCH_SPEED_DECAY` a frame since, the frames the
+ *    gravity energy counts. One over `TECH_FLOOR_MAX_SPEED`, which no window's
+ *    press techs, spent nothing. A launch decayed to nothing since was a slow one.
  *
- * At the fall speed the frames since are no longer counted, so a bounce that
- * long before the next approach goes unseen and that landing is rolled again;
- * a tumble's fall cut short by a wall's bounce can be taken for one that met a
- * floor; and a landing whose press a lockout refused (a shield pressed just before
- * the hit) is not rolled for after its bounce either, though nothing was rolled.
- * UNVERIFIED (engine): whether a tumble can be teched at all on the landing after
- * a missed tech's bounce (Plan 3's `techOrBounce` lets it; no source says), which
- * this ruling leaves to the engine.
+ * At the fall speed the frames since are no longer counted, so a bounce that long
+ * before the next approach goes unseen and that landing is rolled again; a
+ * tumble's fall cut short by a wall's bounce can be taken for one that met a floor;
+ * a landing whose press a lockout refused (a shield pressed just before the hit) is
+ * not rolled for after its bounce either, though nothing was rolled; a floor met
+ * with no rise at all (a level launch) reads as a ceiling's stop, and is rolled
+ * again. UNVERIFIED: a ceiling stop whose launch had no sideways part left, or
+ * whose launch has decayed to nothing since, reads as a floor met (no stage of the
+ * six has a ceiling over a floor). UNVERIFIED (engine): whether a tumble can be
+ * teched at all on the landing after a missed tech's bounce (Plan 3's
+ * `techOrBounce` lets it; no source says), which this ruling leaves to the engine.
  */
 export function floorBounced(def: FighterDef, f: FighterState): boolean {
   const p = fighterParams(def);
   const g = -f.kinetic.gravityY;
+  const { damageY } = f.kinetic;
+  if (damageY < 0 || (damageY === 0 && f.launchSpeed > 0)) return false;
+  const frames = framesSinceFloor(p, f, g);
+  return frames !== null && f.launchSpeed + frames * LAUNCH_SPEED_DECAY <= byRatio(TECH_FLOOR_MAX_SPEED, BOUNCE_FLOOR_LAUNCH_RATIO);
+}
+
+/** The frames since the gravity energy was zeroed by a floor (`floorBounced`), or null where its count shows none. */
+function framesSinceFloor(p: FighterParams, f: FighterState, g: number): number | null {
   if (f.action === "tumbleFall") {
-    if (g < 0 || g >= p.air_speed_y_stable) return false;
+    if (g < 0 || g >= p.air_speed_y_stable) return null;
+    if (g % p.air_accel_y === 0) return g / p.air_accel_y;
     // A balloon reel's frames since the floor, then this fall's own, one a frame from its first.
     const reel = g - p.air_accel_y * (f.actionFrame + 1);
-    return g % p.air_accel_y === 0 || (reel >= 0 && reel % p.damage_fly_top_air_accel_y === 0);
+    return reel >= 0 && reel % p.damage_fly_top_air_accel_y === 0 ? reel / p.damage_fly_top_air_accel_y + f.actionFrame + 1 : null;
   }
-  if (f.kinetic.speedUpFaf !== 0) return false;
+  if (f.kinetic.speedUpFaf !== 0) return null;
   const accel = f.balloon ? p.damage_fly_top_air_accel_y : p.air_accel_y;
   const cap = f.balloon ? p.damage_fly_top_speed_y_stable : p.air_speed_y_stable;
-  return g >= 0 && g < cap && g % accel === 0 && g / accel < f.actionFrame;
+  return g >= 0 && g < cap && g % accel === 0 && g / accel < f.actionFrame ? g / accel : null;
 }
 
 /**
@@ -1207,6 +1247,15 @@ function shieldWaiting(f: FighterState, frame: number): boolean {
  * Not modelled: the ECB's bottom (the origin lands).
  */
 export function framesToFloor(def: FighterDef, self: FighterState, stage: StageView, frame0: number, horizon: number, stageFrame0 = 0, stick: InputFrame = 0, fresh = false): number | null {
+  return floorContact(def, self, stage, frame0, horizon, stageFrame0, stick, fresh)?.frames ?? null;
+}
+
+/**
+ * `framesToFloor`'s fall, and the launch's speed on the step that meets the floor,
+ * as the engine reads it there (`launchBefore`, before the collision): a window's
+ * press techs no contact faster than `TECH_FLOOR_MAX_SPEED` (`techOrBounce`).
+ */
+export function floorContact(def: FighterDef, self: FighterState, stage: StageView, frame0: number, horizon: number, stageFrame0 = 0, stick: InputFrame = 0, fresh = false): { readonly frames: number; readonly speed: number } | null {
   // The highest surface it could come down on within `horizon`: one under it, or
   // one no higher than its rise can take it (a soft platform, or the stage from off
   // its side), which a fall from under that height lands on on the way down. Out of
@@ -1221,11 +1270,16 @@ export function framesToFloor(def: FighterDef, self: FighterState, stage: StageV
   if (surface === null) return null;
   if (self.kinetic.speedUpMax <= 0) {
     const accel = params.air_accel_y + LAUNCH_SPEED_DECAY;
-    const speed = Math.max(0, -self.vy, fresh && (stick & Btn.Down) !== 0 ? params.dive_speed_y : 0);
-    const reach = horizon * speed + (accel * horizon * (horizon + 1)) / 2;
+    const down = Math.max(0, -self.vy, fresh && (stick & Btn.Down) !== 0 ? params.dive_speed_y : 0);
+    const reach = horizon * down + (accel * horizon * (horizon + 1)) / 2;
     if (self.y - surface > reach) return null;
   }
-  return ghostFall(def, self, frame0, horizon, (prevX, prevY, f, k) => f.y < prevY && landsOn(f.x, prevY, f.y, stage, stageFrame0 + k), stick, fresh ? 0 : stick);
+  let speed = 0;
+  const frames = ghostFall(def, self, frame0, horizon, (prevX, prevY, f, k) => {
+    speed = f.launchSpeed;
+    return f.y < prevY && landsOn(f.x, prevY, f.y, stage, stageFrame0 + k);
+  }, stick, fresh ? 0 : stick);
+  return frames === null ? null : { frames, speed };
 }
 
 /**
@@ -1382,10 +1436,12 @@ function canDropShield(f: FighterState): boolean {
 
 /**
  * Whether the swing's first live boxes land on this fighter's shield as the
- * engine lands a hit (ruling R-T18j), with the swing where it is now (`swing`,
- * not the view's rewound place) and this fighter `lands` frames into the drop the
- * parry starts. The engine takes, a source and a part, the lowest-id box that
- * reaches the body (`resolveHits`' `reachesBody`: a hurt capsule, the bake's when
+ * engine lands a hit (ruling R-T18j), with this fighter `lands` frames into the
+ * drop the parry starts. The swing's boxes reach where it will be when they land
+ * (`at`: ruling R-T18m), swept, as the engine sweeps a box (`gatherHitboxes`), from
+ * where the step that lands them starts (`was`); the side they come from is judged
+ * from where it is now (`swing`, not the view's rewound place; ruling R-T18j). The
+ * engine takes, a source and a part, the lowest-id box that reaches the body (`resolveHits`' `reachesBody`: a hurt capsule, the bake's when
  * the match runs one, `fighterHurtboxes`, deeper than a graze or onto a shield),
  * and that box lands on the shield only from the side it covers (`hitReachesShield`:
  * `shieldCovers` at the box's nearest point) and inside its bubble (`shieldBubble`).
@@ -1394,7 +1450,7 @@ function canDropShield(f: FighterState): boolean {
  * only there; a Final Smash's box no shield takes; and nothing lands on a body
  * intangible or invincible when the hit comes, which no shield then meets.
  */
-function landsOnShield(def: FighterDef, swing: FighterState, self: FighterState, selfDef: FighterDef, lands: number, frame: number, bake: BakeTables | undefined): boolean {
+function landsOnShield(def: FighterDef, swing: FighterState, was: FighterState, at: FighterState, self: FighterState, selfDef: FighterDef, lands: number, frame: number, bake: BakeTables | undefined): boolean {
   if (self.intangible > lands + 1 || self.invincible > lands + 1) return false;
   const move = swing.move === null ? undefined : def.moves[swing.move];
   if (move === undefined || move.final !== undefined) return false;
@@ -1414,12 +1470,16 @@ function landsOnShield(def: FighterDef, swing: FighterState, self: FighterState,
   for (const hb of boxes) {
     const part = hb.part ?? 0;
     if (parts.includes(part)) continue;
-    const box = boxCapsule(swing, hb);
-    if (!body.some((h) => capsulesOverlap(box, h))) continue;
-    const nearest = Math.min(Math.max(self.x, Math.min(box.x1, box.x2)), Math.max(box.x1, box.x2));
+    const box = boxCapsule(at, hb);
+    const from = hitboxWorldPos(was.x, was.y, was.facing, hb);
+    const dx = box.x2 - box.x1;
+    const dy = box.y2 - box.y1;
+    if (!body.some((h) => sweptCapsuleOverlaps(from.x, from.y, box.x1, box.y1, dx, dy, box.r, h))) continue;
+    const side = boxCapsule(swing, hb);
+    const nearest = Math.min(Math.max(self.x, Math.min(side.x1, side.x2)), Math.max(side.x1, side.x2));
     const onShield = shieldCovers(drop, nearest) && capsulesOverlap(box, bubble);
     // A graze of the body off the shield is no hit, and passes the pick on.
-    if (!onShield && deepestReach(box.x1, box.y1, box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, box.r, body).depth < GLANCING_BLOW_DEPTH) continue;
+    if (!onShield && deepestReach(from.x, from.y, box.x1, box.y1, dx, dy, box.r, body).depth < GLANCING_BLOW_DEPTH) continue;
     parts.push(part);
     if (onShield) shielded++;
   }
@@ -1439,11 +1499,12 @@ function boxCapsule(f: Pick<FighterState, "x" | "y" | "facing">, hb: Hitbox): Ca
  * its hit a frame further on and inside `PARRY_AIM`, and its timing known then: a
  * smash's charge decided (`swingHitFrame`). One let go uncharged showed at its
  * hold frame let go; one released from a charge (it keeps its `charge`) was still
- * charging there. And its first boxes landing on the shield from where the swing
- * was then: one frame back on its velocity, as the shield rebuilds a threat
- * (`threatBefore`).
+ * charging there. And its first boxes landing on the shield as they did then: the
+ * swing one frame back on its velocity, as the shield rebuilds a threat
+ * (`threatBefore`), its side judged from there, and its boxes where it will be
+ * when they land (`was` to `at`, the same places from then as from now).
  */
-function couldParryBefore(def: FighterDef, self: FighterState, swing: FighterState, selfDef: FighterDef, age: number, lands: number, frame: number, bake: BakeTables | undefined): boolean {
+function couldParryBefore(def: FighterDef, self: FighterState, swing: FighterState, was: FighterState, at: FighterState, selfDef: FighterDef, age: number, lands: number, frame: number, bake: BakeTables | undefined): boolean {
   if (self.actionFrame < SHIELD_MIN_HOLD || age < 1 || swing.actionFrame < 1 || lands + 1 > PARRY_AIM) return false;
   const move = swing.move === null ? undefined : def.moves[swing.move];
   if (move?.chargeable === true) {
@@ -1452,7 +1513,7 @@ function couldParryBefore(def: FighterDef, self: FighterState, swing: FighterSta
     if (before < hold || (before === hold && (swing.charge > 0 || !swing.combat.smashLetGo))) return false;
   }
   const then: FighterState = { ...swing, x: swing.x - swing.vx, y: swing.y - swing.vy, actionFrame: swing.actionFrame - 1 };
-  return landsOnShield(def, then, self, selfDef, lands + 1, frame - 1, bake);
+  return landsOnShield(def, then, was, at, self, selfDef, lands + 1, frame - 1, bake);
 }
 
 /**
@@ -1470,7 +1531,17 @@ function couldParryBefore(def: FighterDef, self: FighterState, swing: FighterSta
  * Where the swing is, it reads from the swing as it is now (ruling R-T18j), not
  * the view's place rewound along its velocity: the swing's timing is read off
  * its own frame already, and a dash attack seen where it was crossed a shield up
- * that its rewound place had in front.
+ * that its rewound place had in front. Its boxes reach from where its own
+ * momentum carries it by the step they land on (ruling R-T18m): its place now
+ * carried on by its velocity now, `lands + 1` steps, and swept from `lands` steps
+ * on, where that step starts, as the engine sweeps every box (`gatherHitboxes`).
+ * The golden's Fox forward smash (re-review 2) slid him on past a reach his place
+ * now had; carried in, a swing out of reach now lands. Not modelled: what the
+ * ground's friction or the air's drift takes off the velocity on the way (it is
+ * held, so a sliding swing is placed a little past where it lands); a move's own
+ * motion changing it (Pikachu's Quick Attack, still before its dash, is carried at
+ * its creep); and the side, which the engine judges where the box lands, so a
+ * swing carried across the shield by then is taken for one in front of it.
  */
 export const parry: Behaviour = (ctx) => {
   const { self, target, targetAction, targetActionAge, distance } = ctx.view;
@@ -1483,8 +1554,10 @@ export const parry: Behaviour = (ctx) => {
   const lands = hit - (target.actionFrame + 1);
   if (lands < 0 || lands > PARRY_AIM) return NOTHING;
   const swing = ctx.state.fighters[target.port];
-  if (!landsOnShield(def, swing, self, selfDef, lands, ctx.view.frame, ctx.bake)) return NOTHING;
-  if (couldParryBefore(def, self, swing, selfDef, targetActionAge, lands, ctx.view.frame, ctx.bake)) return NOTHING;
+  const was: FighterState = { ...swing, x: swing.x + swing.vx * lands, y: swing.y + swing.vy * lands };
+  const at: FighterState = { ...swing, x: swing.x + swing.vx * (lands + 1), y: swing.y + swing.vy * (lands + 1) };
+  if (!landsOnShield(def, swing, was, at, self, selfDef, lands, ctx.view.frame, ctx.bake)) return NOTHING;
+  if (couldParryBefore(def, self, swing, was, at, selfDef, targetActionAge, lands, ctx.view.frame, ctx.bake)) return NOTHING;
   if (ctx.rolls[ROLL_PARRY] >= ctx.tuning.parrySkill) return NOTHING;
   return { score: 650, input: 0, decided: true };
 };

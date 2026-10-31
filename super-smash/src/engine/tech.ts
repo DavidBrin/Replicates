@@ -58,8 +58,6 @@ export interface LaunchBefore {
   readonly x: number;
   readonly y: number;
   readonly speed: number;
-  /** GRAVITY's speed, kept through a wall or ceiling bounce. */
-  readonly gravity: number;
   /** In `tumble`: hitstun may be left (`techOrBounce` checks). */
   readonly tumbling: boolean;
   /** In `tumbleFall`: the hitstun is over. */
@@ -76,7 +74,6 @@ export function launchBefore(f: FighterState): LaunchBefore {
     x: f.kinetic.damageX,
     y: f.kinetic.damageY,
     speed: f.launchSpeed,
-    gravity: f.kinetic.gravityY,
     tumbling: f.action === "tumble",
     tumbleFall: f.action === "tumbleFall",
     dodgeTech: f.action === "airDodge" && f.combat.tumbleDodge && f.actionFrame < AIR_DODGE_TECH_FRAMES,
@@ -183,13 +180,18 @@ export function techOrBounce(
   // back off a wall, whichever way its component pointed (rubendal
   // `js/knockback.js` bounces with `Math.abs`) — 0.9 of it off a floor, 0.95
   // off a wall or ceiling; hitstun to 0.8 of what is left. A floor bounce
-  // resets gravity, the others keep theirs (`kineticReflect`).
+  // resets gravity, the others keep theirs as the collision left it
+  // (`kineticReflect`): a wall's stop leaves it, a ceiling's stop has zeroed it
+  // (`resolveCollision`), so a ceiling bounce goes on from no fall at all (Plan
+  // 5, Task 18 fix round 3, ruling R-T18r). UNVERIFIED: rubendal keeps the
+  // gravity on a ceiling bounce and has no ceiling stop; the replica's stop
+  // comes first, and its zero is what is kept.
   const ratio = floor ? BOUNCE_FLOOR_LAUNCH_RATIO : BOUNCE_SURFACE_LAUNCH_RATIO;
   const ax = before.x < 0 ? -before.x : before.x;
   const ay = before.y < 0 ? -before.y : before.y;
   const x = surface === "wall" ? -wallSide * ax : before.x;
   const y = floor ? ay : surface === "ceiling" ? -ay : before.y;
-  kineticReflect(f, byRatio(x, ratio), byRatio(y, ratio), byRatio(before.speed, ratio), floor ? 0 : before.gravity);
+  kineticReflect(f, byRatio(x, ratio), byRatio(y, ratio), byRatio(before.speed, ratio), floor ? 0 : f.kinetic.gravityY);
   f.hitstun = byRatio(f.hitstun, BOUNCE_HITSTUN_RATIO);
   if (floor) {
     // Off the floor again without a jump or a landing: the fighter is still in

@@ -321,11 +321,15 @@ export function decideCpu(
   let bestInput: InputFrame = 0;
   let bestName: BehaviourName = "idle";
   let decided: { readonly name: BehaviourName; readonly input: InputFrame } | null = null;
+  // Buttons a behaviour keeps out of the frame, whoever wins it (ruling R-T18q:
+  // `tech` keeps Down out while a fast fall would carry it past its decision frame).
+  let forbid: InputFrame = 0;
   const scores: Record<string, number> = {};
 
   for (let i = 0; i < BEHAVIOURS.length; i++) {
     const { name, run } = BEHAVIOURS[i];
     const result = run(ctx);
+    forbid |= result.forbid ?? 0;
     if (result.score <= 0) continue;
 
     const jitter = 1 + (rolls[DECISION_ROLLS + i] - 0.5) * 2 * tuning.noise;
@@ -346,8 +350,10 @@ export function decideCpu(
   // R-T18d and R-T18e) takes the frame outright, the first in `BEHAVIOURS` order:
   // the dial is the chance, so neither the jitter nor the fumble may undo it.
   if (decided !== null) {
-    return { input: specialPending(self, state.frame) ? upBHold(decided.input) : decided.input, seed, behaviour: decided.name, scores };
+    const input = decided.input & ~forbid;
+    return { input: specialPending(self, state.frame) ? upBHold(input) : input, seed, behaviour: decided.name, scores };
   }
+  bestInput &= ~forbid;
 
   // An aerial near or off the stage that would leave the fighter no way back is
   // not pressed (Plan 5, Task 19: `aerialStrands`): whatever asked for it, the

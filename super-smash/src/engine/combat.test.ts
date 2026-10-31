@@ -2139,6 +2139,17 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(frames[k].state.fighters[1].kinetic.gravityY).toBe(0);
   });
 
+  // Plan 5, Task 18 fix round 3, ruling R-T18r: the underside's stop (`resolveCollision`)
+  // zeroes the gravity before the bounce reads it, and the bounce keeps that zero, so
+  // it goes on from no fall at all. UNVERIFIED: rubendal keeps the gravity through a
+  // ceiling bounce and has no stop before it (`techOrBounce`).
+  it("keeps the ceiling stop's zeroed gravity on a bounce off the underside", () => {
+    const frames = until(flying(0, -78, 0, 4), () => 0);
+    const k = frames.findIndex((f) => f.state.fighters[1].kinetic.damageY < 0);
+    expect(frames[k - 1].state.fighters[1].kinetic.gravityY, "rising into it under its gravity").toBeLessThan(0);
+    expect(frames[k].state.fighters[1].kinetic.gravityY).toBe(0);
+  });
+
   // `passive_wall_stop_frame` is 5 (see `TECH_WALL_HOLD`): UNVERIFIED as a hold.
   it("holds on the wall for 5 frames after a wall tech, then falls", () => {
     const frames = until(flying(92, -20, -4, 0), (i) => (i === 0 ? Btn.Shield : 0));
