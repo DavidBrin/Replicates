@@ -1202,7 +1202,8 @@ function fastFallsNear(def: FighterDef, self: FighterState, stage: StageView, fr
  * no memory, so it reads what meeting the floor leaves on the fighter:
  *
  *  - the gravity energy zeroed there, by a bounce (`kineticReflect`, which also
- *    disarms the launch's speed-up) or a landing. A wall's bounce keeps it, and a
+ *    disarms the launch's speed-up) or a landing. A wall's or a ceiling's bounce
+ *    keeps it (the gravity from before the collision, `techOrBounce`), and a
  *    launch from a hit zeroes it too but restarts the tumble (`actionFrame` 0).
  *    - In the hitstun, its speed-up disarmed, the gravity energy is a whole number
  *      of the reel's frames from zero, fewer than the tumble has run (a launch's
@@ -1215,10 +1216,11 @@ function fastFallsNear(def: FighterDef, self: FighterState, stage: StageView, fr
  *      (`defence.test.ts` pins both), so it was zeroed since, by a bounce or by
  *      lying down and sliding off an edge.
  *  - not a ceiling's (ruling R-T18r): a ceiling's stop zeroes the gravity energy
- *    too, and its bounce keeps that zero (`techOrBounce`), but the stop takes the
- *    launch's rise away (`kineticSetY`) and the bounce sends it down, while a floor
- *    bounce sends it up (`|y|`). So a launch going down, or level with what is left
- *    of it still moving, is a ceiling's, not a floor's;
+ *    too (`kineticSetY`), and takes the launch's rise away; a ceiling's bounce
+ *    gives back the gravity the stop zeroed (`techOrBounce`, ruling R-T18s) and
+ *    sends the launch down, while a floor bounce sends it up (`|y|`). So a launch
+ *    going down, or level with what is left of it still moving, is a ceiling's,
+ *    not a floor's;
  *  - the contact's speed, read back: the bounce leaves 0.9 of it (`byRatio`), and
  *    the launch has lost `LAUNCH_SPEED_DECAY` a frame since, the frames the
  *    gravity energy counts. One over `TECH_FLOOR_MAX_SPEED`, which no window's

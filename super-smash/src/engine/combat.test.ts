@@ -2139,15 +2139,21 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(frames[k].state.fighters[1].kinetic.gravityY).toBe(0);
   });
 
-  // Plan 5, Task 18 fix round 3, ruling R-T18r: the underside's stop (`resolveCollision`)
-  // zeroes the gravity before the bounce reads it, and the bounce keeps that zero, so
-  // it goes on from no fall at all. UNVERIFIED: rubendal keeps the gravity through a
-  // ceiling bounce and has no stop before it (`techOrBounce`).
-  it("keeps the ceiling stop's zeroed gravity on a bounce off the underside", () => {
-    const frames = until(flying(0, -78, 0, 4), () => 0);
+  // rubendal `js/knockback.js` L136-146: a ceiling bounce keeps gravity (`resetGravity`
+  // is false there), as a wall bounce does. The underside's stop (`resolveCollision`'s
+  // `kineticSetY`) zeroes it first, and the bounce gives back the gravity from before
+  // the collision (`launchBefore`), so the fall it rose under carries on (Plan 5, Task
+  // 18 fix round 4, ruling R-T18s).
+  it("keeps the gravity from before the collision on a bounce off the underside", () => {
+    const frames = until(flying(0, -98, 0, 4), () => 0);
     const k = frames.findIndex((f) => f.state.fighters[1].kinetic.damageY < 0);
-    expect(frames[k - 1].state.fighters[1].kinetic.gravityY, "rising into it under its gravity").toBeLessThan(0);
-    expect(frames[k].state.fighters[1].kinetic.gravityY).toBe(0);
+    expect(k).toBeGreaterThan(1);
+    const gravity = (i: number) => frames[i].state.fighters[1].kinetic.gravityY;
+    const perFrame = gravity(k - 1) - gravity(k - 2);
+    expect(perFrame, "rising into it under its gravity").toBeLessThan(0);
+    expect(gravity(k), "the fall before the collision, a frame on").toBe(gravity(k - 1) + perFrame);
+    const v = frames[k].state.fighters[1];
+    expect(v.vy).toBe(v.kinetic.damageY + v.kinetic.gravityY);
   });
 
   // `passive_wall_stop_frame` is 5 (see `TECH_WALL_HOLD`): UNVERIFIED as a hold.

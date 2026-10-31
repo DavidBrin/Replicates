@@ -1114,8 +1114,8 @@ describe("engine golden trace", () => {
   // a swing where its own velocity carries it by its hit frame, swept from that step's
   // start; a floor met faster than a press can tech spends no roll; before its hold,
   // `tech` keeps Down out of the frame where it held a decided neutral, which took the
-  // frame from every other behaviour; a ceiling bounce keeps the ceiling stop's zeroed
-  // gravity, and a ceiling stop is no floor met) moved three CPU matches, each from the
+  // frame from every other behaviour; a ceiling stop is no floor met; a ceiling bounce
+  // kept the stop's zero, until fix round 4) moved three CPU matches, each from the
   // first such frame where another behaviour now steers the level-9 CPU: donkeyKong-
   // pikachu on 277 (the 201-300 sample), kirby-marth on 961 (901-1000) and link-samus
   // on 1036 (1001-1100), all three `approach`, drifting toward the opponent. mario-fox
@@ -1144,6 +1144,9 @@ describe("engine golden trace", () => {
   // by a hit on 3469 before. No golden CPU counters. The script and the eight labs are
   // byte-identical. So now: hits 37/29/26/18, 6, 0, 1, 4, 1, 2, 33, 54 and 0; shield
   // hits 5/10/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
+  // Plan 5 Task 18's fix round 4 (ruling R-T18s: a ceiling bounce keeps the gravity from
+  // before the collision again, as rubendal does, not the ceiling stop's zero) left every
+  // trace byte-identical, so the counts are as above.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

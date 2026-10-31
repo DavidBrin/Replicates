@@ -788,7 +788,9 @@ describe("tech, a ceiling met on the way to the floor (ruling R-T18r)", () => {
       if (rolled(s, view)) rolls++;
       const next = step(s, [0, 0], { prevInputs: [0, 0], ctx: sim }).state;
       const f = next.fighters[0];
-      if (met === null && s.fighters[0].vy > 0 && s.fighters[0].kinetic.gravityY !== 0 && f.kinetic.gravityY === 0) {
+      // The underside met: the launch rising into it zeroed (a stop, `kineticSetY`) or
+      // sent down (a bounce), read off the launch, not the gravity (a bounce keeps that).
+      if (met === null && s.fighters[0].vy > 0 && s.fighters[0].kinetic.damageY > 0 && f.kinetic.damageY <= 0) {
         met = f.kinetic.damageY < 0 ? "bounce" : "stop";
         seen = floorBounced(defOf("mario"), f);
       }
@@ -811,6 +813,20 @@ describe("tech, a ceiling met on the way to the floor (ruling R-T18r)", () => {
 
   it("a bounce off the underside, launched up over 1 and sent down: likewise", () => {
     expect(approach(under(12, 1.3, 0.8))).toEqual({ met: "bounce", seen: false, rolls: 1, teched: true });
+  });
+
+  // The bounce keeps the gravity from before the collision (ruling R-T18s), whose count
+  // reads no floor met in this scene already; the launch sent down must refuse it
+  // whatever the count reads.
+  it("a bounce off the underside is no floor met by its launch sent down, whatever its gravity reads", () => {
+    let s = under(12, 1.3, 0.8);
+    for (let i = 0; i < 60 && s.fighters[0].kinetic.damageY >= 0; i++) s = step(s, [0, 0], { prevInputs: [0, 0], ctx: sim }).state;
+    const f = s.fighters[0];
+    expect(f.kinetic.damageY, "sent down").toBeLessThan(0);
+    const read = (gravityY: number, damageY: number) => floorBounced(defOf("mario"), { ...f, kinetic: { ...f.kinetic, gravityY, damageY } });
+    expect(read(f.kinetic.gravityY, f.kinetic.damageY), "as the bounce left it").toBe(false);
+    expect(read(0, -f.kinetic.damageY), "a gravity just zeroed, the launch sent up: a floor met").toBe(true);
+    expect(read(0, f.kinetic.damageY), "a gravity just zeroed, the launch sent down").toBe(false);
   });
 });
 
