@@ -24,6 +24,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
+import { FINAL_SMASH_READY } from "@/engine/final";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
@@ -655,6 +656,31 @@ describe("a projectile fired into a wall from beside it", () => {
       s = step(s, now, { prevInputs: prev }).state;
       prev = now;
       if (i === 0) expect(s.fighters[0].move, "the move its press starts").toBe(slot);
+      launches += s.nextProjectileId - before;
+      for (const p of s.projectiles) expect(insideSolidBody(FD, s.frame, p.x, p.y), `${p.defId} at age ${p.age}`).toBe(false);
+    }
+    // Its spawn point was inside the wall, so nothing was launched.
+    expect(launches).toBe(0);
+  });
+
+  // Plan 5, Task 16: a Final Smash's projectiles too (Mario Finale's flames, on 5, and the
+  // Ancient Arrow, on 60), each user granted the Smash Ball's power and held there.
+  it.each([
+    ["mario", "Mario Finale's flames", 30],
+    ["link", "Ancient Arrow", 90],
+  ] as const)("%s's %s never starts, or flies, inside it", (id, _name, frames) => {
+    let s = createInitialState("finalDestination", [{ defId: id }, { defId: "kirby" }], RULES, 9);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(-84), y: fx(-30), facing: 1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
+    Object.assign(s.fighters[1], { action: "stand", x: fx(40), y: 0, grounded: true, platform: 0 });
+    let prev: InputFrame[] = [0, 0];
+    let launches = 0;
+    for (let i = 0; i < frames; i++) {
+      Object.assign(s.fighters[0], { x: fx(-84), y: fx(-30) });
+      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
+      const before = s.nextProjectileId;
+      s = step(s, now, { prevInputs: prev }).state;
+      prev = now;
+      if (i === 0) expect(s.fighters[0].move, "the move its press starts").toBe("finalSmash");
       launches += s.nextProjectileId - before;
       for (const p of s.projectiles) expect(insideSolidBody(FD, s.frame, p.x, p.y), `${p.defId} at age ${p.age}`).toBe(false);
     }

@@ -24,11 +24,11 @@ import { FNV_OFFSET, mixInt, mixString } from "@/engine/hash";
  *   `ENGINE_RULES_VERSION` (src/engine/constants.ts) and `RULES_PIN.version`
  *   together, once, and set `RULES_PIN.golden` too if its trace moved.
  *
- * What it cannot see: a change to behaviour the eleven golden matches do not
+ * What it cannot see: a change to behaviour the twelve golden matches do not
  * exercise, and the difference between a bump and a rewrite of the pin by hand
  * (the version beside the digest in the diff is what a reviewer checks).
  */
-const RULES_PIN = { version: 5, golden: "c6b55b6e" } as const;
+const RULES_PIN = { version: 5, golden: "6dfa5ad8" } as const;
 
 const FIXTURE = join(import.meta.dirname, "__golden__", "engine-trace.json");
 

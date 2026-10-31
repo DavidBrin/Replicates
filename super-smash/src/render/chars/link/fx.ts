@@ -914,4 +914,15 @@ const OWN = {
  * smash-thrown Boomerang (Plan 5, Task 13d) is the same article thrown harder, and
  * is painted as the Boomerang.
  */
-export const projectiles: Readonly<Record<string, ProjectilePainter>> = { ...OWN, boomerangSmash: OWN.boomerang };
+export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
+  ...OWN,
+  boomerangSmash: OWN.boomerang,
+  /**
+   * Plan 5, Task 16: the Ancient Arrow of his Final Smash — his arrow at full draw,
+   * glowing Guardian blue.
+   */
+  ancientArrow: (c) => {
+    glow(c.ctx, 0, 0, c.u * 3, "rgba(95,230,224,0.55)");
+    OWN.arrow({ ...c, fraction: 1 });
+  },
+};

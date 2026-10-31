@@ -177,6 +177,27 @@ describe("legacy moves compiled to game_ scripts", () => {
   });
 });
 
+// Plan 5, Task 16: a legacy move's rehit (`MoveDef.rehit`) is every compiled box's `Rehit`,
+// the field an imported script's ATTACK carries its own in, so both reach the one rehit
+// mechanism (`simulate.ts`, the hit record's re-arm).
+describe("a legacy move's rehit", () => {
+  const box = (id: number, from: number, to: number): Hitbox => ({ id, startFrame: from, endFrame: to, x: 0, y: 0, radius: ONE, damage: ONE, angle: 0, baseKnockback: 0, knockbackGrowth: 0 });
+  const plain: MoveDef = { slot: "jab1", name: "stand-in", totalFrames: 20, hitboxes: [box(0, 2, 5), box(1, 6, 9)] };
+  const rehits = (m: MoveDef) => legacyGameScript(m).commands.flatMap((c) => (c.op === "attack" ? [c.params.rehit] : []));
+
+  it("is written into every box's Rehit, and is 0 without one", () => {
+    expect(rehits(plain)).toEqual([0, 0]);
+    expect(rehits({ ...plain, rehit: 10 })).toEqual([10, 10]);
+    expect(attackFromHitbox(box(0, 1, 1)).rehit).toBe(0);
+  });
+
+  it("is Zero Laser's, 10 on each of its boxes (rubendal `samus_laser` `Shoot`: `Rehit=10`)", () => {
+    const samus = FIGHTERS.find((f) => f.id === "samus")!;
+    expect(samus.moves.finalSmash!.rehit).toBe(10);
+    expect(rehits(samus.moves.finalSmash!)).toEqual([10, 10, 10, 10]);
+  });
+});
+
 // Plan 3, Task 17 fix round 1 refused a far end on a legacy hitbox, which the compile then
 // dropped. Plan 5 (ruling P5-R19, Task 15: Jungle Rush's detection punch) compiles it: the
 // far end goes into `ATTACK(..., X2, Y2, Z2)` on the root bone as the near end does,

@@ -1126,6 +1126,70 @@ const legacy: FighterDef = {
         },
       ],
     },
+
+    // Plan 5, Task 16 — Ancient Bow and Arrow. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Link/data.json):
+    // `game_final` (WHOLE_HIT(HIT_STATUS_XLU) from its start, the arrow shot on 60,
+    // FT_MOTION_RATE(FSM=0.85) from 70), final's CancelFrame 111 (game frame 105 at that
+    // rate, `gameFrameOfMotion`), final_air's 100 (`game_finalair` sets no rate), and
+    // the arrow's `link_ancientbowarrow` `Fly` and `Stick`; SmashWiki "Link (SSBU)/Final
+    // Smash" (https://www.ssbwiki.com/Link_(SSBU)/Final_Smash): the flying box, radius
+    // 5.0, 4 ahead, and the explosion on a fighter, 35%, angle 60, BKB 102, KBG 46,
+    // hitlag ×0.3; SmashWiki "Ancient Bow and Arrow"
+    // (https://www.ssbwiki.com/Ancient_Bow_and_Arrow): "fires an Ancient Arrow straight
+    // ahead, hitting the first person in his line of sight"; SmashWiki "Final Smash"
+    // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
+    // intangible". Not a cinematic: it traps nobody.
+    // - The arrow flies flat; its flying box carries the explosion's numbers and its
+    //   `set_force_reaction`, ATTACK_SETOFF_KIND_OFF and `Reflectable=false`, and it is
+    //   gone on its first hit.
+    // UNVERIFIED: the arrow's speed (6 a frame), lifetime (60 frames) and launch offset
+    // (10 ahead, 7 up).
+    // UNVERIFIED-simplified: the explosion lands on the fighter the arrow reaches, not
+    // on everybody within its 25 units ("A small explosion occurs as the opponent is
+    // hit, damaging anybody else near the victim at the time"), and the flying box's
+    // own 0% hit is that explosion's trigger alone; its 20% blast on a wall or a floor
+    // ("If it strikes a wall or floor, it will also explode, but the explosion deals
+    // less damage (35% → 20%)") is not modelled: a wall ends it, as it ends any
+    // projectile (SmashWiki "Wall").
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Ancient Bow and Arrow",
+      totalFrames: 104,
+      aerialTotalFrames: 99,
+      intangible: [1, 104],
+      final: { phase: "start" },
+      hitboxes: [],
+      projectiles: [
+        {
+          id: "ancientArrow",
+          spawnFrame: 60,
+          offsetX: fx(10.0),
+          offsetY: fx(7.0),
+          vx: fx(6.0),
+          vy: fx(0),
+          gravity: fx(0),
+          lifetime: 60,
+          destroyOnHit: true,
+          visual: "arrow",
+          hitbox: {
+            id: 0,
+            startFrame: 0,
+            endFrame: 59,
+            x: fx(4.0),
+            y: fx(0),
+            radius: fx(5.0),
+            damage: fx(35.0),
+            angle: fx(60),
+            baseKnockback: fx(102),
+            knockbackGrowth: fx(46),
+            hitlagMultiplier: fx(0.3),
+            forceReaction: true,
+            transcendent: true,
+          },
+        },
+      ],
+    },
   },
 
   palette: {

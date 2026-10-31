@@ -7,6 +7,7 @@
   "donkeyKong downB hitboxes": "legacy some / game_speciallwstart none",
   "link fsmash lead": "legacy 14%/361°/bkb30/kbg100 / game_attacks4 7%/69°/bkb45/kbg12",
   "samus neutralB faf": "legacy 45 / game_specialnstart 14",
+  "samus finalSmash last": "legacy 147 / game_final 11",
   "kirby rapidJab first": "legacy 5 / game_attack100 1",
   "kirby rapidJab last": "legacy 36 / game_attack100 14",
   "kirby neutralB last": "legacy 44 / game_specialnstart 300",

@@ -17,6 +17,7 @@ import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { SAMUS } from "./acmd/generated/samus";
+import { finalBox } from "./finalKit";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. The Power Suit is bulky —
@@ -1108,6 +1109,48 @@ const legacy: FighterDef = {
           baseKnockback: fx(60),
           knockbackGrowth: fx(75),
         },
+      ],
+    },
+
+    // Plan 5, Task 16 — Zero Laser. Sources: rubendal Data Viewer 13.0.1
+    // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Samus/data.json):
+    // `game_final` (the muzzle), the laser article's `samus_laser` `Shoot` (the beam and
+    // its end), and final_end's CancelFrame 47; SmashWiki "Zero Laser"
+    // (https://www.ssbwiki.com/Zero_Laser): "the attack repeatedly hits any foes caught
+    // in its blast"; SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash): Final
+    // Smashes "make the user fully intangible". Not a cinematic: it traps nobody.
+    // - The muzzle, `game_final`: 1%, angle 20, KBG 100, FKB 22, radius 13, 15 up and 20
+    //   ahead on `top`, hitlag ×0, ATTACK_SETOFF_KIND_OFF, on 1-7; then 2%, radius 15,
+    //   on 8-11.
+    // - The beam, `Shoot` from 12: 1.5%, angle 20, KBG 100, FKB 16, radius 5, hitlag ×1,
+    //   OFF, `Rehit=10`, for 128 frames (12-139); then its end, 5.5%, angle 361, KBG 183,
+    //   BKB 45, radius 11, hitlag ×1, OFF, electric, `set_force_reaction`, for 8
+    //   (140-147). Every box is `Reflectable=false`.
+    // - The end: final_end's CancelFrame 47 from 148, 194 frames in all (UNVERIFIED:
+    //   that it starts as the laser ends; `final_start` and `final` publish no
+    //   CancelFrame).
+    // UNVERIFIED: the beam's height (9, the arm cannon's, where the script's muzzle
+    // boxes sit at 15) and reach (150 units, 12 to 162 ahead), which the laser article's
+    // status sets, unpublished.
+    // UNVERIFIED-simplified: every box re-hits on the beam's 10 (the muzzle's own is
+    // `Rehit=8`), and all four share the move's one hit record, where the laser, an
+    // article, keeps its own and clears it for its end; not modelled: `final_start`'s
+    // charge before the shot (its 1%, `Rehit=10`, on 48-69, and the pull of its two
+    // windboxes, one of them 366°, which no box loads), the upper and lower beams
+    // (`samus_laser2`, 0.5%, pulling in), the laser's thruster box (1.5% behind its
+    // muzzle) and aiming the beam.
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Zero Laser",
+      totalFrames: 194,
+      intangible: [1, 194],
+      rehit: 10,
+      final: { phase: "start" },
+      hitboxes: [
+        finalBox(0, 1, 7, { damage: 1, angle: 20, kbg: 100, fkb: 22, radius: 13, x: 20, y: 15, hitlag: 0, transcendent: true }),
+        finalBox(1, 8, 11, { damage: 2, angle: 20, kbg: 100, fkb: 22, radius: 15, x: 20, y: 15, hitlag: 0, transcendent: true }),
+        finalBox(2, 12, 139, { damage: 1.5, angle: 20, kbg: 100, fkb: 16, radius: 5, x: 12, y: 9, x2: 162, y2: 9, transcendent: true }),
+        finalBox(3, 140, 147, { damage: 5.5, angle: 361, kbg: 183, bkb: 45, radius: 11, x: 12, y: 9, x2: 162, y2: 9, transcendent: true, effect: "electric", forceReaction: true }),
       ],
     },
   },

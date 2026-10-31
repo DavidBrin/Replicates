@@ -568,20 +568,64 @@ export function reboundFrames(damage: number): number {
  */
 export const SMASH_BALL_TARGET = 8;
 
-/** Has this swing already connected with that target? */
-export function alreadyHit(f: Pick<FighterState, "hitThisMove">, target: number): boolean {
-  return f.hitThisMove.includes(target);
+/**
+ * A hit record's entry is its target, below this, plus this times the frame from
+ * which the target may be struck again, for a box with a rehit; the target alone
+ * for one without, struck once for good (Plan 5, Task 16). One integer per target
+ * keeps the record the flat array of small integers it was: the state hash and the
+ * clone walk it as they always did, and a record with no rehit in it is the ports it
+ * always held.
+ */
+const REARM_STRIDE = 16;
+
+/**
+ * Is `target` in `record` and not yet re-armed on frame `now`? A rehit counts from
+ * each strike, target by target: SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox),
+ * a rehit rate, "If not 0, allows the hitbox to strike again after the specified
+ * amount of frames" (Plan 5, Task 16). `now` and the re-arm frame are the record's
+ * own clock: a fighter's swing counts its move's frames, a projectile its age.
+ */
+export function recordHolds(record: readonly number[], target: number, now: number): boolean {
+  for (const entry of record) {
+    if (entry % REARM_STRIDE !== target) continue;
+    const rearm = Math.trunc(entry / REARM_STRIDE);
+    return rearm === 0 || now < rearm;
+  }
+  return false;
 }
 
 /**
- * Record a connection so the same swing cannot hit the same target twice.
+ * Put `target` in `record`: for good, or with `rearmAt` (≥ 1, on the record's clock)
+ * until that frame, when a box with a rehit struck it (Plan 5, Task 16). A target
+ * struck again keeps its one entry, with its new re-arm frame.
+ */
+export function recordMark(record: number[], target: number, rearmAt?: number): void {
+  const entry = rearmAt === undefined ? target : target + REARM_STRIDE * rearmAt;
+  const i = record.findIndex((e) => e % REARM_STRIDE === target);
+  if (i < 0) record.push(entry);
+  else record[i] = entry;
+}
+
+/**
+ * Has this swing already connected with that target, as of its move's frame `now`?
+ * A hit by a box with a rehit lets go of its target that many frames on (`markHit`).
+ */
+export function alreadyHit(f: Pick<FighterState, "hitThisMove">, target: number, now: number = 0): boolean {
+  return recordHolds(f.hitThisMove, target, now);
+}
+
+/**
+ * Record a connection so the same swing cannot hit the same target twice, or, for
+ * a box with a rehit (smash-script `Rehit`; Plan 5, Task 16), not before its move's
+ * frame `rearmAt`: Pikachu's forward air strikes a fighter held in it every 3 frames,
+ * Zero Laser's beam every 10.
  *
  * Cleared whenever a new move starts (`clearHitRecord`), which is what makes a
  * multi-hit move like Link's up smash hit three times while a single-hit move
  * with three overlapping hitboxes hits once.
  */
-export function markHit(f: Pick<FighterState, "hitThisMove">, target: number): void {
-  if (!f.hitThisMove.includes(target)) f.hitThisMove.push(target);
+export function markHit(f: Pick<FighterState, "hitThisMove">, target: number, rearmAt?: number): void {
+  recordMark(f.hitThisMove, target, rearmAt);
 }
 
 export function clearHitRecord(f: Pick<FighterState, "hitThisMove">): void {

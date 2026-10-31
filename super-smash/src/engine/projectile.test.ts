@@ -15,6 +15,7 @@ import {
   projectileChargeScale,
   projectileHitbox,
   projectileHitboxActive,
+  projectileHitboxes,
   articleOf,
   projectilesDueOnFrame,
   projectilesOut,
@@ -755,6 +756,72 @@ describe("hit records", () => {
     markProjectileHit(p, 1);
     markProjectileHit(p, 1);
     expect(p.hitPorts).toEqual([1]);
+  });
+
+  // Plan 5, Task 16: a rehit (smash-script `Rehit`; SmashWiki "Hitbox",
+  // https://www.ssbwiki.com/Hitbox: "allows the hitbox to strike again after the
+  // specified amount of frames"), counted in the projectile's own age from each strike.
+  it("strikes a port again from the age its rehit re-arms it, each port on its own", () => {
+    const p = spawnProjectile(ARROW, fighter(), 1);
+    markProjectileHit(p, 1, 60 + 7);
+    markProjectileHit(p, 2, 63 + 7);
+    expect([66, 67, 69, 70].map((age) => [projectileAlreadyHit(p, 1, age), projectileAlreadyHit(p, 2, age)])).toEqual([
+      [true, true],
+      [false, true],
+      [false, true],
+      [false, false],
+    ]);
+    markProjectileHit(p, 1, 67 + 7);
+    expect([projectileAlreadyHit(p, 1, 73), projectileAlreadyHit(p, 1, 74)]).toEqual([true, false]);
+    expect(p.hitPorts).toHaveLength(2);
+  });
+
+  it("keeps a hit with no rehit for the projectile's life", () => {
+    const p = spawnProjectile(ARROW, fighter(), 1);
+    markProjectileHit(p, 1);
+    expect(projectileAlreadyHit(p, 1, 1_000_000)).toBe(true);
+  });
+});
+
+/**
+ * A staged projectile (Plan 5, Task 16: Mario Finale's flames, SmashWiki "Mario
+ * (SSBU)/Final Smash": early, mid and late hits, the later ones with an air box and a
+ * ground box). Its hit is its own box until its first stage, then each stage's.
+ */
+describe("a staged projectile (Plan 5, Task 16)", () => {
+  const FLAME: ProjectileDef = {
+    ...ARROW,
+    id: "flame",
+    lifetime: 220,
+    destroyOnHit: false,
+    hitbox: hitbox({ startFrame: 60, endFrame: 219, damage: fx(2.5), angle: fx(50), baseKnockback: fx(25), knockbackGrowth: fx(40), radius: fx(16) }),
+    stages: [
+      { from: 100, hitbox: { damage: fx(3), angle: fx(23), baseKnockback: fx(20), knockbackGrowth: fx(90) }, ground: { damage: fx(3), angle: fx(50), baseKnockback: fx(15), knockbackGrowth: fx(100) } },
+      { from: 150, hitbox: { damage: fx(3.5), angle: fx(23), baseKnockback: fx(10), knockbackGrowth: fx(120) } },
+    ],
+  };
+  const at = (age: number) => Object.assign(spawnProjectile(FLAME, fighter(), 1), { age });
+  const kinds = (age: number) => projectileHitboxes(at(age), FLAME).map((hb) => [hb.damage, hb.angle, hb.baseKnockback, hb.knockbackGrowth, hb.situation, hb.radius]);
+
+  it("hits with its own box until its first stage", () => {
+    expect(kinds(60)).toEqual([[fx(2.5), fx(50), fx(25), fx(40), undefined, fx(16)]]);
+    expect(kinds(99)).toEqual(kinds(60));
+    expect(projectileHitbox(at(99), FLAME)).toBe(FLAME.hitbox);
+  });
+
+  it("hits from each stage's age with its box, one for the air and one for the ground where it has both", () => {
+    expect(kinds(100)).toEqual([
+      [fx(3), fx(23), fx(20), fx(90), "air", fx(16)],
+      [fx(3), fx(50), fx(15), fx(100), "ground", fx(16)],
+    ]);
+    expect(kinds(149)).toEqual(kinds(100));
+    expect(kinds(150)).toEqual([[fx(3.5), fx(23), fx(10), fx(120), undefined, fx(16)]]);
+    // The single box a reader without a situation asks for is the stage's first.
+    expect(projectileHitbox(at(120), FLAME)).toBe(projectileHitboxes(at(120), FLAME)[0]);
+  });
+
+  it("builds each stage's boxes once", () => {
+    expect(projectileHitboxes(at(120), FLAME)).toBe(projectileHitboxes(at(130), FLAME));
   });
 });
 

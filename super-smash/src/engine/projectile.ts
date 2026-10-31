@@ -18,6 +18,7 @@
 
 import { ONE, fx, abs, cosDeg, isqrt, mul, sinDeg } from "./fixed";
 import { SMASH_CHARGE_MAX } from "./constants";
+import { recordHolds, recordMark } from "./hitbox";
 import { HARD_PLATFORM_DEPTH, platformCentreX } from "./physics";
 import { chargedHitbox } from "./specialCharge";
 import type {
@@ -62,6 +63,28 @@ export function projectileDefs(def: FighterDef): Map<string, ProjectileDef> {
 
 export function findProjectileDef(def: FighterDef, id: string): ProjectileDef | undefined {
   return projectileDefs(def).get(id);
+}
+
+const finalIds = new WeakMap<FighterDef, ReadonlySet<string>>();
+
+/**
+ * Is projectile `id` one of `def`'s Final Smash's (Plan 5, Task 16): launched by a
+ * move that is a part of one (`MoveDef.final`)? Mario Finale's flames and the Ancient
+ * Arrow are, and like every Final Smash box, no shield or counter takes them
+ * (`simulate.ts`, `appendProjectileCandidates`).
+ */
+export function isFinalProjectile(def: FighterDef, id: string): boolean {
+  let ids = finalIds.get(def);
+  if (ids === undefined) {
+    const set = new Set<string>();
+    for (const move of Object.values(def.moves)) {
+      if (move?.final === undefined) continue;
+      for (const p of move.projectiles ?? []) set.add(p.id);
+    }
+    ids = set;
+    finalIds.set(def, ids);
+  }
+  return ids.has(id);
 }
 
 /**
@@ -153,13 +176,60 @@ function returningHitbox(def: ProjectileDef, hit: NonNullable<ProjectileDef["ret
   return hb;
 }
 
+const stagedHitboxes = new WeakMap<ProjectileDef, readonly (readonly Hitbox[])[]>();
+
+/**
+ * The boxes of each of `def`'s stages (`ProjectileDef.stages`), built once per
+ * definition over its `hitbox`: one where the stage has no ground box, else an air
+ * box and a ground box, each hitting only fighters there (`Hitbox.situation`), as the
+ * script's two pairs of `ATTACK`s do (Plan 5, Task 16: Mario Finale's mid and late
+ * flames, `COLLISION_SITUATION_MASK_A` and `_G`).
+ */
+function stageBoxes(def: ProjectileDef): readonly (readonly Hitbox[])[] {
+  let all = stagedHitboxes.get(def);
+  if (all === undefined) {
+    all = (def.stages ?? []).map((st): readonly Hitbox[] =>
+      st.ground === undefined
+        ? [{ ...def.hitbox, ...st.hitbox }]
+        : [
+            { ...def.hitbox, ...st.hitbox, situation: "air" },
+            { ...def.hitbox, ...st.ground, situation: "ground" },
+          ],
+    );
+    stagedHitboxes.set(def, all);
+  }
+  return all;
+}
+
+/** The index of the last of `def`'s stages `p` has reached by its age, or −1 before its first (or with none). */
+function stageOf(p: ProjectileState, def: ProjectileDef): number {
+  let at = -1;
+  const stages = def.stages ?? [];
+  for (let i = 0; i < stages.length; i++) if (p.age >= stages[i].from) at = i;
+  return at;
+}
+
 /**
  * This projectile's hitbox, at the charge it was launched with (Plan 5), or its
- * hit on the way back once a returning one has turned (Task 13c).
+ * hit on the way back once a returning one has turned (Task 13c), or its latest
+ * stage's (Task 16; its air box, where the stage has two: `projectileHitboxes`).
  */
 export function projectileHitbox(p: ProjectileState, def: ProjectileDef): Hitbox {
   if (p.returning && def.returns !== undefined) return returningHitbox(def, def.returns.hit);
+  const stage = stageOf(p, def);
+  if (stage >= 0) return stageBoxes(def)[stage][0];
   return def.charged === undefined ? def.hitbox : chargedHitbox(def.hitbox, def.charged.hitbox, p.charge, def.charged.partial);
+}
+
+/**
+ * Every box this projectile hits with now: `projectileHitbox`, or both of its
+ * latest stage's where that has an air box and a ground box (Plan 5, Task 16). A
+ * staged definition's boxes are its `hitbox` with each stage's numbers over it; none
+ * on the roster is also `charged` or `returns`.
+ */
+export function projectileHitboxes(p: ProjectileState, def: ProjectileDef): readonly Hitbox[] {
+  const stage = p.returning && def.returns !== undefined ? -1 : stageOf(p, def);
+  return stage >= 0 ? stageBoxes(def)[stage] : [projectileHitbox(p, def)];
 }
 
 /**
@@ -566,13 +636,22 @@ export function projectilesOut(
   return n;
 }
 
-/** Has this projectile already connected with that port? */
-export function projectileAlreadyHit(p: ProjectileState, port: number): boolean {
-  return p.hitPorts.includes(port);
+/**
+ * Has this projectile already connected with that port, as of its age `now`? One
+ * with a rehit (`ProjectileDef.rehit`; Plan 5, Task 16) lets go of a port that many
+ * frames of its age after it struck them (`markProjectileHit`, `recordHolds`).
+ */
+export function projectileAlreadyHit(p: ProjectileState, port: number, now: number = p.age): boolean {
+  return recordHolds(p.hitPorts, port, now);
 }
 
-export function markProjectileHit(p: ProjectileState, port: number): void {
-  if (!p.hitPorts.includes(port)) p.hitPorts.push(port);
+/**
+ * Record a connection: for good, or, for a projectile with a rehit, until its age
+ * `rearmAt` (Plan 5, Task 16: Mario Finale's flames strike a fighter in them every 7
+ * frames). The record keeps one entry per port (`recordMark`).
+ */
+export function markProjectileHit(p: ProjectileState, port: number, rearmAt?: number): void {
+  recordMark(p.hitPorts, port, rearmAt);
 }
 
 /** A deep copy of one projectile, arrays and all. Used by `cloneState`. */

@@ -1090,6 +1090,21 @@ describe("the projectiles are his own", () => {
     expect(reach(0.5)).toBeGreaterThan(reach(0));
   });
 
+  // Plan 5, Task 16: the Ancient Arrow is his arrow at full draw, whatever the
+  // projectile's own charge (it has none), in a Guardian-blue glow.
+  it("paints the Ancient Arrow as his arrow at full draw, glowing", () => {
+    const paint = (painter: (c: ProjectileContext) => void, fraction: number) => {
+      const ctx = createMockContext();
+      painter({ ctx, u: 12, age: 5, dir: 1, heading: 0, charge: 1, fraction, returning: false, frame: 5 } as unknown as ProjectileContext);
+      return ctx;
+    };
+    const lines = (ctx: MockContext) => ctx.calls.filter((c) => c.method === "lineTo" || c.method === "moveTo").map((c) => c.args);
+    expect(lines(paint(projectiles.ancientArrow, 0))).toEqual(lines(paint(projectiles.arrow, 1)));
+    const stops = (ctx: MockContext) => ctx.calls.filter((c) => c.method === "addColorStop").map((c) => String(c.args[1]));
+    expect(stops(paint(projectiles.ancientArrow, 0)).some((colour) => colour.startsWith("rgba(95,230,224"))).toBe(true);
+    expect(stops(paint(projectiles.arrow, 1)).some((colour) => colour.startsWith("rgba(95,230,224"))).toBe(false);
+  });
+
   it("gives the arrow a hitbox worth the size it is drawn at", () => {
     // Not a drawing property: a sanity check that the graphic and the thing it
     // stands for are the same order of magnitude.

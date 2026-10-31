@@ -51,9 +51,11 @@ import { flatten, runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
 import { moveMomentum, moveScriptFrame, moveSpawns, moveSuperArmour, smashHoldFrame } from "@/engine/acmd/run";
 import type { AcmdScript } from "@/engine/acmd/types";
-import { fx } from "@/engine/fixed";
-import { chargeHoldFrame } from "@/engine/hitbox";
+import { fx, mul, toFloat } from "@/engine/fixed";
+import { chargeHoldFrame, moveFrameOf } from "@/engine/hitbox";
 import { COPY_DAMAGE } from "@/engine/inhale";
+import { kineticClear } from "@/engine/kinetic";
+import { STALE_FRESH_BONUS } from "@/engine/knockback";
 import { hashState } from "@/engine/hash";
 import { cloneState, createInitialState, step } from "@/engine/simulate";
 import { hasSuperArmour, onLanded } from "@/engine/states";
@@ -258,6 +260,7 @@ describe("what keeps a move on its legacy frames (Plan 5 review)", () => {
         "inhale",
         "intangible",
         "reflector",
+        "rehit",
         "release",
         "specialCharge",
         "stall",
@@ -274,6 +277,8 @@ describe("what keeps a move on its legacy frames (Plan 5 review)", () => {
     expect(activatable("jab1", { ...jab, copyDamage: fx(1.2) }, script)).toBe(false);
     expect(activatable("jab1", { ...jab, heavyArmour: fx(16) }, script)).toBe(false);
     expect(activatable("jab1", { ...jab, holdLoop: { from: 2, to: 4 } }, script)).toBe(false);
+    // Plan 5, Task 16: a rehit authored on the move, which only its compiled script carries.
+    expect(activatable("jab1", { ...jab, rehit: 7 }, script)).toBe(false);
   });
 
   // A throw's turn is the script's own REVERSE_LR (Plan 5, Task 7, P5-R7); `turnAt`
@@ -798,5 +803,69 @@ describe("a Final Smash's cutscene script (Plan 5, Task 14)", () => {
       expect(boneRole(SKELETONS[id], "virtualfinalattack").kind, id).toBe("missing");
       expect(activatable("finalAttack", { ...scene, final: undefined }, virtual, (bone) => placeableBone(SKELETONS[id], bone)), id).toBe(false);
     }
+  });
+});
+
+/*
+ * Plan 5, Task 16: a script's own `Rehit` reaches the one rehit mechanism (the hit
+ * record re-arms a target that many frames after the box struck it; `hitbox.ts`,
+ * `markHit`), as a legacy move's `MoveDef.rehit` does through its compile. SmashWiki
+ * "Hitbox" (https://www.ssbwiki.com/Hitbox): a rehit rate, "If not 0, allows the
+ * hitbox to strike again after the specified amount of frames".
+ */
+describe("a script's Rehit (Plan 5, Task 16)", () => {
+  const RULES_FREE: MatchRules = { ...RULES, oneOnOne: false };
+
+  /** `a` and `b` held still at (ax, y) and (bx, y), `a` facing `b`; `keys` each step's buttons, `frames` steps. */
+  function heldDuel(context: SimContext, a: string, b: string, ax: number, bx: number, y: number, frames: number, keys: (i: number) => InputFrame[]) {
+    let s = createInitialState("finalDestination", [{ defId: a }, { defId: b }], RULES_FREE, 3, context);
+    const grounded = y === 0;
+    s.fighters.forEach((f, i) => Object.assign(f, { action: grounded ? "stand" : "fall", grounded, platform: grounded ? 0 : -1, x: fx(i === 0 ? ax : bx), y: fx(y), facing: i === 0 ? 1 : -1, intangible: 0 }));
+    let prev: InputFrame[] = [0, 0];
+    const hits: { frame: number; damage: number; id: number }[] = [];
+    for (let i = 0; i < frames; i++) {
+      s = cloneState(s);
+      // Both held where they are (in the air, so nothing lands): what changes is the swing.
+      if (!grounded) {
+        s.fighters.forEach((f, k) => {
+          Object.assign(f, { x: fx(k === 0 ? ax : bx), y: fx(y) });
+          kineticClear(f);
+        });
+      }
+      const now = keys(i);
+      const out = step(s, now, { prevInputs: prev, ctx: context });
+      s = out.state;
+      prev = now;
+      const user = s.fighters[0];
+      for (const h of out.events.hits) if (h.victim === 1 && user.move !== null) hits.push({ frame: moveFrameOf(user.actionFrame), damage: toFloat(h.damage), id: h.hitboxId });
+    }
+    return hits;
+  }
+
+  // SmashWiki "Pikachu (SSBU)/Forward aerial" (https://www.ssbwiki.com/Pikachu_(SSBU)/Forward_aerial):
+  // "Multihits 11-25 (rehit rate: 3)", 1.4%, and the final hit, 4.8%, on 27: "dealing a
+  // maximum of 11.8% if all six hits connect". Its `game_attackairf` runs (`ACTIVE_SCRIPT_SLOTS`).
+  it("lands all six of Pikachu's forward air on a fighter held in it: 11, 14, 17, 20, 23 and 27", () => {
+    expect(ACTIVE_SCRIPT_SLOTS.pikachu).toContain("fair");
+    // Each electric multihit freezes both 5 frames (×0.5, ×1.5 electric), so the swing runs 50 steps.
+    const hits = heldDuel(ctx, "pikachu", "mario", -30, -20, 40, 60, (i) => [i === 0 ? Btn.Attack | Btn.Right : 0, 0]);
+    expect(hits.map((h) => h.frame)).toEqual([11, 14, 17, 20, 23, 27]);
+    // Each a fresh move's (×1.05): the multihits are as stale as the swing's first.
+    expect(hits.map((h) => h.damage)).toEqual([1.4, 1.4, 1.4, 1.4, 1.4, 4.8].map((d) => toFloat(mul(fx(d), STALE_FRESH_BONUS))));
+  });
+
+  // SmashWiki "Marth (SSBU)/Up smash" (https://www.ssbwiki.com/Marth_(SSBU)/Up_smash): the
+  // launcher, 3%, `rehit=2`, on 13-14, and the sword on 13-17; SmashWiki "Marth (SSBU)"
+  // (https://www.ssbwiki.com/Marth_(SSBU)): "The weak grounded hit can knock nearby
+  // opponents into the main attack". His up smash runs its limb script in the game
+  // (`limb.json`, Plan 4), so the bake's context: the launcher on 13, then the sword on 15.
+  it("lets Marth's up smash launcher knock a fighter into its sword two frames later", () => {
+    const GAME = bakedContext(ctx, readBakeFromDisk());
+    expect(LIMB_SCRIPT_SLOTS.marth).toContain("usmash");
+    const hits = heldDuel(GAME, "marth", "mario", -30, -22, 0, 30, (i) => [i === 0 ? Btn.Up | Btn.Attack : 0, 0]);
+    expect(hits.map((h) => [h.frame, h.id === 0 ? "launcher" : "sword"])).toEqual([
+      [13, "launcher"],
+      [15, "sword"],
+    ]);
   });
 });

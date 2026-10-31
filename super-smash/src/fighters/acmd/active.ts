@@ -163,7 +163,9 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
  * lead, before its first command (`chargeInLead`: Link's Spin Attack). Task 14
  * adds a Final Smash's part (`final`): its trap, scene and launch are the engine's
  * reading of the move, and a cutscene script's boxes hang off `virtualfinalattack`
- * bones no skeleton has. Task 16 adds a rehit.
+ * bones no skeleton has. Task 16 adds a rehit authored on the move (`rehit`), which
+ * only its compiled script carries: an imported script's boxes carry their own
+ * `Rehit`, which the engine honours as it does the compiled one.
  */
 export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
   "specialCharge",
@@ -181,6 +183,7 @@ export const PLAN5_BEHAVIOUR: readonly (keyof MoveDef)[] = [
   "intangible",
   "copyDamage",
   "final",
+  "rehit",
 ];
 
 /**

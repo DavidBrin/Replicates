@@ -119,9 +119,11 @@ function farEndOf(hb: Hitbox): Pick<AttackParams, "y2" | "z2"> {
 
 /**
  * A legacy hitbox as `ATTACK` arguments on the root bone, its far end included
- * when it has one (`farEndOf`): a capsule, `ATTACK(..., X2, Y2, Z2)`.
+ * when it has one (`farEndOf`): a capsule, `ATTACK(..., X2, Y2, Z2)`. `rehit` is its
+ * move's (`MoveDef.rehit`; Plan 5, Task 16), the `Rehit` an imported script's boxes
+ * carry their own in; 0 for none.
  */
-export function attackFromHitbox(hb: Hitbox): AttackParams {
+export function attackFromHitbox(hb: Hitbox, rehit: number = 0): AttackParams {
   return {
     id: hb.id,
     part: 0,
@@ -146,7 +148,7 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     setWeight: hb.setWeight === true,
     shieldDamage: 0,
     trip: 0,
-    rehit: 0,
+    rehit,
     reflectable: false,
     absorbable: false,
     // Plan 5, Task 6: a windbox is `Flinchless=true`; written with
@@ -216,7 +218,7 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
       at(hb.endFrame + 1).close.push({ op: "catchClear", id: hb.id });
       continue;
     }
-    at(hb.startFrame).open.push({ op: "attack", params: attackFromHitbox(hb) });
+    at(hb.startFrame).open.push({ op: "attack", params: attackFromHitbox(hb, move.rehit) });
     if (hb.shieldstunMultiplier !== undefined) {
       at(hb.startFrame).open.push({ op: "shieldSetoffMul", id: hb.id, mul: hb.shieldstunMultiplier });
     }

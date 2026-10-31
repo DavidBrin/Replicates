@@ -278,6 +278,13 @@ describe("projectiles", () => {
     // after (2.8 − 0.4) / 0.05 = 48. Its rider's own flight (`25 + 0.5t`) ends it
     // sooner still (`engine/inhale.ts`).
     ["kirby", "star", 48, [0, 59], "https://www.ssbwiki.com/Kirby_(SSBU)/Neutral_special"],
+    // Mario Finale's flames (Plan 5, Task 16): "Fireballs generated 5", "Early hits
+    // 65-104", "Late hits 155-224": live on frames 5-224, hitting from 65, ages 60-219.
+    // Their article's script clears its boxes on 220 (rubendal `mario_hugeflame` `Regular`).
+    ["mario", "hugeFlame", 220, [60, 219], "https://www.ssbwiki.com/Mario_(SSBU)/Final_Smash"],
+    // The Ancient Arrow (Task 16): UNVERIFIED, no published lifetime; it is gone on its
+    // first hit or at the blast zone long before (`link.ts`).
+    ["link", "ancientArrow", 60, [0, 59], "UNVERIFIED: https://www.ssbwiki.com/Link_(SSBU)/Final_Smash publishes none"],
   ];
 
   it("lists every projectile on the roster in the published lives", () => {
@@ -334,7 +341,8 @@ describe("projectiles", () => {
     expect(new Set(owners)).toEqual(new Set(["mario", "link", "samus", "kirby", "fox", "pikachu"]));
 
     // Plan 5, Task 13d: his Boomerang has a smash throw of its own, a fourth definition.
-    const linkProjectiles = everyProjectile(getFighterOrThrow("link"));
+    // Plan 5, Task 16: a Final Smash's arrows and flames are not specials.
+    const linkProjectiles = everyProjectile(getFighterOrThrow("link")).filter((p) => p.slot !== "finalSmash");
     expect(linkProjectiles).toHaveLength(4);
     expect(new Set(linkProjectiles.map((p) => p.slot))).toEqual(
       new Set(["neutralB", "sideB", "sideBSmash", "downB"])

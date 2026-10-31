@@ -37,13 +37,14 @@
  * the world freeze on the same steps (`step`, ruling R-T14g). Kirby in Stone is not
  * trapped (ruling R-T14e, `applyHit`).
  *
- * A Final Smash with no `trap` (Task 16's) is an ordinary, very large move.
+ * A Final Smash with no `trap` (Task 16's: Mario Finale, Zero Laser, the Ancient
+ * Bow and Arrow) is an ordinary, very large move, its projectiles included.
  * SmashWiki "Unblockable attack" (https://www.ssbwiki.com/Unblockable_attack):
  * "in Ultimate, all Final Smashes are unblockable", an unblockable attack being
  * one that "cannot be defended against with a shield or a counterattack"; so no
- * counter catches a Final Smash box (`step`), and the trap and the scene take
- * no shield. UNVERIFIED-simplified: the cutscene's camera and its playback speed
- * are presentation (Task 17).
+ * counter catches a Final Smash box or projectile, and no shield takes one
+ * (`step`, the candidates' `final`). UNVERIFIED-simplified: the cutscene's camera
+ * and its playback speed are presentation (Task 17).
  *
  * `final.ts` and `states.ts` import each other: `states.ts` calls
  * `beginFinalSmash` and `status/attack.ts` `nextFinalPhase`, and this file calls

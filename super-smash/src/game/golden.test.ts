@@ -27,12 +27,13 @@ import { CRAWL_LAB } from "./goldenCrawlLab";
 import { STATES_LAB } from "./goldenStatesLab";
 import { PROJECTILE_LAB } from "./goldenProjectileLab";
 import { FINAL_LAB } from "./goldenFinalLab";
+import { BEAM_LAB } from "./goldenBeamLab";
 import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./projectilePaths";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Eleven matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Twelve matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
@@ -49,10 +50,13 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * settles and goes off on its timer, her Charge Shot and Link's arrow clank, a Charge
  * Shot flies out its life, one clanks with Link's jab and he rebounds, the smash-input
  * specials, Samus's Super Missile and Link's smash-thrown Boomerang, each land their
- * hit, and Link throws with his Boomerang out, which fails; and a 400-frame Final
+ * hit, and Link throws with his Boomerang out, which fails; a 400-frame Final
  * Smash lab (`goldenFinalLab.ts`, Task 15, ruling P5-R14): Donkey Kong, given the
  * Smash Ball's power in its setup, traps Mario in Jungle Rush, plays its scene and
- * launches him.
+ * launches him; and a 700-frame beams lab (`goldenBeamLab.ts`, Task 16), four on
+ * Battlefield: Samus's Zero Laser strikes Donkey Kong again at its rehit, Mario
+ * Finale's flames strike Samus again at theirs, hotter from their mid stage, and the
+ * Ancient Arrow flies and strikes Mario.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -194,10 +198,17 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => FINAL_LAB.inputs(frame);
     },
   },
+  {
+    ...BEAM_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => BEAM_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the eleven matches must visit between them: all 59. A `Record`
+ * Every `ActionState` the twelve matches must visit between them: all 59. A `Record`
  * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
@@ -489,7 +500,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all eleven matches.
+ * on every frame of all twelve matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -878,6 +889,19 @@ describe("engine golden trace", () => {
   // The Final Smash lab moves from its 301-400 sample alone: Jungle Rush's end is 61
   // frames (its FT_MOTION_RATE 0.8 from 30, ruling R-T15i), so Donkey Kong stands on
   // 304, not 312. Every count is as it was.
+  // Plan 5 Task 16 (a box with a rehit strikes a fighter again that many frames after
+  // it struck them, a script's own `Rehit` and a legacy move's alike; the three Final
+  // Smashes that trap nobody) moved one trace and added one. kirby-marth moves from the
+  // 701-800 sample: Marth's up smash on 711, a limb script, lands its launcher (3.78%)
+  // and now, its `Rehit=2` run out, its sword on 713 (16.38%; SmashWiki "Marth (SSBU)":
+  // "The weak grounded hit can knock nearby opponents into the main attack"), and again
+  // on 1001 and 1003. Hits 26, shield hits 0 and KOs 1 there, as before, Marth's KO
+  // coming on 2668, not 1886. Setting the scripts' rehit back alone, every trace
+  // replays. The ten other traces are byte-identical. It added the beams lab
+  // (`goldenBeamLab.ts`): 21 hits (Zero Laser's fifteen on Donkey Kong, Mario Finale's
+  // five on Samus, the Ancient Arrow on Mario), no shield hit, one KO (Samus, off the
+  // stage). So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2, 33 and 21; shield hits
+  // 0/6/0/0, 3, 0, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0, 0 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -933,6 +957,15 @@ describe("engine golden trace", () => {
     expect(lab.moves.has("link sideBFailed"), "the projectile lab's failed throw").toBe(true);
   }
 
+  // Plan 5, Task 16: the beams lab plays the three Final Smashes that trap nobody
+  // (`goldenBeamLab.ts`); no other golden match uses one.
+  function expectBeams(): void {
+    const lab = played.get(BEAM_LAB.name)!;
+    expect(["samus finalSmash", "mario finalSmash", "link finalSmash"].filter((m) => !lab.moves.has(m)), "Final Smashes the beams lab no longer plays").toEqual([]);
+    expect(["hugeFlame", "ancientArrow"].filter((id) => !lab.launched.has(id)), "Final Smash projectiles the beams lab no longer launches").toEqual([]);
+    expect(lab.hits, "Zero Laser's fifteen on Donkey Kong, Mario Finale's five on Samus and the Ancient Arrow on Mario").toBe(21);
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -943,6 +976,7 @@ describe("engine golden trace", () => {
   it("lands every kind of hit the scripted match lands", expectScriptHits);
   it("lets a projectile expire, settle, explode and clank", expectProjectilePaths);
   it("smash-inputs both side specials in the projectile lab", expectSmashSpecials);
+  it("plays the beams and the arrow in the beams lab", expectBeams);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -953,6 +987,7 @@ describe("engine golden trace", () => {
       expectScriptHits();
       expectProjectilePaths();
       expectSmashSpecials();
+      expectBeams();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;

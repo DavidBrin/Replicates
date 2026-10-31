@@ -234,12 +234,15 @@ describe("a bake that does not arrive in time", () => {
   });
 
   it("lets a slow, steady link finish: the whole file at 0.5 Mbit/s, past the 30 s the old deadline allowed (codex P2)", async () => {
-    // 62,500 bytes a second is 0.5 Mbit/s: 30 chunks after a second's latency, the last at 31 s.
-    expect(GZ.length / 62_500).toBeGreaterThan(29);
+    // 62,500 bytes a second is 0.5 Mbit/s: a chunk a second after a second's latency,
+    // the last at 1 + chunks seconds, 33 s for the bake's 32 since Plan 5 Task 16 (31,
+    // and 32 s, before). Timed from the file, so a bake that grows keeps its meaning.
+    const chunks = Math.ceil(GZ.length / 62_500);
+    expect(chunks).toBeGreaterThan(29);
     const seen = watch(fetchBake(link({ bytes: 62_500, everyMs: 1000, latencyMs: 1000 })));
     await vi.advanceTimersByTimeAsync(30_000);
     expect(seen.settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync((1 + chunks) * 1000 - 30_000);
     await vi.waitFor(() => expect(seen.settled).toBe(true));
     expect(seen.error).toBeUndefined();
     expect(seen.value?.fingerprint).toBe(BAKE_DIGEST);

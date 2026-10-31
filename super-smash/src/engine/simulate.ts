@@ -92,11 +92,12 @@ import {
   chargeFraction,
   cloneProjectile,
   findProjectileDef,
+  isFinalProjectile,
   knockProjectile,
   markProjectileHit,
   projectileAlreadyHit,
-  projectileHitbox,
   projectileHitboxActive,
+  projectileHitboxes,
   projectilesOut,
   spawnProjectile,
 } from "./projectile";
@@ -191,6 +192,7 @@ import { absHitbox, scriptHitboxes, unplacedHitbox } from "./acmd/hitboxes";
 import { moveScriptFrame, moveSpawns, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
 import { begunInAir } from "./upSpecial";
 import { gameScriptFor } from "./acmd/legacy";
+import type { AttackParams } from "./acmd/types";
 import "./status";
 import { releaseHeld, struggleInGrab } from "./status/grab";
 import { emptyEvents } from "./types";
@@ -575,9 +577,19 @@ interface Candidate {
    * user has trapped, wherever they are, for damage only or to launch; `strike`, a
    * trapping part's box that hits instead (`Hitbox.trap` false; Task 15 fix round 1,
    * ruling R-T15j), hits the world as an ordinary box and its user's trapped as a
-   * `hold` does. Null for every other box.
+   * `hold` does; `world`, a box of a Final Smash that traps nobody, or of one of its
+   * projectiles (Task 16: Mario Finale's flames, Zero Laser, the Ancient Arrow), hits
+   * the world as an ordinary box, its hit record kept. No shield or counter takes any
+   * of them. Null for every other box.
    */
-  readonly final: "trap" | "hold" | "launch" | "strike" | null;
+  readonly final: "trap" | "hold" | "launch" | "strike" | "world" | null;
+  /**
+   * Frames after it strikes a fighter before it may strike them again, 0 for once
+   * (smash-script `Rehit`; Plan 5, Task 16: `rehitOf`, `ProjectileDef.rehit`), and the
+   * clock its hit record counts them on: its move's frame, or its projectile's age.
+   */
+  readonly rehit: number;
+  readonly clock: number;
   suppressed: boolean;
 }
 
@@ -586,12 +598,26 @@ interface Candidate {
  * the world: it clanks, or not, by its own flags (`Hitbox.transcendent`; Task 15's
  * carry their scripts' ATTACK_SETOFF_KIND_OFF). UNVERIFIED: no source says how Final
  * Smash boxes clank (SmashWiki "Priority" and "Final Smash" are silent); the
- * alternative is that every Final Smash box is transcendent.
+ * alternative is that every Final Smash box is transcendent. A start that traps
+ * nobody is a box in the world too, `world` (Task 16: Zero Laser), and clanks the
+ * same way.
  */
 function finalKind(final: FinalPhase | undefined, hb: Hitbox): Candidate["final"] {
   if (final === undefined) return null;
-  if (final.phase === "start") return final.trap === true ? (hb.trap === false ? "strike" : "trap") : null;
+  if (final.phase === "start") return final.trap === true ? (hb.trap === false ? "strike" : "trap") : "world";
   return final.phase === "attack" ? "hold" : "launch";
+}
+
+/**
+ * A live box's rehit (smash-script `Rehit`; Plan 5, Task 16): the running script's
+ * `ATTACK` of its id, whose own `Rehit` an imported script carries and a legacy move's
+ * compile writes from `MoveDef.rehit` (`attackFromHitbox`). One rehit for both, and
+ * none for a catch: Pikachu's forward air's `game_attackairf` strikes every 3 frames,
+ * Marth's up smash's launcher lets go after 2, Zero Laser's beam every 10.
+ */
+function rehitOf(attacks: readonly AttackParams[], hb: Hitbox): number {
+  if (hb.grabbing === true) return 0;
+  return attacks.find((a) => a.id === hb.id)?.rehit ?? 0;
 }
 
 /** A Final Smash scene's box: not in the world, it reaches the trapped and nothing else. */
@@ -1263,6 +1289,8 @@ function gatherHitboxes(
         onlyPort: run.state.catchOnly ? f.grabbing : null,
         damageMul: defs[i].moves[f.move]?.copyDamage ?? ONE,
         final: finalKind(defs[i].moves[f.move]?.final, hb),
+        rehit: rehitOf(run.state.attacks, raw),
+        clock: run.gameFrame,
         suppressed: false,
       });
     }
@@ -1375,7 +1403,14 @@ function spawnDueProjectiles(
   }
 }
 
-/** Add every live projectile hitbox to the same candidate list as the fists. */
+/**
+ * Add every live projectile hitbox to the same candidate list as the fists: one,
+ * or one for each situation where its stage has two (`projectileHitboxes`; Plan 5,
+ * Task 16). A Final Smash's projectile is a Final Smash's box in the world (`world`):
+ * no shield or counter takes it (SmashWiki "Unblockable attack",
+ * https://www.ssbwiki.com/Unblockable_attack: "in Ultimate, all Final Smashes are
+ * unblockable", one that "cannot be defended against with a shield or a counterattack").
+ */
 function appendProjectileCandidates(
   s: GameState,
   ctx: SimContext,
@@ -1386,26 +1421,30 @@ function appendProjectileCandidates(
     const def = projectileDefOf(ctx, p);
     if (def === undefined || !projectileHitboxActive(p, def)) continue;
     const was = prev.get(p.instanceId) ?? { x: p.x, y: p.y };
-    const hitbox = projectileHitbox(p, def);
-    const offsetX = p.facing >= 0 ? hitbox.x : -hitbox.x;
-    candidates.push({
-      attacker: p.owner,
-      hitbox,
-      x: p.x + offsetX,
-      y: p.y + hitbox.y,
-      prevX: was.x + offsetX,
-      prevY: was.y + hitbox.y,
-      dx: 0,
-      dy: 0,
-      slot: null,
-      projectile: p,
-      chargeScale: p.chargeScale,
-      destroyOnHit: def.destroyOnHit === true,
-      onlyPort: null,
-      damageMul: p.damageMul,
-      final: null,
-      suppressed: false,
-    });
+    const final = isFinalProjectile(ctx.fighter(p.source), p.defId) ? "world" : null;
+    for (const hitbox of projectileHitboxes(p, def)) {
+      const offsetX = p.facing >= 0 ? hitbox.x : -hitbox.x;
+      candidates.push({
+        attacker: p.owner,
+        hitbox,
+        x: p.x + offsetX,
+        y: p.y + hitbox.y,
+        prevX: was.x + offsetX,
+        prevY: was.y + hitbox.y,
+        dx: 0,
+        dy: 0,
+        slot: null,
+        projectile: p,
+        chargeScale: p.chargeScale,
+        destroyOnHit: def.destroyOnHit === true,
+        onlyPort: null,
+        damageMul: p.damageMul,
+        final,
+        rehit: def.rehit ?? 0,
+        clock: p.age,
+        suppressed: false,
+      });
+    }
   }
 }
 
@@ -1726,8 +1765,9 @@ function resolveHits(
     // 6), which pushes the countering fighter as it would anyone. UNVERIFIED for
     // the windbox: no source says either way (SmashWiki "Windbox", "F.L.U.D.D.",
     // "Mario (SSBU)/Down special" and "Counterattack" are silent), and a 0% push
-    // has nothing for a counter to return. Nor a Final Smash's box (Task 14):
-    // SmashWiki "Unblockable attack" (https://www.ssbwiki.com/Unblockable_attack),
+    // has nothing for a counter to return. Nor a Final Smash's box (Task 14), nor
+    // one of its projectiles (Task 16: `world`): SmashWiki "Unblockable attack"
+    // (https://www.ssbwiki.com/Unblockable_attack),
     // an unblockable attack "cannot be defended against with a shield or a
     // counterattack", and "in Ultimate, all Final Smashes are unblockable".
     // `caught` holds the candidates that reached the bubble, whether or not they
@@ -2051,6 +2091,8 @@ function throwCandidate(attacker: number, hitbox: Hitbox, slot: MoveSlot, at: Po
     onlyPort: null,
     damageMul: ONE,
     final: null,
+    rehit: 0,
+    clock: 0,
     suppressed: false,
   };
 }
@@ -2062,8 +2104,8 @@ function throwCandidate(attacker: number, hitbox: Hitbox, slot: MoveSlot, at: Po
  * have three arrows in the air and each is entitled to its own hit.
  */
 function recordSaysAlreadyHit(s: GameState, c: Candidate, port: number): boolean {
-  if (c.projectile !== null) return projectileAlreadyHit(c.projectile, port);
-  return alreadyHit(s.fighters[c.attacker], port);
+  if (c.projectile !== null) return projectileAlreadyHit(c.projectile, port, c.clock);
+  return alreadyHit(s.fighters[c.attacker], port, c.clock);
 }
 
 function recordHit(c: Candidate, attacker: FighterState, port: number): void {
@@ -2071,8 +2113,14 @@ function recordHit(c: Candidate, attacker: FighterState, port: number): void {
   // ruling R-T15j): a one-frame box that lands once, as a scene's does, which leaves
   // the start's trap free to catch whom it hit (Volt Tackle's sparks, then its 1%).
   if (c.final === "strike") return;
-  if (c.projectile !== null) markProjectileHit(c.projectile, port);
-  else markHit(attacker, port);
+  // A box with a rehit lets go of its target that many frames on its clock from now
+  // (Plan 5, Task 16; SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox: a rehit rate
+  // "allows the hitbox to strike again after the specified amount of frames"),
+  // whichever of its move's boxes strikes next. UNVERIFIED: that a move's boxes share
+  // the one record, as a legacy move's always have (a script's `clear_all` aside).
+  const rearmAt = c.rehit > 0 ? c.clock + c.rehit : undefined;
+  if (c.projectile !== null) markProjectileHit(c.projectile, port, rearmAt);
+  else markHit(attacker, port, rearmAt);
 }
 
 /**
@@ -2871,7 +2919,8 @@ function applyHit(
   // The hit must reach the shield bubble too: a worn shield shrinks to 15% of
   // its radius and a hit that misses it lands on the body — a shield poke.
   // A Final Smash's box takes no shield (Plan 5, Task 15 fix round 1: a start's
-  // ordinary hit; the trap and the scene never come here): SmashWiki "Unblockable
+  // ordinary hit; Task 16: a box or a projectile of one that traps nobody; the trap
+  // and the scene never come here): SmashWiki "Unblockable
   // attack" (https://www.ssbwiki.com/Unblockable_attack), "in Ultimate, all Final
   // Smashes are unblockable", one that "cannot be defended against with a shield".
   const onShield = c.final === null && hitReachesShield(victim, victimDef, c);

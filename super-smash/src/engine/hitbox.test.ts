@@ -242,6 +242,35 @@ describe("hitThisMove bookkeeping", () => {
     expect(f.hitThisMove).toEqual([1]);
   });
 
+  // Plan 5, Task 16: a rehit (smash-script `Rehit`; SmashWiki "Hitbox",
+  // https://www.ssbwiki.com/Hitbox: "If not 0, allows the hitbox to strike again after
+  // the specified amount of frames"), counted from each strike, target by target.
+  it("re-arms a target on the frame its hit's rehit runs out, and not before", () => {
+    const f = { hitThisMove: [] as number[] };
+    // Struck on 10 with a rehit of 7: again from 17.
+    markHit(f, 1, 17);
+    expect([alreadyHit(f, 1, 16), alreadyHit(f, 1, 17)]).toEqual([true, false]);
+    markHit(f, 1, 24);
+    expect([alreadyHit(f, 1, 23), alreadyHit(f, 1, 24)]).toEqual([true, false]);
+    // One entry per target, however often it is struck.
+    expect(f.hitThisMove).toHaveLength(1);
+  });
+
+  it("times each target from its own last hit, and keeps a hit with no rehit for the swing", () => {
+    const f = { hitThisMove: [] as number[] };
+    markHit(f, 1, 13);
+    markHit(f, 2, 16);
+    markHit(f, 3);
+    expect([1, 2, 3].map((t) => alreadyHit(f, t, 14))).toEqual([false, true, true]);
+    expect(alreadyHit(f, 3, 1_000_000)).toBe(true);
+    expect(alreadyHit(f, 0, 14)).toBe(false);
+    // The Smash Ball's slot stays apart from every port's, rehit or not.
+    markHit(f, SMASH_BALL_TARGET, 20);
+    expect([alreadyHit(f, SMASH_BALL_TARGET, 19), alreadyHit(f, SMASH_BALL_TARGET, 20), alreadyHit(f, 0, 19)]).toEqual([true, false, false]);
+    clearHitRecord(f);
+    expect([1, 2, 3, SMASH_BALL_TARGET].map((t) => alreadyHit(f, t, 0))).toEqual([false, false, false, false]);
+  });
+
   it("keeps the Smash Ball in a slot no port can occupy", () => {
     const f = { hitThisMove: [] as number[] };
     markHit(f, SMASH_BALL_TARGET);

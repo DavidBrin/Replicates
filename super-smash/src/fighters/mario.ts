@@ -1124,6 +1124,84 @@ const legacy: FighterDef = {
         },
       ],
     },
+
+    // Plan 5, Task 16 — Mario Finale. Sources: SmashWiki "Mario (SSBU)/Final Smash"
+    // (https://www.ssbwiki.com/Mario_(SSBU)/Final_Smash): "Fireballs generated 5",
+    // "Early hits 65-104 (rehit rate: 7)", "Mid hits 105-154 (rehit rate: 7)", "Late
+    // hits 155-224 (rehit rate: 7)", "Interruptible (grounded) 157", "Interruptible
+    // (aerial) 147", its hitbox table, and "It also has no finishing hitbox"; rubendal
+    // Data Viewer 13.0.1 (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Mario/data.json):
+    // `game_final` (WHOLE_HIT(HIT_STATUS_XLU) from its start, the article generated on
+    // 5) and the article's `mario_hugeflame` `Regular`; SmashWiki "Final Smash"
+    // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
+    // intangible". Not a cinematic: it traps nobody.
+    // - The flames, one article: from its frame 60 (the move's 65; it is born on 5),
+    //   2.5%, angle 50, BKB 25, KBG 40; from 100 (105), 3.0%, in the air at 23°, BKB 20,
+    //   KBG 90, and on the ground at 50°, BKB 15, KBG 100; from 150 (155), 3.5%, in the
+    //   air at 23°, BKB 10, KBG 120, and on the ground at 50°, BKB 5, KBG 130. Radius 16,
+    //   hitlag ×0, `Rehit=7`, fire, ATTACK_SETOFF_KIND_OFF, `Reflectable=false`; its
+    //   script clears them on 220 (the move's 224).
+    // UNVERIFIED: the flames' speed (0.3 a frame, so they are still in front of Mario
+    // when they start to burn) and launch offset (10 ahead, 8 up); a wall ends them, as
+    // it ends any projectile (SmashWiki "Wall"; no source gives them meeting one).
+    // UNVERIFIED-simplified: the second flame (`fire2`, 2° flatter, on the article's
+    // one hit record) is not modelled, nor the boxes' vertical stretch (8.0.0, "Y
+    // offset: 0u, -3u—3u"; a projectile's box is a sphere), their SDI ×0.8, the slowing
+    // of nearby opponents (`SLOW_OPPONENT`), or Mario's own drift: "If used in the air,
+    // it pushes Mario backwards a little, as well as give him a little jump upwards",
+    // and "You'll slide backward little by little" on the ground (SmashWiki "Mario
+    // Finale"; no numbers).
+    finalSmash: {
+      slot: "finalSmash",
+      name: "Mario Finale",
+      totalFrames: 156,
+      aerialTotalFrames: 146,
+      intangible: [1, 156],
+      final: { phase: "start" },
+      hitboxes: [],
+      projectiles: [
+        {
+          id: "hugeFlame",
+          spawnFrame: 5,
+          offsetX: fx(10.0),
+          offsetY: fx(8.0),
+          vx: fx(0.3),
+          vy: fx(0),
+          gravity: fx(0),
+          lifetime: 220,
+          destroyOnHit: false,
+          rehit: 7,
+          visual: "fire",
+          stages: [
+            {
+              from: 100,
+              hitbox: { damage: fx(3.0), angle: fx(23), baseKnockback: fx(20), knockbackGrowth: fx(90) },
+              ground: { damage: fx(3.0), angle: fx(50), baseKnockback: fx(15), knockbackGrowth: fx(100) },
+            },
+            {
+              from: 150,
+              hitbox: { damage: fx(3.5), angle: fx(23), baseKnockback: fx(10), knockbackGrowth: fx(120) },
+              ground: { damage: fx(3.5), angle: fx(50), baseKnockback: fx(5), knockbackGrowth: fx(130) },
+            },
+          ],
+          hitbox: {
+            id: 0,
+            startFrame: 60,
+            endFrame: 219,
+            x: fx(0),
+            y: fx(0),
+            radius: fx(16.0),
+            damage: fx(2.5),
+            angle: fx(50),
+            baseKnockback: fx(25),
+            knockbackGrowth: fx(40),
+            effect: "fire",
+            hitlagMultiplier: fx(0),
+            transcendent: true,
+          },
+        },
+      ],
+    },
   },
 
   palette: {

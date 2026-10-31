@@ -493,6 +493,21 @@ export interface ProjectileDef {
   /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */
   readonly reflectable?: boolean;
   /**
+   * It may strike a fighter it struck again this many frames of its age later (the
+   * article's `ATTACK(…, Rehit=n)`; SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox:
+   * "allows the hitbox to strike again after the specified amount of frames"). Plan 5,
+   * Task 16: Mario Finale's flames, every 7. Absent: once each, for its whole life.
+   */
+  readonly rehit?: number;
+  /**
+   * From these ages on it hits with each stage's numbers over its `hitbox`, the last
+   * stage reached winning (Plan 5, Task 16: Mario Finale's flames grow hotter, 2.5%,
+   * then 3% from 100, then 3.5% from 150). A stage with a `ground` box hits a grounded
+   * fighter with that and an airborne one with `hitbox` (`projectileHitboxes`), as the
+   * script's `COLLISION_SITUATION_MASK_G` and `_A` boxes do.
+   */
+  readonly stages?: readonly { readonly from: number; readonly hitbox: ChargedHitbox; readonly ground?: ChargedHitbox }[];
+  /**
    * It slows by `perFrame` every frame and is gone once slower than `minSpeed`
    * (Plan 5, Task 9: Kirby's spit star). Q12, units a frame.
    */
@@ -991,6 +1006,14 @@ export interface MoveDef {
   readonly turnAt?: number;
   /** Its catch boxes swallow rather than grab (Plan 5, Task 9: Kirby's Inhale). See `InhaleDef`. */
   readonly inhale?: InhaleDef;
+  /**
+   * Its boxes may strike a fighter they struck again this many frames of the move
+   * later (smash-script `Rehit`; Plan 5, Task 16: Zero Laser's beam, every 10). The
+   * compile writes it into every box's `ATTACK` (`attackFromHitbox`), the field an
+   * imported script carries its own `Rehit` in, so both reach one rehit (`simulate.ts`
+   * `rehitOf`; the hit record's `markHit`). Absent: each box strikes a fighter once.
+   */
+  readonly rehit?: number;
   /** Which part of a Final Smash this move is (Plan 5, Task 14: `final.ts`). See `FinalPhase`. */
   readonly final?: FinalPhase;
   /**
@@ -1441,7 +1464,12 @@ export interface FighterState {
    * runs parallel to it, entry for entry (see there for the invariant).
    */
   staleQueue: MoveSlot[];
-  /** Hitboxes already connected this move, so one swing hits once. */
+  /**
+   * Hitboxes already connected this move, so one swing hits once: one entry per
+   * target, the target alone, or with the move frame from which a box with a rehit
+   * may strike it again (Plan 5, Task 16; read and written only through `alreadyHit`
+   * and `markHit`, `hitbox.ts`).
+   */
   hitThisMove: number[];
 
   /** Frames since the direction was last pressed — drives tilt vs. smash. */
@@ -1482,7 +1510,12 @@ export interface ProjectileState {
   bouncesLeft: number;
   /** Damage scaling from a charged launch, in fixed-point. `ONE` when uncharged. */
   chargeScale: number;
-  /** Ports it has already hit, so one arrow cannot hit the same fighter twice. */
+  /**
+   * Ports it has already hit, so one arrow cannot hit the same fighter twice: one
+   * entry per port, with the age from which one with a rehit may strike it again
+   * (Plan 5, Task 16; read and written only through `projectileAlreadyHit` and
+   * `markProjectileHit`).
+   */
   hitPorts: number[];
   /** Flipped once a returning projectile turns around. */
   returning: boolean;

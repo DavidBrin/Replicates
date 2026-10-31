@@ -491,6 +491,9 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
     // attack", which this replica does not model. UNVERIFIED: transcendent, so an
     // attack does not end it.
     ["link", "remoteBomb", "(none: an item)", "OFF"],
+    // Plan 5, Task 16: the Final Smashes' articles.
+    ["mario", "hugeFlame", "mario_hugeflame Regular", "OFF"],
+    ["link", "ancientArrow", "link_ancientbowarrow Fly, Stick", "OFF"],
   ];
 
   it("lists every roster projectile", () => {
