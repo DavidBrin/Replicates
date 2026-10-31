@@ -361,6 +361,29 @@ export interface Hitbox {
    * victim is on; `ATTACK_LR_CHECK_B`: launch backwards. Absent: forwards.
    */
   readonly lr?: "position" | "back";
+  /**
+   * smash-script `Rehit`: frames after it strikes a fighter before it may strike them
+   * again; 0 or absent for once a swing (Plan 5, Task 16). A script's `ATTACK` carries
+   * its own (`scriptHitboxes`); a legacy table's box overrides its move's
+   * `MoveDef.rehit`, both through the compile (fix round 1, ruling R-T16d: Zero Laser's
+   * muzzle 8, beam 10, end none). A projectile's is its `ProjectileDef.rehit`.
+   */
+  readonly rehit?: number;
+  /**
+   * smash-script `Part`: the box keeps a hit record, and wins the lowest-id pick, of
+   * its own, so it may land on a fighter beside the move's other parts, on the same
+   * frame too (SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox: "If a hitbox has a
+   * part value of 1, for example, it can connect after landing a hitbox with a part
+   * value of 0"). 0 to 3; absent, 0 (Plan 5, Task 16 fix round 1, ruling R-T16e: Zero
+   * Laser's fringe beams, separate articles in the game, on parts 1 and 2).
+   */
+  readonly part?: number;
+  /**
+   * `Hitbits=COLLISION_CATEGORY_MASK_FIGHTER`: the box hits fighters and nothing else,
+   * the Smash Ball included (Plan 5, Task 16 fix round 1, ruling R-T16g: the Ancient
+   * Arrow).
+   */
+  readonly fightersOnly?: boolean;
 }
 
 /**
@@ -1008,12 +1031,22 @@ export interface MoveDef {
   readonly inhale?: InhaleDef;
   /**
    * Its boxes may strike a fighter they struck again this many frames of the move
-   * later (smash-script `Rehit`; Plan 5, Task 16: Zero Laser's beam, every 10). The
-   * compile writes it into every box's `ATTACK` (`attackFromHitbox`), the field an
-   * imported script carries its own `Rehit` in, so both reach one rehit (`simulate.ts`
-   * `rehitOf`; the hit record's `markHit`). Absent: each box strikes a fighter once.
+   * later (smash-script `Rehit`; Plan 5, Task 16: Zero Laser's beam, every 10), each box
+   * that sets its own `Hitbox.rehit` excepted. The compile writes it into every box's
+   * `ATTACK` (`attackFromHitbox`), the field an imported script carries its own `Rehit`
+   * in, and `scriptHitboxes` carries it back onto the box, so both reach one rehit (the
+   * hit record's `markHit`). Absent: each box strikes a fighter once.
    */
   readonly rehit?: number;
+  /**
+   * The move frames its script runs `AttackModule::clear_all()` on, before that frame's
+   * boxes open: every box then live ends, and the swing's hit record clears, so a box
+   * opened there may strike a fighter the move has already struck (Plan 5, Task 16 fix
+   * round 1, ruling R-T16d: Zero Laser's `final_start` on 69, its muzzle on the laser's
+   * 8, its beam on 12 and its end on 140). No box of the move's table may be live
+   * across one (`legacy.test.ts`).
+   */
+  readonly clearAt?: readonly number[];
   /** Which part of a Final Smash this move is (Plan 5, Task 14: `final.ts`). See `FinalPhase`. */
   readonly final?: FinalPhase;
   /**

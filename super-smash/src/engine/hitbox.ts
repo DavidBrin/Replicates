@@ -569,25 +569,33 @@ export function reboundFrames(damage: number): number {
 export const SMASH_BALL_TARGET = 8;
 
 /**
- * A hit record's entry is its target, below this, plus this times the frame from
- * which the target may be struck again, for a box with a rehit; the target alone
- * for one without, struck once for good (Plan 5, Task 16). One integer per target
+ * A hit record's entry is its key (`recordKey`: the target, below 16, plus 16 times
+ * the box's part, 0 to 3), plus this times the frame from which the target may be
+ * struck again, for a box with a rehit; the key alone for one without, struck once
+ * for good (Plan 5, Task 16; the part, fix round 1). One integer per target and part
  * keeps the record the flat array of small integers it was: the state hash and the
- * clone walk it as they always did, and a record with no rehit in it is the ports it
- * always held.
+ * clone walk it as they always did, and a record with no rehit or part in it is the
+ * ports it always held.
  */
-const REARM_STRIDE = 16;
+const REARM_STRIDE = 64;
+
+/** A target's key in a record for a box of `part` (`Hitbox.part`; Plan 5, Task 16 fix round 1). */
+function recordKey(target: number, part: number): number {
+  return target + 16 * part;
+}
 
 /**
- * Is `target` in `record` and not yet re-armed on frame `now`? A rehit counts from
- * each strike, target by target: SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox),
- * a rehit rate, "If not 0, allows the hitbox to strike again after the specified
- * amount of frames" (Plan 5, Task 16). `now` and the re-arm frame are the record's
- * own clock: a fighter's swing counts its move's frames, a projectile its age.
+ * Is `target` in `record` for `part`, and not yet re-armed on frame `now`? A rehit
+ * counts from each strike, target by target: SmashWiki "Hitbox"
+ * (https://www.ssbwiki.com/Hitbox), a rehit rate, "If not 0, allows the hitbox to
+ * strike again after the specified amount of frames" (Plan 5, Task 16). `now` and the
+ * re-arm frame are the record's own clock: a fighter's swing counts its move's
+ * frames, a projectile its age. Each part keeps its own (fix round 1, ruling R-T16e).
  */
-export function recordHolds(record: readonly number[], target: number, now: number): boolean {
+export function recordHolds(record: readonly number[], target: number, now: number, part: number = 0): boolean {
+  const key = recordKey(target, part);
   for (const entry of record) {
-    if (entry % REARM_STRIDE !== target) continue;
+    if (entry % REARM_STRIDE !== key) continue;
     const rearm = Math.trunc(entry / REARM_STRIDE);
     return rearm === 0 || now < rearm;
   }
@@ -595,37 +603,39 @@ export function recordHolds(record: readonly number[], target: number, now: numb
 }
 
 /**
- * Put `target` in `record`: for good, or with `rearmAt` (≥ 1, on the record's clock)
- * until that frame, when a box with a rehit struck it (Plan 5, Task 16). A target
- * struck again keeps its one entry, with its new re-arm frame.
+ * Put `target` in `record` for `part`: for good, or with `rearmAt` (≥ 1, on the
+ * record's clock) until that frame, when a box with a rehit struck it (Plan 5, Task
+ * 16). A target struck again keeps its one entry per part, with its new re-arm frame.
  */
-export function recordMark(record: number[], target: number, rearmAt?: number): void {
-  const entry = rearmAt === undefined ? target : target + REARM_STRIDE * rearmAt;
-  const i = record.findIndex((e) => e % REARM_STRIDE === target);
+export function recordMark(record: number[], target: number, rearmAt?: number, part: number = 0): void {
+  const key = recordKey(target, part);
+  const entry = rearmAt === undefined ? key : key + REARM_STRIDE * rearmAt;
+  const i = record.findIndex((e) => e % REARM_STRIDE === key);
   if (i < 0) record.push(entry);
   else record[i] = entry;
 }
 
 /**
- * Has this swing already connected with that target, as of its move's frame `now`?
- * A hit by a box with a rehit lets go of its target that many frames on (`markHit`).
+ * Has this swing already connected with that target, as of its move's frame `now`,
+ * with a box of `part`? A hit by a box with a rehit lets go of its target that many
+ * frames on (`markHit`).
  */
-export function alreadyHit(f: Pick<FighterState, "hitThisMove">, target: number, now: number = 0): boolean {
-  return recordHolds(f.hitThisMove, target, now);
+export function alreadyHit(f: Pick<FighterState, "hitThisMove">, target: number, now: number = 0, part: number = 0): boolean {
+  return recordHolds(f.hitThisMove, target, now, part);
 }
 
 /**
  * Record a connection so the same swing cannot hit the same target twice, or, for
  * a box with a rehit (smash-script `Rehit`; Plan 5, Task 16), not before its move's
  * frame `rearmAt`: Pikachu's forward air strikes a fighter held in it every 3 frames,
- * Zero Laser's beam every 10.
+ * Zero Laser's beam every 10. A box of another `part` keeps its own entry (fix round 1).
  *
  * Cleared whenever a new move starts (`clearHitRecord`), which is what makes a
  * multi-hit move like Link's up smash hit three times while a single-hit move
  * with three overlapping hitboxes hits once.
  */
-export function markHit(f: Pick<FighterState, "hitThisMove">, target: number, rearmAt?: number): void {
-  recordMark(f.hitThisMove, target, rearmAt);
+export function markHit(f: Pick<FighterState, "hitThisMove">, target: number, rearmAt?: number, part: number = 0): void {
+  recordMark(f.hitThisMove, target, rearmAt, part);
 }
 
 export function clearHitRecord(f: Pick<FighterState, "hitThisMove">): void {

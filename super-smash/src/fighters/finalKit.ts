@@ -50,6 +50,14 @@ export interface Hit {
   readonly forceReaction?: boolean;
   /** False: in a trapping start, the box hits instead of trapping (`Hitbox.trap`; fix round 1, ruling R-T15j). */
   readonly trap?: false;
+  /** The box's own `Rehit`, over its move's (`Hitbox.rehit`; Task 16 fix round 1, ruling R-T16d). */
+  readonly rehit?: number;
+  /** The box's `Part`, a hit record of its own (`Hitbox.part`; Task 16 fix round 1, ruling R-T16e). */
+  readonly part?: number;
+  /** `Flinchless=true`: a windbox, which pushes and does not hit (`Hitbox.windbox`; ruling R-T16c). */
+  readonly windbox?: boolean;
+  /** `COLLISION_CATEGORY_MASK_FIGHTER`: hits fighters and nothing else (`Hitbox.fightersOnly`; ruling R-T16g). */
+  readonly fightersOnly?: boolean;
 }
 
 /** One box, live on `from`–`to` (game frames). */
@@ -74,6 +82,10 @@ export function finalBox(id: number, from: number, to: number, h: Hit): Hitbox {
     ...(h.effect !== undefined ? { effect: h.effect } : {}),
     ...(h.forceReaction === true ? { forceReaction: true } : {}),
     ...(h.trap === false ? { trap: false } : {}),
+    ...(h.rehit !== undefined ? { rehit: h.rehit } : {}),
+    ...(h.part !== undefined && h.part !== 0 ? { part: h.part } : {}),
+    ...(h.windbox === true ? { windbox: true } : {}),
+    ...(h.fightersOnly === true ? { fightersOnly: true } : {}),
   };
 }
 

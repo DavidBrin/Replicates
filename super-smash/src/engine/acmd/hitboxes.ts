@@ -186,6 +186,10 @@ function attackHitbox(
     ...(a.forceReaction === true ? { forceReaction: true } : {}),
     ...(a.trap === false ? { trap: false } : {}),
     ...(a.whileGrounded !== undefined ? { whileGrounded: a.whileGrounded } : {}),
+    // Plan 5, Task 16 (fix round 1, ruling R-T16d): the box's `Rehit` and its `Part`, read
+    // by the one rehit mechanism and by the hit record (`simulate.ts`, `markHit`).
+    ...(a.rehit > 0 ? { rehit: a.rehit } : {}),
+    ...(a.part !== 0 ? { part: a.part } : {}),
     // Plan 5, Task 6: `Flinchless=true` is a windbox. SmashWiki "Hitbox"
     // (https://www.ssbwiki.com/Hitbox): it "prevents the hitbox from inflicting
     // hitstun or hitlag; any knockback coded for the hitbox instead pushes or

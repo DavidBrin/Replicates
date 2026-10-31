@@ -1114,43 +1114,78 @@ const legacy: FighterDef = {
 
     // Plan 5, Task 16 — Zero Laser. Sources: rubendal Data Viewer 13.0.1
     // (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Samus/data.json):
-    // `game_final` (the muzzle), the laser article's `samus_laser` `Shoot` (the beam and
-    // its end), and final_end's CancelFrame 47; SmashWiki "Zero Laser"
+    // `game_finalstart` (the charge), `game_final` (the muzzle), the laser article's
+    // `samus_laser` `Shoot` (the beam and its end) and `samus_laser2` `Upper` and `Lower`
+    // (the fringe beams), and final_end's CancelFrame 47; SmashWiki "Zero Laser"
     // (https://www.ssbwiki.com/Zero_Laser): "the attack repeatedly hits any foes caught
-    // in its blast"; SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash): Final
-    // Smashes "make the user fully intangible". Not a cinematic: it traps nobody.
-    // - The muzzle, `game_final`: 1%, angle 20, KBG 100, FKB 22, radius 13, 15 up and 20
-    //   ahead on `top`, hitlag ×0, ATTACK_SETOFF_KIND_OFF, on 1-7; then 2%, radius 15,
-    //   on 8-11.
-    // - The beam, `Shoot` from 12: 1.5%, angle 20, KBG 100, FKB 16, radius 5, hitlag ×1,
-    //   OFF, `Rehit=10`, for 128 frames (12-139); then its end, 5.5%, angle 361, KBG 183,
-    //   BKB 45, radius 11, hitlag ×1, OFF, electric, `set_force_reaction`, for 8
-    //   (140-147). Every box is `Reflectable=false`.
-    // - The end: final_end's CancelFrame 47 from 148, 194 frames in all (UNVERIFIED:
-    //   that it starts as the laser ends; `final_start` and `final` publish no
-    //   CancelFrame).
+    // in its blast", and the game's tips, "Before the laser fires, it'll pull in nearby
+    // fighters a little bit" and "Fighters are drawn to the center"; SmashWiki "Final
+    // Smash" (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
+    // intangible". Not a cinematic: it traps nobody.
+    // - The start, `game_finalstart` (fix round 1, ruling R-T16c): on 48-68, a 1%
+    //   electric box, angle 18, KBG 100, FKB 12, radius 10, 17 ahead and 13 up, hitlag
+    //   ×0 (`DisableHitlag`), `Rehit=10`; and two 0% pulls, FKB 30, flinchless,
+    //   `DisableHitlag`: 18° at radius 20, 15 behind, and 366° at radius 30, 17 ahead,
+    //   loaded at 367 (ruling P5-R18's stand-in; `windboxPush`). A windbox pushes every
+    //   frame it is out, so each pull is authored one frame at a time on its `Rehit=10`,
+    //   48, 58 and 68. `clear_all` on 69. UNVERIFIED: the start's length, its last
+    //   scripted event (69; `final_start` publishes no CancelFrame).
+    // - The muzzle, `game_final`, from the move's 70 (the laser's frame f is the move's
+    //   69 + f): 1%, angle 20, KBG 100, FKB 22, radius 13, 15 up and 20 ahead on `top`,
+    //   hitlag ×0, ATTACK_SETOFF_KIND_OFF, `Rehit=8`, on 1-7; `clear_all` on 8, then 2%,
+    //   radius 15, `Rehit=8`, on 8-11.
+    // - The beam, `Shoot` from 12, its record cleared there (the laser, an article, keeps
+    //   its own): 1.5%, angle 20, KBG 100, FKB 16, radius 5, hitlag ×1, OFF, `Rehit=10`,
+    //   for 128 frames (12-139); then, its record cleared on 140, its end, 5.5%, angle
+    //   361, KBG 183, BKB 45, radius 11, hitlag ×1, OFF, electric, `set_force_reaction`,
+    //   no rehit, for 8 (140-147). Every box is `Reflectable=false`.
+    // - The fringe beams, `samus_laser2` (ruling R-T16e): 0.5% from 17, `Rehit=8`,
+    //   radius 6, 14 above the beam at 325° (FKB 20) and 14 below at 45° (FKB 24), toward
+    //   the centre; then on 140 each ends in a 2.5% blast, 45°, KBG 183, BKB 95, radius
+    //   12.5, electric, `set_force_reaction`. Each is its own article with its own record:
+    //   `Part` 1 and 2 here (`Hitbox.part`), so they land beside the main beam.
+    //   SmashWiki's moveset row (Samus (SSBU)) is then their sum, box for box: "1% (charge
+    //   loop), 0.5% (fringe loop), 1.5% (thruster, main loop), 2% (main loop; point blank,
+    //   long range), 2.5% (contact blast), 8% (fringe blast), 10.5% (main blast)" are the
+    //   charge, a fringe beam, the beam, 2 = 1.5 + 0.5 (and the 2% muzzle), a blast,
+    //   8 = 5.5 + 2.5 and 10.5 = 5.5 + 2.5 + 2.5 (the review's inference, M3).
+    // - The end: final_end's CancelFrame 47 from 217, 263 frames in all (UNVERIFIED: that
+    //   it starts as the laser ends; `final` publishes no CancelFrame). In the air,
+    //   `final_air_end`'s CancelFrame 64 under `FT_MOTION_RATE(FSM=0.5)` from 30 is
+    //   30 + 34 × 0.5 = 47 too (`gameFrameOfMotion`'s convention), so no `airTotalFrames`
+    //   (the review's M7).
     // UNVERIFIED: the beam's height (9, the arm cannon's, where the script's muzzle
     // boxes sit at 15) and reach (150 units, 12 to 162 ahead), which the laser article's
-    // status sets, unpublished.
-    // UNVERIFIED-simplified: every box re-hits on the beam's 10 (the muzzle's own is
-    // `Rehit=8`), and all four share the move's one hit record, where the laser, an
-    // article, keeps its own and clears it for its end; not modelled: `final_start`'s
-    // charge before the shot (its 1%, `Rehit=10`, on 48-69, and the pull of its two
-    // windboxes, one of them 366°, which no box loads), the upper and lower beams
-    // (`samus_laser2`, 0.5%, pulling in), the laser's thruster box (1.5% behind its
-    // muzzle) and aiming the beam.
+    // status sets, unpublished; the fringe beams' along it.
+    // UNVERIFIED (ruling R-T16f): the beam's hits freeze Samus, as her own move's hits
+    // do. SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag): "Hitlag only affects the
+    // object that deals the damage", which makes the laser article the frozen one; the
+    // alternative is a victim-only freeze for `world` boxes, which keeps 263 real frames
+    // and changes the hits' spacing. A side effect: as her own move's, the beam's hits
+    // take the fresh-move bonus, where Mario Finale's flames and the Ancient Arrow, as
+    // projectiles, do not.
+    // Not modelled: the laser's thruster box (1.5% behind its muzzle), `SLOW_OPPONENT`
+    // and aiming the beam.
     finalSmash: {
       slot: "finalSmash",
       name: "Zero Laser",
-      totalFrames: 194,
-      intangible: [1, 194],
+      totalFrames: 263,
+      intangible: [1, 263],
       rehit: 10,
+      clearAt: [69, 77, 81, 209],
       final: { phase: "start" },
       hitboxes: [
-        finalBox(0, 1, 7, { damage: 1, angle: 20, kbg: 100, fkb: 22, radius: 13, x: 20, y: 15, hitlag: 0, transcendent: true }),
-        finalBox(1, 8, 11, { damage: 2, angle: 20, kbg: 100, fkb: 22, radius: 15, x: 20, y: 15, hitlag: 0, transcendent: true }),
-        finalBox(2, 12, 139, { damage: 1.5, angle: 20, kbg: 100, fkb: 16, radius: 5, x: 12, y: 9, x2: 162, y2: 9, transcendent: true }),
-        finalBox(3, 140, 147, { damage: 5.5, angle: 361, kbg: 183, bkb: 45, radius: 11, x: 12, y: 9, x2: 162, y2: 9, transcendent: true, effect: "electric", forceReaction: true }),
+        finalBox(0, 48, 68, { damage: 1, angle: 18, kbg: 100, fkb: 12, radius: 10, x: 17, y: 13, hitlag: 0, transcendent: true, effect: "electric" }),
+        ...[48, 58, 68].map((f, i) => finalBox(1 + i, f, f, { damage: 0, angle: 18, kbg: 100, fkb: 30, radius: 20, x: -15, y: 13, hitlag: 0, transcendent: true, windbox: true })),
+        ...[48, 58, 68].map((f, i) => finalBox(4 + i, f, f, { damage: 0, angle: 367, kbg: 100, fkb: 30, radius: 30, x: 17, y: 13, hitlag: 0, transcendent: true, windbox: true })),
+        finalBox(7, 70, 76, { damage: 1, angle: 20, kbg: 100, fkb: 22, radius: 13, x: 20, y: 15, hitlag: 0, transcendent: true, rehit: 8 }),
+        finalBox(8, 77, 80, { damage: 2, angle: 20, kbg: 100, fkb: 22, radius: 15, x: 20, y: 15, hitlag: 0, transcendent: true, rehit: 8 }),
+        finalBox(9, 81, 208, { damage: 1.5, angle: 20, kbg: 100, fkb: 16, radius: 5, x: 12, y: 9, x2: 162, y2: 9, transcendent: true }),
+        finalBox(10, 209, 216, { damage: 5.5, angle: 361, kbg: 183, bkb: 45, radius: 11, x: 12, y: 9, x2: 162, y2: 9, transcendent: true, effect: "electric", forceReaction: true, rehit: 0 }),
+        finalBox(11, 86, 208, { damage: 0.5, angle: 325, kbg: 100, fkb: 20, radius: 6, x: 12, y: 23, x2: 162, y2: 23, transcendent: true, part: 1, rehit: 8 }),
+        finalBox(12, 86, 208, { damage: 0.5, angle: 45, kbg: 100, fkb: 24, radius: 6, x: 12, y: -5, x2: 162, y2: -5, transcendent: true, part: 2, rehit: 8 }),
+        finalBox(13, 209, 216, { damage: 2.5, angle: 45, kbg: 183, bkb: 95, radius: 12.5, x: 12, y: 23, x2: 162, y2: 23, transcendent: true, effect: "electric", forceReaction: true, part: 1, rehit: 0 }),
+        finalBox(14, 209, 216, { damage: 2.5, angle: 45, kbg: 183, bkb: 95, radius: 12.5, x: 12, y: -5, x2: 162, y2: -5, transcendent: true, effect: "electric", forceReaction: true, part: 2, rehit: 0 }),
       ],
     },
   },

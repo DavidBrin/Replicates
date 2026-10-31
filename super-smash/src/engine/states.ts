@@ -412,6 +412,11 @@ export interface StateContext {
    * `step`: then a trap reads no move and lets go.
    */
   readonly defs?: readonly FighterDef[];
+  /**
+   * Is a projectile a Final Smash launched still out (Plan 5, Task 16 fix round 1,
+   * ruling R-T16a: `finalSmashActive`)? Absent outside `step`: then none is.
+   */
+  readonly finalProjectileOut?: () => boolean;
 }
 
 /** Change status through the StatusModule (`status/kind.ts`): end, reset, pre. */

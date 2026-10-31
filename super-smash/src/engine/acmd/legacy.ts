@@ -119,14 +119,15 @@ function farEndOf(hb: Hitbox): Pick<AttackParams, "y2" | "z2"> {
 
 /**
  * A legacy hitbox as `ATTACK` arguments on the root bone, its far end included
- * when it has one (`farEndOf`): a capsule, `ATTACK(..., X2, Y2, Z2)`. `rehit` is its
- * move's (`MoveDef.rehit`; Plan 5, Task 16), the `Rehit` an imported script's boxes
- * carry their own in; 0 for none.
+ * when it has one (`farEndOf`): a capsule, `ATTACK(..., X2, Y2, Z2)`. Its `Rehit` is
+ * its own (`Hitbox.rehit`; fix round 1, ruling R-T16d), else its move's
+ * (`MoveDef.rehit`, passed as `rehit`; Plan 5, Task 16): the field an imported
+ * script's boxes carry their own in; 0 for none. Its `Part` is its own (`Hitbox.part`).
  */
 export function attackFromHitbox(hb: Hitbox, rehit: number = 0): AttackParams {
   return {
     id: hb.id,
-    part: 0,
+    part: hb.part ?? 0,
     bone: "top",
     damage: hb.damage,
     angle: hb.angle,
@@ -148,7 +149,7 @@ export function attackFromHitbox(hb: Hitbox, rehit: number = 0): AttackParams {
     setWeight: hb.setWeight === true,
     shieldDamage: 0,
     trip: 0,
-    rehit,
+    rehit: hb.rehit ?? rehit,
     reflectable: false,
     absorbable: false,
     // Plan 5, Task 6: a windbox is `Flinchless=true`; written with
@@ -233,6 +234,10 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
     at(m.frame).open.push({ op: "momentum", x: m.x, y: m.y, hold: m.hold ?? 0, order, ...(m.airOnly === true ? { airOnly: true } : {}) });
   });
   for (const p of move.projectiles ?? []) at(p.spawnFrame).open.push({ op: "spawnProjectile", id: p.id });
+  // A scripted `AttackModule::clear_all()` (`MoveDef.clearAt`; Plan 5, Task 16 fix round
+  // 1, ruling R-T16d), first on its frame: the boxes then live end, and the hit record
+  // clears (`gatherHitboxes`), before that frame's boxes open.
+  for (const frame of move.clearAt ?? []) at(frame).close.unshift({ op: "clearAll" });
 
   const commands: AcmdCommand[] = [];
   for (const frame of [...beats.keys()].sort((a, b) => a - b)) {

@@ -53,10 +53,11 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * hit, and Link throws with his Boomerang out, which fails; a 400-frame Final
  * Smash lab (`goldenFinalLab.ts`, Task 15, ruling P5-R14): Donkey Kong, given the
  * Smash Ball's power in its setup, traps Mario in Jungle Rush, plays its scene and
- * launches him; and a 700-frame beams lab (`goldenBeamLab.ts`, Task 16), four on
- * Battlefield: Samus's Zero Laser strikes Donkey Kong again at its rehit, Mario
- * Finale's flames strike Samus again at theirs, hotter from their mid stage, and the
- * Ancient Arrow flies and strikes Mario.
+ * launches him; and a 950-frame beams lab (`goldenBeamLab.ts`, Task 16), four on
+ * Battlefield: Samus's Zero Laser charges, then strikes Donkey Kong again at each of
+ * its boxes' rehits, its fringe beams beside its beam, Mario Finale's flames, used in
+ * the air, which holds him there, strike Samus again at theirs, and the Ancient Arrow,
+ * in the air too, flies and strikes Mario.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -902,6 +903,24 @@ describe("engine golden trace", () => {
   // five on Samus, the Ancient Arrow on Mario), no shield hit, one KO (Samus, off the
   // stage). So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2, 33 and 21; shield hits
   // 0/6/0/0, 3, 0, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0, 0 and 1.
+  // Plan 5 Task 16's fix round 1 (a Final Smash is out while its projectiles are,
+  // ruling R-T16a; an aerial one that traps nobody holds its user, and every Final
+  // Smash ending in the air gives back the midair jumps, R-T16b; Zero Laser's start,
+  // per-box rehits, scripted record clears and fringe beams, R-T16c to R-T16e; the
+  // arrow hits fighters only and freezes nobody, R-T16g and R-T16h; a clank re-arms a
+  // rehit box, R-T16i) moved the beams lab alone, re-timed (its steps are this task's
+  // own, ruling R-T13c-f): Zero Laser is 263 frames, its fringe beams reach the lower
+  // platforms where Link and Mario stood, and its last hit came on 407, not 213. So
+  // Link and Mario start on the top platform, and both use theirs in the air, which
+  // the lab had not visited. 950 frames, from its first sample: 51 hits (Zero Laser's
+  // 48 on Donkey Kong: its charge 3, its muzzle 1, its beam 13, its fringe beams 28,
+  // its end and blasts 3; Mario Finale's two on Samus; the Ancient Arrow on Mario), no
+  // shield hit, two KOs (Donkey Kong, launched by the laser's end, and Samus, off the
+  // stage). The eleven other traces are byte-identical: no other golden match uses a
+  // Final Smash or a box with a per-box rehit, a part or a scripted clear, and no
+  // golden clank meets a rehit box. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2, 33 and
+  // 51; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2, 0, 0, 0, 0,
+  // 0 and 2.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -963,7 +982,7 @@ describe("engine golden trace", () => {
     const lab = played.get(BEAM_LAB.name)!;
     expect(["samus finalSmash", "mario finalSmash", "link finalSmash"].filter((m) => !lab.moves.has(m)), "Final Smashes the beams lab no longer plays").toEqual([]);
     expect(["hugeFlame", "ancientArrow"].filter((id) => !lab.launched.has(id)), "Final Smash projectiles the beams lab no longer launches").toEqual([]);
-    expect(lab.hits, "Zero Laser's fifteen on Donkey Kong, Mario Finale's five on Samus and the Ancient Arrow on Mario").toBe(21);
+    expect(lab.hits, "Zero Laser's 48 on Donkey Kong, Mario Finale's two on Samus and the Ancient Arrow on Mario").toBe(51);
   }
 
   function expectInvariants(): void {

@@ -532,8 +532,12 @@ describe("hitbox values", () => {
     // its victim 23 above her feet: `game_throwhi`, Plan 5 Task 7).
     const projectileSlots: MoveSlot[] = ["neutralB", "sideB", "downB", "upB"];
     const scripted = new Set<MoveSlot>(ACTIVE_SCRIPT_SLOTS[fighter.id]);
+    // Zero Laser's upper fringe beam and its blast (`samus_laser2` `Upper`, 14 above the
+    // beam's 9: 23 up), an article's boxes the script places (Plan 5, Task 16 fix round 1,
+    // ruling R-T16e).
+    const placedByScript = new Set(["samus finalSmash 11", "samus finalSmash 13"]);
     for (const { slot, hitbox } of everyHitbox(fighter)) {
-      if (projectileSlots.includes(slot) || scripted.has(slot)) continue;
+      if (projectileSlots.includes(slot) || scripted.has(slot) || placedByScript.has(`${fighter.id} ${slot} ${hitbox.id}`)) continue;
       const reach = Math.abs(toFloat(hitbox.x));
       expect(
         reach,

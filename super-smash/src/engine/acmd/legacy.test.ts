@@ -44,6 +44,8 @@ function canonical(hb: Hitbox) {
     // and a force reaction.
     trap: hb.trap !== false,
     forceReaction: hb.forceReaction === true,
+    // Fix round 1: a box's own record (smash-script `Part`).
+    part: hb.part ?? 0,
   };
 }
 
@@ -191,10 +193,57 @@ describe("a legacy move's rehit", () => {
     expect(attackFromHitbox(box(0, 1, 1)).rehit).toBe(0);
   });
 
-  it("is Zero Laser's, 10 on each of its boxes (rubendal `samus_laser` `Shoot`: `Rehit=10`)", () => {
+  // Fix round 1 (ruling R-T16d): a box's own rehit overrides its move's, and its part
+  // (`Hitbox.part`, smash-script `Part`) is its ATTACK's.
+  it("takes a box's own rehit over its move's, and writes its part", () => {
+    const own: MoveDef = { ...plain, rehit: 10, hitboxes: [{ ...box(0, 2, 5), rehit: 8 }, { ...box(1, 6, 9), rehit: 0, part: 2 }] };
+    expect(rehits(own)).toEqual([8, 0]);
+    expect(legacyGameScript(own).commands.flatMap((c) => (c.op === "attack" ? [c.params.part] : []))).toEqual([0, 2]);
+    expect(attackFromHitbox({ ...box(0, 1, 1), part: 1 }).part).toBe(1);
+  });
+
+  it("is Zero Laser's: 10 on its beam and its charge, 8 on its muzzle and its fringe beams, none on its end and blasts", () => {
     const samus = FIGHTERS.find((f) => f.id === "samus")!;
-    expect(samus.moves.finalSmash!.rehit).toBe(10);
-    expect(rehits(samus.moves.finalSmash!)).toEqual([10, 10, 10, 10]);
+    const zero = samus.moves.finalSmash!;
+    expect(zero.rehit).toBe(10);
+    const byId = legacyGameScript(zero).commands.flatMap((c) => (c.op === "attack" ? [[c.params.id, c.params.rehit]] : []));
+    expect(Object.fromEntries(byId.filter(([id]) => id === 0 || id >= 7))).toEqual({ 0: 10, 7: 8, 8: 8, 9: 10, 10: 0, 11: 8, 12: 8, 13: 0, 14: 0 });
+  });
+});
+
+// Fix round 1 (ruling R-T16d): a move's scripted record clears (`MoveDef.clearAt`) compile
+// as `AttackModule::clear_all()` on those frames, before the boxes that open there:
+// Zero Laser's `final_start` on 69, its muzzle on the laser's 8, the laser on its 12
+// and its end on its 140 (the move's 69, 77, 81 and 209).
+describe("a legacy move's scripted clears", () => {
+  const box = (id: number, from: number, to: number): Hitbox => ({ id, startFrame: from, endFrame: to, x: 0, y: 0, radius: ONE, damage: ONE, angle: 0, baseKnockback: 0, knockbackGrowth: 0 });
+  const move: MoveDef = { slot: "jab1", name: "stand-in", totalFrames: 20, hitboxes: [box(0, 2, 5), box(1, 6, 9)], clearAt: [6] };
+
+  it("runs clear_all on each, before that frame's boxes open, and on no other frame", () => {
+    const script = legacyGameScript(move);
+    const fired = (g: number) => runScript(script, g).fired.map((c) => c.op);
+    for (let g = 1; g <= 12; g++) expect(fired(g).includes("clearAll"), `frame ${g}`).toBe(g === 6);
+    expect(fired(6).indexOf("clearAll")).toBeLessThan(fired(6).indexOf("attack"));
+    expect(runScript(script, 6).attacks.map((a) => a.id)).toEqual([1]);
+    expect(legacyGameScript({ ...move, clearAt: undefined }).commands.some((c) => c.op === "clearAll")).toBe(false);
+  });
+
+  it("is Zero Laser's on 69, 77, 81 and 209", () => {
+    const zero = FIGHTERS.find((f) => f.id === "samus")!.moves.finalSmash!;
+    const script = legacyGameScript(zero);
+    const clears = Array.from({ length: zero.totalFrames }, (_, k) => k + 1).filter((g) => runScript(script, g).fired.some((c) => c.op === "clearAll"));
+    expect(clears).toEqual([69, 77, 81, 209]);
+  });
+
+  it("cuts no box of any move's table short: none is live across one of its clears", () => {
+    for (const def of FIGHTERS) {
+      for (const move of Object.values(def.moves)) {
+        if (move === undefined) continue;
+        for (const at of move.clearAt ?? []) {
+          for (const hb of move.hitboxes) expect(hb.startFrame < at && hb.endFrame >= at, `${def.id} ${move.slot} box ${hb.id} across ${at}`).toBe(false);
+        }
+      }
+    }
   });
 });
 

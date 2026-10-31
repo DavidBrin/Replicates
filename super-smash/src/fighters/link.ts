@@ -1139,7 +1139,7 @@ const legacy: FighterDef = {
     // the arrow's `link_ancientbowarrow` `Fly` and `Stick`; SmashWiki "Link (SSBU)/Final
     // Smash" (https://www.ssbwiki.com/Link_(SSBU)/Final_Smash): the flying box, radius
     // 5.0, 4 ahead, and the explosion on a fighter, 35%, angle 60, BKB 102, KBG 46,
-    // hitlag ×0.3; SmashWiki "Ancient Bow and Arrow"
+    // hitlag ×0.3 (not followed: ruling R-T16h, below); SmashWiki "Ancient Bow and Arrow"
     // (https://www.ssbwiki.com/Ancient_Bow_and_Arrow): "fires an Ancient Arrow straight
     // ahead, hitting the first person in his line of sight"; SmashWiki "Final Smash"
     // (https://www.ssbwiki.com/Final_Smash): Final Smashes "make the user fully
@@ -1147,6 +1147,14 @@ const legacy: FighterDef = {
     // - The arrow flies flat; its flying box carries the explosion's numbers and its
     //   `set_force_reaction`, ATTACK_SETOFF_KIND_OFF and `Reflectable=false`, and it is
     //   gone on its first hit.
+    // - It hits fighters and nothing else (Task 16 fix round 1, ruling R-T16g): its
+    //   `Fly`, `Stick` and `StickWall` are `Hitbits=COLLISION_CATEGORY_MASK_FIGHTER`
+    //   (SmashWiki's table: "hitbits=Fighter only"), so it passes a Smash Ball by
+    //   (`Hitbox.fightersOnly`).
+    // - It freezes nobody (ruling R-T16h): the same three set `DisableHitlag=true`,
+    //   which the repo reads as no hitlag (`AttackParams.noHitlag`), here a hitlag of ×0.
+    //   UNVERIFIED: SmashWiki's table gives the explosion ff 0.3, a hitlag of ×0.3, the
+    //   alternative.
     // UNVERIFIED: the arrow's speed (6 a frame), lifetime (60 frames) and launch offset
     // (10 ahead, 7 up).
     // UNVERIFIED-simplified: the explosion lands on the fighter the arrow reaches, not
@@ -1187,9 +1195,10 @@ const legacy: FighterDef = {
             angle: fx(60),
             baseKnockback: fx(102),
             knockbackGrowth: fx(46),
-            hitlagMultiplier: fx(0.3),
+            hitlagMultiplier: fx(0),
             forceReaction: true,
             transcendent: true,
+            fightersOnly: true,
           },
         },
       ],

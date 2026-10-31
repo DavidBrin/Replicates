@@ -1142,15 +1142,23 @@ const legacy: FighterDef = {
     //   hitlag ×0, `Rehit=7`, fire, ATTACK_SETOFF_KIND_OFF, `Reflectable=false`; its
     //   script clears them on 220 (the move's 224).
     // UNVERIFIED: the flames' speed (0.3 a frame, so they are still in front of Mario
-    // when they start to burn) and launch offset (10 ahead, 8 up); a wall ends them, as
-    // it ends any projectile (SmashWiki "Wall"; no source gives them meeting one).
+    // when they start to burn, and stop about 76 units ahead) and launch offset (10
+    // ahead, 8 up); a wall ends them, as it ends any projectile (SmashWiki "Wall"; no
+    // source gives them meeting one). Two pages lean toward farther (the review's M10):
+    // SmashWiki "Mario Finale" (https://www.ssbwiki.com/Mario_Finale, the Smash 4
+    // trophy), "The attack covers a wide range and travels far, so it's best to fire this
+    // from one side of the stage to the other", and "Mario (SSBU)/Final Smash", "the
+    // final smash needs to be positioned so that it will carry opponents into the
+    // blastzone"; neither gives a speed.
     // UNVERIFIED-simplified: the second flame (`fire2`, 2° flatter, on the article's
     // one hit record) is not modelled, nor the boxes' vertical stretch (8.0.0, "Y
     // offset: 0u, -3u—3u"; a projectile's box is a sphere), their SDI ×0.8, the slowing
     // of nearby opponents (`SLOW_OPPONENT`), or Mario's own drift: "If used in the air,
     // it pushes Mario backwards a little, as well as give him a little jump upwards",
     // and "You'll slide backward little by little" on the ground (SmashWiki "Mario
-    // Finale"; no numbers).
+    // Finale"; no numbers). In the air he is held where he is for the move instead, and
+    // ends it with his midair jump back, "a desperate recovery tool" (Task 16 fix round
+    // 1, ruling R-T16b: `engine/final.ts`, `holdsAloft`).
     finalSmash: {
       slot: "finalSmash",
       name: "Mario Finale",

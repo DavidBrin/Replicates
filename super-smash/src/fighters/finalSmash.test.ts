@@ -12,11 +12,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { gameFrameOfMotion } from "@/engine/acmd/interpreter";
+import { SMASH_BALL_SPAWN_INTERVAL } from "@/engine/constants";
 import { FINAL_SMASH_READY } from "@/engine/final";
-import { fx, toFloat } from "@/engine/fixed";
+import { fx, mul, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
 import { moveFrameOf } from "@/engine/hitbox";
 import { kineticClear } from "@/engine/kinetic";
+import { STALE_FRESH_BONUS } from "@/engine/knockback";
 import { insideSolidBody } from "@/engine/physics";
 import { findProjectileDef } from "@/engine/projectile";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
@@ -533,10 +535,16 @@ describe("Final Smashes that are not cinematics", () => {
   });
 
   it("Zero Laser: the beam hits every 10 frames along its length", () => {
-    // Mario 50 ahead: the plan's 90 has the beam's pushes carry him off Final
-    // Destination's edge, out of it, after six hits (Task 16's run).
-    const { events } = run(ready("samus", 50), 160);
-    const onMario = events.flatMap((e, i) => e.hits.filter((h) => h.victim === 1).map(() => i));
+    // Mario 90 ahead, the plan's. The beam's 20° carries him along it, past Final
+    // Destination's edge (80). Before fix round 1 he dropped out of it there, and this
+    // test had him at 50 (the review's M8): the cause was the unmodelled `samus_laser2`,
+    // whose fringe beams (325° above, 45° below) hold a fighter in the beam ("Fighters
+    // are drawn to the center"). With them (ruling R-T16e) he stays in it, past the edge,
+    // for 11 beam hits in 300 steps. The beam's own hits: the fringe beams strike on
+    // records of their own.
+    const beam = def("samus").moves.finalSmash!.hitboxes.find((hb) => toFloat(hb.damage) === 1.5)!.id;
+    const { events } = run(ready("samus", 90), 300);
+    const onMario = events.flatMap((e, i) => e.hits.filter((h) => h.victim === 1 && h.hitboxId === beam).map(() => i));
     expect(onMario.length).toBeGreaterThan(8);
     const gaps = onMario.slice(1).map((f, i) => f - onMario[i]);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(10);
@@ -646,18 +654,19 @@ describe("the beams strike a fighter held in them again at their rehit", () => {
   });
 
   // rubendal Data Viewer 13.0.1 (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Samus/data.json),
-  // `samus_laser` `Shoot`: the beam, 1.5% `Rehit=10`, for 128 frames from 12; then its
-  // end, 5.5%. Held in the beam, a fighter is struck on the move's frames 12, 22, … 132,
-  // thirteen times, each a fresh move's (×1.05), and by the end on 142, ten frames after
-  // the beam's last (UNVERIFIED-simplified: the move keeps one hit record, so the end
-  // waits out the beam's rehit; the game's laser clears its record for it on 140).
-  it("Zero Laser: every 10 of its frames from 12, 13 hits, then its end", () => {
-    const { states, events } = runHeld(ready("samus", 90), 360, (s) => hold(s.fighters[1], s.fighters[0].x + fx(90), fx(4)));
-    const frames = events.flatMap((e, i) => e.hits.filter((h) => h.victim === 1).map(() => moveFrameOf(states[i].fighters[0].actionFrame)));
-    expect(frames).toEqual([...Array.from({ length: 13 }, (_, k) => 12 + 10 * k), 142]);
-    const damages = hitsOnPort1(events).map((h) => h.damage);
-    for (const d of damages.slice(0, 13)) expect(d).toBeCloseTo(1.5 * FRESH, 2);
-    expect(damages[13]).toBeCloseTo(5.5 * FRESH, 2);
+  // `samus_laser` `Shoot`: the beam, 1.5% `Rehit=10`, for 128 frames from 12; then, its
+  // record cleared (`clear_all` on 140), its end, 5.5%. After `final_start`'s 69 frames
+  // (fix round 1, ruling R-T16c) the laser's frame f is the move's 69 + f. Held in the
+  // beam, a fighter is struck on the move's 81, 91, … 201, thirteen times, each a fresh
+  // move's (×1.05), and by the end on 209, the laser's 140 (ruling R-T16d).
+  it("Zero Laser: every 10 of its frames from the laser's 12, 13 hits, then its end on the laser's 140", () => {
+    const { states, events } = runHeld(ready("samus", 90), 400, (s) => hold(s.fighters[1], s.fighters[0].x + fx(90), 0));
+    const main = (id: number) =>
+      events.flatMap((e, i) => e.hits.filter((h) => h.victim === 1 && h.hitboxId === id).map((h) => [moveFrameOf(states[i].fighters[0].actionFrame), toFloat(h.damage)]));
+    const [beam, end] = [9, 10];
+    expect(main(beam).map(([f]) => f)).toEqual(Array.from({ length: 13 }, (_, k) => 81 + 10 * k));
+    for (const [, d] of main(beam)) expect(d).toBeCloseTo(1.5 * FRESH, 2);
+    expect(main(end)).toEqual([[209, toFloat(mul(fx(5.5), STALE_FRESH_BONUS))]]);
   });
 });
 
@@ -700,7 +709,10 @@ describe("the three's lengths", () => {
   it.each([
     ["mario", 156, 146],
     ["link", gameFrameOfMotion(REFERENCE_SCRIPTS.link.scripts.game_final, 111) - 1, 99],
-    ["samus", 194, undefined],
+    // Fix round 1 (ruling R-T16c): `final_start`'s 69 frames lead it. In the air the same
+    // (M7): `final_air_end`'s CancelFrame 64 under FT_MOTION_RATE(FSM=0.5) from 30 is
+    // game frame 30 + 34 × 0.5 = 47, `final_end`'s 47, so no air length of its own.
+    ["samus", 263, undefined],
   ] as const)("%s's Final Smash lasts %i frames, and %s in the air", (id, total, air) => {
     expect(def(id).moves.finalSmash!.totalFrames).toBe(total);
     expect(def(id).moves.finalSmash!.aerialTotalFrames).toBe(air);
@@ -752,24 +764,63 @@ describe("the three's boxes carry their scripts' numbers", () => {
     ]);
   });
 
-  it("Zero Laser's muzzle, beam and end", () => {
+  // Fix round 1 (rulings R-T16c to R-T16e): `game_finalstart`'s charge (1%, `Rehit=10`,
+  // electric) and its two pulls (0%, FKB 30, flinchless: 18° from 15 behind, radius 20,
+  // and 366° 17 ahead, radius 30, loaded at 367, P5-R18's stand-in), each pull a frame
+  // at a time on 48, 58 and 68, its `Rehit=10`; then the laser from the move's 70, its
+  // muzzle `Rehit=8`, its end none; `samus_laser2`'s two fringe beams (0.5%, `Rehit=8`,
+  // 325° above and 45° below, FKB 20 and 24, radius 6) from the laser's 17 and their
+  // blasts (2.5%, 45°, KBG 183, BKB 95, radius 12.5, electric, `set_force_reaction`) on
+  // its 140, each fringe on a record of its own (`Hitbox.part` 1 and 2).
+  it("Zero Laser's start, muzzle, beam, end, fringe beams and blasts", () => {
     const zero = def("samus").moves.finalSmash!;
-    expect(zero.hitboxes.map(row)).toEqual([
-      [1, 7, 1, 20, 100, 0, 22, 13, fx(0), true, "normal", false],
-      [8, 11, 2, 20, 100, 0, 22, 15, fx(0), true, "normal", false],
-      [12, 139, 1.5, 20, 100, 0, 16, 5, fx(1), true, "normal", false],
-      [140, 147, 5.5, 361, 183, 45, 0, 11, fx(1), true, "electric", true],
+    const pulls = (f: number) => [
+      [f, f, 0, 18, 100, 0, 30, 20, fx(0), true, "normal", false],
+      [f, f, 0, 367, 100, 0, 30, 30, fx(0), true, "normal", false],
+    ];
+    expect([...zero.hitboxes].sort((a, b) => a.id - b.id).map(row)).toEqual([
+      [48, 68, 1, 18, 100, 0, 12, 10, fx(0), true, "electric", false],
+      ...[48, 58, 68].map((f) => pulls(f)[0]),
+      ...[48, 58, 68].map((f) => pulls(f)[1]),
+      [70, 76, 1, 20, 100, 0, 22, 13, fx(0), true, "normal", false],
+      [77, 80, 2, 20, 100, 0, 22, 15, fx(0), true, "normal", false],
+      [81, 208, 1.5, 20, 100, 0, 16, 5, fx(1), true, "normal", false],
+      [209, 216, 5.5, 361, 183, 45, 0, 11, fx(1), true, "electric", true],
+      [86, 208, 0.5, 325, 100, 0, 20, 6, fx(1), true, "normal", false],
+      [86, 208, 0.5, 45, 100, 0, 24, 6, fx(1), true, "normal", false],
+      [209, 216, 2.5, 45, 183, 95, 0, 12.5, fx(1), true, "electric", true],
+      [209, 216, 2.5, 45, 183, 95, 0, 12.5, fx(1), true, "electric", true],
     ]);
-    expect(zero.hitboxes.slice(2).map((hb) => [toFloat(hb.x2!), toFloat(hb.y2!)])).toEqual([
-      [162, 9],
-      [162, 9],
+    const byId = (id: number) => zero.hitboxes.find((hb) => hb.id === id)!;
+    // Where they are, their records, their rehits and the windboxes.
+    expect(Array.from({ length: 15 }, (_, id) => [toFloat(byId(id).x), toFloat(byId(id).y), byId(id).part ?? 0, byId(id).rehit, byId(id).windbox === true])).toEqual([
+      [17, 13, 0, undefined, false],
+      [-15, 13, 0, undefined, true],
+      [-15, 13, 0, undefined, true],
+      [-15, 13, 0, undefined, true],
+      [17, 13, 0, undefined, true],
+      [17, 13, 0, undefined, true],
+      [17, 13, 0, undefined, true],
+      [20, 15, 0, 8, false],
+      [20, 15, 0, 8, false],
+      [12, 9, 0, undefined, false],
+      [12, 9, 0, 0, false],
+      [12, 23, 1, 8, false],
+      [12, -5, 2, 8, false],
+      [12, 23, 1, 0, false],
+      [12, -5, 2, 0, false],
     ]);
+    for (const id of [9, 10, 11, 12, 13, 14]) expect(toFloat(byId(id).x2!), `box ${id}`).toBe(162);
+    expect([zero.rehit, zero.clearAt]).toEqual([10, [69, 77, 81, 209]]);
   });
 
   it("the Ancient Arrow", () => {
     const [arrow] = def("link").moves.finalSmash!.projectiles!;
     expect([arrow.id, arrow.spawnFrame, arrow.destroyOnHit, toFloat(arrow.hitbox.x)]).toEqual(["ancientArrow", 60, true, 4]);
-    expect(row(arrow.hitbox)).toEqual([0, 59, 35, 60, 46, 102, 0, 5, fx(0.3), true, "normal", true]);
+    // Hitlag ×0, its script's `DisableHitlag=true` (fix round 1, ruling R-T16h; SmashWiki's
+    // ff 0.3 the UNVERIFIED alternative), and fighters only (ruling R-T16g).
+    expect(row(arrow.hitbox)).toEqual([0, 59, 35, 60, 46, 102, 0, 5, fx(0), true, "normal", true]);
+    expect(arrow.hitbox.fightersOnly).toBe(true);
   });
 
   // Hitlag ×0 (Ultimate: "a hitlag multiplier of 0× now functions like this parameter,
@@ -815,7 +866,8 @@ describe("a Final Smash's beams and projectiles are unblockable and not countere
 
   it.each([
     ["the Ancient Arrow", "link", 50, 45, 140],
-    ["Zero Laser's beam", "samus", 90, 4, 100],
+    // Fix round 1: the beam is out from the move's 81, after `final_start` (R-T16c).
+    ["Zero Laser's beam", "samus", 90, 74, 160],
   ] as const)("Marth's Counter does not catch %s", (_name, user, gap, press, frames) => {
     const { states, events } = runHeld(duel(user, "marth", gap), frames, () => {}, (i) => [i === 0 ? Btn.Special : 0, i === press ? Btn.Down | Btn.Special : 0]);
     expect(states.some((s) => s.fighters[1].move === "downB")).toBe(true);
@@ -861,6 +913,251 @@ describe("a Final Smash's projectile ends against a wall", () => {
     expect(gone).toBeGreaterThan(born);
     expect(life[gone - 1]!.age).toBeLessThan(findProjectileDef(def(user), id)!.lifetime - 1);
     for (const p of life) if (p !== undefined) expect(insideSolidBody(FD_STAGE, 0, p.x, p.y)).toBe(false);
+  });
+});
+
+/**
+ * One Final Smash at a time, its projectiles included (fix round 1, ruling R-T16a):
+ * SmashWiki "Final Smash" (https://www.ssbwiki.com/Final_Smash), "only one Smash Ball or
+ * Final Smash can be present onscreen at any given time", and "When a Final Smash is
+ * active, all other players on standby temporarily exit standby mode and regain it upon
+ * conclusion". Mario's move ends on 156; his flames, born on 5, live to 224.
+ */
+describe("a Final Smash is out while one of its projectiles is (ruling R-T16a)", () => {
+  const flames = (s: GameState) => s.projectiles.find((p) => p.defId === "hugeFlame");
+
+  it("keeps the standby of a fighter Mario Finale's flames strike after Mario's move, and drops no ball", () => {
+    const s = ready("mario", 45);
+    s.fighters[1].finalSmashReady = FINAL_SMASH_READY;
+    const { states, events } = runHeld(s, 240, (st) => {
+      const flame = flames(st);
+      if (flame !== undefined) hold(st.fighters[1], flame.x, flame.y);
+    });
+    expect(hitsOnPort1(events).filter((h) => h.frame > 157).length).toBeGreaterThan(5);
+    expect(states.every((st) => st.fighters[1].finalSmashReady === FINAL_SMASH_READY)).toBe(true);
+    expect(states.every((st) => !st.smashBall.active)).toBe(true);
+  });
+
+  it("refuses a second Final Smash while the flames are out, and starts it once they are gone", () => {
+    const s = ready("mario", 45);
+    // Fox, far behind Mario, has the power too.
+    s.fighters[2].finalSmashReady = FINAL_SMASH_READY;
+    const { states } = runHeld(s, 260, () => {}, (i) => [i === 0 ? Btn.Special : 0, 0, i === 169 || i === 239 ? Btn.Special : 0]);
+    expect(slots([states[169]], 0)[0]).toBeNull();
+    expect(flames(states[169])).toBeDefined();
+    expect([states[169].fighters[2].move, states[169].fighters[2].finalSmashReady]).toEqual(["neutralB", FINAL_SMASH_READY]);
+    expect(flames(states[239])).toBeUndefined();
+    expect(states[239].fighters[2].move).toBe("finalSmash");
+  });
+
+  // A spawn falls due every `SMASH_BALL_SPAWN_INTERVAL` frames; the clock is set so one
+  // falls on the step given.
+  const spawnRun = (user: string, gap: number, dueStep: number) => {
+    const s = ready(user, gap);
+    Object.assign(s.rules, { smashBall: true });
+    s.frame = SMASH_BALL_SPAWN_INTERVAL - (dueStep + 1);
+    return run(s, dueStep + 5).states;
+  };
+
+  it.each([
+    ["inside Mario's move", 100],
+    ["in the flames after it", 180],
+  ] as const)("spawns no Smash Ball %s; after both, one appears", (_when, due) => {
+    expect(spawnRun("mario", 45, due).every((st) => !st.smashBall.active)).toBe(true);
+    expect(spawnRun("mario", 45, 260)[260].smashBall.active).toBe(true);
+  });
+
+  it("does the same for the Ancient Arrow while it flies on past Link's move", () => {
+    // Link fires left from Final Destination's right side; Mario and Fox stand behind him.
+    const setup = () => {
+      const s = ready("link", 0);
+      Object.assign(s.fighters[0], { x: fx(75), facing: -1 });
+      Object.assign(s.fighters[1], { x: fx(78), finalSmashReady: FINAL_SMASH_READY });
+      Object.assign(s.fighters[2], { x: fx(79) });
+      return s;
+    };
+    const arrowOut = (st: GameState) => st.projectiles.some((p) => p.defId === "ancientArrow");
+    const first = run(setup(), 130).states;
+    const tail = first.findIndex((st, i) => i > 60 && slots([st], 0)[0] === null && arrowOut(st));
+    expect(tail).toBeGreaterThan(100);
+    const { states } = runHeld(setup(), 140, () => {}, (i) => [i === 0 ? Btn.Special : 0, i === tail ? Btn.Special : 0, 0]);
+    expect([states[tail].fighters[1].move, states[tail].fighters[1].finalSmashReady]).toEqual(["neutralB", FINAL_SMASH_READY]);
+  });
+});
+
+/**
+ * An aerial Final Smash (fix round 1, ruling R-T16b). SmashWiki "Final Smash": "When most
+ * Final Smashes are performed in the air, upon ending the move, the character gains a
+ * slight boost in height and regains their spent midair jumps, which can aid in
+ * recovery"; SmashWiki "Mario (SSBU)/Final Smash": "so it can also be used as a desperate
+ * recovery tool when aimed away from the stage". One that traps nobody holds its user
+ * where it is for the move (UNVERIFIED: held still, no gravity and no drift); every one
+ * that ends in the air gives back the spent midair jumps. The boost is carried: no size
+ * is published.
+ */
+describe("a Final Smash in the air (ruling R-T16b)", () => {
+  const FD_LEFT = FD_FLOOR.x - FD_FLOOR.halfWidth;
+
+  it.each(["mario", "samus", "link"])("%s: used offstage 40 up, aimed away, holds there, survives it and ends with a midair jump back", (id) => {
+    const s = ready(id, 0);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: FD_LEFT - fx(40), y: fx(40), facing: -1, jumpsUsed: 2 });
+    Object.assign(s.fighters[1], { x: fx(60) });
+    Object.assign(s.fighters[2], { x: fx(70) });
+    const { states } = run(s, 300);
+    const user = slots(states, 0);
+    const last = user.lastIndexOf("finalSmash");
+    expect(last).toBeGreaterThan(90);
+    for (const st of states.slice(0, last + 1)) expect([st.fighters[0].x, st.fighters[0].y, st.fighters[0].stocks]).toEqual([FD_LEFT - fx(40), fx(40), 3]);
+    expect([states[last + 1].fighters[0].action, states[last + 1].fighters[0].jumpsUsed]).toEqual(["fall", 1]);
+  });
+
+  it("gives Donkey Kong's midair jump back when Jungle Rush ends in the air too", () => {
+    const s = ready("donkeyKong", 18);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(150), jumpsUsed: 2 });
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(150) });
+    const { states } = run(s, 400);
+    const user = slots(states, 0);
+    const last = user.lastIndexOf("finalEnd");
+    expect(last).toBeGreaterThan(0);
+    expect(states[last].fighters[0].jumpsUsed).toBe(2);
+    expect([states[last + 1].fighters[0].grounded, states[last + 1].fighters[0].jumpsUsed]).toEqual([false, 1]);
+  });
+});
+
+/**
+ * Zero Laser's start, its scripted clears and its fringe beams (fix round 1, rulings
+ * R-T16c to R-T16e), from rubendal Data Viewer 13.0.1 (…/character/Samus/data.json):
+ * `game_finalstart`, `game_final`, `samus_laser` `Shoot` and `samus_laser2` `Upper` and
+ * `Lower`. SmashWiki "Zero Laser" (https://www.ssbwiki.com/Zero_Laser): "Before the laser
+ * fires, it'll pull in nearby fighters a little bit", and "Fighters are drawn to the
+ * center". The laser's frame f is the move's 69 + f.
+ */
+describe("Zero Laser's start, clears and fringe beams (rulings R-T16c to R-T16e)", () => {
+  /** Hits on port 1 by the box that landed: the move frame Samus was on, and the damage. */
+  const byBox = (states: readonly GameState[], events: readonly StepEvents[]) => {
+    const out = new Map<number, [number, number][]>();
+    events.forEach((e, i) => {
+      for (const h of e.hits) {
+        if (h.victim !== 1) continue;
+        const list = out.get(h.hitboxId) ?? [];
+        list.push([moveFrameOf(states[i].fighters[0].actionFrame), toFloat(h.damage)]);
+        out.set(h.hitboxId, list);
+      }
+    });
+    return out;
+  };
+  const framesOf = (hits: Map<number, [number, number][]>, id: number) => (hits.get(id) ?? []).map(([f]) => f);
+
+  it("charges for 69 frames first: its 1% strikes a fighter held point-blank on 48, 58 and 68, and the laser fires on 70", () => {
+    const { states, events } = runHeld(ready("samus", 20), 400, (s) => hold(s.fighters[1], s.fighters[0].x + fx(20), 0));
+    const hits = byBox(states, events);
+    expect(framesOf(hits, 0)).toEqual([48, 58, 68]);
+    expect((hits.get(0) ?? []).every(([, d]) => Math.abs(d - 1 * FRESH) < 0.01)).toBe(true);
+    // Point-blank, the laser's own record (`clear_all` on its 8, 12 and 140) strikes 16
+    // times: the muzzle on 70 (1%) and 77 (2%), the beam thirteen times, the end on 209.
+    const laser = [7, 8, 9, 10].flatMap((id) => framesOf(hits, id)).sort((a, b) => a - b);
+    expect(laser).toEqual([70, 77, ...Array.from({ length: 13 }, (_, k) => 81 + 10 * k), 209]);
+  });
+
+  it("pulls a fighter behind Samus forward, and one in front, in the air, back toward her line", () => {
+    // Behind: the 18° pull, 15 behind and 20 across; in front: the 367° pull (366° in the
+    // script), 17 ahead and 30 across, toward its centre.
+    const behind = ready("samus", -10);
+    const { states: b, events: be } = run(behind, 50);
+    expect(be[47].pushes).toContainEqual({ attacker: 0, victim: 1 });
+    expect(b[49].fighters[1].x).toBeGreaterThan(b[46].fighters[1].x);
+    const front = ready("samus", 35);
+    Object.assign(front.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(13) });
+    const { states: f, events: fe } = runHeld(front, 48, (st) => {
+      if (moveFrameOf(st.fighters[0].actionFrame) < 47) hold(st.fighters[1], fx(5), fx(13));
+    });
+    expect(fe[47].pushes).toContainEqual({ attacker: 0, victim: 1 });
+    expect(f[47].fighters[1].vx).toBeLessThan(0);
+  });
+
+  it("adds samus_laser2's fringe beams, each on its own record: 0.5% every 8 from the laser's 17, and its blast beside the end on 140", () => {
+    const { states, events } = runHeld(ready("samus", 90), 400, (s) => hold(s.fighters[1], s.fighters[0].x + fx(90), 0));
+    const hits = byBox(states, events);
+    // The lower beam (14 below the main, 45°) reaches a standing Mario's feet; the upper
+    // (325°, 14 above) passes over his head.
+    expect(framesOf(hits, 12)).toEqual(Array.from({ length: 16 }, (_, k) => 86 + 8 * k));
+    expect(framesOf(hits, 11)).toEqual([]);
+    // On the laser's 140 the end and both blasts land together: 5.5 + 2.5 + 2.5 = 10.5,
+    // SmashWiki "Samus (SSBU)"'s "10.5% (main blast)", each a fresh move's.
+    const on209 = [...hits.values()].flat().filter(([f]) => f === 209).map(([, d]) => d);
+    expect(on209.reduce((a, d) => a + d, 0)).toBeCloseTo(10.5 * FRESH, 1);
+    expect(on209).toHaveLength(3);
+  });
+});
+
+/**
+ * Rollback across a misprediction between two rehits (fix round 1, M4): from a snapshot
+ * taken between two strikes, a wrong branch (the fighter in them presses shield and
+ * jump) is simulated and thrown away, and the right inputs re-simulated from the
+ * snapshot give the original states, hash for hash; the snapshot is untouched.
+ */
+describe("the beams roll back across a misprediction between rehits", () => {
+  it.each([
+    ["mario", 45, 240, [68, 75, 110]],
+    ["samus", 50, 260, [85, 95, 150]],
+  ] as const)("%s's, Mario %i ahead", (user, gap, frames, at) => {
+    const { states } = run(ready(user, gap), frames);
+    for (const k of at) {
+      const snapshot = states[k];
+      const before = hashState(snapshot);
+      let wrong = cloneState(snapshot);
+      let prev: InputFrame[] = [0, 0, 0];
+      for (let i = k + 1; i < k + 12; i++) {
+        const keys: InputFrame[] = [0, i % 2 === 0 ? Btn.Shield : Btn.Jump, 0];
+        wrong = step(wrong, keys, { prevInputs: prev }).state;
+        prev = keys;
+      }
+      expect(hashState(wrong), `snapshot ${k}: the wrong branch diverges`).not.toBe(hashState(states[k + 11]));
+      expect(hashState(snapshot)).toBe(before);
+      let s = cloneState(snapshot);
+      prev = [0, 0, 0];
+      for (let i = k + 1; i < frames; i++) {
+        s = step(s, [0, 0, 0], { prevInputs: prev }).state;
+        expect(hashState(s), `snapshot ${k}, step ${i}`).toBe(hashState(states[i]));
+      }
+    }
+  });
+});
+
+/**
+ * The Ancient Arrow hits fighters and nothing else (fix round 1, ruling R-T16g): its
+ * script's `Hitbits=COLLISION_CATEGORY_MASK_FIGHTER` (rubendal `link_ancientbowarrow`;
+ * SmashWiki "Link (SSBU)/Final Smash": "hitbits=Fighter only"). Mario Finale's flames
+ * have the default, and hit a Smash Ball. And the arrow freezes nobody (ruling R-T16h):
+ * its `DisableHitlag=true`.
+ */
+describe("the Ancient Arrow and a Smash Ball (rulings R-T16g, R-T16h)", () => {
+  /** `user`'s Final Smash (or none) with a still Smash Ball at (x, y); the ball's health after `frames`. */
+  const ballAfter = (user: string, gap: number, press: boolean, x: number, y: number, frames: number) => {
+    const s = ready(user, gap);
+    Object.assign(s.rules, { smashBall: true });
+    Object.assign(s.smashBall, { active: true, x: fx(x), y: fx(y), vx: 0, vy: 0, health: fx(40), driftTimer: 100_000 });
+    let st = s;
+    let prev: InputFrame[] = [0, 0, 0];
+    for (let i = 0; i < frames; i++) {
+      const keys: InputFrame[] = [press && i === 0 ? Btn.Special : 0, 0, 0];
+      st = step(st, keys, { prevInputs: prev }).state;
+      prev = keys;
+    }
+    return st.smashBall.health;
+  };
+
+  it("lets the arrow fly through a Smash Ball in its path, which the flames strike", () => {
+    // Link at −30 shoots right on 60 from −20, 7 up; Mario well out of the way behind.
+    expect(ballAfter("link", -40, true, 10, 7, 100)).toBe(ballAfter("link", -40, false, 10, 7, 100));
+    expect(ballAfter("mario", -40, true, 0, 8, 120)).toBeLessThan(ballAfter("mario", -40, false, 0, 8, 120));
+  });
+
+  it("freezes nobody: the arrow's victim takes no hitlag", () => {
+    const { states, events } = run(ready("link", 50), 140);
+    const hit = events.findIndex((e) => e.hits.some((h) => h.victim === 1));
+    expect(hit).toBeGreaterThan(0);
+    expect(states[hit].fighters[1].hitlag).toBe(0);
   });
 });
 

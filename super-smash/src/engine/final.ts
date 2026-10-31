@@ -84,10 +84,45 @@ const FINAL_SLOTS: ReadonlySet<MoveSlot> = new Set<MoveSlot>(["finalSmash", "fin
  * R-T14h): SmashWiki "Final Smash", "When a Final Smash is active, all other players
  * on standby temporarily exit standby mode and regain it upon conclusion", and
  * "only one Smash Ball or Final Smash can be present onscreen at any given time". So
- * nobody else starts one, and no hit drops one, until it is over.
+ * nobody else starts one, no hit drops one, and no Smash Ball appears (`step`'s
+ * `updateSmashBall`), until it is over.
+ *
+ * It is out while its user is in one of its parts, or while any projectile one of
+ * them launched is still out, `projectileOut` (Task 16 fix round 1, ruling R-T16a:
+ * `isFinalProjectile`): Mario Finale's flames and the Ancient Arrow fly on after
+ * their move has ended, and are as much the Final Smash as the move was.
  */
-export function finalSmashActive(s: { readonly fighters: readonly FighterState[] }): boolean {
-  return s.fighters.some((f) => f.action === "special" && f.move !== null && FINAL_SLOTS.has(f.move));
+export function finalSmashActive(s: { readonly fighters: readonly FighterState[] }, projectileOut: boolean): boolean {
+  return projectileOut || s.fighters.some((f) => f.action === "special" && f.move !== null && FINAL_SLOTS.has(f.move));
+}
+
+/**
+ * Does `f`'s Final Smash hold it where it is in the air (Plan 5, Task 16 fix round 1,
+ * ruling R-T16b)? A start that traps nobody (Mario Finale, Zero Laser, the Ancient
+ * Bow and Arrow), used in the air, stands its user still for the move: SmashWiki
+ * "Mario (SSBU)/Final Smash" calls Mario Finale "a desperate recovery tool", and
+ * SmashWiki "Final Smash": "When most Final Smashes are performed in the air, upon
+ * ending the move, the character gains a slight boost in height and regains their
+ * spent midair jumps" (`refreshFinalJumps`). UNVERIFIED: the kinetics, no gravity
+ * and no movement at all for the whole move (no page gives them); the height boost
+ * has no published size and is not modelled. A cinematic one's scene holds its user
+ * already (ruling R-T14d).
+ */
+export function holdsAloft(f: FighterState, def: FighterDef): boolean {
+  if (f.grounded || f.action !== "special" || f.move === null) return false;
+  const final = def.moves[f.move]?.final;
+  return final !== undefined && final.phase === "start" && final.trap !== true;
+}
+
+/**
+ * A Final Smash ending in the air gives its user back the midair jumps it had spent
+ * (ruling R-T16b): SmashWiki "Final Smash", "upon ending the move, the character
+ * [...] regains their spent midair jumps". Every Final Smash, the cinematic ones too.
+ * The first jump, from the ground, is not a midair jump: one that left the ground
+ * keeps it spent (`jumpsUsed` counts it).
+ */
+export function refreshFinalJumps(f: FighterState): void {
+  if (!f.grounded) f.jumpsUsed = Math.min(f.jumpsUsed, 1);
 }
 
 /** The fighters `user`'s Final Smash has trapped. */
@@ -107,7 +142,7 @@ export function trappedBy(s: { readonly fighters: readonly FighterState[] }, use
  * hit on the first would cost the Final Smash it had just spent.
  */
 export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boolean): boolean {
-  if (!neutral || f.finalSmashReady <= 0 || ctx.def.moves.finalSmash === undefined || finalSmashActive(ctx)) return false;
+  if (!neutral || f.finalSmashReady <= 0 || ctx.def.moves.finalSmash === undefined || finalSmashActive(ctx, ctx.finalProjectileOut?.() === true)) return false;
   f.finalSmashReady = 0;
   startMove(f, "special", "finalSmash");
   updateDodgeIntangibility(f, ctx.def);
@@ -197,12 +232,13 @@ export function inCinematic(s: Pick<GameState, "cinematic">, f: FighterState): b
  * competitive play): "Characters on Final Smash standby can also randomly drop it
  * from any hit that deals hitstun". Not while somebody's Final Smash is out: then
  * the fighter is not in standby, and has the power back after (`finalSmashActive`,
- * ruling R-T14h). UNVERIFIED: every such hit drops it here (the page says
- * "randomly", and publishes no chance); the dropped ball's HP (a fresh one's 40)
- * and the 10 units above the fighter it appears at.
+ * ruling R-T14h; its projectiles too, `projectileOut`, ruling R-T16a). UNVERIFIED:
+ * every such hit drops it here (the page says "randomly", and publishes no chance);
+ * the dropped ball's HP (a fresh one's 40) and the 10 units above the fighter it
+ * appears at.
  */
-export function dropSmashBall(s: Pick<GameState, "smashBall" | "fighters">, f: FighterState): void {
-  if (f.finalSmashReady <= 0 || finalSmashActive(s)) return;
+export function dropSmashBall(s: Pick<GameState, "smashBall" | "fighters">, f: FighterState, projectileOut: boolean): void {
+  if (f.finalSmashReady <= 0 || finalSmashActive(s, projectileOut)) return;
   f.finalSmashReady = 0;
   if (s.smashBall.active) return;
   Object.assign(s.smashBall, { active: true, x: f.x, y: f.y + fx(10), vx: 0, vy: 0, health: SMASH_BALL_HEALTH, driftTimer: 0 });

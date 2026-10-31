@@ -5,6 +5,8 @@ import { fx } from "./fixed";
 import { emptyCombat } from "./combat";
 import { emptyKinetic } from "./kinetic";
 import { hashState, mixBool, mixInt, mixString } from "./hash";
+import { markHit } from "./hitbox";
+import { markProjectileHit } from "./projectile";
 import type { FighterState, GameState, ProjectileState } from "./types";
 
 function fighter(over: Partial<FighterState> = {}): FighterState {
@@ -343,6 +345,27 @@ describe("hashState", () => {
     expect(withMarks([true])).not.toBe(withMarks([false]));
     expect(withMarks([true, false])).not.toBe(withMarks([false, true]));
     expect(withMarks([false, false, true])).not.toBe(withMarks([false, false, false]));
+  });
+
+  // Plan 5, Task 16 fix round 1 (the review's M4, X6/X7): a hit record's re-arm frame
+  // (a rehit, `markHit`'s `rearmAt`) and its part (`Hitbox.part`) are state. Two peers
+  // whose records differ only there strike again on different frames: a desync the
+  // hash must see, for a fighter's swing and for a projectile.
+  it("distinguishes hit records that differ only in a target's re-arm frame or its part", () => {
+    const withRecord = (mark: (f: { hitThisMove: number[] }) => void): number => {
+      const s = state();
+      mark(s.fighters[0]);
+      return hashState(s);
+    };
+    expect(withRecord((f) => markHit(f, 1, 17))).not.toBe(withRecord((f) => markHit(f, 1, 18)));
+    expect(withRecord((f) => markHit(f, 1, 17))).not.toBe(withRecord((f) => markHit(f, 1)));
+    expect(withRecord((f) => markHit(f, 1, 17, 1))).not.toBe(withRecord((f) => markHit(f, 1, 17, 0)));
+    const withProjectileRecord = (rearmAt: number): number => {
+      const p = projectile();
+      markProjectileHit(p, 1, rearmAt);
+      return hashState(state({ projectiles: [p] }));
+    };
+    expect(withProjectileRecord(67)).not.toBe(withProjectileRecord(68));
   });
 
   it("distinguishes a null move from a move named nothing-like", () => {

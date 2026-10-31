@@ -1,9 +1,11 @@
 /**
  * The golden trace's twelfth match: the Final Smashes that trap nobody, staged
  * (Plan 5, Task 16; ruling P5-R14's way: new behaviour visited in a lab). Zero
- * Laser's beam strikes a fighter again every 10 of its frames (its rehit), Mario
- * Finale's flames every 7 and hotter from their mid stage, and the Ancient Arrow
- * flies and strikes the first fighter in its line.
+ * Laser's beam strikes a fighter again every 10 of its frames (its rehit) and its
+ * fringe beams every 8, Mario Finale's flames strike a fighter and carry them off the
+ * stage, and the Ancient Arrow flies and strikes the first fighter in its line; the
+ * last two are used in the air, where they hold their users (fix round 1, ruling
+ * R-T16b).
  *
  * No golden match breaks a Smash Ball (the scripted match plays with it on, every
  * other with it off), and a lab's fighters are fixed for its match while every other
@@ -12,29 +14,32 @@
  * lab of their own, and the eleven other traces stay byte-identical.
  *
  * Four fighters on Battlefield (a free-for-all, not one-on-one): Samus (port 0) on the
- * floor at x -75, facing right; Link (port 1) on the right soft platform at 42, facing
- * left; Donkey Kong (port 2) on the floor at -45, facing left, the one fighter without
- * the power; Mario (port 3) on the left soft platform at -30, facing left. The setup
- * grants Samus, Link and Mario the Smash Ball's power ("Standby Mode",
- * `FINAL_SMASH_READY`, as breaking the ball sets it). Each Final Smash comes after the
- * last is over, and each fighter it hits has spent its own or has none, so no hit
- * drops a standby (`dropSmashBall`), and no Final Smash's flames are still out when the
- * next starts:
- * - Zero Laser: the muzzle strikes Donkey Kong on 1 (1%) and 11 (2%), and the beam
- *   every 16 steps from 21 to 197 (twelve 1.5% hits, ten of its frames apart, each
- *   freezing Samus and him 7), its end on 213 (5.5%): fifteen hits, 27.82%. It pushes
- *   him along the floor under Link's platform and launches him onto the right ledge,
- *   where he hangs from 262 to the lab's end. The beam passes under both platforms,
- *   and Samus's Final Smash is over on 280.
- * - Mario Finale: Mario drops through his platform on 292, lands, and presses it on
- *   310; its flames are out on 314 and strike Samus, 35 ahead, on 374, 386, 398 and
- *   411 (2.5%, 50°, a launch to the left, so 130° in the world) and on 426 (3.0%, the
- *   mid stage's air box, 23°, so 157°), until they push her off the stage's left edge;
- *   she falls and is KO'd on 542. Mario's move ends on 466 and the flames on 534.
- * - The Ancient Bow and Arrow: Link drops through his platform on 520, lands, and
- *   presses it on 540, after the flames; Samus's KO freezes the match for 14 frames
- *   from 543, so the arrow is shot on 613 from 32 and strikes Mario, the first fighter
- *   in its line, 62 to its left, on 622: 35%, launched up and away at 120°.
+ * floor at x -75, facing right; Link (port 1) on the top platform at 10, facing left;
+ * Donkey Kong (port 2) on the floor at -45, facing left, the one fighter without the
+ * power; Mario (port 3) on the top platform at -15, facing left. The setup grants
+ * Samus, Link and Mario the Smash Ball's power ("Standby Mode", `FINAL_SMASH_READY`, as
+ * breaking the ball sets it). Each Final Smash comes after the last is over, its
+ * projectiles included (Task 16 fix round 1, ruling R-T16a), and each fighter it hits
+ * has spent its own or has none, so no hit drops a standby (`dropSmashBall`):
+ * - Zero Laser (fix round 1: its start, its scripted clears and its fringe beams,
+ *   rulings R-T16c to R-T16e): the start's charge strikes Donkey Kong on 48, 58 and 68
+ *   (1%) and its pulls draw him in; the muzzle on 70 (1%); then the beam (1.5%, 13
+ *   hits) from 81 and the fringe beams (0.5%; 16 above, 12 below) from 92, each on its
+ *   own record, carry him along the floor; the end and both blasts on 407 (5.5% and
+ *   2.5% twice): 48 hits, 50.4%. He tumbles off to the right and is KO'd on 587. The
+ *   fringe beams pass under the top platform (the upper one, 23 up, reaches the lower
+ *   platforms, where Link and Mario stood before fix round 1), and Samus's Final
+ *   Smash is over on 475.
+ * - Mario Finale, in the air (ruling R-T16b): Mario drops through the top platform on
+ *   480 and presses it on 513, 10 up, where it holds him until 673; its flames are out
+ *   on 517 and strike Samus on 632 and 644 (3.0%, the mid stage: 50°, a launch to the
+ *   left, so 130° in the world, then the air box's 23°, 157°), until she is off the
+ *   stage's left edge; she falls and is KO'd on 762. Mario lands on 687; the flames are
+ *   gone on 751.
+ * - The Ancient Bow and Arrow, in the air: Link drops through the top platform on 780
+ *   and presses it on 810, 12 up, after the flames, where it holds him until 909; the
+ *   arrow is shot on 869 from 0 and strikes Mario, the first fighter in its line, on
+ *   871: 35%, launched up and away at 120°. Link lands on 924.
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added (Plan 5, Task 16); the pins in
@@ -47,7 +52,7 @@ import { fx } from "@/engine/fixed";
 import { kineticClear } from "@/engine/kinetic";
 import { Btn } from "@/engine/types";
 import type { GameState, InputFrame } from "@/engine/types";
-import { BATTLEFIELD_LOWER_PLATFORM_Y } from "@/stages/battlefield";
+import { BATTLEFIELD_UPPER_PLATFORM_Y } from "@/stages/battlefield";
 import type { LabMatch } from "./goldenLab";
 
 const B = Btn.Special;
@@ -57,19 +62,20 @@ const D = Btn.Down;
 type Step = readonly [frames: number, samus: InputFrame, link: InputFrame, donkeyKong: InputFrame, mario: InputFrame];
 
 const STEPS: readonly Step[] = [
-  [1, B, 0, 0, 0], //                 1: Zero Laser; the muzzle hits Donkey Kong on 1 and 11
-  [290, 0, 0, 0, 0], //                  the beam from 21 to 197, its end on 213; he hangs
-  //                                     from the right ledge from 262
-  [3, 0, 0, 0, D], //               292: Mario drops through the left platform
-  [15, 0, 0, 0, 0],
-  [1, 0, 0, 0, B], //               310: Mario Finale; the flames out on 314 strike Samus on
-  [209, 0, 0, 0, 0], //                  374, 386, 398, 411 and 426, until she is off the
-  //                                     stage; she is KO'd on 542
-  [3, 0, D, 0, 0], //               520: Link drops through the right platform
-  [17, 0, 0, 0, 0],
-  [1, 0, B, 0, 0], //               540: the Ancient Bow and Arrow, after the flames (gone
-  [160, 0, 0, 0, 0], //                  after 534); shot on 613 (Samus's KO froze 14),
-  //                                     it strikes Mario on 622
+  [1, B, 0, 0, 0], //                 1: Zero Laser; its charge strikes Donkey Kong on 48,
+  [478, 0, 0, 0, 0], //                  58 and 68, the muzzle on 70, the beam from 81 and
+  //                                     the fringe beams from 92, the end on 407; over on
+  //                                     475; he is KO'd on 587
+  [3, 0, 0, 0, D], //               480: Mario drops through the top platform
+  [30, 0, 0, 0, 0],
+  [1, 0, 0, 0, B], //               513: Mario Finale in the air, held there until 673; the
+  [266, 0, 0, 0, 0], //                  flames out on 517 strike Samus on 632 and 644, until
+  //                                     she is off the stage; she is KO'd on 762
+  [3, 0, D, 0, 0], //               780: Link drops through the top platform
+  [27, 0, 0, 0, 0],
+  [1, 0, B, 0, 0], //               810: the Ancient Bow and Arrow in the air, after the
+  [140, 0, 0, 0, 0], //                  flames (gone after 751), held until 909; shot on
+  //                                     869, it strikes Mario on 871
 ];
 
 /** The steps, frame by frame: every port's keys on `frame` (from 1); none past the last. */
@@ -85,16 +91,16 @@ export const BEAM_LAB: LabMatch = {
   fighters: ["samus", "link", "donkeyKong", "mario"],
   seed: 916,
   rules: { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false },
-  frames: 700,
+  frames: 950,
   setup(state: GameState) {
     const [samus, link, donkeyKong, mario] = state.fighters;
     const floor = { grounded: true, platform: 0, y: fx(0.111) };
-    const platform = { grounded: true, y: BATTLEFIELD_LOWER_PLATFORM_Y };
+    const top = { grounded: true, platform: 2, y: BATTLEFIELD_UPPER_PLATFORM_Y };
     const still = { action: "stand", actionFrame: 0, intangible: 0, invincible: 0 } as const;
     Object.assign(samus, still, floor, { x: fx(-75), facing: 1 });
-    Object.assign(link, still, platform, { platform: 3, x: fx(42), facing: -1 });
+    Object.assign(link, still, top, { x: fx(10), facing: -1 });
     Object.assign(donkeyKong, still, floor, { x: fx(-45), facing: -1 });
-    Object.assign(mario, still, platform, { platform: 1, x: fx(-30), facing: -1 });
+    Object.assign(mario, still, top, { x: fx(-15), facing: -1 });
     for (const f of state.fighters) kineticClear(f);
     for (const f of [samus, link, mario]) f.finalSmashReady = FINAL_SMASH_READY;
   },

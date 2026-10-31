@@ -110,7 +110,7 @@ import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
 import { stopsAtEdge } from "./groundExit";
 import { dropsThroughSoft } from "./softDrop";
-import { FINAL_SMASH_READY, dropSmashBall, endDash, inCinematic, inDash, trapVictim, updateCinematic } from "./final";
+import { FINAL_SMASH_READY, dropSmashBall, endDash, finalSmashActive, holdsAloft, inCinematic, inDash, trapVictim, updateCinematic } from "./final";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -192,7 +192,6 @@ import { absHitbox, scriptHitboxes, unplacedHitbox } from "./acmd/hitboxes";
 import { moveScriptFrame, moveSpawns, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
 import { begunInAir } from "./upSpecial";
 import { gameScriptFor } from "./acmd/legacy";
-import type { AttackParams } from "./acmd/types";
 import "./status";
 import { releaseHeld, struggleInGrab } from "./status/grab";
 import { emptyEvents } from "./types";
@@ -585,8 +584,8 @@ interface Candidate {
   readonly final: "trap" | "hold" | "launch" | "strike" | "world" | null;
   /**
    * Frames after it strikes a fighter before it may strike them again, 0 for once
-   * (smash-script `Rehit`; Plan 5, Task 16: `rehitOf`, `ProjectileDef.rehit`), and the
-   * clock its hit record counts them on: its move's frame, or its projectile's age.
+   * (smash-script `Rehit`; Plan 5, Task 16: `Hitbox.rehit`, `ProjectileDef.rehit`), and
+   * the clock its hit record counts them on: its move's frame, or its projectile's age.
    */
   readonly rehit: number;
   readonly clock: number;
@@ -609,15 +608,16 @@ function finalKind(final: FinalPhase | undefined, hb: Hitbox): Candidate["final"
 }
 
 /**
- * A live box's rehit (smash-script `Rehit`; Plan 5, Task 16): the running script's
- * `ATTACK` of its id, whose own `Rehit` an imported script carries and a legacy move's
- * compile writes from `MoveDef.rehit` (`attackFromHitbox`). One rehit for both, and
+ * A live box's rehit (smash-script `Rehit`; Plan 5, Task 16): its own, which the
+ * script's `ATTACK` carries onto it (`attackHitbox`; fix round 1, ruling R-T16d), and
+ * which an imported script writes box by box and a legacy move's compile writes from
+ * `Hitbox.rehit`, else `MoveDef.rehit` (`attackFromHitbox`). One rehit for both, and
  * none for a catch: Pikachu's forward air's `game_attackairf` strikes every 3 frames,
- * Marth's up smash's launcher lets go after 2, Zero Laser's beam every 10.
+ * Marth's up smash's launcher lets go after 2, Zero Laser's beam every 10 and its
+ * muzzle every 8.
  */
-function rehitOf(attacks: readonly AttackParams[], hb: Hitbox): number {
-  if (hb.grabbing === true) return 0;
-  return attacks.find((a) => a.id === hb.id)?.rehit ?? 0;
+function rehitOf(hb: Hitbox): number {
+  return hb.grabbing === true ? 0 : (hb.rehit ?? 0);
 }
 
 /** A Final Smash scene's box: not in the world, it reaches the trapped and nothing else. */
@@ -645,6 +645,27 @@ function candidateKey(c: Candidate): number {
   // Each projectile competes on its own, so two arrows both connect; a fighter's
   // own overlapping hitboxes compete with each other, so only the tipper lands.
   return c.projectile === null ? c.attacker : 1000 + c.projectile.instanceId;
+}
+
+/**
+ * The key a candidate competes under for one victim: its source's, and within a
+ * fighter's swing its box's part (smash-script `Part`; Plan 5, Task 16 fix round 1,
+ * ruling R-T16e). SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox): a part
+ * "Determines how many hitboxes can hit in one attack. If a hitbox has a part value of
+ * 1, for example, it can connect after landing a hitbox with a part value of 0". The
+ * lowest id lands per part, each with its own record (`markHit`): Zero Laser's
+ * laser2 beams beside its main beam. UNVERIFIED: that two parts land on one frame
+ * (the page reads as an order, part 1 "after" part 0); the alternative, part 1 only
+ * once part 0 has landed, adds a frame's wait to laser2's first hit and changes no
+ * count here.
+ */
+function pickKey(c: Candidate): number {
+  return candidateKey(c) * 4 + (c.projectile === null ? (c.hitbox.part ?? 0) : 0);
+}
+
+/** A candidate's part in its source's hit record: a fighter box's own, 0 for a projectile's. */
+function recordPart(c: Candidate): number {
+  return c.projectile === null ? (c.hitbox.part ?? 0) : 0;
 }
 
 /**
@@ -722,6 +743,9 @@ export function step(
     s.fighters.map((f, i) => ecbFor(i, f)),
   );
   const footstools: Footstool[] = [];
+  // Is a projectile a Final Smash launched still out (Plan 5, Task 16 fix round 1,
+  // ruling R-T16a)? Then that Final Smash is still active (`finalSmashActive`).
+  const finalOut = (): boolean => s.projectiles.some((p) => isFinalProjectile(ctx.fighter(p.source), p.defId));
   const stateCtx = (i: number): StateContext => ({
     def: defs[i],
     stage,
@@ -732,6 +756,7 @@ export function step(
     footstools,
     defs,
     out: (def) => projectilesOut(s.projectiles, s.fighters[i].port, defs[i].id, articleOf(def), (id) => findProjectileDef(defs[i], id)),
+    finalProjectileOut: finalOut,
   });
 
   /* -- 3. action state machines ------------------------------------------- */
@@ -897,7 +922,9 @@ export function step(
     // So does a Final Smash's user while its scene plays, in the air too, with no
     // gravity or speed of its own (fix round 1, ruling R-T14d): the scene is
     // "unskippable" (SmashWiki "Final Smash").
-    if (f.port === scene) {
+    // An aerial Final Smash that traps nobody holds its user where it is for the move
+    // (Plan 5, Task 16 fix round 1, ruling R-T16b: `holdsAloft`).
+    if (f.port === scene || holdsAloft(f, defs[i])) {
       kineticClear(f);
       continue;
     }
@@ -1052,8 +1079,8 @@ export function step(
   // Reflectors first: a reflected projectile neither clanks nor hits this frame (Plan 5).
   reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
   resolveClanks(s, candidates, (p) => projectileDefOf(ctx, p), events, destroyed);
-  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed);
-  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events);
+  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut);
+  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut);
   if (destroyed.size > 0) {
     // A star a clank ends lets its rider go, as one whose flight ends does (Plan 5,
     // Task 13c: the star clanks now, `kirby_starmissile`'s `ATTACK_SETOFF_KIND_ON`).
@@ -1088,8 +1115,9 @@ export function step(
 
   /* -- 8. the Smash Ball --------------------------------------------------- */
 
-  // It waits out a Final Smash's scene (Plan 5, Task 14).
-  if (s.rules.smashBall && !paused) updateSmashBall(s);
+  // It waits out a Final Smash's scene (Plan 5, Task 14), and none appears while a
+  // Final Smash, or a projectile one launched, is out (Task 16 fix round 1, ruling R-T16a).
+  if (s.rules.smashBall && !paused) updateSmashBall(s, finalSmashActive(s, finalOut()));
 
   /* -- 9. blast zones ------------------------------------------------------ */
 
@@ -1300,7 +1328,7 @@ function gatherHitboxes(
         onlyPort: run.state.catchOnly ? f.grabbing : null,
         damageMul: defs[i].moves[f.move]?.copyDamage ?? ONE,
         final: finalKind(defs[i].moves[f.move]?.final, hb),
-        rehit: rehitOf(run.state.attacks, raw),
+        rehit: rehitOf(raw),
         clock: run.gameFrame,
         suppressed: false,
       });
@@ -1684,7 +1712,9 @@ function clankSide(
   if (c.projectile !== null) {
     if (!lost) return;
     if (c.hitbox.noRebound === true) {
-      if (other.projectile === null) markProjectileHit(c.projectile, other.attacker);
+      // The clank blocks this hit; a box with a rehit is re-armed for its target, on
+      // its age, as a hit re-arms it (ruling R-T16i, below).
+      if (other.projectile === null) markProjectileHit(c.projectile, other.attacker, rearmFrame(c));
       return;
     }
     const def = projectileDef(c.projectile);
@@ -1700,7 +1730,11 @@ function clankSide(
   );
   if (!lost || !f.grounded) return;
   if (c.hitbox.noRebound === true) {
-    if (!vsProjectile) markHit(f, other.attacker);
+    // Ruling R-T16i (Plan 5, Task 16 fix round 1): "clanking blocks only the current
+    // hit" (SmashWiki "Priority", https://www.ssbwiki.com/Priority), so a box with a
+    // rehit is blocked for its rehit, as a hit holds it, and strikes again after; one
+    // without, for the swing.
+    if (!vsProjectile) markHit(f, other.attacker, rearmFrame(c), recordPart(c));
     return;
   }
   startRebound(f, reboundFrames(stronger.damage));
@@ -1747,6 +1781,7 @@ function resolveHits(
   intents: readonly Intent[],
   events: StepEvents,
   destroyed: Set<number>,
+  finalOut: () => boolean,
 ): void {
   for (let v = 0; v < s.fighters.length; v++) {
     const victim = s.fighters[v];
@@ -1809,7 +1844,7 @@ function resolveHits(
       const ownTrapped = trapped && victim.combat.trappedBy === c.attacker;
       if (isSceneBox(c) ? !ownTrapped : trapped && !(c.final === "strike" && ownTrapped)) continue;
       if (isSceneBox(c) || ownTrapped) {
-        const key = candidateKey(c);
+        const key = pickKey(c);
         const incumbent = perSource.get(key);
         if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
         continue;
@@ -1849,7 +1884,7 @@ function resolveHits(
       } else if (bubble !== null && !c.hitbox.grabbing && c.hitbox.windbox !== true && c.final === null && sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, bubble)) {
         caught.add(c);
       } else if (!reachesBody(c)) continue;
-      const key = candidateKey(c);
+      const key = pickKey(c);
       const incumbent = perSource.get(key);
       if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
     }
@@ -1916,7 +1951,7 @@ function resolveHits(
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
-        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events);
+        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
         // on contact, whatever else the hit does: a launch, a launch it cannot
         // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
@@ -1989,6 +2024,7 @@ function resolveThrows(
   beforeActionFrame: readonly number[],
   intents: readonly Intent[],
   events: StepEvents,
+  finalOut: () => boolean,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -2017,7 +2053,7 @@ function resolveThrows(
       const v = victim.port;
       const at = { x: victim.x, y: victim.y };
       const own = f.hitlag;
-      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events);
+      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut);
       f.hitlag = own;
     }
     for (const flash of run.state.flashed) {
@@ -2117,7 +2153,7 @@ function throwCandidate(attacker: number, hitbox: Hitbox, slot: MoveSlot, at: Po
  */
 function recordSaysAlreadyHit(s: GameState, c: Candidate, port: number): boolean {
   if (c.projectile !== null) return projectileAlreadyHit(c.projectile, port, c.clock);
-  return alreadyHit(s.fighters[c.attacker], port, c.clock);
+  return alreadyHit(s.fighters[c.attacker], port, c.clock, recordPart(c));
 }
 
 function recordHit(c: Candidate, attacker: FighterState, port: number): void {
@@ -2128,11 +2164,20 @@ function recordHit(c: Candidate, attacker: FighterState, port: number): void {
   // A box with a rehit lets go of its target that many frames on its clock from now
   // (Plan 5, Task 16; SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox: a rehit rate
   // "allows the hitbox to strike again after the specified amount of frames"),
-  // whichever of its move's boxes strikes next. UNVERIFIED: that a move's boxes share
-  // the one record, as a legacy move's always have (a script's `clear_all` aside).
-  const rearmAt = c.rehit > 0 ? c.clock + c.rehit : undefined;
+  // whichever of its move's boxes of its part strikes next. UNVERIFIED: that a move's
+  // boxes of one part share the one record, as a legacy move's always have (a
+  // script's `clear_all` aside; a part keeps its own, fix round 1, `pickKey`).
+  const rearmAt = rearmFrame(c);
   if (c.projectile !== null) markProjectileHit(c.projectile, port, rearmAt);
-  else markHit(attacker, port, rearmAt);
+  else markHit(attacker, port, rearmAt, recordPart(c));
+}
+
+/**
+ * The frame on its record's clock from which a box with a rehit may strike its
+ * target again, from now; none for a box without, which holds its target for good.
+ */
+function rearmFrame(c: Candidate): number | undefined {
+  return c.rehit > 0 ? c.clock + c.rehit : undefined;
 }
 
 /**
@@ -2503,8 +2548,13 @@ interface Autolink {
  */
 function autolinkOf(victim: FighterState, hb: Hitbox, c: Candidate, attacker: FighterState): Autolink | null {
   if (!isAutolinkAngle(hb.angle)) return null;
+  if (hb.angle !== AUTOLINK_HALF_MOMENTUM && victim.grounded) return null;
+  return autolinkFrom(hb, c, attacker);
+}
+
+/** The autolink of a box with an autolink angle, whoever it reaches (`autolinkOf`). */
+function autolinkFrom(hb: Hitbox, c: Candidate, attacker: FighterState): Autolink {
   const pull = hb.angle !== AUTOLINK_HALF_MOMENTUM;
-  if (pull && victim.grounded) return null;
   return {
     pull,
     momentumX: c.projectile !== null ? c.projectile.vx : attacker.vx,
@@ -2783,6 +2833,7 @@ function applyHit(
   contact: Point,
   victimIntent: Intent,
   events: StepEvents,
+  finalOut: () => boolean,
 ): void {
   const hb = c.hitbox;
   const fromProjectile = c.projectile !== null;
@@ -3283,7 +3334,7 @@ function applyHit(
   victim.hitstun = effectiveHitstun(kb, speedUp);
   victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
   // A hit that deals hitstun drops the Smash Ball's power (Plan 5, Task 14: `dropSmashBall`).
-  if (victim.hitstun > 0) dropSmashBall(s, victim);
+  if (victim.hitstun > 0) dropSmashBall(s, victim, finalOut());
   victim.combat.launchSetWeight = hb.setWeight === true;
   // A launch that tumbles a grounded victim bounces it off the floor as it fires,
   // if it points into the floor then (`releasePendingLaunch`), set knockback
@@ -3395,7 +3446,7 @@ function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: F
     fixedKnockback: hb.fixedKnockback,
     setWeight: hb.setWeight,
   });
-  const push = knockbackToVelocity(kb, resolveAngle(hb, victim.grounded, kb), launchSourceFacing(c, attacker, victim));
+  const push = windboxPush(attacker, victim, c, kb);
   const vy = victim.grounded ? 0 : push.vy;
   const speed = victim.grounded ? abs(push.vx) : push.speed;
   const verdict = knockbackStack(speed, victim.hitstun > 0 ? victim.launchSpeed : 0);
@@ -3407,6 +3458,27 @@ function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: F
   kineticPush(victim, push.vx, vy, speed);
 }
 
+/**
+ * Where a windbox pushes `victim`: along its angle at its knockback's speed, or, at a
+ * pulling autolink angle, toward its centre by 367°'s rule (`autolinkVector`), on the
+ * ground too, which takes the pull's horizontal part (`applyWindbox`). Zero Laser's
+ * start pulls so (Plan 5, Task 16 fix round 1, ruling R-T16c: its script's 366°
+ * windbox, 367° the stand-in, ruling P5-R18; the game's own tip, "Before the laser
+ * fires, it'll pull in nearby fighters a little bit"). UNVERIFIED: 366° itself
+ * (SmashWiki "Autolink angle", https://www.ssbwiki.com/Autolink_angle) "does not
+ * reduce the launch speed obtained from knockback", has no speed caps, and "nor it
+ * launches grounded opponents at a fixed angle", which is why a grounded fighter is
+ * pulled here and not pushed off at 80°.
+ */
+function windboxPush(attacker: FighterState, victim: FighterState, c: Candidate, kb: number): { vx: number; vy: number; speed: number } {
+  const hb = c.hitbox;
+  if (isAutolinkAngle(hb.angle) && hb.angle !== AUTOLINK_HALF_MOMENTUM) {
+    const v = autolinkVector(autolinkFrom(hb, c, attacker), victim.x, victim.y);
+    return { vx: v.vx, vy: v.vy, speed: magnitude(v.vx, v.vy) };
+  }
+  return knockbackToVelocity(kb, hitAngle(hb, victim.grounded, kb), launchSourceFacing(c, attacker, victim));
+}
+
 /* ----------------------------------------------------------- smash ball -- */
 
 /**
@@ -3414,14 +3486,16 @@ function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: F
  *
  * It drifts on a seeded RNG, loses 2 HP every 60 frames on its own so a stalemate
  * cannot last forever, and awards the Final Smash to whoever lands the hit that
- * takes it to zero.
+ * takes it to zero. None appears while `finalActive`, a Final Smash out (Plan 5, Task
+ * 16 fix round 1, ruling R-T16a): SmashWiki "Final Smash", "only one Smash Ball or
+ * Final Smash can be present onscreen at any given time".
  */
-function updateSmashBall(s: GameState): void {
+function updateSmashBall(s: GameState, finalActive: boolean): void {
   const ball = s.smashBall;
   const anyoneCharged = s.fighters.some((f) => f.finalSmashReady > 0);
 
   if (!ball.active) {
-    if (!anyoneCharged && s.frame > 0 && s.frame % SMASH_BALL_SPAWN_INTERVAL === 0) {
+    if (!anyoneCharged && !finalActive && s.frame > 0 && s.frame % SMASH_BALL_SPAWN_INTERVAL === 0) {
       const r = randomInt(s.rngSeed, 2);
       s.rngSeed = r.seed;
       ball.active = true;
@@ -3467,6 +3541,9 @@ function resolveSmashBallHits(
     // source says whether a Final Smash's boxes hit a Smash Ball; the alternative
     // reads them as world boxes, as transcendent Final Smash boxes would still be.
     if (c.suppressed || c.onlyPort !== null || isSceneBox(c)) continue;
+    // A box that hits fighters only (`Hitbox.fightersOnly`; Task 16 fix round 1, ruling
+    // R-T16g: the Ancient Arrow's `COLLISION_CATEGORY_MASK_FIGHTER`) passes it by.
+    if (c.hitbox.fightersOnly === true) continue;
     const attacker = s.fighters[c.attacker];
     if (alreadyHit(attacker, SMASH_BALL_TARGET)) continue;
     if (!sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, target)) continue;
