@@ -1,5 +1,5 @@
 /**
- * The CPU's repertoire: eight small behaviours, each of which looks at one
+ * The CPU's repertoire: eleven small behaviours, each of which looks at one
  * delayed view of the world and answers two questions — "does this apply right
  * now, and how much?" and "what would I press?".
  *
@@ -41,18 +41,22 @@ import {
 import { cloneFighter } from "@/engine/simulate";
 import { advanceFighter, applyMovement, interpretInput, updateInputTracking, type StateContext } from "@/engine/states";
 import { HARD_PLATFORM_DEPTH, integrate } from "@/engine/physics";
-import { WALL_JUMP_WINDOW } from "@/engine/wallJump";
+import { WALL_JUMP_WINDOW, WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
 import {
   AIR_DODGE_SLIDE_DISTANCE,
   AIR_DODGE_SLIDE_END_SPEED,
   AIR_DODGE_SLINGSHOT_DISTANCE,
   AIR_DODGE_SLINGSHOT_FRAMES,
+  AIR_DODGE_TECH_FRAMES,
+  HITSTUN_CANCEL_AIR_DODGE_FRAME,
+  HITSTUN_CANCEL_AIR_DODGE_SPEED,
   LEDGE_GRAB_BACK_PENALTY,
   LEDGE_GRAB_RANGE_X,
   LEDGE_GRAB_RANGE_Y,
   SDI_INPUT_INTERVAL,
   SMASH_INPUT_WINDOW,
+  TECH_WINDOW,
 } from "@/engine/constants";
 import { ONE, abs, fx, magnitude, mul } from "@/engine/fixed";
 import { fighterParams, type FighterParams } from "@/engine/params";
@@ -147,6 +151,10 @@ export interface LevelTuning {
   readonly noise: number;
   /** Chance of dropping a frame's input entirely. The low-level fumble. */
   readonly fumbleChance: number;
+  /** Plan 5: how reliably it techs a landing and air-dodges out of hitstun. */
+  readonly techSkill: number;
+  /** Plan 5: how often it lets go of its shield to parry a swing it sees coming. */
+  readonly parrySkill: number;
 }
 
 /* ------------------------------------------------------------ observation -- */
@@ -281,7 +289,10 @@ export const ROLL_EDGEGUARD = 2;
 export const ROLL_RECOVER = 3;
 export const ROLL_MOVE = 4;
 export const ROLL_FUMBLE = 5;
-export const DECISION_ROLLS = 6;
+/** Plan 5: teching and hitstun cancels share one roll; parrying has its own. */
+export const ROLL_TECH = 6;
+export const ROLL_PARRY = 7;
+export const DECISION_ROLLS = 8;
 
 export interface BehaviourContext {
   /** Read for `frame` and `rules` only — never for the opponent. */
@@ -314,8 +325,11 @@ export interface BehaviourResult {
 export type Behaviour = (ctx: BehaviourContext) => BehaviourResult;
 
 export type BehaviourName =
+  | "tech"
+  | "escape"
   | "survive"
   | "recover"
+  | "parry"
   | "shield"
   | "edgeguard"
   | "attack"
@@ -794,6 +808,129 @@ export const survive: Behaviour = (ctx) => {
 };
 
 /**
+ * Tech the landing (Plan 5). A tumbling fighter about to hit the stage presses
+ * shield in time for the floor to come inside the tech its press makes:
+ *
+ *  - In the hitstun (`tumble`) the press opens Plan 3's tech window,
+ *    `TECH_WINDOW` frames (SmashWiki "Tech": 11 in Ultimate). It is pressed
+ *    toward the middle, which rolls the tech inward when the body meets the
+ *    floor on the press's own step; a later landing rolls whichever way the
+ *    stick is held then (`techOrBounce` reads the stick at contact).
+ *  - After it (`tumbleFall`; ruling P5-R20) the press is an air dodge, which
+ *    techs a floor it meets in its first `AIR_DODGE_TECH_FRAMES` frames
+ *    (SmashWiki "Lucario (SSBU)/Techs"). A neutral one, because it keeps the
+ *    fall and comes down into the floor, where a direction held would make it
+ *    the directional dodge, which can carry the fighter clear of it (Plan 3,
+ *    Task 20c). Whatever is held when it lands picks the roll (`techOrBounce`).
+ *
+ * Scored above `survive`: the DI has done its work by now, and a missed tech is
+ * the punish. The scores here and below only order the behaviours.
+ */
+export const tech: Behaviour = (ctx) => {
+  const { self } = ctx.view;
+  const fall = self.action === "tumbleFall";
+  if ((self.action !== "tumble" && !fall) || self.grounded || self.vy >= 0) return NOTHING;
+  if (fall) {
+    // With its air dodge spent, a press is no dodge (`startAirDodge`).
+    if (self.airDodged) return NOTHING;
+  } else {
+    if (self.combat.techLockout > 0 || self.combat.techWindow > 0) return NOTHING;
+    // Once the hitstun cancel is open a shield press is an air dodge, not a
+    // tech: that is `escape`'s.
+    if (cancelOpen(self)) return NOTHING;
+  }
+  const floor = floorUnder(self, ctx.stage);
+  if (floor === null) return NOTHING;
+  const height = self.y - floor;
+  // Frames until the floor at this speed; the window has to still be open then.
+  const open = (fall ? AIR_DODGE_TECH_FRAMES : TECH_WINDOW) - TECH_MARGIN;
+  if (height > open * -self.vy) return NOTHING;
+  if (ctx.rolls[ROLL_TECH] >= ctx.tuning.techSkill) return NOTHING;
+  return { score: 1100, input: fall ? Btn.Shield : Btn.Shield | towardX(self.x, 0) };
+};
+
+/**
+ * The height of what a fighter falling from here comes down on: the highest soft
+ * platform under it, or the stage between its ledges; null over neither. A tumble
+ * lands on a soft platform (ruling R-T13b-g), and in the CPU sweep every lie-down
+ * the stage-only measure left was on one. A platform it drops through is a press
+ * spent early: the dodge then ends on its feet, or the window runs out, as with no
+ * press at all. The view's platforms do not move (`StageView`).
+ */
+function floorUnder(f: FighterState, stage: StageView): number | null {
+  let floor = !isOffstage(f, stage) && f.y >= stage.groundY ? stage.groundY : null;
+  for (const p of stage.platforms) {
+    if (abs(f.x - p.x) <= p.halfWidth && f.y >= p.y && (floor === null || p.y > floor)) floor = p.y;
+  }
+  return floor;
+}
+
+/**
+ * UNVERIFIED (CPU judgement, no source): the frames short of a tech's window the
+ * CPU wants the floor by, at its speed when it presses. The press is read on the
+ * next step, and the fall speeds up on the way down.
+ */
+const TECH_MARGIN = 2;
+
+/**
+ * Plan 3's hitstun cancel will be open when this frame's press is read: frame 41
+ * of the reel, launch speed under 2.5 (`HITSTUN_CANCEL_AIR_DODGE_*`, SmashWiki
+ * "Hitstun canceling"). The engine reads the press on the next step, one frame
+ * further into the reel (`advanceFighter` counts the frame before the status
+ * runs), and with the launch speed as it is now (it decays later in that step,
+ * with the movement); so the cancel is open for the CPU one frame before the
+ * reel shows frame 41.
+ */
+function cancelOpen(f: FighterState): boolean {
+  return f.hitstun > 0 && f.actionFrame + 1 >= HITSTUN_CANCEL_AIR_DODGE_FRAME && f.launchSpeed < HITSTUN_CANCEL_AIR_DODGE_SPEED;
+}
+
+/**
+ * Air-dodge out of hitstun once Plan 3's hitstun cancel allows it — up high
+ * to drift free, near the floor because a dodge lands on its feet where a
+ * missed tech lands on its back. A neutral press (Plan 3, Task 20b), on one
+ * frame in four (UNVERIFIED: tuning, a mash rate) so a fresh press exists.
+ *
+ * Not one that carries it off the stage (ruling P5-R21): the dodge keeps the
+ * fighter's drift, so `escape` minds the ledge as `shield` does, over its own
+ * dodge length (Task 20c); that is recovery judgement, so a CPU whose recovery
+ * roll fails forgets it.
+ */
+export const escape: Behaviour = (ctx) => {
+  const { self } = ctx.view;
+  if (self.grounded || self.airDodged || !cancelOpen(self)) return NOTHING;
+  if (ctx.rolls[ROLL_TECH] >= ctx.tuning.techSkill) return NOTHING;
+  const minded = ctx.rolls[ROLL_RECOVER] < ctx.tuning.recoverySkill;
+  if (minded && dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, airDodgeFrames(ctx.airDodge, 0))) return NOTHING;
+  return { score: 1050, input: pulse(ctx.view.frame, self.port, 4, 1) ? Btn.Shield : 0 };
+};
+
+/**
+ * Frames after a swing is seen that a parrying CPU lets go. The drop parries
+ * for its first `PERFECT_SHIELD_WINDOW` frames (5; Plan 3, `isParrying`), so a
+ * swing whose hit comes out within that many frames of the release is parried,
+ * and a slower one lands in the rest of the drop. UNVERIFIED (CPU judgement,
+ * no source): the CPU reads no frame data, so the lead is a guess at how soon
+ * a swing it has just seen arrives.
+ */
+export const PARRY_LEAD = 1;
+
+/**
+ * Parry (Plan 5): already shielding, it sees a swing start within reach and
+ * lets go of the shield — the perfect shield is on release, so the drop is the
+ * parry (SmashWiki "Perfect shield"). Scored over `shield`, which would
+ * otherwise keep holding.
+ */
+export const parry: Behaviour = (ctx) => {
+  const { self, targetAction, targetActionAge, distance } = ctx.view;
+  if (!ctx.view.target || !isShielding(self.action) || self.hitstun > 0) return NOTHING;
+  if (!isAttacking(targetAction) || distance > THREAT_RANGE) return NOTHING;
+  if (targetActionAge !== PARRY_LEAD) return NOTHING;
+  if (ctx.rolls[ROLL_PARRY] >= ctx.tuning.parrySkill) return NOTHING;
+  return { score: 650, input: 0 };
+};
+
+/**
  * Get back to the stage. Jump while jumps remain, up-B once they do not — and
  * at low levels, sometimes neither, which is where level-1 CPUs go to die. A
  * fighter that can wall jump kicks off the stage's wall first, where it is close
@@ -812,6 +949,19 @@ export const recover: Behaviour = (ctx) => {
     return { score: 950, input: towardX(self.x, home) };
   }
   if (!canAct(self)) return NOTHING;
+
+  // A wall tech's first frames (Plan 5, Task 10; the Task 10 review's carry): a
+  // jump input then, the button or Up held, kicks off the wall as a wall tech
+  // jump (`tryWallTechJump`), which rises and spends no jump. Below the ledge
+  // that is height the fighter needs, so it holds jump; anywhere else it holds
+  // neither jump nor Up, which another behaviour's Up would turn into one. The
+  // press is read on the next step, one frame further into the tech
+  // (`advanceFighter`). Recovery judgement, so a failed roll forgets it, as the
+  // jump back is forgotten below.
+  if (self.action === "techWall" && self.actionFrame < WALL_TECH_JUMP_FRAMES) {
+    const helps = self.y < stage.groundY && ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
+    return { score: 950, input: helps ? Btn.Jump : 0 };
+  }
 
   if (self.action === "ledgeHang") {
     // Climbing costs nothing and the ledge regrab limit is six, so there is no
@@ -1227,8 +1377,11 @@ export const idle: Behaviour = () => ({ score: 1, input: 0 });
  * equal after jitter, not dying is the better default.
  */
 export const BEHAVIOURS: readonly { readonly name: BehaviourName; readonly run: Behaviour }[] = [
+  { name: "tech", run: tech },
+  { name: "escape", run: escape },
   { name: "survive", run: survive },
   { name: "recover", run: recover },
+  { name: "parry", run: parry },
   { name: "shield", run: shield },
   { name: "edgeguard", run: edgeguard },
   { name: "attack", run: attack },

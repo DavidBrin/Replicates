@@ -792,8 +792,12 @@ describe("platformMove", () => {
 describe("the behaviour set", () => {
   it("lists the survival behaviours first, so they win ties", () => {
     expect(BEHAVIOURS.map((b) => b.name)).toEqual([
+      // Plan 5: a tech and a hitstun cancel are survival too.
+      "tech",
+      "escape",
       "survive",
       "recover",
+      "parry",
       "shield",
       "edgeguard",
       "attack",

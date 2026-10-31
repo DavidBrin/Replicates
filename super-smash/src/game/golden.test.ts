@@ -314,6 +314,12 @@ const MATCHES: readonly Match[] = [
  * fighters theirs and staged one in an eleventh match, the Final Smash lab
  * (`goldenFinalLab.ts`), which traps Mario, and dropped the exemption. All 59 are
  * visited.
+ * Plan 5 Task 18 (the CPU techs its landings, air-dodges out of hitstun and parries)
+ * adds no action. The four CPU matches reach 36 between them, up from 35: all four
+ * tech-roll and two tech in place, kirby-marth grabs and is shield-stunned, and
+ * mario-fox and link-samus rebound; none lies down (`downed`, `getUp`), ledge-rolls
+ * or spot-dodges any more. The states and projectile labs lie down and get up, and
+ * the script ledge-rolls and spot-dodges. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -948,6 +954,25 @@ describe("engine golden trace", () => {
   // eleven other traces are byte-identical. So now: hits 18/32/25/26, 6, 0, 1, 4, 1, 2,
   // 33, 54 and 0; shield hits 0/6/0/0, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 2/0/0/1, 1, 2,
   // 0, 0, 0, 0, 0, 2 and 1.
+  // Plan 5 Task 18 (the CPU techs a tumble's landing, in its hitstun or after it,
+  // onto the stage or a soft platform; air-dodges out of hitstun once the cancel
+  // opens, where the dodge stays over the stage, rulings P5-R20 and P5-R21; parries
+  // by letting go of its shield as it sees a swing start; holds jump in a wall tech
+  // below the ledge) moved the four CPU matches from their first sample. Each CPU
+  // decision draws five more rolls (the tech and parry rolls, and a jitter for each
+  // of the three new behaviours), so a roll lands elsewhere and the level-7 CPU's
+  // keys first differ on frame 10 in mario-fox, 13 in donkeyKong-pikachu, 12 in
+  // link-samus and 4 in kirby-marth; then the defence takes over. The four lay a
+  // fighter down 17 times between them before; now none does, and they tech 19
+  // times (mario-fox 5, donkeyKong-pikachu 8, link-samus 3, kirby-marth 3). Hits 25,
+  // 18, 25 and 16; shield hits 0, 0, 0 and 2; KOs 0, 1, 0 and 1 (were 18/32/25/26,
+  // 0/6/0/0 and 2/0/0/1): Donkey Kong in special fall on 2550, a self-destruct, and
+  // Marth by a hit, tumbling at 112.2% on 2509. donkeyKong-pikachu's six shield hits
+  // before were all parries, each on a shield `shield` had just let go of;
+  // kirby-marth's two now are a shield hit and Marth's parry on 3523. The script and the eight labs
+  // are byte-identical: no CPU plays in them. So now: hits 25/18/25/16, 6, 0, 1, 4,
+  // 1, 2, 33, 54 and 0; shield hits 0/0/0/2, 3, 0, 0, 0, 0, 0, 0, 0 and 0; KOs
+  // 0/1/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

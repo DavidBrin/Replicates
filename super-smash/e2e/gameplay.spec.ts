@@ -52,8 +52,27 @@ test("holding a direction moves the player's fighter", async ({ page }) => {
   expect(afterLeft.x).toBeLessThan(afterRight.x);
 });
 
+/**
+ * Step on, no key held, until the player's fighter is standing, free to act.
+ *
+ * The opponent is a CPU, which answers what it sees, so whether its opening
+ * has landed a hit by `READY_FRAME` moves with its rules: after Plan 5 Task 18
+ * (five more rolls a decision, and its defence) the level-3 CPU's opening hits
+ * the player before frame 72, and a key pressed in hitstun does nothing. The
+ * tests below claim only that a key reaches the simulation, so they press from
+ * a standing start. Still the same frames every run: nothing is pressed here.
+ */
+async function standFree(page: Page): Promise<void> {
+  for (let i = 0; i < 600; i++) {
+    if ((await readFighters(page))[0].action === "stand") return;
+    await stepFrames(page, 1);
+  }
+  throw new Error("the player's fighter did not stand within 600 frames");
+}
+
 test("the jump key leaves the ground", async ({ page }) => {
   await startMatch(page, { stepped: true });
+  await standFree(page);
 
   const groundY = (await readFighters(page))[0].y;
 
@@ -77,6 +96,7 @@ test("the jump key leaves the ground", async ({ page }) => {
  */
 test("the up arrow jumps, like the stick", async ({ page }) => {
   await startMatch(page, { stepped: true });
+  await standFree(page);
 
   const groundY = (await readFighters(page))[0].y;
 
@@ -92,6 +112,7 @@ test("the up arrow jumps, like the stick", async ({ page }) => {
 
 test("up plus attack is still an up-attack, not a jump", async ({ page }) => {
   await startMatch(page, { stepped: true });
+  await standFree(page);
 
   await page.keyboard.down(P1.up);
   await stepFrames(page, 2);
@@ -107,6 +128,7 @@ test("up plus attack is still an up-attack, not a jump", async ({ page }) => {
 
 test("the attack key puts the fighter into an attacking state", async ({ page }) => {
   await startMatch(page, { stepped: true });
+  await standFree(page);
 
   await page.keyboard.down(P1.attack);
   await stepFrames(page, 5);

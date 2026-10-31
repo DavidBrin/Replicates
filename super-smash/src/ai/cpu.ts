@@ -122,17 +122,23 @@ export function cpuWorldFromDef(def: FighterDef, stage: StageView): CpuWorld {
  * highest-risk thing in the game and a CPU that does it badly hands over
  * stocks; and `noise` falls from 0.9 to 0.1, which is what turns visible
  * dithering into visible intent.
+ *
+ * Plan 5 adds two: `techSkill` (teching landings, air-dodging out of hitstun)
+ * climbs with `recoverySkill` because both are survival; `parrySkill` stays
+ * at zero until level 4 and reaches only 0.5, because a parry is a read and a
+ * CPU that parried everything would be reading inputs. UNVERIFIED: the values
+ * are tuning, not data — Ultimate's CPU is not published.
  */
 const TUNING: readonly LevelTuning[] = [
-  { level: 1, reactionFrames: 30, aggression: 0.15, shieldRate: 0.02, dodgeRate: 0.0, diSkill: 0.0, sdiSkill: 0.0, recoverySkill: 0.15, edgeguardSkill: 0.0, moveChoiceSkill: 0.15, noise: 0.9, fumbleChance: 0.3 },
-  { level: 2, reactionFrames: 27, aggression: 0.22, shieldRate: 0.06, dodgeRate: 0.02, diSkill: 0.05, sdiSkill: 0.0, recoverySkill: 0.3, edgeguardSkill: 0.0, moveChoiceSkill: 0.25, noise: 0.8, fumbleChance: 0.24 },
-  { level: 3, reactionFrames: 23, aggression: 0.3, shieldRate: 0.12, dodgeRate: 0.05, diSkill: 0.15, sdiSkill: 0.0, recoverySkill: 0.45, edgeguardSkill: 0.05, moveChoiceSkill: 0.35, noise: 0.7, fumbleChance: 0.19 },
-  { level: 4, reactionFrames: 20, aggression: 0.38, shieldRate: 0.2, dodgeRate: 0.1, diSkill: 0.28, sdiSkill: 0.05, recoverySkill: 0.58, edgeguardSkill: 0.12, moveChoiceSkill: 0.45, noise: 0.6, fumbleChance: 0.15 },
-  { level: 5, reactionFrames: 16, aggression: 0.47, shieldRate: 0.3, dodgeRate: 0.18, diSkill: 0.42, sdiSkill: 0.15, recoverySkill: 0.7, edgeguardSkill: 0.22, moveChoiceSkill: 0.55, noise: 0.5, fumbleChance: 0.11 },
-  { level: 6, reactionFrames: 13, aggression: 0.56, shieldRate: 0.42, dodgeRate: 0.28, diSkill: 0.56, sdiSkill: 0.3, recoverySkill: 0.8, edgeguardSkill: 0.36, moveChoiceSkill: 0.66, noise: 0.4, fumbleChance: 0.08 },
-  { level: 7, reactionFrames: 10, aggression: 0.66, shieldRate: 0.56, dodgeRate: 0.4, diSkill: 0.7, sdiSkill: 0.48, recoverySkill: 0.88, edgeguardSkill: 0.52, moveChoiceSkill: 0.77, noise: 0.3, fumbleChance: 0.05 },
-  { level: 8, reactionFrames: 7, aggression: 0.78, shieldRate: 0.72, dodgeRate: 0.55, diSkill: 0.85, sdiSkill: 0.7, recoverySkill: 0.95, edgeguardSkill: 0.72, moveChoiceSkill: 0.88, noise: 0.2, fumbleChance: 0.02 },
-  { level: 9, reactionFrames: 4, aggression: 0.9, shieldRate: 0.9, dodgeRate: 0.72, diSkill: 1.0, sdiSkill: 0.95, recoverySkill: 1.0, edgeguardSkill: 0.92, moveChoiceSkill: 1.0, noise: 0.1, fumbleChance: 0.0 },
+  { level: 1, reactionFrames: 30, aggression: 0.15, shieldRate: 0.02, dodgeRate: 0.0, diSkill: 0.0, sdiSkill: 0.0, recoverySkill: 0.15, edgeguardSkill: 0.0, moveChoiceSkill: 0.15, noise: 0.9, fumbleChance: 0.3, techSkill: 0.0, parrySkill: 0.0 },
+  { level: 2, reactionFrames: 27, aggression: 0.22, shieldRate: 0.06, dodgeRate: 0.02, diSkill: 0.05, sdiSkill: 0.0, recoverySkill: 0.3, edgeguardSkill: 0.0, moveChoiceSkill: 0.25, noise: 0.8, fumbleChance: 0.24, techSkill: 0.05, parrySkill: 0.0 },
+  { level: 3, reactionFrames: 23, aggression: 0.3, shieldRate: 0.12, dodgeRate: 0.05, diSkill: 0.15, sdiSkill: 0.0, recoverySkill: 0.45, edgeguardSkill: 0.05, moveChoiceSkill: 0.35, noise: 0.7, fumbleChance: 0.19, techSkill: 0.12, parrySkill: 0.0 },
+  { level: 4, reactionFrames: 20, aggression: 0.38, shieldRate: 0.2, dodgeRate: 0.1, diSkill: 0.28, sdiSkill: 0.05, recoverySkill: 0.58, edgeguardSkill: 0.12, moveChoiceSkill: 0.45, noise: 0.6, fumbleChance: 0.15, techSkill: 0.22, parrySkill: 0.02 },
+  { level: 5, reactionFrames: 16, aggression: 0.47, shieldRate: 0.3, dodgeRate: 0.18, diSkill: 0.42, sdiSkill: 0.15, recoverySkill: 0.7, edgeguardSkill: 0.22, moveChoiceSkill: 0.55, noise: 0.5, fumbleChance: 0.11, techSkill: 0.35, parrySkill: 0.05 },
+  { level: 6, reactionFrames: 13, aggression: 0.56, shieldRate: 0.42, dodgeRate: 0.28, diSkill: 0.56, sdiSkill: 0.3, recoverySkill: 0.8, edgeguardSkill: 0.36, moveChoiceSkill: 0.66, noise: 0.4, fumbleChance: 0.08, techSkill: 0.5, parrySkill: 0.1 },
+  { level: 7, reactionFrames: 10, aggression: 0.66, shieldRate: 0.56, dodgeRate: 0.4, diSkill: 0.7, sdiSkill: 0.48, recoverySkill: 0.88, edgeguardSkill: 0.52, moveChoiceSkill: 0.77, noise: 0.3, fumbleChance: 0.05, techSkill: 0.65, parrySkill: 0.2 },
+  { level: 8, reactionFrames: 7, aggression: 0.78, shieldRate: 0.72, dodgeRate: 0.55, diSkill: 0.85, sdiSkill: 0.7, recoverySkill: 0.95, edgeguardSkill: 0.72, moveChoiceSkill: 0.88, noise: 0.2, fumbleChance: 0.02, techSkill: 0.8, parrySkill: 0.35 },
+  { level: 9, reactionFrames: 4, aggression: 0.9, shieldRate: 0.9, dodgeRate: 0.72, diSkill: 1.0, sdiSkill: 0.95, recoverySkill: 1.0, edgeguardSkill: 0.92, moveChoiceSkill: 1.0, noise: 0.1, fumbleChance: 0.0, techSkill: 0.95, parrySkill: 0.5 },
 ];
 
 export function tuningForLevel(level: number): LevelTuning {
