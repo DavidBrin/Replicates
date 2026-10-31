@@ -1416,7 +1416,7 @@ function strongerOf(a: Candidate, da: number, b: Candidate, db: number): Stronge
  *   other's hit. UNVERIFIED (Task 13 fix round 2): "Priority" says only that "two
  *   moves that cannot rebound that are used against each other are more prone to
  *   damaging both characters instead of cancelling out their hitboxes", which
- *   names no blocking either way;
+ *   leans against this reading (fix round 3): both hits landing, not both blocked;
  * - any other fighter that lost rebounds (`startRebound`).
  */
 function clankSide(

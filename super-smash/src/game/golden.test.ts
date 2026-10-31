@@ -749,6 +749,14 @@ describe("engine golden trace", () => {
   // rebounds; no hit. The four CPU matches and the other labs are byte-identical, and
   // every count is as it was: hits 34/22/18/18, 6, 0, 1, 4, 1 and 0; shield hits
   // 2/1/0/0, 3, 0, 0, 0, 0 and 0; KOs 1/2/1/0, 1, 2, 0, 0, 0 and 0.
+  // Plan 5 Task 13's fix round 3 (ruling R-T13l: a smash, once let go, never charges
+  // again; R-T13m: a Stone's stone ends cleanly) moved only kirby-marth, from the
+  // 2401-2500 sample: Marth's up smash on 2409, let go on 2411 and pressed again on
+  // 2418, no longer rewinds to its hold frame to charge; it plays on and meets Kirby's
+  // shield on 2421. Hits 30, shield hits 1 and KOs 0 there (were 18, 0 and 0). No
+  // golden match uses the Stone. The other nine are byte-identical. So now: hits
+  // 34/22/18/30, 6, 0, 1, 4, 1 and 0; shield hits 2/1/0/1, 3, 0, 0, 0, 0 and 0; KOs
+  // 1/2/1/0, 1, 2, 0, 0, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

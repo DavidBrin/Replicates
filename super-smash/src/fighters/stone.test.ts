@@ -162,6 +162,14 @@ describe("Kirby's Stone, as published (R-T13j)", () => {
     expect(free).toBe(77);
   });
 
+  it("is not ended by the special button on its 17th frame", () => {
+    const c = ctx();
+    // Its stone forms on step 28: the 17th stone frame is step 44.
+    const { states } = run(lineUp("void", 0, 0, "mario", 2000, c), 70, stoneInputs([44]), c);
+    expect(states.slice(44, 70).every((s) => stoneOf(kirbyOf(s), kirby) !== null)).toBe(true);
+    expect(frameOf(kirbyOf(states[50]))).toBe(46);
+  });
+
   it("on the ground: the landing hit on 11, its stone on 11-28, ended on its 18th frame, interruptible on 60", () => {
     const c = ctx();
     const hit = run(lineUp("finalDestination", 0, 0, "mario", 8, c), 20, stoneInputs(), c);
@@ -189,10 +197,10 @@ describe("its damage-based armour (R-T13j)", () => {
   });
 
   /** Kirby in the air at frame 20 of his Stone, held in place; a hitter's three-hit jab of `damage` on him. */
-  function armouredHit(damage: number): { kirby: FighterState; launched: boolean; damageTaken: number } {
+  function armouredHit(damage: number, rules: MatchRules = RULES): { kirby: FighterState; launched: boolean; damageTaken: number } {
     const h = hitter(damage);
     const c = ctx([h]);
-    const s0 = lineUp("finalDestination", 0, 5, "hitter", 17, c);
+    const s0 = lineUp("finalDestination", 0, 5, "hitter", 17, c, rules);
     const { states } = run(s0, 24, (i, s) => {
       // Held 5 above the floor: in the air, inside the jab's reach.
       Object.assign(kirbyOf(s), { y: fx(5), vy: 0 });
@@ -209,6 +217,29 @@ describe("its damage-based armour (R-T13j)", () => {
     expect(soft.damageTaken).toBeCloseTo(10 * 1.05, 2);
     const hard = armouredHit(30);
     expect(hard.launched).toBe(true);
+  });
+
+  // Fix round 3 (the re-review's N3): what it compares and what it adds up.
+  it("compares the damage before the 1v1 multiplier: a 22% hit in 1v1 (23.1 fresh, 27.72 after it) is taken", () => {
+    const duel = armouredHit(22, { ...RULES, oneOnOne: true });
+    expect(duel.launched).toBe(false);
+    expect(duel.damageTaken).toBeCloseTo(22 * 1.05 * 1.2, 1);
+  });
+
+  it("weighs each hit alone: two 15% hits on 19-28, 31.5 together, are both taken", () => {
+    const h = hitter(15);
+    const c = ctx([h]);
+    // Each hit freezes both for 15 frames: the second comes 6 of Kirby's frames after the first.
+    const { states, events } = run(lineUp("finalDestination", 0, 5, "hitter", 17, c), 50, (i, s) => {
+      Object.assign(kirbyOf(s), { y: fx(5), vy: 0 });
+      return [i === 0 ? Btn.Down | Btn.Special : 0, i === 18 ? Btn.Attack : 0];
+    }, c);
+    const hits = events.flatMap((e, i) => e.hits.filter((x) => x.attacker === 1).map(() => i));
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    const [first, second] = hits;
+    expect([first, second].map((i) => frameOf(kirbyOf(states[i])))).toEqual([20, 26]);
+    expect([first, second].map((i) => kirbyOf(states[i]).action)).toEqual(["special", "special"]);
+    expect(kirbyOf(states[second]).damage / 4096).toBeCloseTo(2 * 15 * 1.05, 2);
   });
 });
 
@@ -355,6 +386,15 @@ describe("a Stone that lands (R-T13k)", () => {
     expect(frameOf(kirbyOf(states[first]))).toBe(11);
   });
 
+  it("landing before its frame 11 goes on a frame a step to 11: none skipped", () => {
+    const c = ctx();
+    const { states } = run(lineUp("finalDestination", 0, 2, "mario", 60, c), 30, stoneInputs(), c);
+    const landed = states.findIndex((s) => kirbyOf(s).grounded);
+    const eleven = states.findIndex((s) => frameOf(kirbyOf(s)) === 11);
+    expect(eleven).toBeGreaterThan(landed);
+    for (let i = landed; i <= eleven; i++) expect(frameOf(kirbyOf(states[i])), `step ${i}`).toBe(frameOf(kirbyOf(states[i - 1])) + 1);
+  });
+
   it("landing on its frames 12-28 jumps back to 11 and is a stone on the landing frame", () => {
     const c = ctx();
     // Pressed 12 above the floor: it lands on its frame 18 (as a probe measured).
@@ -363,6 +403,85 @@ describe("a Stone that lands (R-T13k)", () => {
     expect(frameOf(kirbyOf(states[landed - 1]))).toBeGreaterThan(11);
     expect(frameOf(kirbyOf(states[landed]))).toBe(11);
     expect(stoneOf(kirbyOf(states[landed]), kirby)).not.toBeNull();
+  });
+
+  /** A drop from `y` held as a stone (no cancel), Mario at `rx`: every state and event, and the step it lands on. */
+  function heldDrop(y: number, rx: number, presses: number[] = []) {
+    const c = ctx();
+    const out = run(lineUp("finalDestination", 0, y, "mario", rx, c), 140, stoneInputs(presses), c);
+    return { ...out, landed: out.states.findIndex((s) => kirbyOf(s).grounded) };
+  }
+
+  it("landing while its stone is held on 46 goes to 11, with its landing hit", () => {
+    // From 120 it lands on step 49, its stone's 22nd frame, held on 46 (as a probe measured).
+    const { states, events, landed } = heldDrop(120, 12);
+    expect(frameOf(kirbyOf(states[landed - 1]))).toBe(46);
+    expect(kirbyOf(states[landed - 1]).combat.stoneFrames).toBeLessThan(150);
+    expect(frameOf(kirbyOf(states[landed]))).toBe(11);
+    const hit = events.findIndex((e) => e.hits.some((h) => h.attacker === 0));
+    expect(hit).toBe(landed);
+    expect(events[hit].hits.filter((h) => h.attacker === 0).every((h) => h.hitboxId === 1 || h.hitboxId === 2)).toBe(true);
+  });
+
+  // Fix round 3 (ruling R-T13m): a stone ended on the step it lands plays on.
+  it("ended on the step it lands, plays on: no jump back to 11, no stone again, no landing hit, interruptible 32 frames after", () => {
+    const { landed } = heldDrop(120, 60);
+    const { states, events } = heldDrop(120, 60, [landed]);
+    expect(frameOf(kirbyOf(states[landed - 1]))).toBe(46);
+    expect(states.findIndex((s) => kirbyOf(s).grounded)).toBe(landed);
+    expect(kirbyOf(states[landed]).combat.stoneFrames).toBe(150);
+    expect(frameOf(kirbyOf(states[landed]))).toBe(46);
+    expect(states.slice(landed + 1).every((s) => stoneOf(kirbyOf(s), kirby) === null)).toBe(true);
+    expect(events.slice(landed).every((e) => e.hits.every((h) => h.attacker !== 0))).toBe(true);
+    const free = states.findIndex((s, i) => i > landed && kirbyOf(s).action !== "special");
+    expect(free - landed).toBe(32);
+  });
+
+  // Fix round 3 (ruling R-T13m): the air's 32 frames after its cancel, wherever it lands.
+  it("cancelled in the air on 46 and landing on 47-77, is interruptible on 78 still (32 frames after the cancel)", () => {
+    const frames: number[] = [];
+    for (let y = 90; y <= 400; y += 5) {
+      const { states, landed } = heldDrop(y, 60, [45]);
+      if (kirbyOf(states[45]).grounded || frameOf(kirbyOf(states[45])) !== 46 || landed <= 45) continue;
+      const on = frameOf(kirbyOf(states[landed]));
+      if (on > 77) continue;
+      frames.push(on);
+      const free = states.findIndex((s, i) => i > 0 && kirbyOf(s).action !== "special");
+      expect(free, `landed on ${on} from ${y}`).toBe(77);
+      // The stone's record ends with the special.
+      expect(kirbyOf(states[free]).combat).toMatchObject({ stoneFrames: 0, stoneTaken: 0, stoneEndedAir: false });
+    }
+    expect(frames.some((g) => g <= 59)).toBe(true);
+    expect(frames.some((g) => g >= 60)).toBe(true);
+  });
+
+  it("re-simulates identically from any frame across an aerial cancel and its landing (rollback)", () => {
+    const { landed } = heldDrop(120, 60);
+    const c = ctx();
+    const inputs = stoneInputs([landed]);
+    const { states } = run(lineUp("finalDestination", 0, 120, "mario", 60, c), 100, inputs, c);
+    for (const at of [landed - 3, landed - 1, landed, landed + 5]) {
+      let replay = cloneState(states[at]);
+      expect(hashState(replay)).toBe(hashState(states[at]));
+      for (let i = at + 1; i < 100; i++) replay = step(replay, inputs(i), { prevInputs: inputs(i - 1), ctx: c }).state;
+      expect(hashState(replay), `rolled back to ${at}`).toBe(hashState(states[99]));
+    }
+  });
+
+  it("used on the ground after one ended in the air, takes the ground's length again: interruptible on 60", () => {
+    const c = ctx();
+    // An aerial Stone cancelled on 46 that lands in its end lag; once it is over, a Stone on the ground.
+    let firstFree = -1;
+    let second = -1;
+    const { states } = run(lineUp("finalDestination", 0, 112, "mario", 60, c), 200, (i, s) => {
+      const k = kirbyOf(s);
+      if (firstFree < 0 && i > 1 && k.action !== "special") firstFree = i;
+      if (firstFree >= 0 && second < 0 && k.grounded && k.action === "stand") second = i;
+      return [i === 0 || i === second ? Btn.Down | Btn.Special : i === 45 || (second >= 0 && i === second + 27) ? Btn.Special : 0, 0];
+    }, c);
+    expect(second).toBeGreaterThan(0);
+    const free = states.findIndex((s, i) => i > second && kirbyOf(s).action !== "special");
+    expect(free - second).toBe(59);
   });
 
   it("landing after its stone has ended plays on as it is: no stone again, no landing hit", () => {

@@ -444,8 +444,10 @@ export function startMove(f: FighterState, action: ActionState, slot: MoveSlot):
   f.move = slot;
   f.charge = 0;
   clearHitRecord(f);
-  // A new swing: it will join the stale queue on its first hit (Plan 3, Task 16).
+  // A new swing: it will join the stale queue on its first hit (Plan 3, Task 16),
+  // and a smash charges while the button stays held from here (R-T13l).
   f.combat.swingQueued = false;
+  f.combat.smashLetGo = false;
 }
 
 /** Damage multiplier from a held smash charge: 1.0 fresh, 1.4 at 60 frames. */
@@ -645,8 +647,11 @@ export function moveEndFrame(f: FighterState, move: MoveDef): number {
   // An aerial length of its own (Plan 5, Task 9 fix round 1: Kirby's spit, 38),
   // read where the fighter is on the frames it could end on. UNVERIFIED: the page
   // gives the two lengths, not when one is chosen; a spit begun on the ground
-  // that leaves it plays the aerial one.
-  if (!f.grounded && move.aerialTotalFrames !== undefined) return move.aerialTotalFrames;
+  // that leaves it plays the aerial one. A stone ended in the air keeps it wherever
+  // it lands (Plan 5, Task 13 fix round 3, ruling R-T13m): SmashWiki "Kirby
+  // (SSBU)/Down special" (revision 2041256) gives both timelines' "Interruptible
+  // (from cancel)" as 32 after the cancel, the air's 78 and the ground's 60.
+  if (move.aerialTotalFrames !== undefined && (!f.grounded || (move.stone !== undefined && f.combat.stoneEndedAir))) return move.aerialTotalFrames;
   return move.totalFrames;
 }
 
@@ -1287,10 +1292,14 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // times an early landing); and one that lands after its stone has ended plays on
   // as it is, never forming the stone again (UNVERIFIED too). A stone that has
   // formed carries into the ground's window, and one that forms on the landing
-  // counts the landing frame as its first, as the ground's frame 11 is.
+  // counts the landing frame as its first, as the ground's frame 11 is. Fix round 3
+  // (R-T13m): a stone that has ended plays on even on its last frame, the step the
+  // button (or its `maxFrames`) ends it on, and keeps the air's length after
+  // (`moveEndFrame`, `CombatState.stoneEndedAir`).
   const move = f.action === "special" && f.move !== null ? ctx.def.moves[f.move] : undefined;
   if (move?.landing !== undefined) {
-    if (moveFrameOf(f.actionFrame) <= move.landing.through) {
+    const ended = move.stone !== undefined && f.combat.stoneFrames >= move.stone.maxFrames;
+    if (!ended && moveFrameOf(f.actionFrame) <= move.landing.through) {
       f.actionFrame = Math.min(f.actionFrame, actionFrameOf(move.landing.at));
       clearHitRecord(f);
       const stone = move.stone;

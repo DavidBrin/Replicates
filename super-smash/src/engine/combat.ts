@@ -84,6 +84,13 @@ export interface CombatState {
    */
   swingQueued: boolean;
   /**
+   * Plan 5, Task 13 fix round 3 (ruling R-T13l): the attack button that started
+   * the current smash has been let go of, so it never charges again: a smash
+   * charges only while held from its start (`attackMain`). Reset by `startMove`,
+   * as `swingQueued`.
+   */
+  smashLetGo: boolean;
+  /**
    * The parked launch is an autolink (Plan 3, Task 19): what its vector needs is
    * parked on contact, and `releasePendingLaunch` computes the vector from it
    * when the freeze ends ("calculated after hitlag is over", so the victim's
@@ -230,6 +237,12 @@ export interface CombatState {
   /** Plan 5, Task 13 fix round 2: the damage (Q12) the current move's stone has blocked, against its `hp`. Per move, as `stoneFrames`. */
   stoneTaken: number;
   /**
+   * Plan 5, Task 13 fix round 3 (ruling R-T13m): the current move's stone ended in
+   * the air, so the move keeps its aerial length wherever it lands (`moveEndFrame`).
+   * Per move, as `stoneFrames`.
+   */
+  stoneEndedAir: boolean;
+  /**
    * The length, in frames after its freeze, of the rebound a lost clank sends the
    * fighter into (Plan 5, Task 13c fix round 1, ruling R-T13c-a: `reboundFrames`); 0
    * outside it. Cleared when the rebound ends, however it ends (`STATUS_REBOUND`).
@@ -256,6 +269,7 @@ export function emptyCombat(): CombatState {
     grabImmune: 0,
     tumbleDodge: false,
     swingQueued: false,
+    smashLetGo: false,
     autolink: false,
     autolinkPull: false,
     autolinkMomentumX: 0,
@@ -281,6 +295,7 @@ export function emptyCombat(): CombatState {
     landingCliffStop: false,
     stoneFrames: 0,
     stoneTaken: 0,
+    stoneEndedAir: false,
     rebound: 0,
   };
 }
@@ -301,6 +316,7 @@ export function cloneCombat(c: CombatState): CombatState {
     grabImmune: c.grabImmune,
     tumbleDodge: c.tumbleDodge,
     swingQueued: c.swingQueued,
+    smashLetGo: c.smashLetGo,
     autolink: c.autolink,
     autolinkPull: c.autolinkPull,
     autolinkMomentumX: c.autolinkMomentumX,
@@ -326,6 +342,7 @@ export function cloneCombat(c: CombatState): CombatState {
     landingCliffStop: c.landingCliffStop,
     stoneFrames: c.stoneFrames,
     stoneTaken: c.stoneTaken,
+    stoneEndedAir: c.stoneEndedAir,
     rebound: c.rebound,
   };
 }

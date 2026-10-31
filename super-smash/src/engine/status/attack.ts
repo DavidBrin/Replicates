@@ -57,15 +57,27 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.action === "special" && move.holdLoop !== undefined) holdLoopMain(f, intent, move.holdLoop);
   // A special that holds a stone (Plan 5, Task 13 fix round 2, R-T13j: Kirby's Stone).
   if (f.action === "special" && move.stone !== undefined) stoneMain(f, intent, move.stone);
-  // Charging a smash holds the animation on the frame before its script raises
-  // START_SMASH_HOLD, else on the frame before its earliest hitbox goes live (`smashHoldFrame`,
-  // ruling P5-R15), so nothing can be hit while it charges.
-  if (f.action === "attack" && move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
-    const holdFrame = smashHoldFrame(ctx.def, f);
-    if (f.actionFrame >= holdFrame) {
-      f.actionFrame = holdFrame;
-      f.charge += 1;
-      return;
+  // Charging a smash holds the animation on its hold frame (`smashHoldFrame`): the
+  // move's published one where it has one (`MoveDef.smashHold`, the first frame of
+  // SmashWiki's "Charges between", ruling R-T13i), else the frame before its script
+  // raises START_SMASH_HOLD (R-T13e), else the frame before its earliest hitbox goes
+  // live (ruling P5-R15), so nothing can be hit while it charges.
+  // It charges only while the button that started it stays held, from its start,
+  // until the release or the full charge; once let go, Attack does not touch the
+  // move again (Plan 5, Task 13 fix round 3, ruling R-T13l; `CombatState.smashLetGo`).
+  // SmashWiki "Smash attack" (https://www.ssbwiki.com/Smash_attack, revision
+  // 2062630): "they can be charged by holding the buttons down"; "the move's
+  // script calling for a command on a certain frame to determine whether the
+  // attack will be charged or not".
+  if (f.action === "attack" && move.chargeable) {
+    if (!intent.attackHeld) f.combat.smashLetGo = true;
+    if (!f.combat.smashLetGo && f.charge < SMASH_CHARGE_MAX) {
+      const holdFrame = smashHoldFrame(ctx.def, f);
+      if (f.actionFrame >= holdFrame) {
+        f.actionFrame = holdFrame;
+        f.charge += 1;
+        return;
+      }
     }
   }
   if (move.followUp !== undefined && intent.attackPressed && f.actionFrame >= 3 && hasMove(ctx, move.followUp)) {
@@ -153,6 +165,7 @@ function clearSpecialMove(f: FighterState): void {
   f.combat.counterDamage = 0;
   f.combat.stoneFrames = 0;
   f.combat.stoneTaken = 0;
+  f.combat.stoneEndedAir = false;
 }
 
 export const STATUS_SPECIAL: FighterStatus = {

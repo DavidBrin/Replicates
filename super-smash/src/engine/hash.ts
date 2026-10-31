@@ -179,6 +179,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.grabImmune);
   x = mixBool(x, c.tumbleDodge);
   x = mixBool(x, c.swingQueued);
+  x = mixBool(x, c.smashLetGo);
   x = mixBool(x, c.autolink);
   x = mixBool(x, c.autolinkPull);
   x = mixInt(x, c.autolinkMomentumX);
@@ -204,6 +205,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.landingCliffStop);
   x = mixInt(x, c.stoneFrames);
   x = mixInt(x, c.stoneTaken);
+  x = mixBool(x, c.stoneEndedAir);
   x = mixInt(x, c.rebound);
   return x;
 }

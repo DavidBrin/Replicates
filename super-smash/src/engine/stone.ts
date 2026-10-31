@@ -21,7 +21,8 @@
  * The frames are the move's own: the stone's window for where the fighter is (the
  * air's or the ground's) is its first 18 frames, and the move holds on its last
  * until the stone ends. `CombatState.stoneFrames` counts the stone's frames, and
- * is the stone's `maxFrames` once it has ended; `stoneTaken` the damage it took.
+ * is the stone's `maxFrames` once it has ended; `stoneTaken` the damage it took;
+ * `stoneEndedAir` whether it ended in the air (fix round 3, R-T13m).
  */
 
 import { actionFrameOf, moveFrameOf } from "./hitbox";
@@ -51,9 +52,11 @@ export function stoneMain(f: FighterState, intent: Pick<Intent, "specialPressed"
   if (frame < from || frame > to || c.stoneFrames >= stone.maxFrames) return;
   c.stoneFrames += 1;
   if (c.stoneFrames >= stone.maxFrames || (c.stoneFrames >= stone.minFrames && intent.specialPressed)) {
-    // Its last frame: the window's last, so the move goes on past it next.
+    // Its last frame: the window's last, so the move goes on past it next; ended in
+    // the air, on the air's length wherever it lands (R-T13m, `moveEndFrame`).
     f.actionFrame = actionFrameOf(to);
     c.stoneFrames = stone.maxFrames;
+    c.stoneEndedAir = !f.grounded;
   }
 }
 

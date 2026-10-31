@@ -54,7 +54,8 @@ import type { AcmdScript } from "@/engine/acmd/types";
 import { fx } from "@/engine/fixed";
 import { chargeHoldFrame } from "@/engine/hitbox";
 import { COPY_DAMAGE } from "@/engine/inhale";
-import { createInitialState, step } from "@/engine/simulate";
+import { hashState } from "@/engine/hash";
+import { cloneState, createInitialState, step } from "@/engine/simulate";
 import { hasSuperArmour, onLanded } from "@/engine/states";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -640,5 +641,116 @@ describe("a held smash, from its release to its first box (https://www.ssbwiki.c
     // Released, the move goes on from the frame after the hold, one a step, to the published first box.
     expect(firstLive - released).toBe(firstBox - chargeOn - 1);
     expect(s.fighters[0].actionFrame + 1).toBe(firstBox);
+  });
+});
+
+/**
+ * Plan 5, Task 13 fix round 3 (ruling R-T13l): a smash charges only while the
+ * button that started it is held, from its start, until the release or the full
+ * charge; after that, Attack does not touch the move. SmashWiki "Smash attack"
+ * (https://www.ssbwiki.com/Smash_attack, revision 2062630): "they can be charged
+ * by holding the buttons down"; "the move's script calling for a command on a
+ * certain frame to determine whether the attack will be charged or not".
+ */
+describe("a smash, once let go, never charges again (R-T13l)", () => {
+  const GAME = bakedContext(ctx, readBakeFromDisk());
+  const DIR: Partial<Record<MoveSlot, Btn>> = { fsmash: Btn.Right, usmash: Btn.Up, dsmash: Btn.Down };
+
+  interface SwingStep {
+    readonly inMove: boolean;
+    readonly frame: number;
+    readonly charge: number;
+  }
+
+  /** `slot` from a stand, the attack button held on the steps `held(i)` says (the press on step 0 with the direction). */
+  function swing(id: string, slot: MoveSlot, held: (i: number) => boolean): SwingStep[] {
+    let s = createInitialState("finalDestination", [{ defId: id }, { defId: "mario" }], RULES, 3, GAME);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(i === 0 ? -60 : 60), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    let prev: InputFrame[] = [0, 0];
+    const out: SwingStep[] = [];
+    for (let i = 0; i < 200; i++) {
+      const now = [i === 0 ? DIR[slot]! | Btn.Attack : held(i) ? Btn.Attack : 0, 0];
+      s = step(s, now, { prevInputs: prev, ctx: GAME }).state;
+      prev = now;
+      const f = s.fighters[0];
+      const inMove = f.action === "attack" && f.move === slot;
+      out.push({ inMove, frame: f.actionFrame, charge: f.charge });
+      if (!inMove) break;
+    }
+    return out;
+  }
+
+  /** The step the fighter leaves the move on. */
+  const endOf = (run: SwingStep[]) => run.findIndex((x) => !x.inMove);
+  /** Each step in the move from `from` on is the frame after the step before it: no hold, no rewind. */
+  function stepsOn(run: SwingStep[], from: number): void {
+    for (let i = Math.max(1, from); i < endOf(run); i++) expect(run[i].frame, `step ${i}`).toBe(run[i - 1].frame + 1);
+  }
+
+  it.each(RELEASES)("%s %s: tapped, then Attack pressed again past its hold frame, it neither charges nor rewinds, and ends on its FAF", (id, slot, chargeOn) => {
+    const tapped = swing(id, slot, () => false);
+    // Pressed again two frames past the hold frame, and held for five.
+    const again = swing(id, slot, (i) => i >= chargeOn + 1 && i < chargeOn + 6);
+    expect(again.every((x) => x.charge === 0)).toBe(true);
+    stepsOn(again, 1);
+    expect(endOf(again)).toBe(endOf(tapped));
+    expect(endOf(tapped)).toBeGreaterThan(chargeOn + 6);
+  });
+
+  it.each(RELEASES.filter(([, , chargeOn]) => chargeOn >= 3))("%s %s: let go before its hold frame and held again on it, it does not charge (held from its start)", (id, slot, chargeOn) => {
+    // Up on step 1; down again from the step the move reaches its hold frame (game frame `chargeOn`, step chargeOn − 1).
+    const run = swing(id, slot, (i) => i >= chargeOn - 1 && i < chargeOn + 20);
+    expect(run.every((x) => x.charge === 0)).toBe(true);
+    stepsOn(run, 1);
+    expect(endOf(run)).toBe(endOf(swing(id, slot, () => false)));
+  });
+
+  it.each(RELEASES)("%s %s: let go mid-charge and pressed again, it keeps the charge it had and goes on", (id, slot, chargeOn) => {
+    // Held through ten frames of charge, up for two steps, then held again for ten.
+    const letGo = chargeOn - 1 + 10;
+    const run = swing(id, slot, (i) => i < letGo || (i >= letGo + 2 && i < letGo + 12));
+    const kept = run[letGo].charge;
+    expect(kept).toBeGreaterThan(5);
+    expect(run.slice(letGo).every((x) => !x.inMove || x.charge === kept)).toBe(true);
+    stepsOn(run, letGo);
+    // It ends as a swing let go on the same step without the second press does.
+    expect(endOf(run)).toBe(endOf(swing(id, slot, (i) => i < letGo)));
+  });
+
+  it("charges the next smash held from its start, after one let go", () => {
+    let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 3, GAME);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(i === 0 ? -60 : 60), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    let prev: InputFrame[] = [0, 0];
+    // A tapped forward smash; then, once it has ended, a down smash held for 30 steps.
+    let second = -1;
+    let charged = 0;
+    for (let i = 0; i < 160; i++) {
+      const f0 = s.fighters[0];
+      const free = f0.action === "stand" && i > 5;
+      if (free && second < 0) second = i;
+      const now = [i === 0 ? Btn.Right | Btn.Attack : second >= 0 && i === second ? Btn.Down | Btn.Attack : second >= 0 && i < second + 30 ? Btn.Attack : 0, 0];
+      s = step(s, now, { prevInputs: prev, ctx: GAME }).state;
+      prev = now;
+      if (s.fighters[0].move === "dsmash") charged = Math.max(charged, s.fighters[0].charge);
+    }
+    expect(second).toBeGreaterThan(0);
+    expect(charged).toBeGreaterThan(20);
+  });
+
+  it("re-simulates identically from any frame of a tapped smash pressed again (rollback)", () => {
+    let s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 3, GAME);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", grounded: true, platform: 0, x: fx(i === 0 ? -60 : 60), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    const inputs = (i: number): InputFrame[] => [i === 0 ? Btn.Right | Btn.Attack : i >= 8 && i < 14 ? Btn.Attack : 0, 0];
+    const states: GameState[] = [];
+    for (let i = 0; i < 40; i++) {
+      s = step(s, inputs(i), { prevInputs: i === 0 ? [0, 0] : inputs(i - 1), ctx: GAME }).state;
+      states.push(s);
+    }
+    for (const at of [1, 3, 7, 9]) {
+      let replay = cloneState(states[at]);
+      expect(hashState(replay)).toBe(hashState(states[at]));
+      for (let i = at + 1; i < 40; i++) replay = step(replay, inputs(i), { prevInputs: inputs(i - 1), ctx: GAME }).state;
+      expect(hashState(replay), `rolled back to ${at}`).toBe(hashState(states[39]));
+    }
   });
 });
