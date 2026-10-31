@@ -14,10 +14,10 @@
 
 import { PerspectiveCamera } from "three";
 
-import { VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
+import { SIDE_FOV_DEG, VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
 
-/** Vertical field of view, degrees. Narrow, like Ultimate's side camera. UNVERIFIED: tuned by eye. */
-export const SIDE_FOV_DEG = 26;
+/** Vertical field of view, degrees (`render/camera.ts`, where the overlay reads it too). */
+export { SIDE_FOV_DEG };
 
 export interface SideCameraPose {
   readonly x: number;

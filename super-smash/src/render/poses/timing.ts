@@ -183,7 +183,9 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   dthrow: "dthrow",
   ledgeAttack: "ftilt",
   getUpAttack: "dsmash",
-  finalSmash: "neutralB",
+  // Its own name (Task 17 fix round 3, ruling R-T17m): a fighter that authors no
+  // Final Smash clip plays its own neutral special's (`POSE_FALLBACK`).
+  finalSmash: "finalSmash",
   // Plan 5, Task 5 (P5-R4): the counterattack is a clip of its own, its strike
   // key on the cut; the counter's guard stays `downB`.
   counterAttack: "counterAttack",

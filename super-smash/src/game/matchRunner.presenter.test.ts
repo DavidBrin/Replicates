@@ -8,7 +8,7 @@ import { createNullTransport } from "@/net/transport";
 import { VIEW_HEIGHT, VIEW_WIDTH, cameraTarget, createCamera } from "@/render/camera";
 import * as characterArt from "@/render/characterArt";
 import { countCapsules, createMockContext } from "@/render/mockContext";
-import { INTERPOLATION_SNAP_UNITS, interpolatePosition, type RenderState } from "@/render/renderer";
+import { INTERPOLATION_SNAP_UNITS, interpolatePosition, sceneShiftAt, type RenderState } from "@/render/renderer";
 import { drawnTop, overlayAnchor } from "@/render3d/anchors";
 import { claimContext } from "@/render3d/fakeContext";
 import { createModelCache } from "@/render3d/models/loader";
@@ -193,14 +193,33 @@ describe("the camera a Final Smash's scene gets (Plan 5, Task 17 fix round 2)", 
     runner.advance(1);
     const s = runner.state;
     const tops = s.fighters.map((f) => drawnTop(GAME_SIM_CONTEXT.fighter(f.defId), f, s.frame, GAME_SIM_CONTEXT.bake));
-    const [rs] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    const [rs, , alpha] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
     expect(rs.tops).toEqual(tops);
+    // And the shift, eased once a paint for both drawers (R-T17o): held, so as measured.
+    expect(rs.sceneShift).toEqual(sceneShiftAt(rs, alpha));
+    expect(rs.sceneShift[0]).toBeLessThan(0);
     expect(tops[0]).toBeGreaterThan(30);
     const stage = getStageOrThrow("finalDestination");
     expect(s.cinematic).toBe(0);
     expect(runner.camera.targetZoom).toBeCloseTo(cameraTarget(s, stage, tops).zoom, 9);
     expect(runner.camera.targetZoom).toBeLessThan(cameraTarget(s, stage).zoom * 0.95);
     runner.dispose();
+  });
+
+  it("eases the release it hands the drawing: a fighter let go closes the gap over frames, not in one (R-T17o)", () => {
+    const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
+    const runner = scene("finalAttack", 20, presenter);
+    runner.advance(1);
+    const shiftOf = () => (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0].sceneShift[0] as number;
+    const held = shiftOf();
+    expect(held).toBeLessThan(-1);
+    // Let Mario go, far off: the shift this step measures is none.
+    const mario = runner.state.fighters[1];
+    Object.assign(mario, { action: "stand", x: 60 * 4096 });
+    mario.combat.trappedBy = -1;
+    runner.advance(1);
+    expect(shiftOf()).toBeLessThan(0);
+    expect(shiftOf()).toBeGreaterThan(held);
   });
 
   it("punches in on the uppercut's hit, read off the move the runner hands it", () => {

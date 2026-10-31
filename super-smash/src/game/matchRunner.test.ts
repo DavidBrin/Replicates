@@ -43,7 +43,8 @@ import { stepVfx } from "@/render/vfx";
 
 // Nothing in these tests paints a real canvas; the stub lets one test see what
 // the runner would have drawn.
-vi.mock("@/render/renderer", () => ({ render: vi.fn() }));
+// The drawing's own draw shift (Task 17), as nobody here is in a Final Smash: none.
+vi.mock("@/render/renderer", () => ({ render: vi.fn(), sceneShiftAt: vi.fn((s: { current: { fighters: unknown[] } }) => s.current.fighters.map(() => 0)) }));
 // The real `stepVfx`, watched, so a test can see what the runner hands it.
 vi.mock("@/render/vfx", async (original) => {
   const real = await original<typeof import("@/render/vfx")>();

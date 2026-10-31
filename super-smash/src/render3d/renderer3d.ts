@@ -366,15 +366,15 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
 
       let shadowCount = 0;
       shields.fill(null);
-      // A Final Smash's user backed off a fighter it holds, as the overlay draws it (R-T17d, R-T17i).
-      const shift = sceneShiftAt(rs, alpha);
+      // A Final Smash's user backed off a fighter it holds, as the overlay draws it (R-T17d, R-T17i, R-T17o).
+      const shift = rs.sceneShift ?? sceneShiftAt(rs, alpha);
       for (let i = 0; i < game.fighters.length; i++) {
         const f = game.fighters[i];
         const fighter = fighters[f.port] ?? null;
         const def = rs.fighters[f.port] ?? null;
         if (fighter === null || def === null) continue;
         const pos = interpolatePosition(previousOf(rs.previous, f.port), f, alpha);
-        pos.x += shift[i];
+        pos.x += shift[i] ?? 0;
         fighter.update({
           f,
           x: pos.x,

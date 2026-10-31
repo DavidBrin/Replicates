@@ -24,6 +24,10 @@ import { resolve, type Skeleton } from "../../skeleton";
 import { poses } from "./poses";
 import { fx, projectiles } from "./fx";
 import { fxFor } from "../index";
+import { clipFor } from "../poses";
+import { poseNameFor } from "../../poses/timing";
+import { localHurtboxes } from "@/engine/acmd/hurtboxes";
+import { makeFighter } from "../../testFixtures";
 import { createMockContext, type MockContext } from "../../mockContext";
 
 const rig = getCharacterRig("samus");
@@ -1055,30 +1059,6 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
     return { strokes, circles };
   }
 
-  /** The beams drawn: for each distinct line, its widest stroke, in world units. */
-  function beams(strokes: ReturnType<typeof shapes>["strokes"], dir: 1 | -1 = 1) {
-    const out = new Map<string, { x1: number; x2: number; y: number; height: number }>();
-    for (const st of strokes) {
-      const key = `${st.from.join(",")}>${st.to.join(",")}`;
-      const beam = {
-        x1: ((st.from[0] - FEET_X) / U) * dir,
-        x2: ((st.to[0] - FEET_X) / U) * dir,
-        y: (FEET_Y - st.from[1]) / U,
-        height: st.width / U,
-      };
-      const had = out.get(key);
-      if (had === undefined || had.height < beam.height) out.set(key, beam);
-    }
-    return [...out.values()].sort((a, b) => b.y - a.y);
-  }
-
-  const rounded = (v: { x1: number; x2: number; y: number; height: number }) => ({
-    x1: Math.round(v.x1 * 100) / 100,
-    x2: Math.round(v.x2 * 100) / 100,
-    y: Math.round(v.y * 100) / 100,
-    height: Math.round(v.height * 100) / 100,
-  });
-
   it("is painted: today Samus has none, and the Final Smash is invisible", () => {
     expect(fxFor("samus", "finalSmash")).toBeTypeOf("function");
   });
@@ -1101,38 +1081,121 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
     }
   });
 
-  it("fires the beam at its box's length and height: 12 to 162 ahead at 15 up, 10 high, on 81-208", () => {
-    for (const frame of [81, 85]) expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([{ x1: 12, x2: 162, y: 15, height: 10 }]);
+  /**
+   * The beam's fills (Task 17 fix round 3, ruling R-T17k): each `fillRect` in world
+   * units ahead of her feet and up from them, with the vertical gradient it was
+   * filled with (the last one created), its stops as fractions top to bottom.
+   */
+  function fills(frame: number, dir: 1 | -1 = 1) {
+    const { ctx } = laserAt(frame, dir);
+    const out: { x0: number; x1: number; lo: number; hi: number; grad: { top: number; bottom: number; stops: [number, string][] } | null }[] = [];
+    let grad: { top: number; bottom: number; stops: [number, string][] } | null = null;
+    for (const c of ctx.calls) {
+      if (c.method === "createLinearGradient") {
+        const a = c.args.map(Number);
+        grad = { top: (FEET_Y - a[1]) / U, bottom: (FEET_Y - a[3]) / U, stops: [] };
+      }
+      if (c.method === "addColorStop" && grad !== null) grad.stops.push([Number(c.args[0]), String(c.args[1]).replace(/\s/g, "")]);
+      if (c.method === "fillRect") {
+        const [x, y, w, h] = c.args.map(Number);
+        const xs = [(x - FEET_X) / U, (x + w - FEET_X) / U].map((v) => v * dir).sort((p, q) => p - q);
+        const ys = [(FEET_Y - y) / U, (FEET_Y - y - h) / U].sort((p, q) => p - q);
+        out.push({ x0: xs[0], x1: xs[1], lo: ys[0], hi: ys[1], grad });
+      }
+    }
+    return { out, strokes: shapes(ctx).strokes, circles: shapes(ctx).circles };
+  }
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const box = (f: ReturnType<typeof fills>["out"][number]) => ({ x0: r2(f.x0), x1: r2(f.x1), lo: r2(f.lo), hi: r2(f.hi) });
+  const alphaOf = (colour: string) => Number(colour.slice(colour.lastIndexOf(",") + 1, -1));
+
+  it("fires one beam, its main box's height, 12 ahead to its far end: 10 to 20 up on 81-85 (ruling R-T17k)", () => {
+    for (const frame of [81, 85]) expect(fills(frame).out.map(box), `frame ${frame}`).toEqual([{ x0: 12, x1: 167, lo: 10, hi: 20 }]);
   });
 
-  it("adds samus_laser2's two fringe beams from 86, 14 above and 14 below it, 12 high", () => {
-    for (const frame of [86, 150, 208]) {
-      expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([
-        { x1: 12, x2: 162, y: 29, height: 12 },
-        { x1: 12, x2: 162, y: 15, height: 10 },
-        { x1: 12, x2: 162, y: 1, height: 12 },
-      ]);
+  it("from 86, one beam over the envelope of the main box and samus_laser2's two fringes, its edges on the fringes' outer edges: -5 to 35 up", () => {
+    for (const frame of [86, 150, 208]) expect(fills(frame).out.map(box), `frame ${frame}`).toEqual([{ x0: 12, x1: 168, lo: -5, hi: 35 }]);
+  });
+
+  it("shades it in one vertical gradient over the envelope: clear at its edges, the effect script's violet across the fringes, the pale body over the main box, a white core over its middle", () => {
+    const { out } = fills(150);
+    const g = out[0].grad!;
+    expect([g.top, g.bottom]).toEqual([35, -5]);
+    const at = (y: number) => (35 - y) / 40;
+    const stop = (y: number) => g.stops.find(([o]) => Math.abs(o - at(y)) < 1e-9)?.[1];
+    // Clear at the envelope's edges.
+    expect(alphaOf(stop(35)!)).toBe(0);
+    expect(alphaOf(stop(-5)!)).toBe(0);
+    // effect_shoot's violet on the fringes' axes, 29 and 1: its colour blend, 70, 50,
+    // 160 (WuBoytH SSBU-Dumped-Scripts at bac470d,
+    // https://github.com/WuBoytH/SSBU-Dumped-Scripts/blob/bac470d/hdr-format/samus/samus_laser/Shoot.txt).
+    expect(stop(29)!.startsWith("rgba(70,50,160,")).toBe(true);
+    expect(stop(1)!.startsWith("rgba(70,50,160,")).toBe(true);
+    // The pale body at the main box's edges, 10 and 20; white at its middle, 15.
+    expect(stop(20)!.startsWith("rgba(200,216,255,")).toBe(true);
+    expect(stop(10)!.startsWith("rgba(200,216,255,")).toBe(true);
+    expect(stop(15)!.startsWith("rgba(255,255,255,")).toBe(true);
+    expect(alphaOf(stop(15)!)).toBeGreaterThan(0.9);
+  });
+
+  it("draws no bands and nothing behind the muzzle: one fill, no strokes, no caps, from 12 ahead on", () => {
+    for (const frame of [81, 86, 150, 209, 216]) {
+      const f = fills(frame);
+      expect(f.out.length, `frame ${frame}`).toBe(1);
+      expect(f.strokes, `frame ${frame}`).toEqual([]);
+      expect(f.circles, `frame ${frame}`).toEqual([]);
+      expect(f.out[0].x0, `frame ${frame}`).toBe(12);
     }
   });
 
-  it("ends in the three blasts, 209-216, at their boxes' sizes: the beam's 22 high, each fringe's 25", () => {
-    for (const frame of [209, 216]) {
-      expect(beams(laserAt(frame).strokes).map(rounded), `frame ${frame}`).toEqual([
-        { x1: 12, x2: 162, y: 29, height: 25 },
-        { x1: 12, x2: 162, y: 15, height: 22 },
-        { x1: 12, x2: 162, y: 1, height: 25 },
-      ]);
+  it("ends in one blast over its envelope, 209-216: the main blast's and the fringe blasts', -11.5 to 41.5, fading out", () => {
+    for (const frame of [209, 216]) expect(fills(frame).out.map(box), `frame ${frame}`).toEqual([{ x0: 12, x1: 174.5, lo: -11.5, hi: 41.5 }]);
+    const core = (frame: number) => Math.max(...fills(frame).out[0].grad!.stops.map(([, c]) => alphaOf(c)));
+    expect(core(216)).toBeLessThan(core(209));
+    for (const frame of [217, 240, 263]) expect(fills(frame).out, `frame ${frame}`).toEqual([]);
+  });
+
+  it("mirrors with her: facing left, the beam runs left of her feet, and so do the charge and the muzzle", () => {
+    expect(fills(150, -1).out.map(box)).toEqual(fills(150).out.map(box));
+    for (const [frame, ahead] of [[60, 17], [72, 20]] as const) {
+      const biggest = laserAt(frame, -1).circles.reduce((a, b) => (b.r > a.r ? b : a));
+      expect(biggest.x, `frame ${frame}`).toBe(FEET_X - ahead * U);
     }
-    for (const frame of [217, 240, 263]) expect(laserAt(frame).strokes, `frame ${frame}`).toEqual([]);
+    const { ctx } = laserAt(150, -1);
+    const rect = ctx.calls.find((c) => c.method === "fillRect")!.args.map(Number);
+    expect(rect[0] + Math.max(0, rect[2])).toBeLessThanOrEqual(FEET_X - 12 * U);
+  });
+});
+
+describe("Zero Laser's cannon, as the bake draws it (Task 17 fix round 3, ruling R-T17m)", () => {
+  const bake = readBakeFromDisk();
+  const GAME = withLimbScripts(samus, bake.bones);
+  const bones = bake.hurtboxes("samus")!.map((h) => h.bone);
+  /** The forearm's capsule on move frame `mf`: its angle off the horizontal, degrees (up is positive), and its forward end's height. */
+  function forearm(mf: number) {
+    const caps = localHurtboxes(GAME, makeFighter({ defId: "samus", action: "special", move: "finalSmash", actionFrame: mf - 1 }), 0, bake)!;
+    const c = caps[bones.indexOf("armr")];
+    const [x1, y1, x2, y2] = [c.x1, c.y1, c.x2, c.y2].map(toFloat);
+    const [bx, by, fx2, fy] = x1 <= x2 ? [x1, y1, x2, y2] : [x2, y2, x1, y1];
+    return { angle: (Math.atan2(fy - by, fx2 - bx) * 180) / Math.PI, end: fy };
+  }
+
+  it("holds the cannon level along the beam, from the laser's first frame to the beam's last, 70 to 216: no recoil climbing over it", () => {
+    const beam = samus.moves.finalSmash!.hitboxes.find((hb) => hb.id === 9)!;
+    const [lo, hi] = [toFloat(beam.y) - toFloat(beam.radius), toFloat(beam.y) + toFloat(beam.radius)];
+    for (let mf = 70; mf <= 216; mf += 2) {
+      const arm = forearm(mf);
+      expect(Math.abs(arm.angle), `frame ${mf}: ${arm.angle.toFixed(1)} degrees`).toBeLessThanOrEqual(5);
+      // On the beam: the cannon's end inside its main box's height.
+      expect(arm.end, `frame ${mf}`).toBeGreaterThanOrEqual(lo);
+      expect(arm.end, `frame ${mf}`).toBeLessThanOrEqual(hi);
+    }
   });
 
-  it("mirrors with her: facing left, the beam runs left of her feet", () => {
-    expect(beams(laserAt(150, -1).strokes, -1).map(rounded)).toEqual(beams(laserAt(150).strokes).map(rounded));
-    for (const st of laserAt(150, -1).strokes) expect(st.to[0]).toBeLessThan(FEET_X);
-  });
-
-  it("is lit violet at its edge, the light its effect script casts: colour_blend 70, 50, 160 (effect_shoot)", () => {
-    const edge = laserAt(150).strokes.filter((st) => st.width === 10 * U).map((st) => st.colour);
-    expect(edge.some((colour) => colour.replace(/\s/g, "").startsWith("rgba(70,50,160"))).toBe(true);
+  it("plays a clip of her own, not Charge Shot's single shot stretched over the beam", () => {
+    expect(clipFor("samus", "finalSmash")).not.toBe(clipFor("samus", "neutralB"));
+    expect(poseNameFor({ action: "special", move: "finalSmash", jumpsUsed: 0, fastFalling: false })).toBe("finalSmash");
+    // Everybody else's Final Smash start keeps their own neutral special's.
+    for (const id of ["mario", "donkeyKong", "link", "fox", "kirby", "pikachu", "marth"]) expect(clipFor(id, "finalSmash"), id).toBe(clipFor(id, "neutralB"));
   });
 });

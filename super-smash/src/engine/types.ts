@@ -652,6 +652,13 @@ export interface FinalPhase {
    * never reads it, and both fighters stay where they are in it.
    */
   readonly sceneGap?: number;
+  /**
+   * The gap to a fighter held *behind* the user, where it differs from
+   * `sceneGap` (Plan 5, Task 17 fix round 3, ruling R-T17n: Jungle Rush traps up
+   * to 7 units behind Donkey Kong, and his barrage's and uppercut's back and legs
+   * reach further behind him than his front does ahead). Presentation only.
+   */
+  readonly sceneGapBehind?: number;
 }
 
 /**

@@ -55,6 +55,7 @@ import { blendedPose, clipFrameFor } from "./blend";
 import { rigHeight } from "./skeleton";
 import { drawBackground, drawBlastZone } from "./stageArt";
 import { drawMoveFx } from "./specialFx";
+import { paintClearOfStage, stageSolidsOnScreen, type Point } from "./stageClip";
 import { projectilePainterFor } from "./chars";
 import {
   drawFinalSmashAura,
@@ -109,6 +110,12 @@ export interface RenderState {
    * its user off a launched fighter while the two are level (`sceneDrawShift`).
    */
   readonly tops?: readonly (number | null)[];
+  /**
+   * Per fighter, the draw shift this paint, eased by the runner
+   * (`sceneShiftEase.ts`, ruling R-T17o): its release closes over a few frames
+   * rather than in one. Without it, `sceneShiftAt`'s own, uneased.
+   */
+  readonly sceneShift?: readonly number[];
 }
 
 /** A fighter's head in the 3D world, relative to their feet, in world units. */
@@ -205,8 +212,8 @@ export function interpolatePosition(
  * fires on, and closes the gap only as the victim flies clear (10 to 25 units on
  * its first frame of flight in the scene probe; Jungle Rush's uppercut sends it
  * past the raised fist, 44 up, on its second). Away is back from a fighter ahead
- * of it and on from one behind it; with fighters on both sides, the larger need
- * wins. Everybody else, and both in the sim, stay where the sim has them.
+ * of it and on from one behind it (by `sceneGapBehind` where the part names one);
+ * with fighters on both sides, the larger need wins. Everybody else, and both in the sim, stay where the sim has them.
  * Measured between where the two are drawn (`at`, the sim's positions by
  * default; `sceneShiftAt` passes the interpolated ones). The overlay and the 3D
  * presenter both draw through this. Presentation choice: no source describes it.
@@ -223,6 +230,7 @@ export function sceneDrawShift(
     const final = defs[user.port]?.moves[user.move]?.final;
     if (final === undefined || final.sceneGap === undefined) return;
     const gap = toFloat(final.sceneGap);
+    const behind = final.sceneGapBehind === undefined ? gap : toFloat(final.sceneGapBehind);
     const u = at(user);
     let back = 0;
     let on = 0;
@@ -232,7 +240,7 @@ export function sceneDrawShift(
       if (!heldBy(game, f, user, final.phase !== "start", p.y - u.y, gap, tops)) continue;
       const ahead = (p.x - u.x) * user.facing;
       if (ahead >= 0) back = Math.max(back, gap - ahead);
-      else on = Math.max(on, gap + ahead);
+      else on = Math.max(on, behind + ahead);
     }
     if (back > 0 || on > 0) shift[i] = back >= on ? -user.facing * back : user.facing * on;
   });
@@ -364,13 +372,16 @@ export function drawScene(
   if (state.showBlastZone) drawBlastZone(ctx, stage, camera);
 
   // A Final Smash's user backed off a fighter it holds, measured where the two
-  // are drawn this paint (R-T17d, R-T17i).
-  const shift = sceneShiftAt(state, interpolationAlpha);
+  // are drawn this paint (R-T17d, R-T17i), its release eased by the runner (R-T17o).
+  const shift = state.sceneShift ?? sceneShiftAt(state, interpolationAlpha);
+  // The stage's solid bodies on screen, which move effects and projectiles are kept
+  // off (Plan 5, Task 17 fix round 3, ruling R-T17l).
+  const solids = stageSolidsOnScreen(stage, game.stageFrame, camera);
   const drawn = state.current.fighters.map<DrawnFighter>((fighter, i) => {
     const previous = state.previous?.fighters.find((f) => f.port === fighter.port);
     const pos = interpolatePosition(previous, fighter, interpolationAlpha);
     const def = state.fighters[fighter.port] ?? null;
-    return { fighter, x: pos.x + shift[i], y: pos.y, def, rig: getCharacterRig(def?.id) };
+    return { fighter, x: pos.x + (shift[i] ?? 0), y: pos.y, def, rig: getCharacterRig(def?.id) };
   });
 
   // Whoever is doing something goes on top.
@@ -390,10 +401,12 @@ export function drawScene(
       hidden[d.fighter.port] = true;
       continue;
     }
-    hidden[d.fighter.port] = drawOneFighter(ctx, state, camera, d);
+    hidden[d.fighter.port] = drawOneFighter(ctx, state, camera, d, solids);
   }
 
-  drawProjectiles(ctx, game, camera, projectileVisual(state));
+  // Behind the stage's face, not over it (R-T17l): an arrow skimming the floor, a
+  // Mario Finale flame half below it.
+  paintClearOfStage(ctx, solids, () => drawProjectiles(ctx, game, camera, projectileVisual(state)));
   drawSmashBall(ctx, game, camera);
   // The sparks and bursts are the 3D layer's sprites; drawn here too, each would show twice.
   drawParticles(ctx, state.vfx, camera, WORLD3D_PARTICLES);
@@ -475,7 +488,7 @@ export function visualHeight(rig: CharacterRig): number {
  * whether the move effect replaces the fighter this frame (Kirby's Stone), for
  * the 3D layer to hide them.
  */
-function drawOneFighter(ctx: CanvasRenderingContext2D, state: RenderState, cam: Camera, d: DrawnFighter): boolean {
+function drawOneFighter(ctx: CanvasRenderingContext2D, state: RenderState, cam: Camera, d: DrawnFighter, solids: readonly (readonly Point[])[]): boolean {
   const f = d.fighter;
   const rig = d.rig;
   const timing = moveTimingFor(d.def, f.move);
@@ -512,16 +525,19 @@ function drawOneFighter(ctx: CanvasRenderingContext2D, state: RenderState, cam: 
 
   // A special's own graphic, which may replace the fighter — Kirby's Stone is
   // the fighter, not a prop held by one.
-  const fx = drawMoveFx(ctx, d.def, f, cam, height, screen.x, screen.y, {
-    lastHit: state.vfx.lastHit,
-    frame: state.current.frame,
-  });
+  // Clear of the stage's solid bodies (R-T17l): Zero Laser's beam and blasts reach below the floor.
+  const fx = paintClearOfStage(ctx, solids, () =>
+    drawMoveFx(ctx, d.def, f, cam, height, screen.x, screen.y, {
+      lastHit: state.vfx.lastHit,
+      frame: state.current.frame,
+    }),
+  );
 
   // Whatever the effect asked to be painted after the body: the near half of a
   // drill, the tip of a swing that passes in front of the shoulder, a spark on
   // the fist rather than behind it. Before the port tag, which is readability
   // the player needs and a move graphic should not bury.
-  for (const paint of fx.over) paint();
+  if (fx.over.length > 0) paintClearOfStage(ctx, solids, () => fx.over.forEach((paint) => paint()));
 
   drawFinalSmashAura(ctx, f, cam, height, state.current.frame);
   // Above the fighter, and after them, because a broken shield is drawn at the

@@ -65,6 +65,18 @@ import type { PoseName } from "../../poses/library";
  */
 const CANNON_LEVEL = { upperArmR: 88, forearmR: -4 } as const;
 
+/**
+ * Charge Shot's braced lunge, the cannon out level (`neutralB`'s first key), which
+ * Zero Laser holds along its beam.
+ */
+const ZERO_LASER_BRACE = P({
+  torso: 26, head: -22, hip: 4,
+  thighR: 122, shinR: 98, footR: -74,
+  thighL: 221, shinL: -12, footL: -96,
+  upperArmR: 68, forearmR: -6,
+  upperArmL: 186, forearmL: -46,
+});
+
 export const poses: Partial<Record<PoseName, PoseClip>> = {
   /* --------------------------------------------------------------- stand -- */
 
@@ -338,6 +350,58 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         }),
       },
       { t: 1, pose: P({ torso: 2, upperArmR: 140, forearmR: -22, upperArmL: 186, forearmL: -28 }) },
+    ],
+  },
+
+  /**
+   * Zero Laser (Plan 5, Task 17 fix round 3, ruling R-T17m): her own clip, where
+   * it played Charge Shot's, whose single shot's recoil climbed the cannon 30° over
+   * the beam (the re-review 2's V3: the baked forearm at +12° to +38° from 81 to
+   * 130, then down to −17° by 216).
+   *
+   * She takes Charge Shot's braced lunge, the cannon out level, and holds it:
+   * through the charge (1-69), the shove back on the laser's first frame (70,
+   * `MoveDef.clipStrike` on `strike`), and the whole beam, to its last frame, 216.
+   * Every key from the charge to 216 has the same angles, so the cannon stays level
+   * along the beam (`samus.test.ts` pins the baked forearm within 5° of level and
+   * on the beam's main box). Then she rises out of the lunge by 263.
+   *
+   * Clip time is frame-mapped piecewise round the strike (`poseTimeFor`): frames
+   * 0-69 to 0-0.3, and 70-263 to 0.3-1, so frame 216 is at 0.827. Presentation
+   * choice throughout: the game's own `final` animation is not in this pipeline.
+   */
+  finalSmash: {
+    loop: false,
+    strike: 0.3,
+    keys: [
+      { t: 0, pose: ZERO_LASER_BRACE, offsetX: 0.35, offsetY: -0.5, ease: "linear" },
+      { t: 0.29, pose: ZERO_LASER_BRACE, offsetX: 0.35, offsetY: -0.5, ease: "linear" },
+      // The laser leaves: the whole body shoved back along the ground, the cannon level.
+      { t: 0.3, pose: ZERO_LASER_BRACE, offsetX: -0.2, offsetY: -0.56, scaleX: 0.96, ease: "out" },
+      // Braced into the beam, and held to its last frame, 216.
+      { t: 0.36, pose: ZERO_LASER_BRACE, offsetX: 0, offsetY: -0.52, ease: "linear" },
+      { t: 0.828, pose: ZERO_LASER_BRACE, offsetX: 0, offsetY: -0.52 },
+      // Up out of the lunge, the cannon coming down.
+      {
+        t: 0.92,
+        pose: P({
+          torso: 10, head: -8, hip: 3,
+          thighR: 145, shinR: 55, footR: -70,
+          thighL: 205, shinL: 4, footL: -84,
+          upperArmR: 120, forearmR: -30,
+          upperArmL: 172, forearmL: -50,
+        }),
+        offsetY: -0.25,
+      },
+      {
+        t: 1,
+        pose: P({
+          hip: 1, torso: 13, head: -11,
+          thighR: 163, shinR: 26, thighL: 195, shinL: -5,
+          upperArmR: 171, forearmR: -60,
+          upperArmL: 168, forearmL: -62,
+        }),
+      },
     ],
   },
 

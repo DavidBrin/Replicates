@@ -21,13 +21,14 @@ import { toFloat } from "@/engine/fixed";
 import { HARD_PLATFORM_DEPTH, platformCentreX } from "@/engine/physics";
 import type { Platform, StageDef } from "@/engine/types";
 import { stagePaintFor } from "@/render/stageArt";
+import { MAIN_DEPTH_Z } from "@/render/stageClip";
 
 /** A main body is the sim's solid, as deep as the sim makes it (R13). */
 export const MAIN_DEPTH = toFloat(HARD_PLATFORM_DEPTH);
 /** How thick a soft platform is drawn. UNVERIFIED (cosmetic): the sim gives a soft platform no body. */
 export const SOFT_THICKNESS = 1.2;
-/** How far a platform reaches toward and away from the camera, in units. UNVERIFIED: by eye. */
-export const MAIN_DEPTH_Z = 36;
+/** How far a solid platform reaches toward and away from the camera (`render/stageClip.ts`, where the overlay clips by it). */
+export { MAIN_DEPTH_Z };
 export const SOFT_DEPTH_Z = 18;
 
 type Rgb = readonly [number, number, number];

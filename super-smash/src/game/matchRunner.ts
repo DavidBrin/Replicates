@@ -38,7 +38,7 @@ import type { FighterSelection } from "@/engine/simulate";
 import { createCamera, updateCamera, type Camera } from "@/render/camera";
 import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
-import { render, renderBackground, type RenderState } from "@/render/renderer";
+import { render, renderBackground, sceneShiftAt, type RenderState } from "@/render/renderer";
 import { cpuInput, cpuWorldFromDef, type CpuWorld } from "@/ai/cpu";
 import { stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
@@ -47,6 +47,7 @@ import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollbac
 import type { Transport } from "@/net/transport";
 // Three-free (`render3d/anchors.ts`): the overlay's anchors cost the page no three.js.
 import { drawnTop, overlayAnchor } from "@/render3d/anchors";
+import { createSceneShiftEase, easeSceneShift } from "@/render/sceneShiftEase";
 import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
 import { GAME_SIM_CONTEXT } from "./simContext";
 
@@ -258,6 +259,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let events: StepEvents | null = null;
   /** How tall each fighter is drawn, from the bake, as of the last step (`drawnTop`). */
   let tops: readonly (number | null)[] = [];
+  /** A Final Smash's draw shift, its release eased once a paint for both drawers (R-T17o). */
+  const shiftEase = createSceneShiftEase();
 
   // `step` needs the previous frame's inputs to tell a press from a hold. A
   // button is an edge, and `GameState` deliberately has no field for one.
@@ -421,7 +424,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
 
   function paint(alpha: number): void {
     if (!ctx) return;
-    const rs: RenderState = {
+    const drawn: RenderState = {
       current: state,
       previous,
       stage,
@@ -440,6 +443,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
               return def ? overlayAnchor(def, f, state.frame, GAME_SIM_CONTEXT.bake) : null;
             }),
     };
+    // Between the last step and this one, `alpha` of the way, as the positions are drawn.
+    const rs: RenderState = { ...drawn, sceneShift: easeSceneShift(shiftEase, sceneShiftAt(drawn, alpha), state.frame - 1 + alpha) };
     if (bgCtx) renderBackground(bgCtx, stage, camera, state.frame);
     // The overlay first: it is what knows a move effect hides its fighter this
     // frame. Both canvases reach the screen at the same composite either way.

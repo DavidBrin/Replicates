@@ -104,8 +104,9 @@ export type PoseName =
   | "downB"
   // Plan 5, Task 5: the strike a counter returns (Marth's Counter).
   | "counterAttack"
-  // Plan 5, Task 17 fix round 1: a Final Smash's scene and its finishing blow
-  // (its `finalAttack` and `finalEnd` parts).
+  // Plan 5, Task 17 fix rounds 1 and 3: a Final Smash's start, its scene and its
+  // finishing blow (its `finalSmash`, `finalAttack` and `finalEnd` parts).
+  | "finalSmash"
   | "finalAttack"
   | "finalEnd"
   | "fthrow"
@@ -196,4 +197,10 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   finalAttack: attacks.neutralB,
   /** The finishing blow, its `finalEnd` part: likewise. */
   finalEnd: attacks.neutralB,
+  /**
+   * A Final Smash's start, its `finalSmash` part (Task 17 fix round 3, ruling
+   * R-T17m): likewise, but for Samus, whose Zero Laser holds her cannon level along
+   * its beam.
+   */
+  finalSmash: attacks.neutralB,
 };

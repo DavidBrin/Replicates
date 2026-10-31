@@ -423,6 +423,15 @@ describe("the 3D presenter", () => {
     expect(gl().scene!.getObjectByName("fighter:3:donkeyKong")!.position.x).toBeCloseTo(-30, 9);
   });
 
+  it("draws the eased shift the runner hands it, when it hands one (Task 17 fix round 3, R-T17o)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    state.fighters[3] = { ...state.fighters[3], x: fx(-30) };
+    presenter.paint({ ...rs, sceneShift: [0, 0, 0, -6] }, createCamera(stage), 1, []);
+    expect(gl().scene!.getObjectByName("fighter:3:donkeyKong")!.position.x).toBeCloseTo(-36, 9);
+  });
+
   it("measures the shift between where it draws the two: at the start of the launch's step, Mario still 2 ahead and Donkey Kong still backed off", async () => {
     const { presenter, rs, state, stage, gl } = setup();
     await presenter.ready;

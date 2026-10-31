@@ -49,6 +49,14 @@ export const MAX_ZOOM = 15;
  */
 export const FIGHTER_UNITS = 13;
 
+/**
+ * The 3D side camera's vertical field of view, degrees. Narrow, like Ultimate's
+ * side camera. UNVERIFIED: tuned by eye. Here, three-free, so the overlay can
+ * project the stage's depth as the 3D layer does (`stageClip.ts`); the 3D side
+ * camera (`render3d/camera3d.ts`) takes it from here.
+ */
+export const SIDE_FOV_DEG = 26;
+
 /** Empty space kept around the fighters, in simulation units. */
 export const FRAME_MARGIN_X = 38;
 export const FRAME_MARGIN_Y = 30;
@@ -287,7 +295,9 @@ export function updateCamera(
       cam.targetZoom = clamp(base * (1 + (KO_ZOOM_FACTOR - 1) * punch), MIN_ZOOM, MAX_ZOOM * 1.6);
       cam.timeScale = lerp(1, KO_TIME_SCALE, punch);
       const kept = keep === undefined ? undefined : state.fighters.find((f) => f.port === keep.port);
-      if (kept !== undefined && kept.action !== "dead") keepWhole(cam, toFloat(kept.y), tops?.[state.fighters.indexOf(kept)] ?? null);
+      if (kept !== undefined && kept.action !== "dead") {
+        keepWhole(cam, toFloat(kept.y), tops?.[state.fighters.indexOf(kept)] ?? null, cam.koZoom.frames === KO_ZOOM_FRAMES - 1);
+      }
     }
   }
 
@@ -341,12 +351,22 @@ function ingestCameraEvents(cam: Camera, state: GameState, events: StepEvents, d
  * (`DrawnTops`), with the scene's margin: the zoom no closer than fits it, and the
  * centre moved just enough to hold both ends. With no top to go by, a fighter's
  * standard height.
+ *
+ * On the punch's first frame (`now`), the camera itself as well as its target:
+ * the hit lands on the frame a raised fist does, and the follow would show it a
+ * frame or two late, its fingertips off the top (the Task 17 re-review 2's N8;
+ * fix round 3, ruling R-T17p). The jump hides in the hit's flash and shake.
  */
-function keepWhole(cam: Camera, feet: number, top: number | null): void {
+function keepWhole(cam: Camera, feet: number, top: number | null, now: boolean): void {
   const height = Math.max(top ?? 0, FIGHTER_UNITS) + 2 * SCENE_MARGIN_Y;
-  cam.targetZoom = Math.min(cam.targetZoom, Math.max(MIN_ZOOM, VIEW_HEIGHT / height));
+  const fits = Math.max(MIN_ZOOM, VIEW_HEIGHT / height);
+  cam.targetZoom = Math.min(cam.targetZoom, fits);
   const half = VIEW_HEIGHT / (2 * cam.targetZoom);
   cam.targetY = clamp(cam.targetY, feet + height - SCENE_MARGIN_Y - half, feet - SCENE_MARGIN_Y + half);
+  if (!now) return;
+  cam.zoom = Math.min(cam.zoom, fits);
+  const seen = VIEW_HEIGHT / (2 * cam.zoom);
+  cam.y = clamp(cam.y, feet + height - SCENE_MARGIN_Y - seen, feet - SCENE_MARGIN_Y + seen);
 }
 
 /**

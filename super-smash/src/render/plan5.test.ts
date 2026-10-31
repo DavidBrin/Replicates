@@ -25,6 +25,7 @@ import {
   offscreenIndicators,
   updateCamera,
   visibleBounds,
+  worldToScreen,
 } from "./camera";
 import { getCharacterRig } from "./characterArt";
 import { clipFor } from "./chars/poses";
@@ -36,7 +37,7 @@ import { render, sceneDrawShift, sceneShiftAt, type RenderState } from "./render
 import { resolve, type BoneName, type Rig } from "./skeleton";
 import { STRONG_COUNTER_YELLOW, createVfx, drawParticles, stepVfx } from "./vfx";
 import { WORLD3D_PARTICLES } from "./renderer";
-import { makeDef, makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
+import { makeDef, makeEvents, makeFighter, makeProjectile, makeStage, makeState } from "./testFixtures";
 
 const stage = makeStage();
 
@@ -224,6 +225,72 @@ describe("a Final Smash's end hit (ruling R-T17j)", () => {
         expect(cam.zoom, `${user} ${i}`).toBeGreaterThanOrEqual(scene * 0.97);
       }
     }
+  });
+});
+
+describe("effects behind the stage's face (ruling R-T17l)", () => {
+  const fd = STAGES.find((st) => st.id === "finalDestination")!;
+  const def = (id: string) => FIGHTERS.find((d) => d.id === id)!;
+  /** Whether the call at `i` paints under the even-odd clip opened before it (nothing restored in between). */
+  function clippedAt(ctx: ReturnType<typeof createMockContext>, i: number): boolean {
+    const clip = ctx.calls.slice(0, i).map((c, k) => ({ c, k })).filter(({ c }) => c.method === "clip" && c.args[0] === "evenodd").at(-1);
+    if (clip === undefined) return false;
+    let depth = 0;
+    for (const c of ctx.calls.slice(clip.k + 1, i)) {
+      if (c.method === "save") depth++;
+      if (c.method === "restore" && --depth < 0) return false;
+    }
+    return true;
+  }
+
+  it("paints Zero Laser's beam and blasts with the stage's solid bodies clipped out", () => {
+    const state = makeState({
+      stageId: "finalDestination",
+      fighters: [
+        makeFighter({ port: 0, defId: "samus", x: fx(-60), facing: 1, action: "special", move: "finalSmash", actionFrame: 149 }),
+        makeFighter({ port: 1, x: fx(40), facing: -1 }),
+      ],
+    });
+    for (const actionFrame of [149, 209]) {
+      state.fighters[0] = { ...state.fighters[0], actionFrame };
+      const ctx = createMockContext();
+      render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), stage: fd, fighters: [def("samus"), def("mario")] }, null, createCamera(fd), 1);
+      const beam = ctx.calls.findIndex((c) => c.method === "fillRect");
+      expect(beam, `frame ${actionFrame + 1}`).toBeGreaterThan(0);
+      expect(clippedAt(ctx, beam), `frame ${actionFrame + 1}`).toBe(true);
+    }
+  });
+
+  it("paints every move effect so, not only the ones painted after the body: Samus's down tilt's blast off the floor", () => {
+    const state = makeState({
+      stageId: "finalDestination",
+      fighters: [
+        makeFighter({ port: 0, defId: "samus", x: fx(-20), facing: 1, action: "attack", move: "dtilt", actionFrame: 6 }),
+        makeFighter({ port: 1, x: fx(20), facing: -1 }),
+      ],
+    });
+    const ctx = createMockContext();
+    const cam = createCamera(fd);
+    render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), stage: fd, fighters: [def("samus"), def("mario")] }, null, cam, 1);
+    // The blast's own arcs, round her feet (the HUD's stock icons are arcs too).
+    const feet = worldToScreen(cam, -20, 0);
+    const near = (c: { readonly args: readonly unknown[] }) => Math.abs(Number(c.args[0]) - feet.x) < 15 * cam.zoom && Math.abs(Number(c.args[1]) - feet.y) < 15 * cam.zoom;
+    const arcs = ctx.calls.map((c, i) => ({ c, i })).filter(({ c }) => c.method === "arc" && near(c));
+    expect(arcs.length).toBeGreaterThan(0);
+    for (const { i } of arcs) expect(clippedAt(ctx, i), `call ${i}`).toBe(true);
+  });
+
+  it("paints projectiles so too: Mario Finale's flame", () => {
+    const state = makeState({
+      stageId: "finalDestination",
+      fighters: [makeFighter({ port: 0, x: fx(-60), facing: 1 }), makeFighter({ port: 1, defId: "fox", x: fx(40), facing: -1 })],
+      projectiles: [makeProjectile({ defId: "hugeFlame", owner: 0, x: fx(-40), y: fx(8), age: 90 })],
+    });
+    const ctx = createMockContext();
+    render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), stage: fd, fighters: [def("mario"), def("fox")] }, null, createCamera(fd), 1);
+    const flame = ctx.calls.findIndex((c) => c.method === "arc" && Math.abs(Number(c.args[2]) - 16 * createCamera(fd).zoom) < 1e-6);
+    expect(flame).toBeGreaterThan(0);
+    expect(clippedAt(ctx, flame)).toBe(true);
   });
 });
 
@@ -640,6 +707,22 @@ describe("Jungle Rush's barrage (ruling R-T17d)", () => {
       expect(shiftOf("marth", "finalEnd", -14, trapped)).toBe(0);
     });
 
+    it("keeps Donkey Kong 15 off a fighter held behind him in the barrage and the uppercut, where his back reaches further than his front (ruling R-T17n)", () => {
+      const behind = Object.fromEntries(
+        FIGHTERS.flatMap((d) =>
+          Object.entries(d.moves)
+            .filter(([, m]) => m?.final?.sceneGapBehind !== undefined)
+            .map(([slot, m]) => [`${d.id} ${slot}`, m!.final!.sceneGapBehind! / 4096]),
+        ),
+      );
+      expect(behind).toEqual({ "donkeyKong finalAttack": 15, "donkeyKong finalEnd": 15 });
+      expect(shiftOf("donkeyKong", "finalAttack", -4, trapped)).toBe(11);
+      expect(shiftOf("donkeyKong", "finalEnd", -0.5, trapped)).toBe(14.5);
+      // Ahead, his front's own gap.
+      expect(shiftOf("donkeyKong", "finalAttack", 4, trapped)).toBe(-8);
+      expect(shiftOf("donkeyKong", "finalAttack", -16, trapped)).toBe(0);
+    });
+
     it("keeps clear of the fighter its scene launched while the launch's hitlag freezes it, and on as it starts to fly, until it is the gap above (no drawn tops to go by)", () => {
       expect(shiftOf("pikachu", "finalEnd", 8, frozen)).toBe(-7);
       expect(shiftOf("pikachu", "finalEnd", 8, frozen, 30)).toBe(-7);
@@ -691,6 +774,16 @@ describe("Jungle Rush's barrage (ruling R-T17d)", () => {
       expect(sceneShiftAt(launch, 0.5)[0]).toBeCloseTo(-(9 - 7.4), 3);
       expect(sceneShiftAt(launch, 1)[0]).toBe(0);
       expect(sceneShiftAt({ ...launch, previous: null }, 0)[0]).toBe(0);
+      // With the drawn tops, between steps as at a step: Fox's 22 over his feet
+      // keeps Mario, 14.5 up, held.
+      expect(sceneShiftAt({ ...launch, tops: [22, 18] }, 1)[0]).toBeCloseTo(0, 9);
+      const level = pair(trapped, (m) => {
+        flying(m);
+        Object.assign(m, { action: "tumble", x: fx(-30 + 4), y: fx(14.5) });
+      });
+      expect(sceneShiftAt({ ...level, tops: [22, 18] }, 1)[0]).toBeCloseTo(-5, 9);
+      expect(sceneShiftAt({ ...level, tops: [22, 18] }, 0.5)[0]).toBeCloseTo(-6, 9);
+      expect(sceneShiftAt(level, 1)[0]).toBe(0);
       // The trap lands: Mario standing 2 ahead, then trapped there. This step decides.
       const trap = pair(() => {}, trapped);
       expect(sceneShiftAt(trap, 0)[0]).toBe(-7);
@@ -760,6 +853,22 @@ describe("Jungle Rush's barrage (ruling R-T17d)", () => {
     const held = tagX([44, 18]);
     const plain = tagX();
     expect(held.x - plain.x).toBeCloseTo(-11 * held.zoom, 6);
+  });
+
+  it("draws the overlay with the eased shift the runner hands it, when it hands one (ruling R-T17o)", () => {
+    const defs = [FIGHTERS.find((d) => d.id === "donkeyKong")!, FIGHTERS.find((d) => d.id === "mario")!];
+    const tagX = (sceneShift?: number[]) => {
+      const state = makeState({
+        fighters: [makeFighter({ port: 0, defId: "donkeyKong", x: fx(-30), facing: 1 }), makeFighter({ port: 1, x: fx(10), facing: -1 })],
+      });
+      const ctx = createMockContext();
+      const cam = createCamera(stage);
+      render(ctx as unknown as CanvasRenderingContext2D, { ...renderState(state), fighters: defs, ...(sceneShift ? { sceneShift } : {}) }, null, cam, 0);
+      return { x: callsOf(ctx, "fillText").find((c) => c.args[0] === "P1")!.args[1] as number, zoom: cam.zoom };
+    };
+    const eased = tagX([-5, 0]);
+    const plain = tagX();
+    expect(eased.x - plain.x).toBeCloseTo(-5 * eased.zoom, 6);
   });
 
   it("draws the overlay where the shift is measured between the drawn positions: at the start of a launch's step, still backed off", () => {

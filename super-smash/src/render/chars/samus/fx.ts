@@ -1046,9 +1046,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    *   through its last, 68.
    * - The muzzle: its two boxes, radius 13 on 70-76 and 15 on 77-80, 20 ahead and
    *   15 up.
-   * - The beam: its capsule, 12 to 162 ahead at 15 up, radius 5 (10 high), on
-   *   81-208; `samus_laser2`'s two fringe beams beside it, radius 6, 14 above and
-   *   14 below, from 86; then the three end blasts, radius 11 and 12.5, on 209-216.
+   * - The beam: one beam (fix round 3, ruling R-T17k, `zeroBeam`) over its boxes:
+   *   the main capsule, 12 to 162 ahead at 15 up, radius 5 (10 high), on 81-208;
+   *   with `samus_laser2`'s two fringe beams beside it, radius 6, 14 above and 14
+   *   below, from 86; then one end blast over the three, radius 11 and 12.5, on
+   *   209-216.
    *
    * Its edge is the light the laser's own effect script casts:
    * `color_blend!(agent, *MA_MSC_COLOR_BLEND_LIGHT_AXIS, 70, 50, 160, 255, ...)`
@@ -1071,13 +1073,9 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
         const grown = (frame - ZERO_CHARGE_FROM + 1) / (charge.startFrame - ZERO_CHARGE_FROM + 1);
         zeroOrb(ctx, ...at(charge.x, charge.y), toFloat(charge.radius) * u * grown, frame);
       }
-      for (const hb of live) {
-        if (hb.x2 === undefined) zeroOrb(ctx, ...at(hb.x, hb.y), toFloat(hb.radius) * u, frame);
-        else {
-          const fade = hb.forceReaction === true ? 1 - (frame - hb.startFrame) / (hb.endFrame - hb.startFrame + 1) : 1;
-          zeroBeam(ctx, ...at(hb.x, hb.y), ...at(hb.x2, hb.y2 ?? hb.y), toFloat(hb.radius) * u, frame, hb.forceReaction === true, fade);
-        }
-      }
+      for (const hb of live) if (hb.x2 === undefined) zeroOrb(ctx, ...at(hb.x, hb.y), toFloat(hb.radius) * u, frame);
+      const beam = live.filter((hb) => hb.x2 !== undefined);
+      if (beam.length > 0) zeroBeam(ctx, beam, frame, x, y, u, dir);
       ctx.restore();
     });
     return NOTHING;
@@ -1105,42 +1103,56 @@ function zeroOrb(ctx: CanvasRenderingContext2D, x: number, y: number, r: number,
 }
 
 /**
- * A capsule of Zero Laser, (x1, y1) to (x2, y2) in px, its outer edge at the
- * box's radius `r` (px): the beam, a fringe beam, or (`blast`) an end blast.
- * Round caps, as the box is a capsule.
+ * Zero Laser's beam, or its end blast, as ONE beam (Plan 5, Task 17 fix round 3,
+ * ruling R-T17k): over the envelope of the live capsule boxes (the main one and
+ * `samus_laser2`'s fringes, then the three blasts), its edges on theirs, filled
+ * with one vertical gradient. Clear at the envelope's edges; the light
+ * `effect_shoot` casts, rgb(70, 50, 160), across the fringes; the pale body over
+ * the main box; a white core over its middle. One beam, not three bars: the
+ * 3-unit seams between the boxes are narrower than any body, and the fringes pull
+ * toward the centre ("Fighters are drawn to the center", SmashWiki "Zero Laser"),
+ * so they are its edge. Flat at the near end, the main box's start, so nothing
+ * reaches back over Samus; out to the boxes' far reach. The shading is a
+ * presentation choice; its extents are the boxes'.
  */
-function zeroBeam(
-  ctx: CanvasRenderingContext2D,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  r: number,
-  frame: number,
-  blast: boolean,
-  fade: number,
-): void {
-  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.9 + x1 * 0.01);
-  const layers: readonly (readonly [number, string])[] = blast
-    ? [
-        [1, `rgba(${ZERO_LIGHT},${0.75 * fade})`],
-        [0.7, `rgba(${ZERO_BODY},${0.85 * fade})`],
-        [0.4, `rgba(255,255,255,${fade})`],
-      ]
-    : [
-        [1, `rgba(${ZERO_LIGHT},0.8)`],
-        [0.58 + 0.08 * pulse, `rgba(${ZERO_BODY},0.72)`],
-        [0.26 + 0.06 * pulse, "rgba(255,255,255,0.92)"],
-      ];
-  for (const [k, colour] of layers) {
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = 2 * r * k;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+function zeroBeam(ctx: CanvasRenderingContext2D, boxes: readonly Hitbox[], frame: number, feetX: number, feetY: number, u: number, dir: number): void {
+  const main = boxes.find((hb) => (hb.part ?? 0) === 0) ?? boxes[0];
+  const my = toFloat(main.y);
+  const mr = toFloat(main.radius);
+  let lo = Infinity;
+  let hi = -Infinity;
+  let far = -Infinity;
+  for (const hb of boxes) {
+    const r = toFloat(hb.radius);
+    const ys = [toFloat(hb.y), toFloat(hb.y2 ?? hb.y)];
+    lo = Math.min(lo, ...ys.map((v) => v - r));
+    hi = Math.max(hi, ...ys.map((v) => v + r));
+    far = Math.max(far, toFloat(hb.x2 ?? hb.x) + r);
   }
+  const near = toFloat(main.x);
+  const blast = main.forceReaction === true;
+  const fade = blast ? 1 - (frame - main.startFrame) / (main.endFrame - main.startFrame + 1) : 1;
+  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.9);
+  const top = feetY - hi * u;
+  const bottom = feetY - lo * u;
+  const offset = (yy: number) => (hi - yy) / (hi - lo);
+  const stops: [number, string][] = [
+    [0, `rgba(${ZERO_LIGHT},0)`],
+    [1, `rgba(${ZERO_LIGHT},0)`],
+    [offset(my), `rgba(255,255,255,${(blast ? 1 : 0.94 + 0.06 * pulse) * fade})`],
+    [offset(my + mr / 2), `rgba(255,255,255,${0.9 * fade})`],
+    [offset(my - mr / 2), `rgba(255,255,255,${0.9 * fade})`],
+  ];
+  // The main box's edges, where the envelope reaches past them.
+  for (const edge of [my + mr, my - mr]) if (edge < hi && edge > lo) stops.push([offset(edge), `rgba(${ZERO_BODY},${(blast ? 0.85 : 0.78) * fade})`]);
+  // The fringes' axes.
+  for (const hb of boxes) if (hb !== main) stops.push([offset(toFloat(hb.y)), `rgba(${ZERO_LIGHT},${0.7 * fade})`]);
+  const g = ctx.createLinearGradient(0, top, 0, bottom);
+  for (const [o, colour] of stops.sort((p, q) => p[0] - q[0])) g.addColorStop(o, colour);
+  ctx.fillStyle = g;
+  const x0 = feetX + dir * near * u;
+  const x1 = feetX + dir * far * u;
+  ctx.fillRect(Math.min(x0, x1), top, Math.abs(x1 - x0), bottom - top);
 }
 
 /* ------------------------------------------------------------ projectiles -- */

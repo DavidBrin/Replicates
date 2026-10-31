@@ -1037,7 +1037,9 @@ const legacy: FighterDef = {
       intangible: [1, 132],
       // The drawing (Task 17 fix rounds 1 and 2, rulings R-T17d and R-T17i): no nearer
       // than 12 to the fighter it holds, where the barrage's clip stays off its body.
-      final: { phase: "attack", next: "finalEnd", sceneGap: fx(12) },
+      // 15 from one held behind him (fix round 3, ruling R-T17n): his back and legs
+      // reach further behind than his punches do ahead.
+      final: { phase: "attack", next: "finalEnd", sceneGap: fx(12), sceneGapBehind: fx(15) },
       hitboxes: [
         ...barrage(0, 6, 18, 4, { damage: 1.2, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
         ...barrage(18, 79, 13, 4, { damage: 1.1, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
@@ -1052,7 +1054,7 @@ const legacy: FighterDef = {
       // The drawing (Task 17 fix rounds 1 and 2, rulings R-T17d and R-T17i): 13, a
       // unit past the barrage's, so his head clears the knee of a fighter the
       // uppercut sends up past it.
-      final: { phase: "end", sceneGap: fx(13) },
+      final: { phase: "end", sceneGap: fx(13), sceneGapBehind: fx(15) },
       hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true })],
     },
   },
