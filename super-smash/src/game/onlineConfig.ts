@@ -8,7 +8,7 @@
  */
 
 import type { MatchRules } from "@/engine/types";
-import { RANDOM_FIGHTER, type PlayerSlot, type StageForm } from "@/lib/matchConfig";
+import { RANDOM_FIGHTER, controlsOf, type PlayerSlot, type StageForm } from "@/lib/matchConfig";
 import type { BuildStamp, OnlineMatchConfig } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, resolveFighterId, resolveMatchStage } from "./bootstrap";
@@ -35,6 +35,8 @@ export function buildStartConfig(input: StartConfigInput): OnlineMatchConfig {
     rules: { ...input.rules, oneOnOne: true },
     fighters: [resolveFighterId(known(p0.fighterId), seed, 0), resolveFighterId(known(p1.fighterId), seed, 1)],
     costumes: [p0.costume, p1.costume],
+    // Plan 5: each player's control options, which the sim reads on both peers.
+    controls: [controlsOf(p0), controlsOf(p1)],
     ...localBuild(),
   };
 }
@@ -108,7 +110,7 @@ export function newMatchSeed(random: () => number = Math.random): number {
 
 export function runnerSlotsFor(config: OnlineMatchConfig): RunnerSlot[] {
   return config.fighters.map((defId, port) => ({
-    selection: { defId, costume: config.costumes[port] },
+    selection: { defId, costume: config.costumes[port], controls: config.controls[port] },
     cpuLevel: null,
     label: `P${port + 1}`,
   }));

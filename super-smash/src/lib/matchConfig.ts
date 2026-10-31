@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 
 import { fx } from "@/engine/fixed";
+import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
 import type {
   FighterDef,
   FighterPalette,
@@ -623,6 +624,18 @@ export interface PlayerSlot {
   costume: number;
   /** Which control preset a human port is using. Ignored for CPUs. */
   scheme: SchemeId;
+  /** Plan 5: Ultimate's "Stick Jump" (tap jump) — up on the stick jumps. On by default. Ignored for CPUs. */
+  stickJump: boolean;
+}
+
+/** A player's own control options (Plan 5): what `/controls` sets per port, and what an online session must not overwrite. */
+export type ControlOptions = Pick<PlayerSlot, "stickJump">;
+
+const DEFAULT_CONTROL_OPTIONS: ControlOptions = { stickJump: true };
+
+/** A slot's control options as the simulation's `CONTROL_*` bits (Plan 5). A CPU plays the default. */
+export function controlsOf(slot: Pick<PlayerSlot, "kind" | "stickJump">): number {
+  return slot.kind === "human" && !slot.stickJump ? CONTROL_STICK_JUMP_OFF : 0;
 }
 
 export const MIN_PLAYERS = 2;
@@ -709,6 +722,12 @@ interface MatchConfigState {
   result: MatchResult | null;
   /** Seated for an online match by `configureOnline`, until `leaveOnline` or `reset`. */
   online: boolean;
+  /**
+   * Plan 5: this machine's player's control options, as they were when
+   * `configureOnline` seated the match. Online, the other player's pick writes
+   * theirs over one port; `leaveOnline` puts these back (ruling P5-R26).
+   */
+  localOptions: ControlOptions;
 
   setMode(mode: MatchRules["mode"]): void;
   setStocks(stocks: number): void;
@@ -728,9 +747,11 @@ interface MatchConfigState {
   setFighter(port: number, fighterId: string | null): void;
   setCostume(port: number, costume: number): void;
   setScheme(port: number, scheme: SchemeId): boolean;
-  /** Two humans, one per machine, each on their own keyboard's Config 1. */
+  /** Plan 5: turn a port's stick jump on or off. */
+  setStickJump(port: number, on: boolean): void;
+  /** Two humans, one per machine, each on their own keyboard's Config 1, both with this machine's control options. */
   configureOnline(): void;
-  /** Back to the offline default: one human and a CPU. */
+  /** Back to the offline default: one human, with this machine's control options again, and a CPU. */
   leaveOnline(): void;
 
   rebind(scheme: SchemeId, action: ControlAction, code: string): RebindResult;
@@ -750,15 +771,32 @@ function makePlayer(port: number): PlayerSlot {
     fighterId: null,
     costume: port,
     scheme: CONTROL_SCHEMES[Math.min(port, CONTROL_SCHEMES.length - 1)],
+    ...DEFAULT_CONTROL_OPTIONS,
   };
 }
 
-function initialPlayers(): PlayerSlot[] {
-  return [makePlayer(0), makePlayer(1)];
+/** One human, with `local`'s control options, and a CPU. */
+function initialPlayers(local: ControlOptions = DEFAULT_CONTROL_OPTIONS): PlayerSlot[] {
+  return [{ ...makePlayer(0), ...local }, makePlayer(1)];
 }
 
-function onlinePlayer(port: number): PlayerSlot {
-  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows" };
+/**
+ * An online port. Both start with this machine's player's control options —
+ * the local port keeps them, and the remote one is overwritten by the other
+ * peer's pick (`onlineStore`).
+ */
+function onlinePlayer(port: number, local: ControlOptions): PlayerSlot {
+  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows", ...local };
+}
+
+/**
+ * This machine's player's control options: those its online session seated, or
+ * offline, its first human's (or port 0's, with none).
+ */
+function localOptionsOf(s: Pick<MatchConfigState, "online" | "localOptions" | "players">): ControlOptions {
+  if (s.online) return s.localOptions;
+  const local = s.players.find((p) => p.kind === "human") ?? s.players[0];
+  return local === undefined ? DEFAULT_CONTROL_OPTIONS : { stickJump: local.stickJump };
 }
 
 /**
@@ -792,6 +830,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   },
   result: null,
   online: false,
+  localOptions: DEFAULT_CONTROL_OPTIONS,
 
   setMode: (mode) => set((s) => ({ rules: { ...s.rules, mode } })),
 
@@ -874,18 +913,25 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
     return true;
   },
 
+  setStickJump: (port, on) =>
+    set((s) => ({ players: s.players.map((p) => (p.port === port ? { ...p, stickJump: on } : p)) })),
+
   configureOnline: () =>
     set((s) => {
-      const players = [onlinePlayer(0), onlinePlayer(1)];
-      return { players, rules: withDerivedRules(s.rules, players), result: null, online: true };
+      const local = localOptionsOf(s);
+      const players = [onlinePlayer(0, local), onlinePlayer(1, local)];
+      return { players, rules: withDerivedRules(s.rules, players), result: null, online: true, localOptions: local };
     }),
 
   // `result` is kept: the results screen calls this on its way out, and
   // clearing it there would flash "No match yet" before the navigation lands.
+  // The local player's control options come back with the seat (P5-R26): the
+  // session, and the other player's pick, never change them.
   leaveOnline: () =>
     set((s) => {
-      const players = initialPlayers();
-      return { players, rules: withDerivedRules(s.rules, players), online: false };
+      const local = localOptionsOf(s);
+      const players = initialPlayers(local);
+      return { players, rules: withDerivedRules(s.rules, players), online: false, localOptions: local };
     }),
 
   /**
@@ -934,6 +980,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
       },
       result: null,
       online: false,
+      localOptions: DEFAULT_CONTROL_OPTIONS,
     }),
 }));
 

@@ -24,6 +24,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  controls: [0, 0],
   build: "0123456789ab",
   protocol: PROTOCOL_VERSION,
   bones: "0123abcd",

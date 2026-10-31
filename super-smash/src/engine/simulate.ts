@@ -391,6 +391,8 @@ export function cloneState(state: GameState): GameState {
 export interface FighterSelection {
   readonly defId: string;
   readonly costume?: number;
+  /** The player's control options (`CONTROL_*` bits, Plan 5); 0 for the default. */
+  readonly controls?: number;
 }
 
 /** Default seed. Any integer works; the netcode replaces it with an agreed one. */
@@ -454,7 +456,7 @@ export function createInitialState(
       lastDirPressed: 0,
       bufferedAction: null,
       kinetic: emptyKinetic(),
-      combat: emptyCombat(),
+      combat: { ...emptyCombat(), controls: sel.controls ?? 0 },
     };
   });
 

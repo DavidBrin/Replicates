@@ -80,7 +80,7 @@ import { STATUS_TABLE, changeStatus } from "./status/kind";
 import { begunInAir, moveLaunch, movePhase, phaseParams, upSpecialStick, windowEndSpeed, windowVelocity } from "./upSpecial";
 import type { Stick } from "./upSpecial";
 import type { StatusTable } from "./status/kind";
-import { Btn, held, pressed, released, stickX, stickY } from "./types";
+import { Btn, CONTROL_STICK_JUMP_OFF, held, pressed, released, stickX, stickY } from "./types";
 import type { Footstool, FootstoolHead } from "./footstool";
 import type {
   ActionState,
@@ -285,7 +285,17 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
   // fresh direction, so it can only equal the window on the press that started
   // it. Both facts mean one press can produce at most one jump, and holding up
   // does not pogo.
+  //
+  // Plan 5, Task 20: with the player's Stick Jump off (`CombatState.controls`),
+  // up is only up. And a soft Up never jumps, the option on or off (ruling
+  // P5-R27): SmashWiki "Tap" (https://www.ssbwiki.com/Tap): "A player can jump
+  // by tapping upwards on the Control Stick", a tap being "quickly tilting the
+  // maximum distance", and a soft tilt is short of the maximum (the game reads
+  // the stick up past `jump_stick_y`: `tryWallTechJump`'s WuBor Patch source).
+  // The jump button's own press is neither's to gate (`jumpButtonPressed`).
+  const stickJump = (f.combat.controls & CONTROL_STICK_JUMP_OFF) === 0 && !soft;
   const tapJump =
+    stickJump &&
     f.lastDirPressed === Btn.Up &&
     f.framesSinceDirPress === TAP_JUMP_FRAMES &&
     held(input, Btn.Up);
@@ -296,8 +306,10 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     jumpPressed: pressed(input, prev, Btn.Jump) || tapJump,
     jumpButtonPressed: pressed(input, prev, Btn.Jump),
     // Holding up holds the jump, so up gives a full hop and a flick gives a
-    // short one — the same distinction the stick makes.
-    jumpHeld: held(input, Btn.Jump) || held(input, Btn.Up),
+    // short one — the same distinction the stick makes. Not with Stick Jump
+    // off, nor a soft Up: then no jump is held but the button's, a wall tech's
+    // jump input included (`tryWallTechJump`).
+    jumpHeld: held(input, Btn.Jump) || (stickJump && held(input, Btn.Up)),
     attackPressed: pressed(input, prev, Btn.Attack),
     attackHeld: held(input, Btn.Attack),
     specialPressed: pressed(input, prev, Btn.Special),

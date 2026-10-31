@@ -28,6 +28,7 @@ import {
   leaveOnline,
   roomErrorMessage,
   sendLobby,
+  sendOwnPick,
   useOnlineStore,
   type OnlineErrorReason,
 } from "./onlineStore";
@@ -39,6 +40,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  controls: [0, 0],
   ...localBuild(),
 };
 
@@ -1085,5 +1087,88 @@ describe("sending and leaving", () => {
     bindSession(session);
     emit({ type: "error", reason: "unreachable" });
     expect(useOnlineStore.getState().error).toMatch(/wrangler dev/);
+  });
+});
+
+describe("control options online (Plan 5)", () => {
+  const stickJumps = () => useMatchConfig.getState().players.map((p) => p.stickJump);
+
+  it("takes the other player's Stick Jump from their pick, onto their port only; a pick without one is on", () => {
+    useMatchConfig.getState().setStickJump(0, false);
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "host" });
+    expect(stickJumps()).toEqual([false, false]);
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
+    expect(stickJumps()).toEqual([false, true]);
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2, stickJump: false } });
+    expect(stickJumps()).toEqual([false, false]);
+  });
+
+  it("says its own Stick Jump in its pick only when it is off (P5-R25: absent is on)", () => {
+    const guest = fakeSession();
+    setActiveSession(guest.session);
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    useMatchConfig.getState().setFighter(1, "fox");
+    expect(sendOwnPick(1)).toBe(true);
+    useMatchConfig.getState().setStickJump(1, false);
+    expect(sendOwnPick(1)).toBe(true);
+    expect(guest.sent).toEqual([
+      { kind: "pick", fighterId: "fox", costume: 1 },
+      { kind: "pick", fighterId: "fox", costume: 1, stickJump: false },
+    ]);
+  });
+
+  /**
+   * P5-R26: an online session seats both ports with this machine's options,
+   * and the other player's pick writes theirs over one of them. Leaving puts
+   * this machine's back on its one human, whichever port was its own.
+   */
+  it.each([
+    ["host", false, true],
+    ["host", true, false],
+    ["guest", false, true],
+    ["guest", true, false],
+  ] as const)("puts this machine's Stick Jump back on leaving, as the %s, whatever the other player's (mine %s, theirs %s)", (role, mine, theirs) => {
+    useMatchConfig.getState().setStickJump(0, mine);
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role });
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2, ...(theirs ? {} : { stickJump: false }) } });
+    const own = role === "host" ? 0 : 1;
+    expect(useMatchConfig.getState().players[own].stickJump).toBe(mine);
+    expect(useMatchConfig.getState().players[1 - own].stickJump).toBe(theirs);
+    leaveOnline();
+    expect(useMatchConfig.getState().online).toBe(false);
+    expect(useMatchConfig.getState().players.map((p) => [p.kind, p.stickJump])).toEqual([
+      ["human", mine],
+      ["cpu", true],
+    ]);
+  });
+
+  /**
+   * P5-R24 (R20-1): a start without control options is a host on the rules
+   * before Plan 5. This build reads it as a start it cannot play, carrying the
+   * host's stamp, so the guest refuses it by name (its rules differ), tells the
+   * host, and leaves, rather than wait for a match that never comes.
+   */
+  it("refuses, by name, a start from a host on the rules before Plan 5, which sends no control options", async () => {
+    const older = { version: ENGINE_RULES_VERSION - 1, activeSlots: ACTIVE_SCRIPT_SLOTS };
+    const { controls: _drop, ...rest } = CONFIG;
+    void _drop;
+    const wire = { ...rest, bones: engineFingerprint(GAME_SIM_CONTEXT, older), engineRules: rulesFingerprint(older) };
+    const received = parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config: wire })));
+    expect(received?.kind).toBe("unreadable-start");
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    guest.emit({ type: "lobby", message: received! });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "engine-mismatch" });
+    expect(useOnlineStore.getState().error).toBe("The other player is running a different version. Both reload the page.");
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
+    expect(warn.mock.calls[0].join(" ")).toContain(`its engine rules are ${rulesFingerprint(older)}, this build's are ${localBuild().engineRules}`);
+    await Promise.resolve();
+    expect(guest.session.close).toHaveBeenCalledTimes(1);
   });
 });

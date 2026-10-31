@@ -21,7 +21,7 @@
  * dropped, as older builds drop the ones added since.
  */
 
-import type { MatchRules } from "@/engine/types";
+import { CONTROL_BITS, type MatchRules } from "@/engine/types";
 import { getFighter } from "@/fighters";
 import {
   MAX_STOCKS,
@@ -76,10 +76,18 @@ export interface OnlineMatchConfig extends BuildStamp {
   /** Concrete fighter ids for ports 0 and 1. */
   readonly fighters: readonly [string, string];
   readonly costumes: readonly [number, number];
+  /**
+   * Each port's control options (`CONTROL_*` bits, Plan 5): the sim reads them
+   * on both peers. Required (ruling P5-R24): a start without them is from a
+   * build before Plan 5, on other rules, and is read as one this build cannot
+   * play, its stamp intact, so the guest refuses it by name.
+   */
+  readonly controls: readonly [number, number];
 }
 
 export type LobbyMessage =
-  | { readonly kind: "pick"; readonly fighterId: string | null; readonly costume: number }
+  /** `stickJump` (Plan 5) is said only when it is off (ruling P5-R25): absent is on. */
+  | { readonly kind: "pick"; readonly fighterId: string | null; readonly costume: number; readonly stickJump?: boolean }
   /** `rules` are the host's, for the guest to see before it starts; the start carries the ones played. */
   | { readonly kind: "stage"; readonly stageId: string; readonly form: StageForm; readonly rules?: MatchRules }
   | { readonly kind: "start"; readonly config: OnlineMatchConfig }
@@ -137,7 +145,10 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
       const fighterId = raw === null || raw === RANDOM_FIGHTER ? raw : isFighterId(raw) ? raw : undefined;
       const costume = payload.costume;
       if (fighterId === undefined || !isCostume(costume)) return null;
-      return { kind: "pick", fighterId, costume };
+      // Plan 5: the player's Stick Jump rides on its pick; absent is the default, on.
+      const stickJump = payload.stickJump;
+      if (stickJump !== undefined && typeof stickJump !== "boolean") return null;
+      return stickJump === undefined ? { kind: "pick", fighterId, costume } : { kind: "pick", fighterId, costume, stickJump };
     }
     case "stage": {
       const stageId = payload.stageId;
@@ -178,7 +189,7 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
 }
 
 function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineMatchConfig | null {
-  const { seed, stageId, stageForm, rules, fighters, costumes } = value;
+  const { seed, stageId, stageForm, rules, fighters, costumes, controls } = value;
   if (!isInRange(seed, MIN_SEED, MAX_SEED)) return null;
   if (!isStageId(stageId) || !isStageForm(stageForm)) return null;
   const parsedRules = parseRules(rules);
@@ -189,6 +200,9 @@ function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineM
   if (!Array.isArray(costumes) || costumes.length !== 2) return null;
   const [c0, c1] = costumes as unknown[];
   if (!isCostume(c0) || !isCostume(c1)) return null;
+  if (!Array.isArray(controls) || controls.length !== 2) return null;
+  const [k0, k1] = controls as unknown[];
+  if (!isControls(k0) || !isControls(k1)) return null;
   return {
     seed,
     stageId,
@@ -196,6 +210,7 @@ function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineM
     rules: parsedRules,
     fighters: [f0, f1],
     costumes: [c0, c1],
+    controls: [k0, k1],
     build: stamp.build,
     protocol: stamp.protocol,
     bones: stamp.bones,
@@ -234,6 +249,11 @@ function isStageId(value: unknown): value is string {
 
 function isCostume(value: unknown): value is number {
   return isInRange(value, 0, MAX_COSTUME);
+}
+
+/** A set of control option bits (Plan 5, `CONTROL_BITS`), and nothing else. */
+function isControls(value: unknown): value is number {
+  return isInRange(value, 0, CONTROL_BITS) && (value & ~CONTROL_BITS) === 0;
 }
 
 function isStageForm(value: unknown): value is StageForm {

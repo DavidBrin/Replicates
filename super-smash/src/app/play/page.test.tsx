@@ -24,7 +24,7 @@ import { localBuild, runnerSlotsFor } from "@/game/onlineConfig";
 import { GAME_SIM_CONTEXT } from "@/game/simContext";
 import type { World3dModule } from "@/game/useWorld3d";
 import type { WorldLayers, WorldOptions } from "@/game/world3d";
-import type { FighterDef, StageDef } from "@/engine/types";
+import { CONTROL_STICK_JUMP_OFF, type FighterDef, type StageDef } from "@/engine/types";
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import type { GamepadOptions } from "@/input/gamepad";
 import { claimContext } from "@/render3d/fakeContext";
@@ -161,6 +161,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 2, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [3, 1],
+  controls: [0, 0],
   ...localBuild(),
 };
 
@@ -798,6 +799,32 @@ describe("the play page, local", () => {
     expect([0, 1, 2].map((ordinal) => pad.options.portForPad?.(ordinal))).toEqual([0, 2, -1]);
     unmount();
     expect(pad.detach).toHaveBeenCalled();
+  });
+
+  /**
+   * Plan 5, Task 20: each human's Stick Jump goes to the sim, and a CPU plays the
+   * default whatever its slot says (its recovery's re-press after a tap jump,
+   * Task 19, assumes it): a port turned from a human into a CPU keeps the
+   * human's option in the menus, never in the match.
+   */
+  it("hands the sim each human's Stick Jump, and every CPU the default whatever the local player's", async () => {
+    const config = useMatchConfig.getState();
+    config.addPlayer();
+    config.setPlayerKind(2, "human");
+    for (const port of [0, 1, 2]) config.setStickJump(port, false);
+    config.setStickJump(2, true);
+    expect(useMatchConfig.getState().players.map((p) => [p.kind, p.stickJump])).toEqual([
+      ["human", false],
+      ["cpu", false],
+      ["human", true],
+    ]);
+    await renderPage();
+    const { options } = only(mocks.runners);
+    expect(options.players.map((p) => [p.cpuLevel !== null, p.selection.controls])).toEqual([
+      [false, CONTROL_STICK_JUMP_OFF],
+      [true, 0],
+      [false, 0],
+    ]);
   });
 
   it("records a local result without the online flag", async () => {

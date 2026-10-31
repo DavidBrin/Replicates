@@ -48,7 +48,7 @@ import { createKeyboardInput, type KeyboardInput } from "@/input/keyboard";
 import { createGamepadInput, padPortMap, type GamepadInput } from "@/input/gamepad";
 import { AudioEngine } from "@/audio";
 import { conflictFreeSelection } from "@/input/schemes";
-import { useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
+import { controlsOf, useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { NetHud } from "@/components/match/NetHud";
 import type { OnlineMatchConfig, RefuseReason } from "@/net/online/lobby";
@@ -88,6 +88,8 @@ function toRunnerSlots(players: readonly PlayerSlot[], seed: number): RunnerSlot
     selection: {
       defId: resolveFighterId(p.fighterId, seed, p.port),
       costume: p.costume,
+      // Plan 5: the player's stick jump, which the simulation reads; a CPU's is the default.
+      controls: controlsOf(p),
     },
     cpuLevel: p.kind === "cpu" ? p.cpuLevel : null,
     label: p.kind === "cpu" ? `CPU` : `P${p.port + 1}`,

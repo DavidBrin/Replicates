@@ -425,6 +425,8 @@ function applyLobby(message: Extract<LobbyMessage, { kind: "pick" | "stage" | "a
       if (remote === null) return;
       match.setFighter(remote, message.fighterId);
       match.setCostume(remote, message.costume);
+      // Plan 5: their Stick Jump, which their pick leaves out when it is on (P5-R25).
+      match.setStickJump(remote, message.stickJump ?? true);
       return;
     }
     case "stage": {
@@ -455,7 +457,9 @@ export function sendLobby(message: LobbyMessage): boolean {
  */
 export function sendOwnPick(port: number): boolean {
   const own = useMatchConfig.getState().players[port];
-  return sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? port });
+  const pick = { kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? port } as const;
+  // Plan 5: this side's Stick Jump, said only when it is off (P5-R25): absent is on.
+  return sendLobby(own?.stickJump === false ? { ...pick, stickJump: false } : pick);
 }
 
 /** The host's stage as the match config now holds it, with the rules the host will start, for the guest to see. */

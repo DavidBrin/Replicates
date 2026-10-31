@@ -51,6 +51,17 @@ export const enum Btn {
 /** A packed input frame. Zero means "no keys held". */
 export type InputFrame = number;
 
+/**
+ * A player's control options the simulation must agree on (Plan 5), as bits
+ * on `CombatState.controls`. Zero is Ultimate's default. SmashWiki "Stick
+ * jump" (https://www.ssbwiki.com/Stick_jump, which leads to its "Tap" page):
+ * "The Tap Jump option is known as "Stick Jump" in Super Smash Bros.
+ * Ultimate." Off, up on the stick neither jumps nor holds a jump.
+ */
+export const CONTROL_STICK_JUMP_OFF = 1;
+/** Every control option bit there is; anything else in a `controls` value is not a control option. */
+export const CONTROL_BITS = CONTROL_STICK_JUMP_OFF;
+
 export function held(input: InputFrame, b: Btn): boolean {
   return (input & b) !== 0;
 }

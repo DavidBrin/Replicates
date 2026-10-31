@@ -2,9 +2,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
-import type { MatchRules } from "@/engine/types";
+import { CONTROL_STICK_JUMP_OFF, type MatchRules } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
-import { RANDOM_FIGHTER, RANDOM_STAGE, type PlayerSlot } from "@/lib/matchConfig";
+import { RANDOM_FIGHTER, RANDOM_STAGE, useMatchConfig, type PlayerSlot } from "@/lib/matchConfig";
 import { parseLobbyMessage } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, STAGES, bootstrapEngine, resolveMatchStage } from "./bootstrap";
@@ -16,8 +16,8 @@ const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 9000, smashBall
 
 function players(a: string | null, b: string | null): PlayerSlot[] {
   return [
-    { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows" },
-    { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows" },
+    { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows", stickJump: true },
+    { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows", stickJump: false },
   ];
 }
 
@@ -92,9 +92,46 @@ describe("the host's start config", () => {
   it("turns a config into the runner's two human slots", () => {
     const config = buildStartConfig({ players: players("mario", "fox"), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
     expect(runnerSlotsFor(config)).toEqual([
-      { selection: { defId: "mario", costume: 0 }, cpuLevel: null, label: "P1" },
-      { selection: { defId: "fox", costume: 1 }, cpuLevel: null, label: "P2" },
+      // Plan 5: the players' control options travel too (P2 has stick jump off).
+      { selection: { defId: "mario", costume: 0, controls: 0 }, cpuLevel: null, label: "P1" },
+      { selection: { defId: "fox", costume: 1, controls: CONTROL_STICK_JUMP_OFF }, cpuLevel: null, label: "P2" },
     ]);
+  });
+});
+
+describe("control options online (Plan 5)", () => {
+  it("ships each port's stick jump in the start, and the runner hands it to the sim", () => {
+    const config = buildStartConfig({ players: players("mario", "fox"), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
+    expect(config.controls).toEqual([0, CONTROL_STICK_JUMP_OFF]);
+    expect(runnerSlotsFor(config).map((s) => s.selection.controls)).toEqual([0, CONTROL_STICK_JUMP_OFF]);
+  });
+
+  /**
+   * P5-R24: `controls` is required, so a start from a host on the rules before
+   * Plan 5, which has none, is not read as a start. It still arrives, as an
+   * unreadable start carrying the host's stamp (`parseLobbyMessage`), and the
+   * stamp names why: its rules differ (`buildMismatch`), which the guest says
+   * and refuses on (`onlineStore`). Never dropped, which would leave the guest
+   * waiting for a match that never comes.
+   */
+  it("refuses, by name, a start from a host on the rules before Plan 5 (no controls, an older version)", () => {
+    const config = buildStartConfig({ players: players("mario", "fox"), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
+    const older = { version: ENGINE_RULES_VERSION - 1, activeSlots: GAME_ENGINE_RULES.activeSlots };
+    const { controls: _drop, ...rest } = config;
+    void _drop;
+    const stamp = { build: config.build, protocol: config.protocol, bones: engineFingerprint(GAME_SIM_CONTEXT, older), engineRules: rulesFingerprint(older) };
+    const wire = parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config: { ...rest, ...stamp } })));
+    expect(wire).toEqual({ kind: "unreadable-start", build: stamp });
+    if (wire?.kind !== "unreadable-start") return;
+    expect(buildMismatch(wire.build)).toBe("rules");
+  });
+
+  it("starts an online match with this machine's Stick Jump, on both ports until the other peer's pick says otherwise", () => {
+    useMatchConfig.getState().reset();
+    useMatchConfig.getState().setStickJump(0, false);
+    useMatchConfig.getState().configureOnline();
+    expect(useMatchConfig.getState().players.map((p) => p.stickJump)).toEqual([false, false]);
+    useMatchConfig.getState().reset();
   });
 });
 

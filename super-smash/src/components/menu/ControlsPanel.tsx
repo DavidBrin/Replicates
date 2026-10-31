@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
 import { SkewPanel, SkewTag } from "@/components/ui/SkewPanel";
 import { cn } from "@/lib/cn";
+import { PlayerOptions } from "./PlayerOptions";
 import {
   ACTION_LABELS,
   CONTROL_ACTIONS,
@@ -222,7 +223,9 @@ export function ControlsPanel() {
             <strong className="text-white">Up + Special</strong> is your recovery. To tell the two apart, an Up
             press waits five frames to see whether an attack follows it. The{" "}
             <strong className="text-white">Jump</strong> key has nothing to work out, so it fires the instant
-            you press it — that is what it is there for.
+            you press it — that is what it is there for. As in Ultimate, each player can turn{" "}
+            <strong className="text-white">Stick jump</strong> off below: then Up only aims, and only the Jump
+            key jumps.
           </p>
         </SkewPanel>
 
@@ -320,6 +323,8 @@ export function ControlsPanel() {
 
           <p className="mt-2 text-xs text-white/45">{SCHEME_INFO[scheme].hand}. {SCHEME_INFO[scheme].note}</p>
         </section>
+
+        <PlayerOptions />
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_18rem]">
           <Keyboard bindings={active} />

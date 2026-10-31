@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
 import { parseLobbyMessage, type BuildStamp, type OnlineMatchConfig } from "./lobby";
 
 const CONFIG: OnlineMatchConfig = {
@@ -9,6 +10,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  controls: [0, 1],
   build: "0123456789ab",
   protocol: 2,
   bones: "0123abcd",
@@ -30,6 +32,40 @@ function helloWith(over: Record<string, unknown>): Record<string, unknown> {
 function expectUnplayable(config: unknown, build: BuildStamp | null = BUILD) {
   expect(parseLobbyMessage({ kind: "start", config })).toEqual({ kind: "unreadable-start", build });
 }
+
+describe("control options in the lobby (Plan 5)", () => {
+  it("reads a pick's stick jump, and a pick without one", () => {
+    expect(parseLobbyMessage({ kind: "pick", fighterId: "fox", costume: 2, stickJump: false })).toEqual({ kind: "pick", fighterId: "fox", costume: 2, stickJump: false });
+    expect(parseLobbyMessage({ kind: "pick", fighterId: "fox", costume: 2 })).toEqual({ kind: "pick", fighterId: "fox", costume: 2 });
+    expect(parseLobbyMessage({ kind: "pick", fighterId: "fox", costume: 2, stickJump: "no" })).toBeNull();
+  });
+
+  it("refuses a start whose control options are not two known flag sets", () => {
+    expectUnplayable({ ...CONFIG, controls: [0] });
+    expectUnplayable({ ...CONFIG, controls: [0, 0, 0] });
+    expectUnplayable({ ...CONFIG, controls: [0, 7] });
+    expectUnplayable({ ...CONFIG, controls: [0, 2] });
+    expectUnplayable({ ...CONFIG, controls: [0, 0.5] });
+    expectUnplayable({ ...CONFIG, controls: [0, -1] });
+    expectUnplayable({ ...CONFIG, controls: [0, "1"] });
+    expectUnplayable({ ...CONFIG, controls: "01" });
+    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, controls: [CONTROL_STICK_JUMP_OFF, 0] } })).toEqual({
+      kind: "start",
+      config: { ...CONFIG, controls: [CONTROL_STICK_JUMP_OFF, 0] },
+    });
+  });
+
+  /**
+   * P5-R24: the options are required. A start without them is from a build
+   * before Plan 5, whose rules differ: it is no start here, but its stamp still
+   * comes through, so the guest refuses it by name (`onlineStore`).
+   */
+  it("reads a start from a build before control options as one it cannot play, its stamp intact", () => {
+    const { controls: _drop, ...old } = CONFIG;
+    void _drop;
+    expectUnplayable(old);
+  });
+});
 
 describe("lobby messages", () => {
   it("reads a pick, including clearing one", () => {
@@ -206,7 +242,7 @@ describe("lobby messages from a hostile or mismatched peer", () => {
       "extra": 1,
       "config": {
         "seed": 1234, "stageId": "battlefield", "stageForm": "omega",
-        "fighters": ["mario", "fox"], "costumes": [0, 1], "build": "0123456789ab", "protocol": 2, "bones": "0123abcd",
+        "fighters": ["mario", "fox"], "costumes": [0, 1], "controls": [0, 1], "build": "0123456789ab", "protocol": 2, "bones": "0123abcd",
         "engineRules": "4567ef01",
         "__proto__": { "polluted": true }, "extra": 2,
         "rules": {
@@ -222,6 +258,7 @@ describe("lobby messages from a hostile or mismatched peer", () => {
     expect(Object.keys(parsed.config).sort()).toEqual([
       "bones",
       "build",
+      "controls",
       "costumes",
       "engineRules",
       "fighters",

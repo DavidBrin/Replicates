@@ -16,17 +16,18 @@ import { flatten } from "@/engine/acmd/interpreter";
 import { fx } from "@/engine/fixed";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
-import { Btn } from "@/engine/types";
+import { Btn, CONTROL_STICK_JUMP_OFF } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules, StageDef } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { bakedContext } from "@/game/bake";
 import { readBakeFromDisk } from "@/game/bakeNode";
+import { controlsOf } from "@/lib/matchConfig";
 import { STAGES } from "@/stages";
 import { battlefield } from "@/stages/battlefield";
 import { finalDestination } from "@/stages/finalDestination";
 import { townAndCity } from "@/stages/townAndCity";
 import { cpuWorldFromDef } from "./cpu";
-import { recoveryFromDef, stageViewFromDef, upBHold, upBInReach, upBNowOrNever, upBPath, upBPlan, upBPress, upBReach, upBStickNow, upBSticks, type UpBStick } from "./behaviours";
+import { floorContact, recoveryFromDef, stageViewFromDef, upBHold, upBInReach, upBNowOrNever, upBPath, upBPlan, upBPress, upBReach, upBStickNow, upBSticks, type UpBStick } from "./behaviours";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
@@ -703,5 +704,96 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
         expect([d.behaviour, d.input], `${oy} phase ${phase}`).toEqual(["attack", Btn.Right]);
       }
     }
+  });
+});
+
+/**
+ * Plan 5, Task 20: a CPU plays the default control options, Stick Jump on, whatever
+ * the local player's (`controlsOf`). Its recovery counts on it: a held Up's tap
+ * jump takes the buffer from the up special, and it presses again (Task 19). And
+ * its model runs (`ghostStep`) step copies of its own fighter, so they read its own
+ * options, never the other player's.
+ */
+describe("a CPU on the default control options (Plan 5, Task 20)", () => {
+  const fd = stageViewFromDef(finalDestination);
+  const def = (id: string) => FIGHTERS.find((d) => d.id === id)!;
+  /** P1, the local player, with Stick Jump off, standing on the stage; P2 a CPU, its slot as the menus left it. */
+  const localOffCpu = (cpu: Partial<FighterState>): GameState => {
+    const s = createInitialState(
+      "finalDestination",
+      [
+        { defId: "mario", controls: controlsOf({ kind: "human", stickJump: false }) },
+        { defId: "mario", controls: controlsOf({ kind: "cpu", stickJump: false }) },
+      ],
+      RULES,
+      5,
+    );
+    Object.assign(s.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(40), y: 0, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[1], { action: "fall", actionFrame: 0, grounded: false, platform: -1, intangible: 0, invincible: 0, ...cpu });
+    return s;
+  };
+
+  it("gets its up special out of an offstage aerial with the local player's Stick Jump off, playing on the default itself", () => {
+    // As "an up special pressed during an offstage aerial comes out on the aerial's
+    // first free frame", with the CPU on port 2 and the local player's Stick Jump off.
+    const world = cpuWorldFromDef(def("mario"), fd);
+    let checked = 0;
+    for (let into = 0; into <= 40; into += 2)
+      for (let phase = 0; phase < 6; phase++) {
+        let s = localOffCpu({ x: fx(-100), y: fx(-12), action: "attack", move: "nair", actionFrame: into, facing: 1, jumpsUsed: 2 });
+        expect(s.fighters.map((f) => f.combat.controls)).toEqual([CONTROL_STICK_JUMP_OFF, 0]);
+        s.frame = phase;
+        let prev: readonly InputFrame[] = [0, 0];
+        let seed = 7;
+        let pressed = false;
+        for (let i = 0; i < 80 && s.fighters[1].action === "attack"; i++) {
+          const d = decideCpu(s, 1, 9, seed, world);
+          seed = d.seed;
+          if ((d.input & Btn.Special) !== 0) pressed = true;
+          s = step(s, [0, d.input], { prevInputs: prev }).state;
+          prev = [0, d.input];
+        }
+        if (!pressed) continue;
+        checked++;
+        expect([s.fighters[1].action, s.fighters[1].move], `${into} frames in, phase ${phase}`).toEqual(["special", "upB"]);
+      }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("models its own fall on its own Stick Jump: a held Up jumps in its model as it does in step()", () => {
+    // Mario falling over the middle of the stage, his midair jump left, Up pressed and
+    // held: on the default options its tap jump spends the jump five frames on, and
+    // the floor is further off; with Stick Jump off it only falls.
+    const mario = def("mario");
+    /** Port 2 holds Up from now until it lands: the steps that takes, and whether it spent its jump on the way. */
+    const run = (s0: GameState): { frames: number; jumped: boolean } => {
+      let s = s0;
+      let prev: readonly InputFrame[] = [0, 0];
+      let frames = 0;
+      let jumped = false;
+      while (!s.fighters[1].grounded && frames < 200) {
+        const now = [0, Btn.Up];
+        s = step(s, now, { prevInputs: prev }).state;
+        prev = now;
+        frames++;
+        if (s.fighters[1].jumpsUsed === 2) jumped = true;
+      }
+      return { frames, jumped };
+    };
+    const over = { x: fx(-10), y: fx(30), vx: 0, vy: 0, jumpsUsed: 1, facing: 1 } as const;
+    // The CPU, on port 2, beside a local player with Stick Jump off.
+    const cpu = localOffCpu(over);
+    const model = floorContact(mario, cpu.fighters[1], fd, cpu.frame, 200, 0, Btn.Up, true);
+    const engine = run(cpu);
+    expect(engine.jumped).toBe(true);
+    expect(model?.frames).toBe(engine.frames);
+    // The same fall with Stick Jump off: no jump, in the model as in step().
+    const off = localOffCpu(over);
+    off.fighters[1].combat.controls = CONTROL_STICK_JUMP_OFF;
+    const offModel = floorContact(mario, off.fighters[1], fd, off.frame, 200, 0, Btn.Up, true);
+    const offEngine = run(off);
+    expect(offEngine.jumped).toBe(false);
+    expect(offModel?.frames).toBe(offEngine.frames);
+    expect(engine.frames).toBeGreaterThan(offEngine.frames);
   });
 });

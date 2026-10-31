@@ -268,6 +268,12 @@ export interface CombatState {
    * ends (`STATUS_FINAL_TRAPPED`'s `end`: the launch, a KO, the Final Smash over).
    */
   trappedBy: number;
+  /**
+   * Plan 5, Task 20: this player's control options (`CONTROL_*` bits, `types.ts`);
+   * 0 is the default. The player's, not the stock's: set from the selection at the
+   * match's start (`createInitialState`), and kept through a KO and the respawn.
+   */
+  controls: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -321,6 +327,7 @@ export function emptyCombat(): CombatState {
     aimY: 0,
     turned: false,
     trappedBy: -1,
+    controls: 0,
   };
 }
 
@@ -372,5 +379,6 @@ export function cloneCombat(c: CombatState): CombatState {
     aimY: c.aimY,
     turned: c.turned,
     trappedBy: c.trappedBy,
+    controls: c.controls,
   };
 }
