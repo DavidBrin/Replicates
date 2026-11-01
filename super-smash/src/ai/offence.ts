@@ -17,7 +17,8 @@ import { fighterHurtboxes } from "@/engine/acmd/hurtboxes";
 
 import { GLANCING_BLOW_DEPTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { abs, fx } from "@/engine/fixed";
-import { LEDGE_GETUP_DISTANCE } from "@/engine/states";
+import { platformCentreX } from "@/engine/physics";
+import { LEDGE_GETUP_DISTANCE, LEDGE_GETUP_FRAMES } from "@/engine/states";
 
 import {
   type Behaviour,
@@ -43,7 +44,7 @@ import {
   towardX,
   VERTICAL_REACH,
 } from "./behaviours";
-import { ghostContext, ghostStep } from "./recovery";
+import { ghostContext, ghostStep, landsOn, overFloor } from "./recovery";
 
 const NOTHING: BehaviourResult = { score: 0, input: 0 };
 
@@ -193,23 +194,77 @@ export const attack: Behaviour = (ctx) => {
   const waits = self.action === "attack" || self.action === "landingLag" || self.action === "land" || self.action === "ledgeGetUp";
   if (swinging && (self.grounded || self.action === "ledgeGetUp") && (free(self) || waits)) {
     const swing = (stale ? toward | Btn.Soft : 0) | Btn.Attack;
-    if (swingLands(waits ? comesOut(ctx, swing) : ctx, swing)) return { score: 400, input: swing };
+    if (waits ? waitedLands(ctx, swing) : swingLands(ctx, swing)) return { score: 400, input: swing };
     if (waits) return { score: 400, input: 0 };
     if (self.action === "dashStart" || self.action === "run") return { score: 400, input: 0 };
     const pick = landingSwing(ctx);
     if (pick !== null) return { score: 400, input: pick };
-    if (abs(dx) < POINT_BLANK && stepBack(ctx)) return { score: 400, input: backOff(ctx) };
+    // At point blank with nothing that lands and no room behind to step back, a judged way
+    // out (fix round 2, ruling R-FW1q: `wayOut`), never the fall-through's swing below.
+    if (abs(dx) < POINT_BLANK) return { score: 400, input: stepBack(ctx) ? backOff(ctx) : wayOut(ctx) };
   }
   // On the ground the stale direction is pressed as `pressToward` presses it: at point
   // blank a dash or a run lets go (ruling R-FW1a's stop) and a shield is let down, where
   // the whole stick held through carried a dash past the target and off the ledge (fix
   // round 1, ruling R-FW1n: the re-review's marth-mario@townAndCity), or turned a shield
   // into a roll away. Beyond point blank it is the whole stick, as before.
-  return {
-    score: 400,
-    input: (stale ? (self.grounded ? pressToward(self, dx) : toward) : 0) | (swinging ? Btn.Attack : 0),
-  };
+  const press = stale ? (self.grounded ? pressToward(self, dx) : toward) : 0;
+  // At point blank no swing goes unjudged (fix round 2, ruling R-FW1q). In the air or in a
+  // jumpsquat (`wayOut`'s short hop), the aerial that lands (`judgedAerial`), whenever it
+  // does, and otherwise none, the stick on past the target; on the ground, no swing, which
+  // the judged branch above throws. Beyond point blank the fall-through stays as it was.
+  if (abs(dx) < POINT_BLANK) {
+    if (!self.grounded || self.action === "jumpSquat") return { score: 400, input: judgedAerial(ctx) ?? toward };
+    return { score: 400, input: press };
+  }
+  return { score: 400, input: press | (swinging ? Btn.Attack : 0) };
 };
+
+/**
+ * The aerials a CPU judges at point blank (ruling R-FW1q), in the order it tries them: down,
+ * neutral, forward and back. Down first: in the measured scenes (six fighters on Kirby,
+ * Pikachu and Mario at 0.5 to 1.5, a short hop) the down air lands in all but a few, from
+ * any frame of the hop. No up air: Up in the air is a tap jump's press.
+ */
+function aerialSwings(self: FighterState): readonly InputFrame[] {
+  const forward = self.facing > 0 ? Btn.Right : Btn.Left;
+  const back = self.facing > 0 ? Btn.Left : Btn.Right;
+  return [Btn.Down | Btn.Attack, Btn.Attack, forward | Btn.Attack, back | Btn.Attack];
+}
+
+/** UNVERIFIED (CPU judgement): the steps a short hop's aerial may take to begin (`swingRuns`' lead), past any jumpsquat on the roster. */
+const HOP_LEAD = 10;
+
+/**
+ * The aerial that lands, pressed now in the air or in a jumpsquat (where it comes out on
+ * the first airborne frame), judged as a ground swing is (`swingRuns`), or null. Not from
+ * inside a move: a press there waits, and the move in progress is not it.
+ */
+function judgedAerial(ctx: BehaviourContext): InputFrame | null {
+  const { self } = ctx.view;
+  if (self.action === "attack" || self.action === "special") return null;
+  for (const aerial of aerialSwings(self)) if (swingRuns(ctx, (k) => (k === 1 ? aerial : aerial & ~Btn.Attack), HOP_LEAD)) return aerial;
+  return null;
+}
+
+/**
+ * The way out at point blank when no ground swing lands and there is no room to step back
+ * (Plan 5 final wave, fix round 2, ruling R-FW1q: marth-kirby@smallBattlefield, Marth's
+ * back to the ledge, Kirby 0.92 in front, the fall-through's forward tilt whiffing for
+ * 4,733 frames): a short hop with an aerial that lands, judged as the whole press (the hop
+ * now, the aerial from the jumpsquat's next frame on: `swingRuns`), which the jumpsquat and
+ * the air then press only as `judgedAerial` judges it. Chosen from data over the jump past
+ * the target: of 2,048 scenes (every pair, 3.25 in from Small Battlefield's and Final
+ * Destination's ledges, 0 to 5 apart, the target facing either way) a ground swing lands
+ * in 2,010, 12 level with the target step back toward the middle, and in all 26 others a
+ * short hop's aerial lands (Marth on Kirby and Pikachu, Link on Pikachu): a jump past was
+ * never the only way. With none, nothing is pressed: never a swing that would not land.
+ */
+function wayOut(ctx: BehaviourContext): InputFrame {
+  const { self } = ctx.view;
+  for (const aerial of aerialSwings(self)) if (swingRuns(ctx, (k) => (k === 1 ? Btn.Jump : aerial), HOP_LEAD)) return Btn.Jump;
+  return 0;
+}
 
 /**
  * UNVERIFIED (CPU judgement, measured; Plan 5 final wave, ruling R-FW1a): nearer than this
@@ -247,8 +302,10 @@ export function pressToward(self: FighterState, dx: number): InputFrame {
 const SLIDE_FRAMES = 30;
 
 /**
- * Whether `input` lets go of a dash or a run on the main floor whose slide would carry the
- * fighter past the ledge, off the stage (Plan 5 final wave, fix round 1, ruling R-FW1n).
+ * Whether `input` lets go of a dash or a run whose slide would carry the fighter off the
+ * floor it stands on with no floor under the fall: past the ledge, off the stage (Plan 5
+ * final wave, fix round 1, ruling R-FW1n), or off a platform's edge where nothing is below
+ * (fix round 2, ruling R-FW1p: Town & City's outer platforms past the ledges).
  * The point-blank stop lets go of the stick (`pressToward`, `attack`), and the stand or
  * the run's brake it ends in slides on the dash's speed, off an edge as any other ground
  * state but a shield, a dodge or a grab does (`GROUND_EXIT`). The re-review's
@@ -262,8 +319,14 @@ export function slidesOff(ctx: BehaviourContext, input: InputFrame): boolean {
   const def = ctx.fighterDef;
   if (def === null || !self.grounded || (self.action !== "dashStart" && self.action !== "run")) return false;
   if ((input & (Btn.Left | Btn.Right | Btn.Attack | Btn.Special | Btn.Shield | Btn.Jump | Btn.Grab)) !== 0) return false;
-  // On a soft platform a slide off its edge lands on the floor below.
-  if (self.y > ctx.stage.groundY + fx(4)) return false;
+  // The floor it slides on: the stage between its ledges, or the soft platform under it.
+  // Off a platform's edge it falls, and lands if a floor is under that fall (fix round 2,
+  // ruling R-FW1p: `overFloor`; past the main ledge, off Town & City's outer platforms,
+  // nothing is).
+  const stageFrame = ctx.state.stageFrame;
+  const onMain = self.y <= ctx.stage.groundY + fx(4);
+  const under = onMain ? null : (ctx.stage.platforms.find((p) => abs(p.y - self.y) <= fx(1) && abs(platformCentreX(p, stageFrame) - self.x) <= p.halfWidth) ?? null);
+  if (!onMain && under === null) return false;
   const f = cloneFighter(self);
   const g = ghostContext(def, ctx.view.frame, f);
   let prev: InputFrame = 0;
@@ -272,7 +335,9 @@ export function slidesOff(ctx: BehaviourContext, input: InputFrame): boolean {
     g.frame = ctx.view.frame + k;
     ghostStep(f, now, prev, g);
     prev = now;
-    if (f.x < ctx.stage.leftLedge || f.x > ctx.stage.rightLedge) return true;
+    const left = under === null ? ctx.stage.leftLedge : platformCentreX(under, stageFrame + k) - under.halfWidth;
+    const right = under === null ? ctx.stage.rightLedge : platformCentreX(under, stageFrame + k) + under.halfWidth;
+    if (f.x < left || f.x > right) return !overFloor(def, { ...f, grounded: false, platform: -1 }, ctx.stage, ctx.view.frame + k, stageFrame + k);
     if (f.vx === 0) return false;
   }
   return false;
@@ -323,6 +388,22 @@ function comesOut(ctx: BehaviourContext, swing: InputFrame): BehaviourContext {
 }
 
 /**
+ * Whether a swing pressed now that does not come out at once (`attack`'s `waits`) lands
+ * as it comes out (`comesOut`). The buffer keeps the button and reads the stick on the
+ * step the swing comes out, from whatever is held then, which is not decided yet: so it is
+ * judged both ways, as pressed and as the button alone (fix round 2, ruling R-FW1s: a
+ * forward tilt pressed in a ledge get-up came out a jab with the stick let go, and missed
+ * at the edge of reach). A jab's next hit takes its stick now (`continues`).
+ */
+function waitedLands(ctx: BehaviourContext, swing: InputFrame): boolean {
+  const out = comesOut(ctx, swing);
+  if (!swingLands(out, swing)) return false;
+  const button = swing & ~(Btn.Left | Btn.Right | Btn.Up | Btn.Down | Btn.Soft);
+  return out === ctx || button === swing || swingLands(out, button);
+}
+
+
+/**
  * Whether `swing`, pressed now in the fighter's move, starts that move's follow-up on this
  * step (a jab's next hit: the attack status's `followUp`, from its third frame), read off
  * one step of the fighter's own copy (`ghostStep`), not restated.
@@ -336,14 +417,23 @@ function continues(ctx: BehaviourContext, swing: InputFrame): boolean {
   return f.action === "attack" && f.move !== self.move;
 }
 
-/** The context as if the fighter stood where its ledge get-up puts it (`finishLedgeOption`), as a swing pressed in the get-up comes out (ruling R-FW1n). */
+/**
+ * The context as if the fighter stood where its ledge get-up puts it (`finishLedgeOption`),
+ * as a swing pressed in the get-up comes out (ruling R-FW1n), on the step it comes out:
+ * the get-up's last (`LEDGE_GETUP_FRAMES`), so the target carried on its velocity and its
+ * pose read for the frames left (fix round 2, ruling R-FW1s: judged as if the get-up ended
+ * now, a jab at the edge of reach missed the pose that was there when it came out).
+ */
 function gotUp(ctx: BehaviourContext): BehaviourContext {
-  const { self } = ctx.view;
+  const { self, target } = ctx.view;
   const side = self.ledge?.side ?? (self.x > 0 ? 1 : -1);
   const ledge = side > 0 ? ctx.stage.rightLedge : ctx.stage.leftLedge;
   const at: FighterState = { ...self, x: ledge - side * LEDGE_GETUP_DISTANCE, y: ctx.stage.groundY, grounded: true, platform: self.ledge?.platform ?? self.platform, ledge: null, action: "stand", actionFrame: 0, move: null, vx: 0, vy: 0, kinetic: emptyKinetic() };
-  const view = { ...ctx.view, self: at, dx: ctx.view.dx + self.x - at.x, dy: ctx.view.dy + self.y - at.y };
-  return { ...ctx, view: { ...view, facingTarget: (view.dx >= 0 ? 1 : -1) === at.facing } };
+  const left = Math.max(0, LEDGE_GETUP_FRAMES - self.actionFrame - 1);
+  const later = target === null ? null : { ...target, x: target.x + target.vx * left, y: target.y + target.vy * left };
+  const dx = later === null ? ctx.view.dx : later.x - at.x;
+  const dy = later === null ? ctx.view.dy : later.y - at.y;
+  return { ...ctx, view: { ...ctx.view, self: at, target: later, dx, dy, frame: ctx.view.frame + left, facingTarget: (dx >= 0 ? 1 : -1) === at.facing } };
 }
 
 /** The context as if the fighter faced its target from where it stands: what a turn would swing from (`attack`'s step back). */
@@ -388,6 +478,19 @@ const SWING_LOOKAHEAD_FRAMES = 40;
  * past the frame seen (its pose as it is now).
  */
 function swingLands(ctx: BehaviourContext, input: InputFrame): boolean {
+  return swingRuns(ctx, (k) => (k === 1 ? input : input & ~Btn.Attack), 0);
+}
+
+/**
+ * `swingLands` for a press that is a sequence (Plan 5 final wave, fix round 2, ruling
+ * R-FW1q): `held(k)` is what is held on the copy's `k`th step, and the swing may begin up
+ * to `lead` steps in, after a short hop's jumpsquat, or as one pressed in the jumpsquat
+ * comes out on the first airborne frame. The swing is the first move begun after now (a
+ * move already in progress is not it). A copy in the air that comes down on a floor of the
+ * stage (`landsOn`, where the real fighter lands) has landed, and its swing with it: the
+ * copy itself has no floor.
+ */
+function swingRuns(ctx: BehaviourContext, held: (k: number) => InputFrame, lead: number): boolean {
   const { self, target } = ctx.view;
   const def = ctx.fighterDef;
   const targetDef = target === null ? undefined : ctx.matchDefs[target.port];
@@ -395,14 +498,21 @@ function swingLands(ctx: BehaviourContext, input: InputFrame): boolean {
   const f = cloneFighter(self);
   const g = ghostContext(def, ctx.view.frame, f);
   let prev: InputFrame = 0;
+  let begun = false;
   for (let k = 1; k <= SWING_LOOKAHEAD_FRAMES; k++) {
-    const was = { x: f.x, y: f.y };
-    const now = k === 1 ? input : input & ~Btn.Attack;
+    const was = { x: f.x, y: f.y, move: f.move, actionFrame: f.actionFrame, action: f.action };
+    const now = held(k);
     g.frame = ctx.view.frame + k;
     ghostStep(f, now, prev, g);
     prev = now;
-    const move = f.action === "attack" && f.move !== null ? def.moves[f.move] : undefined;
-    if (move === undefined) return false;
+    if (f.y < was.y && !f.grounded && landsOn(f.x, was.y, f.y, ctx.stage, ctx.state.stageFrame + k)) return false;
+    const fresh = f.action === "attack" && (was.action !== "attack" || f.move !== was.move || f.actionFrame < was.actionFrame);
+    begun ||= fresh && (k > 1 || self.action !== "attack" || f.move !== self.move);
+    const move = begun && f.action === "attack" && f.move !== null ? def.moves[f.move] : undefined;
+    if (move === undefined) {
+      if (begun || k > lead) return false;
+      continue;
+    }
     const moveFrame = f.actionFrame + 1;
     const live = move.hitboxes.filter(
       (hb) =>
@@ -514,21 +624,22 @@ export const platformMove: Behaviour = (ctx) => {
  * held, so one press is one jump. Above the floor it lands there, and the fight is
  * `attack`'s. Under
  * the target's own platform only (as `platformMove`'s jump), more than a unit below its
- * floor, the fighter and the target both over the stage, and a target reeling on the
- * platform is not standing there.
+ * floor, and a target reeling on the platform is not standing there.
  */
 function climb(ctx: BehaviourContext): BehaviourResult {
   const { self, target } = ctx.view;
   if (target === null || !target.grounded || REELING_ACTIONS.includes(ctx.view.targetAction)) return NOTHING;
   if (target.y <= ctx.stage.groundY + fx(4) || self.y >= target.y - fx(1)) return NOTHING;
-  // Over the stage only: past a ledge in x (Town & City's outer platforms), `recover` takes
-  // the air above them for off the stage, and the two would pull against each other.
-  if (isOffstage(self, ctx.stage) || isOffstage(target, ctx.stage)) return NOTHING;
   // Under the target's own platform, not another at its height (Battlefield's two sides).
   const its = ctx.stage.platforms.find((p) => abs(p.y - target.y) <= fx(1) && abs(p.x - target.x) <= p.halfWidth);
   if (its === undefined || abs(its.x - self.x) > its.halfWidth + fx(10)) return NOTHING;
   const jump = self.vy <= 0 && self.jumpsUsed < ctx.jumps ? Btn.Jump : 0;
-  return { score: 440, input: towardX(self.x, target.x) | jump };
+  // Toward the target, but over the main stage while under the floor (fix round 2, ruling
+  // R-FW1p): a target on Town & City's outer platforms stands past the ledge, and below
+  // that platform there is no floor out there, where `recover` would take over. Above
+  // it, over the platform, the fighter is over a floor (`overFloor`) and lands on it.
+  const aim = Math.min(Math.max(target.x, ctx.stage.leftLedge), ctx.stage.rightLedge);
+  return { score: 440, input: towardX(self.x, aim) | jump };
 }
 
 /** Close the distance. The behaviour `aggression` scales directly. */

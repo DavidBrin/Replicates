@@ -149,6 +149,34 @@ function onTheFloor(start: GameState, frames: number): { readonly firstHit: numb
   return { firstHit: -1, off };
 }
 
+/**
+ * Port 0, a level-9 CPU, from `start` against an idle port 1 for up to `frames` frames: the
+ * step it first hits on (-1 for none), and how many swings it started before that, each of
+ * which, had it landed, would have been that hit (a swing that ends without a hit).
+ */
+function swingsUntilHit(start: GameState, frames: number): { readonly firstHit: number; readonly whiffs: number } {
+  let state = start;
+  const view = stageViewFromDef(CTX.stage(state.stageId));
+  const defs = state.fighters.map((f) => CTX.fighter(f.defId));
+  const world: CpuWorld = cpuWorldFromDef(defs[0], view, defs, (id) => CTX.fighter(id), CTX.bake);
+  let prev: readonly InputFrame[] = [0, 0];
+  let seed = 7;
+  let whiffs = 0;
+  for (let frame = 1; frame <= frames; frame++) {
+    const d = decideCpu(state, 0, 9, seed, world);
+    seed = d.seed;
+    const before = state.fighters[0];
+    const out = step(state, [d.input, 0], { prevInputs: prev, ctx: CTX });
+    state = out.state;
+    prev = [d.input, 0];
+    if (out.events.hits.some((h) => h.attacker === 0)) return { firstHit: frame, whiffs };
+    const f = state.fighters[0];
+    // A swing ended: its attack left for anything but a new one (a jab's next hit counts as the same swing).
+    if (before.action === "attack" && f.action !== "attack") whiffs++;
+  }
+  return { firstHit: -1, whiffs };
+}
+
 /** `id` on `stage` as the scene has it: grounded, out of the entry's intangibility. */
 function placed(f: FighterState, over: Partial<FighterState>): void {
   Object.assign(f, { actionFrame: 0, intangible: 0, invincible: 0, grounded: true, ...over });
@@ -295,6 +323,35 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
     }
     expect(late).toEqual([]);
   }, 60_000);
+
+  it("reaches a player standing on Town & City's outer platform past the ledge and hits him (ruling R-FW1p: the six-rotation table's three)", () => {
+    // Over the outer platforms, past the main ledge in x, `recover` took the air for off
+    // the stage and pulled the CPU back from the platform it was jumping to, for minutes.
+    for (const [a, b, side] of [["pikachu", "mario", -1], ["pikachu", "fox", 1], ["samus", "samus", -1], ["pikachu", "mario", 1], ["samus", "samus", 1]] as const) {
+      const stage = CTX.stage("townAndCity");
+      const index = stage.platforms.findIndex((p) => p.soft && Math.sign(p.x) === side && Math.abs(p.x) > fx(60));
+      const s = createInitialState("townAndCity", [{ defId: a }, { defId: b }], RULES, 5, CTX);
+      placed(s.fighters[0], { x: fx(40 * side), y: 0, platform: 0, action: "stand", actionFrame: 30, facing: side });
+      placed(s.fighters[1], { x: fx(94 * side), y: stage.platforms[index].y, platform: index, action: "stand", actionFrame: 30, facing: -side });
+      const { firstHit } = onTheFloor(s, 600);
+      expect(firstHit > 0 && firstHit <= 300, `${a} at ${b} on the ${side > 0 ? "right" : "left"} platform: first hit ${firstHit}`).toBe(true);
+    }
+  });
+
+  it("never throws a swing that will not land at point blank with the ledge behind: marth-kirby@smallBattlefield (ruling R-FW1q; seed 3260, reduced)", () => {
+    // Marth 3.25 inside the right ledge facing left, Kirby 0.92 in front: none of his ground
+    // swings lands and there is no room to step back, so the fall-through's forward tilt
+    // whiffed over Kirby for 4,733 frames. Every swing it starts must hit, and it must hit.
+    const ledge = stageViewFromDef(CTX.stage("smallBattlefield")).rightLedge;
+    for (const phase of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+      const s = createInitialState("smallBattlefield", [{ defId: "marth" }, { defId: "kirby" }], RULES, 5, CTX);
+      placed(s.fighters[0], { x: ledge - fx(3.25), y: 0, platform: 0, action: "stand", actionFrame: 30, facing: -1, framesSinceDirPress: 30 });
+      placed(s.fighters[1], { x: ledge - fx(4.17), y: 0, platform: 0, action: "stand", actionFrame: 30, facing: -1 });
+      s.frame = phase;
+      const { firstHit, whiffs } = swingsUntilHit(s, 300);
+      expect([firstHit > 0 && firstHit <= 120, whiffs], `phase ${phase}: first hit ${firstHit}`).toEqual([true, 0]);
+    }
+  });
 
   it("breaks the lock of two level-9 CPUs dashing at point blank: Pikachu and Marth on Small Battlefield (I1's trace, reduced)", () => {
     // Seed 1008's lock, Pikachu on port 0 and Marth on port 1, both at level 9: from

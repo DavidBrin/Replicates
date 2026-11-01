@@ -296,6 +296,33 @@ export function floorContact(def: FighterDef, self: FighterState, stage: StageVi
   return frames === null ? null : { frames, speed };
 }
 
+/** UNVERIFIED (CPU judgement): the frames of its own fall `overFloor` runs, past a fall from any stage's top platform to the one under it. */
+export const FLOOR_FALL_FRAMES = 90;
+
+/**
+ * Whether this fighter, in the air, is over a floor its own fall comes down on (Plan 5
+ * final wave, fix round 2, ruling R-FW1p): the stage between its ledges or a soft
+ * platform, read as `framesToFloor` reads it, within `FLOOR_FALL_FRAMES`, with nothing
+ * held or with the stick held toward the stage's middle, which takes the drift it carries
+ * off (a fighter drifting out over a platform it would overshoot with the stick let go).
+ * Then it is not recovering, wherever it is in x: past the main ledge over Town & City's
+ * outer platforms (`isOffstage` reads x alone) the fall lands on the platform. Pure, and
+ * run only over a floor's span (a sweeping platform where the stage's clock has it), a
+ * little wider for the drift.
+ */
+export function overFloor(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0 = 0): boolean {
+  if (self.grounded) return true;
+  const spans = (x: number) =>
+    (x >= stage.leftLedge && x <= stage.rightLedge && self.y >= stage.groundY) ||
+    stage.platforms.some((p) => p.y <= self.y && abs(x - platformCentreX(p, stageFrame0)) <= p.halfWidth + FLOOR_DRIFT);
+  if (!spans(self.x)) return false;
+  const inward = towardX(self.x, Math.trunc((stage.leftLedge + stage.rightLedge) / 2));
+  return [0, inward].some((stick) => framesToFloor(def, self, stage, frame0, FLOOR_FALL_FRAMES, stageFrame0, stick) !== null);
+}
+
+/** UNVERIFIED (CPU judgement): how far past a floor's span `overFloor` still runs the fall, for the drift it carries. */
+const FLOOR_DRIFT = fx(10);
+
 /**
  * How many steps from now this fighter's fall, run as `framesToFloor` runs it,
  * meets the main stage's side, under its top (Plan 5, Task 19: a wall tech, the
@@ -337,7 +364,7 @@ function ghostFall(def: FighterDef, self: FighterState, frame0: number, horizon:
  * Whether a body moving down from `prevY` to `y` at `x` meets the stage or a soft
  * platform, a sweeping one where the stage's clock has it (`platformCentreX`).
  */
-function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFrame: number): boolean {
+export function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFrame: number): boolean {
   const crosses = (surface: number) => prevY >= surface && y <= surface;
   if (x >= stage.leftLedge && x <= stage.rightLedge && crosses(stage.groundY)) return true;
   return stage.platforms.some((p) => abs(x - platformCentreX(p, stageFrame)) <= p.halfWidth && crosses(p.y));
@@ -409,14 +436,17 @@ export const recover: Behaviour = (ctx) => {
   // self-destruct).
   const nearer = self.x < 0 ? stage.leftLedge : stage.rightLedge;
   const ledgeFree = !ledgeHeldInOption(ctx, nearer);
+  // Over a floor its own fall lands on, it is not recovering, wherever it is in x (Plan 5
+  // final wave, fix round 2, ruling R-FW1p: `overFloor`, Town & City's outer platforms).
+  const floored = !self.grounded && (offstage || belowStage) && ctx.fighterDef !== null && overFloor(ctx.fighterDef, self, stage, ctx.view.frame, ctx.state.stageFrame);
   if (r !== null && inUpB(self, r)) {
-    if (self.grounded || (!offstage && !belowStage)) return { score: 950, input: 0, decided: true };
+    if (self.grounded || (!offstage && !belowStage) || floored) return { score: 950, input: 0, decided: true };
     const toward = nearer > self.x ? 1 : -1;
     const plan = upBPlan(self, nearer, stage, r, ctx.view.frame, ledgeFree) ?? upBSticks(r, toward)[0];
     return { score: 950, input: upBStickNow(plan, self, r), decided: true };
   }
 
-  if (self.grounded || (!offstage && !belowStage)) return NOTHING;
+  if (self.grounded || (!offstage && !belowStage) || floored) return NOTHING;
 
   const nearerLedge = nearer;
   const drift = towardX(self.x, nearerLedge);

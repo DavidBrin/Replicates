@@ -6,7 +6,7 @@ import { fx, mul, toFloat } from "@/engine/fixed";
 import { fighterParams } from "@/engine/params";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
 import { emptyCombat } from "@/engine/combat";
-import { emptyKinetic } from "@/engine/kinetic";
+import { emptyKinetic, kineticSet } from "@/engine/kinetic";
 import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
@@ -44,6 +44,7 @@ import {
   edgeguard,
   platformMove,
   pressToward,
+  slidesOff,
 } from "./offence";
 import { FIGHTERS, getFighter } from "@/fighters";
 import { ENTRY_INTANGIBILITY, dodgeWindow } from "@/engine/states";
@@ -1046,6 +1047,25 @@ describe("turning at point blank (Plan 5 final wave, ruling R-FW1a; the final re
     expect(pressToward(behind({ action: "run" }).fighters[0], -fx(6))).toBe(Btn.Left);
   });
 
+  it("brakes another way where a let-go would slide off a platform with nothing under it, not off one over the stage (ruling R-FW1p)", () => {
+    // Town & City's outer platforms run past the main ledge to about ±99: a dash let go
+    // near the right one's outer end slides off it into nothing. Off the centre platform's
+    // end, the fall lands on the stage.
+    const dashing = (x: number, platform: number, y: number) => {
+      const s = createInitialState("townAndCity", [{ defId: "fox" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+      Object.assign(s.fighters[0], { x: fx(x), y, grounded: true, action: "dashStart", actionFrame: 2, platform, facing: 1, intangible: 0, invincible: 0 });
+      kineticSet(s.fighters[0], fx(2.2), 0);
+      Object.assign(s.fighters[1], { x: fx(-40), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, intangible: 0, invincible: 0 });
+      s.frame = 0;
+      return bakedCtx(s);
+    };
+    const view = stageViewFromDef(BAKED.stage("townAndCity"));
+    const outer = view.platforms.reduce((a, b) => (b.x > a.x ? b : a));
+    const centre = view.platforms.reduce((a, b) => (Math.abs(b.x) < Math.abs(a.x) ? b : a));
+    expect(slidesOff(dashing(96, 3, outer.y), 0), "off the outer platform's end").toBe(true);
+    expect(slidesOff(dashing(16, 1, centre.y), 0), "off the centre platform, over the stage").toBe(false);
+  });
+
   it("lets a shield down rather than press a direction in it, which is a roll (fix round 1, ruling R-FW1n)", () => {
     for (const action of ["shieldStart", "shield", "shieldStun"] as const) {
       expect(pressToward(behind({ action }).fighters[0], fx(3)), action).toBe(0);
@@ -1194,6 +1214,87 @@ describe("swinging at point blank at a short target (Plan 5 final wave, ruling R
     expect(held(attack(bakedCtx(s)).input, Btn.Attack)).toBe(true);
   });
 
+  it("does not take the air over Town & City's outer platforms for off the stage; it still recovers over no floor (ruling R-FW1p)", () => {
+    // Past the main ledge in x (83.22) but over the right outer platform (79.81 ± 19.25, at
+    // 41.54), the fighter's own fall lands on the platform: it is not recovering. Past that
+    // platform, or under it, nothing would catch the fall: it is.
+    const tc = (x: number, y: number, vx = 0) => {
+      const s = createInitialState("townAndCity", [{ defId: "fox" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+      Object.assign(s.fighters[0], { x: fx(x), y: fx(y), grounded: false, action: "fall", actionFrame: 5, jumpsUsed: 1, platform: -1, facing: 1, intangible: 0, invincible: 0 });
+      kineticSet(s.fighters[0], fx(vx), -fx(0.5));
+      Object.assign(s.fighters[1], { x: fx(-40), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, intangible: 0, invincible: 0 });
+      s.frame = 0;
+      return bakedCtx(s);
+    };
+    expect(recover(tc(93, 60)).score, "over the outer platform").toBe(0);
+    expect(recover(tc(-94, 70)).score, "over the left one").toBe(0);
+    expect(recover(tc(108, 30)).score, "past it, over nothing").toBeGreaterThan(0);
+    expect(recover(tc(93, 30)).score, "under it").toBeGreaterThan(0);
+    // Over its span but carried out past its end before the fall comes down, whatever the
+    // stick: its fall is run, not its x read.
+    expect(recover(tc(104, 47, 2.5)).score, "carried out past it").toBeGreaterThan(0);
+    const fd = createInitialState("finalDestination", [{ defId: "fox" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+    Object.assign(fd.fighters[0], { x: fx(-100), y: fx(10), grounded: false, action: "fall", actionFrame: 5, jumpsUsed: 1, platform: -1, facing: 1, intangible: 0, invincible: 0 });
+    fd.frame = 0;
+    expect(recover(bakedCtx(fd)).score, "off Final Destination").toBeGreaterThan(0);
+  });
+
+  it("climbs to a player on Town & City's outer platform from over the stage, not out past the ledge under it (ruling R-FW1p)", () => {
+    // Pikachu stands at 94 on the right outer platform, past the ledge (83.22). Fox, rising
+    // just past the ledge and under the platform's floor, steers back over the stage while
+    // he climbs: out there, under the platform, nothing would catch his fall.
+    const s = createInitialState("townAndCity", [{ defId: "fox" }, { defId: "pikachu" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+    const view = stageViewFromDef(BAKED.stage("townAndCity"));
+    const outer = view.platforms.reduce((a, b) => (b.x > a.x ? b : a));
+    Object.assign(s.fighters[1], { x: fx(94), y: outer.y, grounded: true, action: "stand", actionFrame: 30, platform: 3, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[0], { x: view.rightLedge + fx(0.3), y: fx(20), grounded: false, action: "fall", actionFrame: 3, jumpsUsed: 1, platform: -1, facing: 1, intangible: 0, invincible: 0 });
+    kineticSet(s.fighters[0], 0, -fx(0.5));
+    s.frame = 0;
+    const climb = platformMove(bakedCtx(s)).input;
+    expect([held(climb, Btn.Left), held(climb, Btn.Jump)]).toEqual([true, true]);
+  });
+
+  it("presses at point blank out of a short hop only the aerial that lands in the engine (ruling R-FW1q)", () => {
+    // Each frame of a short hop at a target standing 0 to 2 ahead, from the jumpsquat on:
+    // whatever aerial the CPU presses there lands, pressed and its stick held, as the engine
+    // plays it, and on a frame where none would, it presses none.
+    const STICK = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
+    const lands = (state: GameState, input: InputFrame): boolean => {
+      let st = state;
+      let prev: readonly InputFrame[] = [0, 0];
+      for (let i = 0; i < 60; i++) {
+        const now = [i === 0 ? input : input & STICK, 0];
+        const out = step(st, now, { prevInputs: prev, ctx: BAKED });
+        if (out.events.hits.some((h) => h.attacker === 0 && h.victim === 1)) return true;
+        st = out.state;
+        prev = now;
+      }
+      return false;
+    };
+    let pressed = 0;
+    const missed: string[] = [];
+    for (const a of ["marth", "link", "mario", "fox"])
+      for (const b of ["kirby", "pikachu"])
+        for (const gap of [0, 1, 2]) {
+          let st = pointBlank(a, b, gap);
+          let prev: readonly InputFrame[] = [0, 0];
+          for (let k = 1; k <= 30; k++) {
+            const now = [k === 1 ? Btn.Jump : 0, 0];
+            const out = step(st, now, { prevInputs: prev, ctx: BAKED });
+            st = out.state;
+            prev = now;
+            const f = st.fighters[0];
+            if (out.events.hits.length > 0 || (f.grounded && f.action !== "jumpSquat")) break;
+            const input = attack(bakedCtx(st)).input;
+            if (!held(input, Btn.Attack)) continue;
+            pressed++;
+            if (!lands(st, input)) missed.push(`${a} on ${b} at ${gap}, ${f.action}@${f.actionFrame}: ${input}`);
+          }
+        }
+    expect(pressed).toBeGreaterThan(50);
+    expect(missed).toEqual([]);
+  });
+
   it("climbs only under the target's own platform: not after walking off the other one at its height (ruling R-FW1k, widened)", () => {
     // The golden's mario-fox: Fox walks off Battlefield's right platform, Mario standing on
     // the left one at the same height; the climb took the right one for Mario's and spent
@@ -1208,6 +1309,65 @@ describe("swinging at point blank at a short target (Plan 5 final wave, ruling R
     expect(platformMove(bakedCtx(s)).score).toBe(0);
     Object.assign(s.fighters[0], { x: left.x + fx(6), y: left.y - fx(6) });
     expect(held(platformMove(bakedCtx(s)).input, Btn.Jump)).toBe(true);
+  });
+
+  it("judges a swing pressed in a ledge get-up as it comes out at the get-up's end, the stick let go or held (ruling R-FW1s)", () => {
+    // Re-review 2: Mario on Mario, Final Destination, 10 to 11 in from the ledge, late in
+    // the get-up: a forward tilt pressed there came out as a jab, the stick let go by then,
+    // and the jab fell short. Whatever it presses in the get-up that comes out must land.
+    const ledge = stageViewFromDef(BAKED.stage("finalDestination")).leftLedge;
+    const outcome = (state: GameState, input: InputFrame): "hit" | "whiff" | "none" => {
+      let st = state;
+      let prev: readonly InputFrame[] = [0, 0];
+      let swung = false;
+      for (let i = 0; i < 80; i++) {
+        const now = [i === 0 ? input : 0, 0];
+        const out = step(st, now, { prevInputs: prev, ctx: BAKED });
+        if (out.events.hits.some((h) => h.attacker === 0 && h.victim === 1)) return "hit";
+        st = out.state;
+        prev = now;
+        swung ||= st.fighters[0].action === "attack";
+      }
+      return swung ? "whiff" : "none";
+    };
+    let hits = 0;
+    const whiffs: string[] = [];
+    for (const [a, b] of [["mario", "mario"], ["marth", "kirby"]] as const)
+      for (let frame = 14; frame <= 25; frame++)
+        for (let d = 8; d <= 13; d += 0.5) {
+          const s = createInitialState("finalDestination", [{ defId: a }, { defId: b }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+          Object.assign(s.fighters[0], { x: ledge, y: 0, grounded: false, action: "ledgeGetUp", actionFrame: frame, ledge: { platform: 0, side: -1 }, facing: 1, platform: -1, intangible: 0, invincible: 0, framesSinceDirPress: 30 });
+          Object.assign(s.fighters[1], { x: ledge + fx(d), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, facing: -1, intangible: 0, invincible: 0 });
+          s.frame = 0;
+          const input = attack(bakedCtx(s)).input;
+          if (!held(input, Btn.Attack)) continue;
+          const r = outcome(s, input);
+          if (r === "hit") hits++;
+          if (r === "whiff") whiffs.push(`${a} on ${b}, get-up frame ${frame}, ${d} in`);
+        }
+    expect(hits).toBeGreaterThan(5);
+    expect(whiffs).toEqual([]);
+    // A target on the move is judged where it will be when the swing comes out: Mario
+    // running away from 6 in, behind where the get-up puts Mario now and in front of him by
+    // then. Judged as if the get-up ended now, nothing was pressed.
+    const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+    Object.assign(s.fighters[0], { x: ledge, y: 0, grounded: false, action: "ledgeGetUp", actionFrame: 20, ledge: { platform: 0, side: -1 }, facing: 1, platform: -1, intangible: 0, invincible: 0, framesSinceDirPress: 30 });
+    Object.assign(s.fighters[1], { x: ledge + fx(6), y: 0, grounded: true, action: "run", actionFrame: 20, platform: 0, facing: 1, intangible: 0, invincible: 0 });
+    kineticSet(s.fighters[1], BAKED.fighter("mario").attributes.runSpeed, 0);
+    s.frame = 0;
+    const input = attack(bakedCtx(s)).input;
+    expect(held(input, Btn.Attack), "pressed").toBe(true);
+    let st = s;
+    let prev: readonly InputFrame[] = [0, Btn.Right];
+    let hit = false;
+    for (let i = 0; i < 60 && !hit; i++) {
+      const now = [i === 0 ? input : 0, Btn.Right];
+      const out = step(st, now, { prevInputs: prev, ctx: BAKED });
+      hit = out.events.hits.some((h) => h.attacker === 0 && h.victim === 1);
+      st = out.state;
+      prev = now;
+    }
+    expect(hit, "it lands on the running Mario").toBe(true);
   });
 
   it("does not step back off the stage: its back to the ledge, it swings where it stands", () => {

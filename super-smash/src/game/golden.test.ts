@@ -226,8 +226,8 @@ const MATCHES: readonly Match[] = [
   },
   // Plan 5 final wave (ruling R-FW1e; the final review's M5): the one CPU match with the
   // Smash Ball on, so the CPU's own Smash Ball and Final Smash decisions are in the trace.
-  // Kirby (level 7) breaks the ball three times and traps Samus (level 9) in Ultra Sword
-  // (fix round 1; round 0's match had both land theirs, Samus's Zero Laser too).
+  // Samus (level 9) breaks the ball and fires Zero Laser along Town & City's floor (fix
+  // round 2; round 1's had Kirby trap her in Ultra Sword, round 0's both).
   cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 606, BALL_RULES),
 ];
 
@@ -393,6 +393,12 @@ const MATCHES: readonly Match[] = [
  * (mario-fox's and kirby-marth's were the old drop pulse's Down taps), spot-dodges or
  * turns out of a run any more, which the script and the labs reach. The ball-on CPU match
  * reaches `finalTrapped` (Kirby's Ultra Sword), which the four do not. All 59 are visited.
+ * Its fix round 2 (rulings R-FW1p to R-FW1s: a floor under the fighter is the stage for
+ * its own recovery; no unjudged swing at point blank; the Inhale gated on the slide; the
+ * get-up's swing judged as it comes out) adds no action. The four CPU matches reach 43
+ * between them, down from 44: none rolls any more, which the script does. The ball-on
+ * match traps nobody now (Samus's Zero Laser), and `finalTrapped` is the Final Smash lab's;
+ * it reaches nothing the four do not. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1210,6 +1216,22 @@ describe("engine golden trace", () => {
   // eight labs are byte-identical. So now: hits 51/52/38/47, 6, 0, 1, 4, 1, 2, 33, 54, 0 and
   // 41; shield hits 2/6/0/2, 3, 0, 0, 0, 0, 0, 0, 0, 0 and 1; KOs 0/0/1/1, 1, 2, 0, 0, 0,
   // 0, 0, 2, 1 and 0.
+  // Its fix round 2 moved all five CPU matches, each on the first frame a CPU at point
+  // blank presses otherwise (ruling R-FW1q: no swing there goes unjudged): mario-fox on 45
+  // (the 1-100 sample), Fox rising beside Mario, a forward air judged to land where he
+  // pressed nothing; donkeyKong-pikachu on 218 (701-800), Pikachu in his shield, and
+  // link-samus on 431 (401-500), Link in his own swing, where the Attack buffered unjudged
+  // is not pressed now; kirby-marth on 171 (401-500), Kirby in a special, the same (and on
+  // 612 his Inhale from a dash's slide is not pressed: ruling R-FW1r); and the
+  // ball-on match on 103 (101-200), Samus rising in a jump at point blank, where the
+  // unjudged forward air is the stick held on past Kirby. Hits 52, 38, 34 and 39; shield
+  // hits 6, 8, 1 and 2; KOs 0, 0, 1 and 0 (were 51/52/38/47, 2/6/0/2 and 0/0/1/1): Samus
+  // self-destructs out of her up special's fall at 92.3% on 2716, and Marth is not KO'd
+  // any more. The ball-on match: Samus breaks the ball on 2209 and lands Zero Laser on
+  // 2225; Kirby goes by a hit, tumbling at 118.4% on 2560. 61 hits, 3 shield hits, one KO.
+  // The script and the eight labs are byte-identical. So now: hits 52/38/34/39, 6, 0, 1, 4,
+  // 1, 2, 33, 54, 0 and 61; shield hits 6/8/1/2, 3, 0, 0, 0, 0, 0, 0, 0, 0 and 3; KOs
+  // 0/0/1/0, 1, 2, 0, 0, 0, 0, 0, 2, 1 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1289,7 +1311,7 @@ describe("engine golden trace", () => {
   // Plan 5 final wave (ruling R-FW1e; the final review's M5): the ball-on CPU match runs
   // the CPU's Smash Ball chase and its Final Smash, so a change to either moves the trace.
   // Pinned by what it plays, not only by its digest: a ball broken, and a Final Smash
-  // started by a CPU (Kirby's, as measured: on 1892, and on 3332, which traps Samus).
+  // started by a CPU (Samus's, as measured: on 2225, Zero Laser along the floor).
   function expectCpuFinalSmash(): void {
     const m = played.get("samus-kirby-townAndCity-ball")!;
     expect(m.ballsBroken, "Smash Balls broken in the ball-on CPU match").toBeGreaterThan(0);

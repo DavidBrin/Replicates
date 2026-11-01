@@ -777,10 +777,26 @@ describe("carries, mouthfuls and grabs", () => {
   it("Kirby inhales from a standstill, not from a dash or a run, whose speed slides the Inhale past (Plan 5 final wave, fix round 1)", () => {
     // kirby-marth@pokemonStadium2 off the committed stages: from his dash's first frame
     // 6 from an idle Marth, the Inhale slid past him and missed, every 64 frames.
-    const from = (action: "stand" | "dashStart" | "run") => makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, action, actionFrame: 0, vx: action === "stand" ? 0 : fx(1.8) }), makeFighter({ port: 1, x: fx(8) })] });
-    expect(holding(context(from("stand"), kirby)).input).toBe(Btn.Special);
-    expect(holding(context(from("dashStart"), kirby)).score).toBe(0);
-    expect(holding(context(from("run"), kirby)).score).toBe(0);
+    const from = (action: "stand" | "walk" | "dashStart" | "run" | "runBrake", speed: number) => makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, action, actionFrame: 0, vx: fx(speed) }), makeFighter({ port: 1, x: fx(8) })] });
+    expect(holding(context(from("stand", 0), kirby)).input).toBe(Btn.Special);
+    expect(holding(context(from("walk", 0.9), kirby)).input, "a walk does not slide it").toBe(Btn.Special);
+    expect(holding(context(from("dashStart", 1.8), kirby)).score).toBe(0);
+    expect(holding(context(from("run", 1.8), kirby)).score).toBe(0);
+    // Fix round 2 (ruling R-FW1r): the slide, not the state. The run's brake keeps the
+    // run's speed, and the Inhale from it slid past (re-review 2: 18 of 145 scenes).
+    expect(holding(context(from("runBrake", 1.5), kirby)).score, "the run's brake").toBe(0);
+  });
+
+  it("Kirby does not inhale an invincible target (ruling R-FW1r: a respawn's invincibility)", () => {
+    const s = makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, actionFrame: 0 }), makeFighter({ port: 1, x: fx(8), invincible: 60, actionFrame: 30 })] });
+    expect(holding(context(s, kirby)).score).toBe(0);
+  });
+
+  it("Kirby does not inhale a fighter hanging on the ledge, whom the Inhale cannot catch (fix round 2: the engine's inhaleMayCatch)", () => {
+    // kirby-fox@finalDestination, the committed rotation: Kirby at the ledge inhaled at a
+    // Fox hanging on it every time he stood again, for 2,701 frames.
+    const hanging = makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, actionFrame: 0 }), makeFighter({ port: 1, x: fx(8), grounded: false, action: "ledgeHang", actionFrame: 30, ledge: { platform: 0, side: 1 } })] });
+    expect(holding(context(hanging, kirby)).score).toBe(0);
   });
 
   it("Kirby spits his mouthful toward the nearer edge, and swallows it facing in", () => {

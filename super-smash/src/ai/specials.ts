@@ -27,6 +27,7 @@
 
 import { LAUNCH_SPEED_DECAY, SMASH_CHARGE_MAX } from "@/engine/constants";
 import { finalSmashActive } from "@/engine/final";
+import { inhaleMayCatch } from "@/engine/inhale";
 import { abs, fx } from "@/engine/fixed";
 import { platformCentreX } from "@/engine/physics";
 import { smashHoldFrame } from "@/engine/acmd/run";
@@ -642,14 +643,24 @@ export const holding: Behaviour = (ctx) => {
   }
   if (self.action === "grab" || self.action === "pummel" || self.action === "throw" || (self.action === "grabHold" && self.actionFrame > 0)) return { score: 530, input: 0 };
   const inhale = ctx.fighterDef?.moves.neutralB;
-  // From a standstill or the air, as above: from a dash or a run the Inhale slides on the
-  // dash's speed past an opponent it was aimed at from in reach (Plan 5 final wave, fix
-  // round 1: kirby-marth@pokemonStadium2 off the committed stages, a whiff every 64 frames).
-  const sliding = self.action === "dashStart" || self.action === "run";
+  // From a standstill or the air, as above: on the ground at more than a walk's speed (a
+  // dash, a run, the run's brake) the Inhale slides on that speed past an opponent it was
+  // aimed at from in reach (Plan 5 final wave, fix round 1: kirby-marth@pokemonStadium2 off
+  // the committed stages, a whiff every 64 frames; fix round 2, ruling R-FW1r: the slide
+  // itself, not a list of the states that slide, so the run's brake too).
+  const def = ctx.fighterDef;
+  const sliding = self.grounded && def !== null && abs(self.vx) > fighterParams(def).walk_speed_max;
   if (inhale?.inhale !== undefined && free(self) && !sliding && opening(ctx)) {
     const { target, dx, dy, facingTarget } = ctx.view;
     const inReach = target !== null && facingTarget && abs(dy) <= VERTICAL_REACH && abs(dx) <= moveReach(inhale);
-    if (inReach && target.intangible === 0 && target.grabbedBy < 0 && skilled(ctx)) return { score: 450, input: Btn.Special };
+    // One the engine would catch (`inhaleMayCatch`: not on a ledge, nor a Kirby with a
+    // mouthful; fix round 2: a Kirby inhaling at a Fox hanging on Final Destination's ledge,
+    // 2,701 frames, once the point blank's unjudged swing no longer hit him after it).
+    const targetDef = target === null ? undefined : ctx.matchDefs[target.port];
+    const catchable = target !== null && (targetDef === undefined || inhaleMayCatch(self, target, targetDef));
+    // Neither intangible nor invincible (ruling R-FW1r: a respawn's invincibility, which
+    // the Inhale passed through 30 frames into it).
+    if (inReach && catchable && target.intangible === 0 && target.invincible === 0 && target.grabbedBy < 0 && skilled(ctx)) return { score: 450, input: Btn.Special };
   }
   if (self.action === "grabHold") {
     if (ctx.rolls[ROLL_SPECIAL] < PUMMEL_CHANCE && ctx.fighterDef?.moves.pummel !== undefined) return { score: 530, input: Btn.Attack, decided: true };
