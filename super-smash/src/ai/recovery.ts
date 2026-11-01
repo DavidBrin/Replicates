@@ -301,23 +301,34 @@ export const FLOOR_FALL_FRAMES = 90;
 
 /**
  * Whether this fighter, in the air, is over a floor its own fall comes down on (Plan 5
- * final wave, fix round 2, ruling R-FW1p): the stage between its ledges or a soft
- * platform, read as `framesToFloor` reads it, within `FLOOR_FALL_FRAMES`, with nothing
- * held or with the stick held toward the stage's middle, which takes the drift it carries
- * off (a fighter drifting out over a platform it would overshoot with the stick let go).
- * Then it is not recovering, wherever it is in x: past the main ledge over Town & City's
- * outer platforms (`isOffstage` reads x alone) the fall lands on the platform. Pure, and
- * run only over a floor's span (a sweeping platform where the stage's clock has it), a
- * little wider for the drift.
+ * final wave, fix round 2, ruling R-FW1p): `floorStick` has a stick for it.
  */
 export function overFloor(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0 = 0): boolean {
-  if (self.grounded) return true;
+  return floorStick(def, self, stage, frame0, stageFrame0) !== null;
+}
+
+/**
+ * The stick that brings this fighter's own fall down on a floor, or null (Plan 5 final
+ * wave, fix round 2, ruling R-FW1p): the stage between its ledges or a soft platform,
+ * read as `framesToFloor` reads it, within `FLOOR_FALL_FRAMES`. Nothing held (0) if that
+ * lands, else the stick held toward the stage's middle if that does, which takes the
+ * drift it carries off (a fighter drifting out over a platform it would overshoot with
+ * the stick let go). Then it is not recovering, wherever it is in x: past the main ledge
+ * over Town & City's outer platforms (`isOffstage` reads x alone) the fall lands on the
+ * platform. The floor is there for that stick only, so `recover` holds it (fix round 3,
+ * ruling R-FW1v: credited the inward stick and held neutral, Dolphin Slash angled out
+ * past the platform's end). Pure, and run only over a floor's span (a sweeping platform
+ * where the stage's clock has it), a little wider for the drift.
+ */
+export function floorStick(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0 = 0): InputFrame | null {
+  if (self.grounded) return 0;
   const spans = (x: number) =>
     (x >= stage.leftLedge && x <= stage.rightLedge && self.y >= stage.groundY) ||
     stage.platforms.some((p) => p.y <= self.y && abs(x - platformCentreX(p, stageFrame0)) <= p.halfWidth + FLOOR_DRIFT);
-  if (!spans(self.x)) return false;
+  if (!spans(self.x)) return null;
   const inward = towardX(self.x, Math.trunc((stage.leftLedge + stage.rightLedge) / 2));
-  return [0, inward].some((stick) => framesToFloor(def, self, stage, frame0, FLOOR_FALL_FRAMES, stageFrame0, stick) !== null);
+  for (const stick of [0, inward]) if (framesToFloor(def, self, stage, frame0, FLOOR_FALL_FRAMES, stageFrame0, stick) !== null) return stick;
+  return null;
 }
 
 /** UNVERIFIED (CPU judgement): how far past a floor's span `overFloor` still runs the fall, for the drift it carries. */
@@ -437,16 +448,25 @@ export const recover: Behaviour = (ctx) => {
   const nearer = self.x < 0 ? stage.leftLedge : stage.rightLedge;
   const ledgeFree = !ledgeHeldInOption(ctx, nearer);
   // Over a floor its own fall lands on, it is not recovering, wherever it is in x (Plan 5
-  // final wave, fix round 2, ruling R-FW1p: `overFloor`, Town & City's outer platforms).
-  const floored = !self.grounded && (offstage || belowStage) && ctx.fighterDef !== null && overFloor(ctx.fighterDef, self, stage, ctx.view.frame, ctx.state.stageFrame);
+  // final wave, fix round 2, ruling R-FW1p: Town & City's outer platforms), and it holds
+  // the stick that fall was run with (`floorStick`; fix round 3, ruling R-FW1v). In its
+  // up special it holds that stick, decided. Out of it, a floor the fall lands on with the
+  // stick let go leaves the fight to the other behaviours, as before, and one it lands on
+  // only with the stick held inward, it holds inward itself. So no floor is credited to a
+  // stick nothing holds: in the up special the stick is decided, and out of it the read
+  // runs again on every step from wherever another behaviour's stick has taken the fall,
+  // with the jump and the up special still there.
+  const floor = !self.grounded && (offstage || belowStage) && ctx.fighterDef !== null ? floorStick(ctx.fighterDef, self, stage, ctx.view.frame, ctx.state.stageFrame) : null;
   if (r !== null && inUpB(self, r)) {
-    if (self.grounded || (!offstage && !belowStage) || floored) return { score: 950, input: 0, decided: true };
+    if (self.grounded || (!offstage && !belowStage)) return { score: 950, input: 0, decided: true };
+    if (floor !== null) return { score: 950, input: floor, decided: true };
     const toward = nearer > self.x ? 1 : -1;
     const plan = upBPlan(self, nearer, stage, r, ctx.view.frame, ledgeFree) ?? upBSticks(r, toward)[0];
     return { score: 950, input: upBStickNow(plan, self, r), decided: true };
   }
 
-  if (self.grounded || (!offstage && !belowStage) || floored) return NOTHING;
+  if (self.grounded || (!offstage && !belowStage) || floor === 0) return NOTHING;
+  if (floor !== null) return { score: 900, input: floor };
 
   const nearerLedge = nearer;
   const drift = towardX(self.x, nearerLedge);
@@ -560,11 +580,19 @@ const AERIAL_FROM: readonly ActionState[] = ["jump", "fall", "attack"];
  * re-review's offstage aerials from the edge, the main lever on its
  * self-destructs; M-11's long offstage aerials with no plan back)? Only near a
  * ledge or past one. The aerial is run by the engine's own rules on a copy
- * (`ghostStep`), as `upBPath` runs an up special: the press, then the same stick held, until the
- * aerial is over. It is safe if the copy comes down on the stage on the way, or
+ * (`ghostStep`), as `upBPath` runs an up special: the press, then a stick held until
+ * the aerial is over. It is safe if the copy comes down on the stage on the way, or
  * after it is back over the stage above its top, or can still get back: its up
  * special has a plan from there (`upBPlan`), or its midair jump does and the up
  * special has one from the jump's top.
+ *
+ * The stick after the press is either the aerial's own, held, or the one the CPU holds
+ * once it is off the stage, toward the stage's middle (`recover`'s drift); it must be
+ * safe with both (Plan 5 final wave, fix round 3, ruling R-FW1w: fox-donkeyKong@
+ * townAndCity, seed 3541). Fox's down air 0.85 past the ledge was run with only its own
+ * stick, Down, and drifted out over open air to 116, from where the jump and Fire Fox
+ * reach the ledge. The CPU held the stick in: the down air ended under the stage at 82.8,
+ * 91.7 below its top, where the jump met the stage's underside and Fire Fox fell short.
  */
 export function aerialStrands(ctx: BehaviourContext, input: InputFrame): boolean {
   const { self } = ctx.view;
@@ -573,16 +601,24 @@ export function aerialStrands(ctx: BehaviourContext, input: InputFrame): boolean
   if (ctx.recovery === null || ctx.fighterDef === null) return false;
   const nearEdge = isOffstage(self, stage) || abs(self.x - stage.leftLedge) <= EDGE_AERIAL_RANGE || abs(self.x - stage.rightLedge) <= EDGE_AERIAL_RANGE;
   if (!nearEdge) return false;
-  const def = ctx.fighterDef;
-  const r = ctx.recovery;
+  const own = input & (Btn.Left | Btn.Right | Btn.Up | Btn.Down);
+  const middle = Math.trunc((stage.leftLedge + stage.rightLedge) / 2);
+  return [() => own, (f: FighterState) => towardX(f.x, middle)].some((after) => strandsHolding(ctx, input, after));
+}
+
+/** `aerialStrands` with `after(copy)` held from the step after the press. */
+function strandsHolding(ctx: BehaviourContext, input: InputFrame, after: (f: FighterState) => InputFrame): boolean {
+  const { self } = ctx.view;
+  const { stage } = ctx;
+  const def = ctx.fighterDef!;
+  const r = ctx.recovery!;
   const f = cloneFighter(self);
   const gctx = ghostContext(def, ctx.view.frame, f);
-  const stick = input & (Btn.Left | Btn.Right | Btn.Up | Btn.Down);
   let prev: InputFrame = 0;
   let begun = false;
   for (let k = 1; k <= AERIAL_LOOKAHEAD_FRAMES; k++) {
     const prevY = f.y;
-    const now = k === 1 ? input : stick;
+    const now = k === 1 ? input : after(f);
     gctx.frame = ctx.view.frame + k;
     ghostStep(f, now, prev, gctx);
     prev = now;

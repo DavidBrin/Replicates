@@ -7,6 +7,7 @@ import { fighterParams } from "@/engine/params";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
 import { emptyCombat } from "@/engine/combat";
 import { emptyKinetic, kineticSet } from "@/engine/kinetic";
+import { platformCentreX } from "@/engine/physics";
 import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
@@ -35,7 +36,7 @@ import {
   type LevelTuning,
   type RecoveryMove,
 } from "./behaviours";
-import { recover, recoveryFromDef } from "./recovery";
+import { aerialStrands, overFloor, recover, recoveryFromDef } from "./recovery";
 import { shield, survive } from "./defence";
 import {
   POINT_BLANK,
@@ -1066,6 +1067,54 @@ describe("turning at point blank (Plan 5 final wave, ruling R-FW1a; the final re
     expect(slidesOff(dashing(16, 1, centre.y), 0), "off the centre platform, over the stage").toBe(false);
   });
 
+  it("carries the slide's copy with Smashville's sweeping platform, as the engine carries the fighter (fix round 3: re-review 3's Minor 1)", () => {
+    // A dash let go 0.5 to 16 from the end of the platform it faces, the platform at 14
+    // points of its sweep, every fighter: `slidesOff` has it slide off into nothing exactly
+    // when the engine, playing the let-go, has it leave the platform with no floor under
+    // its fall (`overFloor`). The copy stood still on the moving platform: where it
+    // sweeps outward past the main ledge, the engine carried the fighter off and the copy
+    // stayed on.
+    const def = BAKED.stage("smashville");
+    const view = stageViewFromDef(def);
+    const index = def.platforms.findIndex((q) => q.motion !== undefined);
+    const p = def.platforms[index];
+    const period = p.motion!.periodFrames;
+    const wrong: string[] = [];
+    let off = 0;
+    for (const id of FIGHTERS.map((f) => f.id))
+      for (let c = 0; c < 14; c++) {
+        const stageFrame = Math.trunc((c * period) / 14);
+        const centre = platformCentreX(p, stageFrame);
+        const side = centre >= 0 ? 1 : -1;
+        for (const d of [0.5, 3, 5.5, 8, 10.5, 13, 16]) {
+          const s = createInitialState("smashville", [{ defId: id }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+          s.stageFrame = stageFrame;
+          s.frame = 0;
+          Object.assign(s.fighters[0], { x: centre + side * (p.halfWidth - fx(d)), y: p.y, grounded: true, action: "dashStart", actionFrame: 2, platform: index, facing: side, intangible: 0, invincible: 0 });
+          kineticSet(s.fighters[0], side * fx(2.2), 0);
+          Object.assign(s.fighters[1], { x: -side * fx(40), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, intangible: 0, invincible: 0 });
+          const judged = slidesOff(bakedCtx(s), 0);
+          let st = s;
+          let prev: readonly InputFrame[] = [0, 0];
+          let leaves = false;
+          for (let k = 1; k <= 30; k++) {
+            st = step(st, [0, 0], { prevInputs: prev, ctx: BAKED }).state;
+            prev = [0, 0];
+            const f = st.fighters[0];
+            if (f.platform !== index) {
+              leaves = !overFloor(BAKED.fighter(id), { ...f, grounded: false, platform: -1 }, view, st.frame, st.stageFrame);
+              break;
+            }
+            if (f.vx === 0) break;
+          }
+          if (leaves) off++;
+          if (judged !== leaves) wrong.push(`${id}, sweep ${c}/14, ${d} from the end: judged ${judged}, the engine ${leaves}`);
+        }
+      }
+    expect(wrong).toEqual([]);
+    expect(off).toBeGreaterThan(10);
+  });
+
   it("lets a shield down rather than press a direction in it, which is a roll (fix round 1, ruling R-FW1n)", () => {
     for (const action of ["shieldStart", "shield", "shieldStun"] as const) {
       expect(pressToward(behind({ action }).fighters[0], fx(3)), action).toBe(0);
@@ -1230,6 +1279,11 @@ describe("swinging at point blank at a short target (Plan 5 final wave, ruling R
     expect(recover(tc(-94, 70)).score, "over the left one").toBe(0);
     expect(recover(tc(108, 30)).score, "past it, over nothing").toBeGreaterThan(0);
     expect(recover(tc(93, 30)).score, "under it").toBeGreaterThan(0);
+    // Just past its outer end (99.06), falling straight: with the stick let go the fall
+    // misses the platform, held in it lands there. It recovers by holding in, the stick its
+    // floor read ran (fix round 3, ruling R-FW1v), not by yielding to another behaviour.
+    const pastEnd = recover(tc(101, 60));
+    expect([pastEnd.score > 0, pastEnd.input], "just past its end").toEqual([true, Btn.Left]);
     // Over its span but carried out past its end before the fall comes down, whatever the
     // stick: its fall is run, not its x read.
     expect(recover(tc(104, 47, 2.5)).score, "carried out past it").toBeGreaterThan(0);
@@ -1293,6 +1347,99 @@ describe("swinging at point blank at a short target (Plan 5 final wave, ruling R
         }
     expect(pressed).toBeGreaterThan(50);
     expect(missed).toEqual([]);
+  });
+
+  it("presses the judged aerial at point blank in a fall on the swing's beat only, as every swing in attack is (fix round 3, ruling R-FW1u)", () => {
+    // Fix round 2's air branch pressed the aerial that lands on every frame it would, off
+    // the swing's beat (`pulse`, 3 frames in 10) that the judged ground swing and the
+    // fall-through keep. Over the 27 sweep sets it doubled the knock-offs by point-blank
+    // aerials (859 to 1,712) and the self-destructs with them. A jump's first aerial is
+    // still pressed whenever it lands on the rise. Out of a short hop at a target 0 to 2
+    // ahead, falling: off the beat no aerial, on it the one that lands.
+    let onBeat = 0;
+    let fromBuffer = 0;
+    const offBeat: string[] = [];
+    for (const a of ["marth", "link", "mario", "fox"])
+      for (const b of ["kirby", "pikachu"])
+        for (const gap of [0, 1, 2]) {
+          let st = pointBlank(a, b, gap);
+          let prev: readonly InputFrame[] = [0, 0];
+          for (let k = 1; k <= 30; k++) {
+            const now = [k === 1 ? Btn.Jump : 0, 0];
+            const out = step(st, now, { prevInputs: prev, ctx: BAKED });
+            st = out.state;
+            prev = now;
+            const f = st.fighters[0];
+            if (out.events.hits.length > 0 || (f.grounded && f.action !== "jumpSquat")) break;
+            if (f.action !== "fall") continue;
+            // An aerial's press waiting in the buffer reads the stick as it comes out: off the
+            // beat too, the stick is the judged aerial's, not the one past the target.
+            if (!pulse(st.frame, 0, 10, 3) && held(attack(bakedCtx({ ...st, fighters: [{ ...f, bufferedAction: { kind: "attack", frame: st.frame } }, st.fighters[1]] })).input, Btn.Attack)) fromBuffer++;
+            if (!held(attack(bakedCtx(st)).input, Btn.Attack)) continue;
+            if (pulse(st.frame, 0, 10, 3)) onBeat++;
+            else offBeat.push(`${a} on ${b} at ${gap}, ${f.action}@${f.actionFrame}, frame ${st.frame}`);
+          }
+        }
+    expect(offBeat).toEqual([]);
+    expect(onBeat).toBeGreaterThan(10);
+    expect(fromBuffer).toBeGreaterThan(10);
+  });
+
+  it("short-hops at point blank only when an aerial from the hop is judged to land: none at a target dashing away (re-review 3's Minor 3, `wayOut`)", () => {
+    // Donkey Kong 2 in from Small Battlefield's right ledge facing in, Mario 12 further in,
+    // dashing away. The 4-frame rewind puts Mario at point blank in front, but no aerial
+    // from a hop reaches him where he will be: no hop. A hop taken whatever lands
+    // would jump here.
+    const s = createInitialState("smallBattlefield", [{ defId: "donkeyKong" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+    const ledge = stageViewFromDef(BAKED.stage("smallBattlefield")).rightLedge;
+    Object.assign(s.fighters[0], { x: ledge - fx(2), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, facing: -1, intangible: 0, invincible: 0, framesSinceDirPress: 30 });
+    Object.assign(s.fighters[1], { x: ledge - fx(14), y: 0, grounded: true, action: "dashStart", actionFrame: 1, platform: 0, facing: -1, intangible: 0, invincible: 0 });
+    kineticSet(s.fighters[1], -(fighterParams(BAKED.fighter("mario")).run_speed_max + fx(0.4)), 0);
+    s.frame = 0;
+    expect(attack(bakedCtx(s)).input).toBe(0);
+    // Where one does land, it hops: Marth 3.25 in from the same ledge, Kirby standing 0.92
+    // in front of him (the R-FW1q scene).
+    const m = createInitialState("smallBattlefield", [{ defId: "marth" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+    Object.assign(m.fighters[0], { x: ledge - fx(3.25), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, facing: -1, intangible: 0, invincible: 0, framesSinceDirPress: 30 });
+    Object.assign(m.fighters[1], { x: ledge - fx(4.17), y: 0, grounded: true, action: "stand", actionFrame: 30, platform: 0, facing: -1, intangible: 0, invincible: 0 });
+    m.frame = 0;
+    expect(attack(bakedCtx(m)).input).toBe(Btn.Jump);
+  });
+
+  it("does not press an aerial past the ledge from which the stage's underside blocks the way back: fox-donkeyKong@townAndCity (ruling R-FW1w; seed 3541, reduced)", () => {
+    // Fox 0.85 past Town & City's right ledge, falling, Donkey Kong standing at the edge
+    // below him. Run with its own stick only, the down air drifted out over open air, from
+    // where the jump and Fire Fox reach the ledge. The stick held in, as the CPU holds it,
+    // it ends under the stage 91.7 below its top, from where nothing gets back. A neutral air
+    // ends the same way.
+    const scene = (x: number) => {
+      const s = createInitialState("townAndCity", [{ defId: "fox" }, { defId: "donkeyKong" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+      Object.assign(s.fighters[0], { x: fx(x), y: fx(10.67), grounded: false, action: "fall", actionFrame: 5, jumpsUsed: 1, platform: -1, facing: 1, intangible: 0, invincible: 0 });
+      kineticSet(s.fighters[0], fx(1.02), -fx(1.51));
+      Object.assign(s.fighters[1], { x: fx(80.22), y: 0, grounded: true, action: "stand", actionFrame: 13, platform: 0, intangible: 0, invincible: 0 });
+      s.frame = 0;
+      return s;
+    };
+    const past = bakedCtx(scene(84.07));
+    expect(aerialStrands(past, Btn.Down | Btn.Attack), "the down air").toBe(true);
+    expect(aerialStrands(past, Btn.Attack), "the neutral air").toBe(true);
+    // Over the stage 25 in, the same down air comes down on the stage: pressed.
+    expect(aerialStrands(bakedCtx(scene(58)), Btn.Down | Btn.Attack), "over the stage").toBe(false);
+    // Played on from the scene against the standing Donkey Kong, Fox keeps his stock.
+    let st = scene(84.07);
+    const view = stageViewFromDef(BAKED.stage("townAndCity"));
+    const defs = st.fighters.map((f) => BAKED.fighter(f.defId));
+    const world = cpuWorldFromDef(defs[0], view, defs, (id) => BAKED.fighter(id), BAKED.bake);
+    let prev: readonly InputFrame[] = [0, 0];
+    let seed = 7;
+    for (let k = 1; k <= 400; k++) {
+      const d = decideCpu(st, 0, 9, seed, world);
+      seed = d.seed;
+      const out = step(st, [d.input, 0], { prevInputs: prev, ctx: BAKED });
+      expect(out.events.kos.map((ko) => ko.port), `step ${k}`).not.toContain(0);
+      st = out.state;
+      prev = [d.input, 0];
+    }
   });
 
   it("climbs only under the target's own platform: not after walking off the other one at its height (ruling R-FW1k, widened)", () => {

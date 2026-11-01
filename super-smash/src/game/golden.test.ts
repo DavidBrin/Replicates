@@ -226,8 +226,8 @@ const MATCHES: readonly Match[] = [
   },
   // Plan 5 final wave (ruling R-FW1e; the final review's M5): the one CPU match with the
   // Smash Ball on, so the CPU's own Smash Ball and Final Smash decisions are in the trace.
-  // Samus (level 9) breaks the ball and fires Zero Laser along Town & City's floor (fix
-  // round 2; round 1's had Kirby trap her in Ultra Sword, round 0's both).
+  // Samus (level 9) fires Zero Laser along Town & City's floor (fix rounds 2 and 3; round
+  // 1's had Kirby trap her in Ultra Sword, round 0's both).
   cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 606, BALL_RULES),
 ];
 
@@ -399,6 +399,11 @@ const MATCHES: readonly Match[] = [
  * between them, down from 44: none rolls any more, which the script does. The ball-on
  * match traps nobody now (Samus's Zero Laser), and `finalTrapped` is the Final Smash lab's;
  * it reaches nothing the four do not. All 59 are visited.
+ * Its fix round 3 (rulings R-FW1t to R-FW1w: a travelling Final Smash judged on its user's
+ * own floor; the point-blank aerial on the swing's beat; the floor read's stick held; an
+ * aerial judged with the stick held in and the stage's underside) adds no action either.
+ * The four CPU matches reach 44 between them, up from 43 (`rebound`); the ball-on match
+ * reaches `roll`, which they do not. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1218,8 +1223,9 @@ describe("engine golden trace", () => {
   // 0, 0, 2, 1 and 0.
   // Its fix round 2 moved all five CPU matches, each on the first frame a CPU at point
   // blank presses otherwise (ruling R-FW1q: no swing there goes unjudged): mario-fox on 45
-  // (the 1-100 sample), Fox rising beside Mario, a forward air judged to land where he
-  // pressed nothing; donkeyKong-pikachu on 218 (701-800), Pikachu in his shield, and
+  // (the 1-100 sample), Fox rising beside Mario, a back air judged to land where he
+  // pressed nothing (facing away from him, Right with Attack; fix round 3 corrects the
+  // forward air it was called here); donkeyKong-pikachu on 218 (701-800), Pikachu in his shield, and
   // link-samus on 431 (401-500), Link in his own swing, where the Attack buffered unjudged
   // is not pressed now; kirby-marth on 171 (401-500), Kirby in a special, the same (and on
   // 612 his Inhale from a dash's slide is not pressed: ruling R-FW1r); and the
@@ -1232,6 +1238,19 @@ describe("engine golden trace", () => {
   // The script and the eight labs are byte-identical. So now: hits 52/38/34/39, 6, 0, 1, 4,
   // 1, 2, 33, 54, 0 and 61; shield hits 6/8/1/2, 3, 0, 0, 0, 0, 0, 0, 0, 0 and 3; KOs
   // 0/0/1/0, 1, 2, 0, 0, 0, 0, 0, 2, 1 and 1.
+  // Its fix round 3 moved the same five, each on the first frame a CPU at point blank in
+  // the air, off the swing's beat and not on a jump's rise, presses no aerial now (ruling
+  // R-FW1u): mario-fox on 705 (701-800), Mario falling beside Fox, no down air; donkeyKong-
+  // pikachu on 741 (701-800), Pikachu falling, no neutral air; link-samus on 1337
+  // (1301-1400), Samus in her ledge get-up, no back air (Right with Attack, facing in);
+  // kirby-marth on 930 (901-1000), Kirby in his, the same (Left with Attack); and the ball-on match on 486 (401-500), Samus falling, no neutral
+  // air. Each holds the stick toward the target instead. Hits 39, 36, 34 and 38; shield hits
+  // 0, 4, 1 and 2; KOs 0, 0, 1 and 1 (were 52/38/34/39, 6/8/1/2 and 0/0/1/0): Marth goes by
+  // a hit, tumbling at 120.1% on 3282. The ball-on match: the ball is broken three times
+  // and Samus fires Zero Laser on 2145; Kirby goes by a hit at 119.0% on 2479. 63 hits,
+  // 1 shield hit, one KO. The script and the eight labs are byte-identical. So now: hits
+  // 39/36/34/38, 6, 0, 1, 4, 1, 2, 33, 54, 0 and 63; shield hits 0/4/1/2, 3, 0, 0, 0, 0, 0,
+  // 0, 0, 0 and 1; KOs 0/0/1/1, 1, 2, 0, 0, 0, 0, 0, 2, 1 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1311,7 +1330,7 @@ describe("engine golden trace", () => {
   // Plan 5 final wave (ruling R-FW1e; the final review's M5): the ball-on CPU match runs
   // the CPU's Smash Ball chase and its Final Smash, so a change to either moves the trace.
   // Pinned by what it plays, not only by its digest: a ball broken, and a Final Smash
-  // started by a CPU (Samus's, as measured: on 2225, Zero Laser along the floor).
+  // started by a CPU (Samus's, as measured: on 2145, Zero Laser along the floor).
   function expectCpuFinalSmash(): void {
     const m = played.get("samus-kirby-townAndCity-ball")!;
     expect(m.ballsBroken, "Smash Balls broken in the ball-on CPU match").toBeGreaterThan(0);

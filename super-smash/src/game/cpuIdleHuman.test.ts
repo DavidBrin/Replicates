@@ -177,6 +177,36 @@ function swingsUntilHit(start: GameState, frames: number): { readonly firstHit: 
   return { firstHit: -1, whiffs };
 }
 
+/** Port 0, a level-9 CPU, from `start` against an idle port 1: the step it loses a stock on within `frames`, or -1. */
+function cpuDeathWithin(start: GameState, frames: number): number {
+  let state = start;
+  const view = stageViewFromDef(CTX.stage(state.stageId));
+  const defs = state.fighters.map((f) => CTX.fighter(f.defId));
+  const world: CpuWorld = cpuWorldFromDef(defs[0], view, defs, (id) => CTX.fighter(id), CTX.bake);
+  let prev: readonly InputFrame[] = [0, 0];
+  let seed = 7;
+  for (let frame = 1; frame <= frames; frame++) {
+    const d = decideCpu(state, 0, 9, seed, world);
+    seed = d.seed;
+    const out = step(state, [d.input, 0], { prevInputs: prev, ctx: CTX });
+    state = out.state;
+    prev = [d.input, 0];
+    if (out.events.kos.some((ko) => ko.port === 0)) return frame;
+  }
+  return -1;
+}
+
+/** The CPU 40 in on `side` of Town & City, the idle `b` on that side's outer platform `out` from the middle, from frame `phase`. */
+function outerPlatformScene(a: string, b: string, side: number, out: number, phase: number): GameState {
+  const stage = CTX.stage("townAndCity");
+  const index = stage.platforms.findIndex((p) => p.soft && Math.sign(p.x) === side && Math.abs(p.x) > fx(60));
+  const s = createInitialState("townAndCity", [{ defId: a }, { defId: b }], RULES, 5, CTX);
+  placed(s.fighters[0], { x: fx(40 * side), y: 0, platform: 0, action: "stand", actionFrame: 30, facing: side });
+  placed(s.fighters[1], { x: fx(out * side), y: stage.platforms[index].y, platform: index, action: "stand", actionFrame: 30, facing: -side });
+  s.frame = phase;
+  return s;
+}
+
 /** `id` on `stage` as the scene has it: grounded, out of the entry's intangibility. */
 function placed(f: FighterState, over: Partial<FighterState>): void {
   Object.assign(f, { actionFrame: 0, intangible: 0, invincible: 0, grounded: true, ...over });
@@ -337,6 +367,36 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
       expect(firstHit > 0 && firstHit <= 300, `${a} at ${b} on the ${side > 0 ? "right" : "left"} platform: first hit ${firstHit}`).toBe(true);
     }
   });
+
+  it("keeps its stock chasing a player on Town & City's left outer platform: marth-mario and pikachu-mario (ruling R-FW1v, re-review 3's traces, reduced)", () => {
+    // Mario 94 out on the left outer platform, the CPU 40 in, phase 5. Marth's Dolphin Slash
+    // aimed over a floor that only the stick held in reaches, held neutral, angled out past
+    // the platform's end, and Marth died on 221; Pikachu, with Mario 98 out, through Quick
+    // Attack on 436. The floor read now gives the stick its fall was run with
+    // (`floorStick`), and `recover` holds it.
+    expect(cpuDeathWithin(outerPlatformScene("marth", "mario", -1, 94, 5), 600)).toBe(-1);
+    expect(cpuDeathWithin(outerPlatformScene("pikachu", "mario", -1, 98, 5), 600)).toBe(-1);
+  });
+
+  it("loses no stock in 512 reduced Town & City scenes against a player on an outer platform (ruling R-FW1v)", () => {
+    // Every pair, the idle player on each outer platform 94 and 98 out, the CPU 40 in on
+    // that side, phases 0 and 5, 600 frames. Fix round 2's floor read (the stick held in
+    // credited and not held) lost 17 of them.
+    const ids = FIGHTERS.map((f) => f.id);
+    const deaths: string[] = [];
+    let n = 0;
+    for (const a of ids)
+      for (const b of ids)
+        for (const side of [-1, 1])
+          for (const out of [94, 98])
+            for (const phase of [0, 5]) {
+              const death = cpuDeathWithin(outerPlatformScene(a, b, side, out, phase), 600);
+              if (death > 0) deaths.push(`${a}-${b}, side ${side}, ${out} out, phase ${phase}: ${death}`);
+              n++;
+            }
+    expect(n).toBe(512);
+    expect(deaths).toEqual([]);
+  }, 120_000);
 
   it("never throws a swing that will not land at point blank with the ledge behind: marth-kirby@smallBattlefield (ruling R-FW1q; seed 3260, reduced)", () => {
     // Marth 3.25 inside the right ledge facing left, Kirby 0.92 in front: none of his ground

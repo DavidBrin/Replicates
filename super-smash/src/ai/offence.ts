@@ -15,7 +15,7 @@ import { emptyKinetic } from "@/engine/kinetic";
 import { deepestReach, hitboxWorldPos, hurtboxCapsule } from "@/engine/hitbox";
 import { fighterHurtboxes } from "@/engine/acmd/hurtboxes";
 
-import { GLANCING_BLOW_DEPTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
+import { BUFFER_FRAMES, GLANCING_BLOW_DEPTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { abs, fx } from "@/engine/fixed";
 import { platformCentreX } from "@/engine/physics";
 import { LEDGE_GETUP_DISTANCE, LEDGE_GETUP_FRAMES } from "@/engine/states";
@@ -210,11 +210,26 @@ export const attack: Behaviour = (ctx) => {
   // into a roll away. Beyond point blank it is the whole stick, as before.
   const press = stale ? (self.grounded ? pressToward(self, dx) : toward) : 0;
   // At point blank no swing goes unjudged (fix round 2, ruling R-FW1q). In the air or in a
-  // jumpsquat (`wayOut`'s short hop), the aerial that lands (`judgedAerial`), whenever it
-  // does, and otherwise none, the stick on past the target; on the ground, no swing, which
-  // the judged branch above throws. Beyond point blank the fall-through stays as it was.
+  // jumpsquat (`wayOut`'s short hop), the aerial that lands (`judgedAerial`), and otherwise
+  // none, the stick on past the target; on the ground, no swing, which the judged branch
+  // above throws. Beyond point blank the fall-through stays as it was.
+  // When (fix round 3, ruling R-FW1u): on the swing's beat (`swinging`), as every swing
+  // here is, except the first aerial of a jump, pressed whenever it lands on the jump's
+  // rise or from its jumpsquat, and an aerial's press waiting in the buffer, which reads
+  // the stick as it comes out (`buffered`). Pressed whenever it would land through the
+  // fall as well, aerial after aerial, it doubled the knock-offs by point-blank aerials
+  // over the 27 sweep sets (859 to 1,712) and the self-destructs after them; on the beat
+  // alone, a jump's 3 frames at point blank past a player on a platform fell between
+  // beats on every pass of a 50-frame loop (fox-kirby@smallBattlefield, the first hit on
+  // frame 608).
   if (abs(dx) < POINT_BLANK) {
-    if (!self.grounded || self.action === "jumpSquat") return { score: 400, input: judgedAerial(ctx) ?? toward };
+    if (!self.grounded || self.action === "jumpSquat") {
+      const b = self.bufferedAction;
+      const buffered = b !== null && b.kind === "attack" && ctx.view.frame + 1 - b.frame <= BUFFER_FRAMES;
+      const rising = self.action === "jumpSquat" || self.action === "jump";
+      const aerial = swinging || buffered || rising ? judgedAerial(ctx) : null;
+      return { score: 400, input: aerial ?? toward };
+    }
     return { score: 400, input: press };
   }
   return { score: 400, input: press | (swinging ? Btn.Attack : 0) };
@@ -338,6 +353,11 @@ export function slidesOff(ctx: BehaviourContext, input: InputFrame): boolean {
     const left = under === null ? ctx.stage.leftLedge : platformCentreX(under, stageFrame + k) - under.halfWidth;
     const right = under === null ? ctx.stage.rightLedge : platformCentreX(under, stageFrame + k) + under.halfWidth;
     if (f.x < left || f.x > right) return !overFloor(def, { ...f, grounded: false, platform: -1 }, ctx.stage, ctx.view.frame + k, stageFrame + k);
+    // Still on it: a sweeping platform carries it, as the engine carries a fighter
+    // standing there after the step's own movement (`resolveCollision`; fix round 3,
+    // re-review 3's Minor 1: Smashville's platform swept the fighter off where the copy,
+    // standing still on it, stayed on).
+    if (under?.motion !== undefined) f.x += platformCentreX(under, stageFrame + k) - platformCentreX(under, stageFrame + k - 1);
     if (f.vx === 0) return false;
   }
   return false;
