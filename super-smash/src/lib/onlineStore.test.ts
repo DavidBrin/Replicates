@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi, type Moc
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
-import { localBuild } from "@/game/onlineConfig";
+import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
+import { buildStartConfig, localBuild } from "@/game/onlineConfig";
 import { GAME_SIM_CONTEXT, engineFingerprint, rulesFingerprint } from "@/game/simContext";
 import { NEGOTIATION_TIMEOUT_MS } from "@/net/adapters/doSignal";
 import { STUN_ONLY } from "@/net/iceConfig";
@@ -29,6 +30,7 @@ import {
   roomErrorMessage,
   sendLobby,
   sendOwnPick,
+  setOwnStickJump,
   useOnlineStore,
   type OnlineErrorReason,
 } from "./onlineStore";
@@ -1170,5 +1172,102 @@ describe("control options online (Plan 5)", () => {
     expect(warn.mock.calls[0].join(" ")).toContain(`its engine rules are ${rulesFingerprint(older)}, this build's are ${localBuild().engineRules}`);
     await Promise.resolve();
     expect(guest.session.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Plan 5, Task 20 fix round 1 (ruling R-T20a): during an online session, this
+ * machine's Stick Jump is its own port's alone. A change to it is kept for after
+ * the session and said again in this machine's pick, so the host's next start
+ * carries it; the other port's is the other peer's, set only by their pick. The
+ * session is bound here as the lobby binds it: `/controls` is reached mid-session
+ * only through the browser's history, so it is tested at the store.
+ */
+describe("this machine's own Stick Jump during an online session (R-T20a)", () => {
+  const START = { stageId: "battlefield", stageForm: "normal", rules: CONFIG.rules, seed: 5 } as const;
+
+  /** A session seated as `role` and bound, as the lobby leaves it, with this machine's pick made. */
+  function seated(role: Role) {
+    const fake = fakeSession();
+    setActiveSession(fake.session);
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role });
+    const own = role === "host" ? 0 : 1;
+    useMatchConfig.getState().setFighter(own, "fox");
+    return { fake, own };
+  }
+
+  it.each(["host", "guest"] as const)("says a change in this machine's pick, as the %s, and only for its own port", (role) => {
+    const { fake, own } = seated(role);
+    expect(setOwnStickJump(false)).toBe(true);
+    expect(useMatchConfig.getState().players.map((p) => p.stickJump)).toEqual(own === 0 ? [false, true] : [true, false]);
+    expect(setOwnStickJump(true)).toBe(true);
+    expect(fake.sent).toEqual([
+      { kind: "pick", fighterId: "fox", costume: own, stickJump: false },
+      { kind: "pick", fighterId: "fox", costume: own },
+    ]);
+  });
+
+  it("carries the guest's mid-session change into the host's next start", () => {
+    // The guest turns it off once it has picked: its pick goes out again...
+    const { fake: guest } = seated("guest");
+    setOwnStickJump(false);
+    const said = guest.sent.at(-1)!;
+    leaveOnline();
+    useMatchConfig.getState().reset();
+    // ...and the host, given it, starts the next match with it on port 2.
+    const { fake: host } = seated("host");
+    host.emit({ type: "lobby", message: overTheWire(said) });
+    const start = buildStartConfig({ players: useMatchConfig.getState().players, ...START });
+    expect(start.controls).toEqual([0, CONTROL_STICK_JUMP_OFF]);
+  });
+
+  it("carries the host's own mid-session change into its next start", () => {
+    seated("host");
+    useMatchConfig.getState().setFighter(1, "mario");
+    setOwnStickJump(false);
+    expect(buildStartConfig({ players: useMatchConfig.getState().players, ...START }).controls).toEqual([CONTROL_STICK_JUMP_OFF, 0]);
+  });
+
+  it("leaves a match under way as it started: it plays its start's options", () => {
+    seated("guest");
+    useOnlineStore.getState().patch({ config: CONFIG });
+    setOwnStickJump(false);
+    expect(useOnlineStore.getState().config).toBe(CONFIG);
+    expect(useOnlineStore.getState().config?.controls).toEqual([0, 0]);
+  });
+
+  it.each(["host", "guest"] as const)("keeps the change on leaving, as the %s, whatever the other player's pick says after it", (role) => {
+    const { fake } = seated(role);
+    setOwnStickJump(false);
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false });
+    // The other player's pick, theirs on, after the change: their port only.
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 3 } });
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false });
+    expect(useMatchConfig.getState().players[role === "host" ? 1 : 0].stickJump).toBe(true);
+    leaveOnline();
+    expect(useMatchConfig.getState().players.map((p) => [p.kind, p.stickJump])).toEqual([
+      ["human", false],
+      ["cpu", true],
+    ]);
+  });
+
+  it("never lets a remote pick reach this machine's options", () => {
+    const { fake } = seated("guest");
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 0, stickJump: false } });
+    expect(useMatchConfig.getState().players[0].stickJump).toBe(false);
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true });
+    leaveOnline();
+    expect(useMatchConfig.getState().players[0].stickJump).toBe(true);
+  });
+
+  it("changes nothing with no session seated", () => {
+    expect(setOwnStickJump(false)).toBe(false);
+    expect(useMatchConfig.getState().players.map((p) => p.stickJump)).toEqual([true, true]);
+    const unseated = fakeSession();
+    setActiveSession(unseated.session);
+    expect(setOwnStickJump(false)).toBe(false);
+    expect(unseated.sent).toEqual([]);
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true });
   });
 });

@@ -462,6 +462,23 @@ export function sendOwnPick(port: number): boolean {
   return sendLobby(own?.stickJump === false ? { ...pick, stickJump: false } : pick);
 }
 
+/**
+ * This machine's own Stick Jump, changed on `/controls` during an online session
+ * (Plan 5, Task 20 fix round 1, ruling R-T20a). Only this machine's port is its to
+ * change (`session.localPort`): the other port is the other peer's, set by their
+ * pick. The change is kept for after the session (`localOptions`) and said again in
+ * this machine's pick, so the host's next start carries it. A match under way plays
+ * its start's `controls` and never changes. False, changing nothing, with no session
+ * or one the room has not seated.
+ */
+export function setOwnStickJump(on: boolean): boolean {
+  const port = getActiveSession()?.localPort ?? null;
+  if (port === null) return false;
+  useMatchConfig.getState().setLocalStickJump(port, on);
+  sendOwnPick(port);
+  return true;
+}
+
 /** The host's stage as the match config now holds it, with the rules the host will start, for the guest to see. */
 export function sendHostStage(): boolean {
   const { stageId, stageForm, rules } = useMatchConfig.getState();

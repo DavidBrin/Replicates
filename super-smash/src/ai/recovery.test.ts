@@ -99,6 +99,33 @@ function cpuRun(state: GameState, world: CpuWorld, frames: number, ctx?: SimCont
   return out;
 }
 
+/**
+ * The level-9 CPU on `port` played through the aerial it is in, the other ports
+ * idle, until the aerial's first free frame (or 80 frames on): the state then,
+ * whether it pressed Special in the aerial, and whether a held Up's tap jump took
+ * its buffer there (a buffered jump with no Jump pressed, which only Stick Jump
+ * makes: Plan 5, Task 20 fix round 1's M1).
+ */
+function throughTheAerial(start: GameState, port: number, world: CpuWorld): { state: GameState; pressed: boolean; tapJumped: boolean } {
+  let s = start;
+  let prev: readonly InputFrame[] = start.fighters.map(() => 0);
+  let seed = 7;
+  let pressed = false;
+  let jumpPressed = false;
+  let tapJumped = false;
+  for (let i = 0; i < 80 && s.fighters[port].action === "attack"; i++) {
+    const d = decideCpu(s, port, 9, seed, world);
+    seed = d.seed;
+    if ((d.input & Btn.Special) !== 0) pressed = true;
+    if ((d.input & Btn.Jump) !== 0) jumpPressed = true;
+    const now = start.fighters.map((_, p) => (p === port ? d.input : 0));
+    s = step(s, now, { prevInputs: prev }).state;
+    prev = now;
+    if (s.fighters[port].bufferedAction?.kind === "jump" && !jumpPressed) tapJumped = true;
+  }
+  return { state: s, pressed, tapJumped };
+}
+
 describe("the CPU's up special model", () => {
   it("exists for every fighter on the roster, and is the up special it uses in the air", () => {
     // A move whose movement left its momentum list (Task 13, Task 13b) still has a
@@ -619,19 +646,10 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
     let checked = 0;
     for (let into = 0; into <= 40; into += 2)
       for (let phase = 0; phase < 6; phase++) {
-        let s = airborne("finalDestination", "mario", { x: fx(-100), y: fx(-12), action: "attack", move: "nair", actionFrame: into, facing: 1 }, fx(40));
-        s.frame = phase;
+        const start = airborne("finalDestination", "mario", { x: fx(-100), y: fx(-12), action: "attack", move: "nair", actionFrame: into, facing: 1 }, fx(40));
+        start.frame = phase;
         // Run the CPU through the aerial, noting whether it pressed Special in it.
-        let prev: readonly InputFrame[] = [0, 0];
-        let seed = 7;
-        let pressed = false;
-        for (let i = 0; i < 80 && s.fighters[0].action === "attack"; i++) {
-          const d = decideCpu(s, 0, 9, seed, world);
-          seed = d.seed;
-          if ((d.input & Btn.Special) !== 0) pressed = true;
-          s = step(s, [d.input, 0], { prevInputs: prev }).state;
-          prev = [d.input, 0];
-        }
+        const { state: s, pressed } = throughTheAerial(start, 0, world);
         if (!pressed) continue;
         checked++;
         expect([s.fighters[0].action, s.fighters[0].move], `${into} frames in, phase ${phase}`).toEqual(["special", "upB"]);
@@ -733,31 +751,36 @@ describe("a CPU on the default control options (Plan 5, Task 20)", () => {
     return s;
   };
 
-  it("gets its up special out of an offstage aerial with the local player's Stick Jump off, playing on the default itself", () => {
-    // As "an up special pressed during an offstage aerial comes out on the aerial's
-    // first free frame", with the CPU on port 2 and the local player's Stick Jump off.
+  it("gets its up special out of an offstage aerial with the local player's Stick Jump off, through its own tap jump", () => {
+    // The CPU, on port 2 beside a local player with Stick Jump off, in a forward air 25
+    // left of Final Destination's ledge, out of jumps, from every frame of the aerial
+    // and every phase of the press pulse. Decided on its up special, it holds Up, which
+    // tap-jumps five frames on and takes the buffer from the Special; it presses again
+    // (Task 19), and the up special comes out on the aerial's first free frame. That
+    // path is Stick Jump's: with the CPU's own option forced off there is no tap jump
+    // to take the buffer, and this fails (Task 20 fix round 1's M1). Every other frame
+    // of Task 19's grid, for the time: each run is two (the option on, then forced off).
     const world = cpuWorldFromDef(def("mario"), fd);
-    let checked = 0;
-    for (let into = 0; into <= 40; into += 2)
-      for (let phase = 0; phase < 6; phase++) {
-        let s = localOffCpu({ x: fx(-100), y: fx(-12), action: "attack", move: "nair", actionFrame: into, facing: 1, jumpsUsed: 2 });
-        expect(s.fighters.map((f) => f.combat.controls)).toEqual([CONTROL_STICK_JUMP_OFF, 0]);
-        s.frame = phase;
-        let prev: readonly InputFrame[] = [0, 0];
-        let seed = 7;
-        let pressed = false;
-        for (let i = 0; i < 80 && s.fighters[1].action === "attack"; i++) {
-          const d = decideCpu(s, 1, 9, seed, world);
-          seed = d.seed;
-          if ((d.input & Btn.Special) !== 0) pressed = true;
-          s = step(s, [0, d.input], { prevInputs: prev }).state;
-          prev = [0, d.input];
+    const runs = (own?: number) => {
+      const out: { at: string; state: GameState; pressed: boolean; tapJumped: boolean }[] = [];
+      for (let into = 0; into <= 40; into += 4)
+        for (let phase = 0; phase < 6; phase++) {
+          const start = localOffCpu({ x: fx(-110), y: fx(5), action: "attack", move: "fair", actionFrame: into, facing: 1, jumpsUsed: 2 });
+          expect(start.fighters.map((f) => f.combat.controls)).toEqual([CONTROL_STICK_JUMP_OFF, 0]);
+          if (own !== undefined) start.fighters[1].combat.controls = own;
+          start.frame = phase;
+          out.push({ at: `${into} frames in, phase ${phase}`, ...throughTheAerial(start, 1, world) });
         }
-        if (!pressed) continue;
-        checked++;
-        expect([s.fighters[1].action, s.fighters[1].move], `${into} frames in, phase ${phase}`).toEqual(["special", "upB"]);
-      }
-    expect(checked).toBeGreaterThan(0);
+      return out.filter((r) => r.pressed);
+    };
+    const played = runs();
+    expect(played.length).toBeGreaterThan(0);
+    for (const r of played) {
+      expect(r.tapJumped, `${r.at}: a tap jump took the buffer`).toBe(true);
+      expect([r.state.fighters[1].action, r.state.fighters[1].move], r.at).toEqual(["special", "upB"]);
+    }
+    // The CPU's own option forced off: the same aerials never tap-jump.
+    expect(runs(CONTROL_STICK_JUMP_OFF).filter((r) => r.tapJumped)).toEqual([]);
   });
 
   it("models its own fall on its own Stick Jump: a held Up jumps in its model as it does in step()", () => {

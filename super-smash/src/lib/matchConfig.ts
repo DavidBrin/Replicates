@@ -723,9 +723,12 @@ interface MatchConfigState {
   /** Seated for an online match by `configureOnline`, until `leaveOnline` or `reset`. */
   online: boolean;
   /**
-   * Plan 5: this machine's player's control options, as they were when
-   * `configureOnline` seated the match. Online, the other player's pick writes
-   * theirs over one port; `leaveOnline` puts these back (ruling P5-R26).
+   * Plan 5: this machine's player's control options through an online session:
+   * taken from the offline seats by `configureOnline`, changed only by this
+   * machine's own edits (`setLocalStickJump`), never by the other player's pick,
+   * and seated again by `leaveOnline` (rulings P5-R26, R-T20a). Meaningful only
+   * while `online`: offline the seats hold the options, and this is left as the
+   * last session left it, unread.
    */
   localOptions: ControlOptions;
 
@@ -749,6 +752,12 @@ interface MatchConfigState {
   setScheme(port: number, scheme: SchemeId): boolean;
   /** Plan 5: turn a port's stick jump on or off. */
   setStickJump(port: number, on: boolean): void;
+  /**
+   * Plan 5 (ruling R-T20a): this machine's own port's stick jump during an online
+   * session, kept for after it (`localOptions`). `onlineStore.setOwnStickJump`,
+   * which knows the port, calls it; the other player's pick never does.
+   */
+  setLocalStickJump(port: number, on: boolean): void;
   /** Two humans, one per machine, each on their own keyboard's Config 1, both with this machine's control options. */
   configureOnline(): void;
   /** Back to the offline default: one human, with this machine's control options again, and a CPU. */
@@ -915,6 +924,12 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
 
   setStickJump: (port, on) =>
     set((s) => ({ players: s.players.map((p) => (p.port === port ? { ...p, stickJump: on } : p)) })),
+
+  setLocalStickJump: (port, on) =>
+    set((s) => ({
+      players: s.players.map((p) => (p.port === port ? { ...p, stickJump: on } : p)),
+      localOptions: { ...s.localOptions, stickJump: on },
+    })),
 
   configureOnline: () =>
     set((s) => {

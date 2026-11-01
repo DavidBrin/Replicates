@@ -223,9 +223,9 @@ export function ControlsPanel() {
             <strong className="text-white">Up + Special</strong> is your recovery. To tell the two apart, an Up
             press waits five frames to see whether an attack follows it. The{" "}
             <strong className="text-white">Jump</strong> key has nothing to work out, so it fires the instant
-            you press it — that is what it is there for. As in Ultimate, each player can turn{" "}
-            <strong className="text-white">Stick jump</strong> off below: then Up only aims, and only the Jump
-            key jumps.
+            you press it — that is what it is there for. As in Ultimate,{" "}
+            <strong className="text-white">Stick jump</strong> can be turned off for each player below: then Up
+            only aims, and only the Jump key jumps.
           </p>
         </SkewPanel>
 

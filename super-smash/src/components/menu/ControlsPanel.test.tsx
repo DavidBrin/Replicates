@@ -15,6 +15,13 @@ beforeEach(() => {
 });
 
 describe("ControlsPanel", () => {
+  /** Plan 5, Task 20 (item 7, and the fix round's M2): the player options are on the screen, and the Up rule says Stick Jump turns off. */
+  it("offers each human's Stick Jump, and says that it can be turned off", () => {
+    render(<ControlsPanel />);
+    expect(screen.getByRole("switch", { name: "P1 stick jump" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("heading", { name: /up jumps, like the stick/i }).parentElement).toHaveTextContent(/stick jump can be turned off/i);
+  });
+
   it("states the mirror-image problem in the numbers, not in prose alone", () => {
     render(<ControlsPanel />);
     expect(screen.getByText(/6 physical keys carry opposite meanings/i)).toBeInTheDocument();
