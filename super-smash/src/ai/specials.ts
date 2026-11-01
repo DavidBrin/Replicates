@@ -26,10 +26,16 @@
  */
 
 import { LAUNCH_SPEED_DECAY, SMASH_CHARGE_MAX } from "@/engine/constants";
-import { finalSmashActive } from "@/engine/final";
+import { endDash, finalSmashActive, holdsAloft, inDash, isFinalSlot } from "@/engine/final";
+import { stopsAtEdge } from "@/engine/groundExit";
 import { inhaleMayCatch } from "@/engine/inhale";
-import { abs, fx } from "@/engine/fixed";
-import { platformCentreX } from "@/engine/physics";
+import { ONE, abs, fx } from "@/engine/fixed";
+import { emptyCombat } from "@/engine/combat";
+import { emptyKinetic, kineticClear } from "@/engine/kinetic";
+import { integrate, platformCentreX, resolveCollision } from "@/engine/physics";
+import { cloneFighter } from "@/engine/simulate";
+import { advanceFighter, applyMovement, interpretInput, onLanded, onLeftGround, updateInputTracking, type StateContext } from "@/engine/states";
+import { begunInAir } from "@/engine/upSpecial";
 import { smashHoldFrame } from "@/engine/acmd/run";
 import { fighterParams } from "@/engine/params";
 import { articleOf, findProjectileDef, isFinalProjectile } from "@/engine/projectile";
@@ -39,10 +45,12 @@ import {
   type FighterDef,
   type FighterState,
   type Hitbox,
+  type InputFrame,
   type MoveDef,
   type MoveSlot,
   type ProjectileDef,
   type ProjectileState,
+  type StageDef,
 } from "@/engine/types";
 import {
   HELD_ACTIONS,
@@ -53,6 +61,7 @@ import {
   dodgeDrift,
   free,
   fullHopPulse,
+  isHelpless,
   isOffstage,
   moveReach,
   pulse,
@@ -60,9 +69,10 @@ import {
   type Behaviour,
   type BehaviourContext,
   type BehaviourResult,
+  type RecoveryMove,
   type StageView,
 } from "./behaviours";
-import { sideRecoveryFromDef, upBInReach } from "./recovery";
+import { ghostContext, ghostStep, overFloor, recoveryFromDef, sideRecoveryFromDef, upBInReach, upBPlan } from "./recovery";
 import { counterWait, specialWith } from "./defence";
 import { pressToward } from "./offence";
 
@@ -263,8 +273,18 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  * the press that does not carry it past (ruling R-FW1a: `pressToward`; the review's I1:
  * the CPU held the power through a dash dance, which stopped the Smash Ball for
  * everybody). No roll: the power is a sure thing, kept until the moment comes.
+ *
+ * Until it is, a travelling one that ignores the edge (Volt Tackle) takes its user to a
+ * spot it would fire from (`finalSmashSpot`; Plan 5 final wave 2, fix round 1, ruling
+ * R-FW2n).
  */
 export const finalSmash: Behaviour = (ctx) => {
+  const fire = fireFinalSmash(ctx);
+  return fire.score > 0 ? fire : finalSmashSpot(ctx);
+};
+
+/** `finalSmash`'s use of the power, where the moment has come; NOTHING where it has not. */
+function fireFinalSmash(ctx: BehaviourContext): BehaviourResult {
   const { self, target, targetAction, dx, dy, facingTarget } = ctx.view;
   const fs = ctx.fighterDef?.moves.finalSmash;
   if (self.finalSmashReady <= 0 || fs === undefined || target === null || !free(self) || finalSmashOut(ctx)) return NOTHING;
@@ -284,35 +304,352 @@ export const finalSmash: Behaviour = (ctx) => {
     if (abs(dy) > FINAL_SMASH_BAND || isOffstage(self, ctx.stage) || (!target.grounded && !committed)) return NOTHING;
   }
   if (!facingTarget) return self.grounded ? { score: 880, input: pressToward(self, dx) } : NOTHING;
-  // Its own safety, read where it is (Plan 5 final wave, fix round 3, ruling R-FW1t): one
-  // that travels (`dashTravel`) and does not stop at the edge is not fired where its whiff
-  // would carry it off the floor it stands on (`whiffLeaves`). The target is judged on the
-  // view as above (R-T19d); the user's own position is not delayed.
-  if (travel > 0 && !(fs.dashEnd?.edge === true && self.grounded) && whiffLeaves(ctx, fs)) return NOTHING;
+  // Its own safety, read where it is (Plan 5 final wave, fix round 3, ruling R-FW1t; part 2
+  // fix round 1, ruling R-FW2n): one that travels (`dashTravel`) and does not stop at the
+  // edge is fired only where its whiff ends somewhere it comes back from (`whiffComesBack`).
+  // The target is judged on the view as above (R-T19d); the user's own position is not delayed.
+  if (travel > 0 && !(fs.dashEnd?.edge === true && self.grounded) && !whiffComesBack(ctx)) return NOTHING;
   return { score: 900, input: pulse(ctx.view.frame, self.port, 2, 1) ? Btn.Special : 0 };
-};
+}
 
 /**
- * Whether a travelling Final Smash, whiffed, carries its user off the floor it stands on
- * (ruling R-FW1t; fox-pikachu@townAndCity, seed 97040: a level-7 Pikachu fired Volt
- * Tackle at a Fox its view, 10 frames behind, put in front, and the dash took him off
- * the left ledge). Along its facing from its live position: its own dash windows
- * (`dashTravel`, the move's momentum, read, never copied, so a re-tuned speed is read as
- * it is) and the slide of the last window's speed after, braked by its traction
- * (`ground_brake`), against the room to the end of its floor (`floorEnds`). Of the
- * roster's Final Smashes only Critical Hit and Volt Tackle travel; Critical Hit's dash
- * stops at the edge on the ground (`MoveDef.dashEnd.edge`), so only Volt Tackle is
- * judged here. Off a floor, it leaves.
+ * UNVERIFIED (CPU judgement): how far ahead of its spot the CPU wants its target at least,
+ * so that standing there it has the target in front of it, not level with it.
  */
-function whiffLeaves(ctx: BehaviourContext, fs: MoveDef): boolean {
-  const { self } = ctx.view;
-  const floor = floorEnds(self, ctx.stage, ctx.state.stageFrame);
-  if (floor === null || ctx.fighterDef === null) return true;
-  const windows = fs.momentum ?? [];
-  const last = windows.length === 0 ? 0 : abs(windows[windows.length - 1].x);
-  const slide = abs(dodgeDrift(last, fighterParams(ctx.fighterDef).ground_brake, Number.MAX_SAFE_INTEGER));
-  const room = self.facing > 0 ? floor.right - self.x : self.x - floor.left;
-  return dashTravel(fs) + slide > room;
+export const SPOT_MIN_AHEAD = fx(4);
+
+/**
+ * UNVERIFIED (CPU judgement): how far from its spot it runs rather than walks (a walk's
+ * let-go slides a unit and a half, a run's about fifteen).
+ */
+export const SPOT_WALK = fx(16);
+
+/**
+ * UNVERIFIED (CPU judgement): how far short of its spot's target-side end it stops when it
+ * still has to turn round there, for the turn's own step (a quarter of a unit for Pikachu's).
+ */
+export const SPOT_TURN_ROOM = fx(0.5);
+
+/** UNVERIFIED (CPU judgement): the most steps a let-go's slide is followed for (`slideStop`). */
+const SPOT_SLIDE_FRAMES = 60;
+
+/** Where on its stage's main floor a travelling Final Smash, whiffed from a standstill facing each way, ends somewhere its user comes back from: whole-unit intervals of x. */
+export interface FiringBands {
+  readonly right: readonly (readonly [number, number])[];
+  readonly left: readonly (readonly [number, number])[];
+}
+
+/** One memo a fighter and a stage view: the bands depend on nothing else (`firingBands`). */
+const BANDS = new WeakMap<FighterDef, WeakMap<StageView, FiringBands>>();
+
+/**
+ * The spots on the main floor from which `def`'s travelling Final Smash, pressed from a
+ * standstill facing right or left, would be fired by `whiffComesBack`'s own reading (Plan 5
+ * final wave 2, fix round 1, ruling R-FW2n): every whole unit between the ledges, its whiff
+ * run (`whiffEnd`) and judged (on a floor, or `recoversFrom`). They read nothing but the
+ * fighter's definition and the stage, so they are worked out once a pair and kept; the
+ * stage's clock is taken at 0 (a moving soft platform where it starts), and the live check
+ * at the moment of firing (`whiffComesBack`) has the last word. A memo of a pure function:
+ * the CPU's answers are the same with it or without.
+ */
+export function firingBands(def: FighterDef, stage: StageView): FiringBands {
+  let byStage = BANDS.get(def);
+  if (byStage === undefined) {
+    byStage = new WeakMap();
+    BANDS.set(def, byStage);
+  }
+  const known = byStage.get(stage);
+  if (known !== undefined) return known;
+  const r = recoveryFromDef(def);
+  const runs = (dir: number): [number, number][] => {
+    const out: [number, number][] = [];
+    for (let x = Math.ceil(stage.leftLedge / ONE) * ONE; x <= stage.rightLedge; x += ONE) {
+      const f = standingAt(def, stage, x, dir);
+      const end = whiffEnd(def, f, stage, 0, 0);
+      const back = end !== null && (end.fighter.grounded || recoversFrom(def, end.fighter, stage, r, def.attributes.jumps, end.steps, end.steps));
+      if (!back) continue;
+      const last = out.at(-1);
+      if (last !== undefined && last[1] === x - ONE) last[1] = x;
+      else out.push([x, x]);
+    }
+    return out;
+  };
+  const bands = { right: runs(1), left: runs(-1) };
+  byStage.set(stage, bands);
+  return bands;
+}
+
+/** A fighter standing still on the main floor at `x`, facing `dir`, with the power: what `firingBands` runs its whiff from. */
+function standingAt(def: FighterDef, stage: StageView, x: number, dir: number): FighterState {
+  return {
+    port: 0,
+    defId: def.id,
+    costume: 0,
+    x,
+    y: stage.groundY,
+    vx: 0,
+    vy: 0,
+    facing: dir,
+    grounded: true,
+    platform: 0,
+    action: "stand",
+    actionFrame: 30,
+    move: null,
+    charge: 0,
+    damage: 0,
+    stocks: 3,
+    jumpsUsed: 0,
+    airDodged: false,
+    fastFalling: false,
+    shortHop: false,
+    shieldHealth: fx(50),
+    hitstun: 0,
+    hitlag: 0,
+    launchSpeed: 0,
+    pendingKnockback: 0,
+    pendingAngle: 0,
+    pendingFacing: 0,
+    balloon: false,
+    intangible: 0,
+    invincible: 0,
+    grabbedBy: -1,
+    grabbing: -1,
+    grabTimer: 0,
+    ledge: null,
+    ledgeRegrabs: 0,
+    ledgeLockout: 0,
+    airTime: 0,
+    finalSmashReady: 1,
+    staleQueue: [],
+    hitThisMove: [],
+    framesSinceDirPress: 999,
+    lastDirPressed: 0,
+    bufferedAction: null,
+    kinetic: emptyKinetic(),
+    combat: emptyCombat(),
+  };
+}
+
+/** Where the CPU fires from (`finalSmashSpotFor`): the nearest point `x`, facing `dir`, of the stretch `from`..`to` it fires from. */
+export interface FinalSmashSpot {
+  readonly x: number;
+  readonly dir: number;
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * The nearest spot on the main floor the CPU would fire its travelling Final Smash from
+ * with its target ahead (Plan 5 final wave 2, fix round 1, ruling R-FW2n): in a firing band
+ * (`firingBands`) facing the target, and with the target `SPOT_MIN_AHEAD` to
+ * `FINAL_SMASH_RANGE` ahead, as the point-blank use wants it. Null where there is none.
+ */
+export function finalSmashSpotFor(def: FighterDef, stage: StageView, selfX: number, targetX: number): FinalSmashSpot | null {
+  const bands = firingBands(def, stage);
+  let best: FinalSmashSpot | null = null;
+  for (const dir of [1, -1]) {
+    const lo = dir > 0 ? targetX - FINAL_SMASH_RANGE : targetX + SPOT_MIN_AHEAD;
+    const hi = dir > 0 ? targetX - SPOT_MIN_AHEAD : targetX + FINAL_SMASH_RANGE;
+    for (const [a, b] of dir > 0 ? bands.right : bands.left) {
+      const from = Math.max(a, lo);
+      const to = Math.min(b, hi);
+      if (from > to) continue;
+      const x = Math.min(Math.max(selfX, from), to);
+      if (best === null || abs(x - selfX) < abs(best.x - selfX)) best = { x, dir, from, to };
+    }
+  }
+  return best;
+}
+
+/**
+ * Where the fighter comes to rest on its floor if it lets go now: its own copy slid by the
+ * engine's rules (`ghostStep`), as `slidesOff` slides it. Null if it is still moving after
+ * `SPOT_SLIDE_FRAMES` steps.
+ */
+function slideStop(ctx: BehaviourContext, def: FighterDef): number | null {
+  const f = cloneFighter(ctx.view.self);
+  const g = ghostContext(def, ctx.view.frame, f);
+  for (let k = 1; k <= SPOT_SLIDE_FRAMES; k++) {
+    g.frame = ctx.view.frame + k;
+    ghostStep(f, 0, 0, g);
+    if (f.vx === 0) return f.x;
+  }
+  return null;
+}
+
+/**
+ * While it holds a travelling Final Smash that ignores the edge (Volt Tackle), the CPU goes
+ * to the nearest spot it would fire it from with its target ahead (`finalSmashSpotFor`),
+ * turns to face the target there, and leaves the rest to its other behaviours, from which
+ * `fireFinalSmash` fires when the target is held point-blank (ruling R-T19d unchanged) (Plan 5
+ * final wave 2, fix round 1, ruling R-FW2n: judged by where the whiff ends, the CPU's Volt
+ * Tackles were still 0 on Battlefield and Small Battlefield over the sweep). On its own floor
+ * and free to act only; where no spot has the target ahead (a target in the stage's middle,
+ * say), it does nothing, and the fight goes on as before.
+ *
+ * Getting there: Smashville's stretch is 4 units wide, so it lets go where its slide stops
+ * in the stretch (`slideStop`), runs from `SPOT_WALK` away and walks nearer, and, arriving
+ * facing away, stops `SPOT_TURN_ROOM` short of the stretch's target-side end, then turns
+ * with a walk's first step.
+ */
+function finalSmashSpot(ctx: BehaviourContext): BehaviourResult {
+  const { self, target, dx, dy } = ctx.view;
+  const def = ctx.fighterDef;
+  const fs = def?.moves.finalSmash;
+  if (def === null || fs === undefined || self.finalSmashReady <= 0 || target === null || !free(self) || !self.grounded) return NOTHING;
+  if (dashTravel(fs) === 0 || fs.dashEnd?.edge === true || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
+  const spot = finalSmashSpotFor(def, ctx.stage, self.x, self.x + dx);
+  if (spot === null) return NOTHING;
+  // The part of the stretch it stops in: all of it facing the target, short of the target's
+  // side by the turn's room facing away.
+  const room = self.facing === spot.dir ? 0 : Math.min(SPOT_TURN_ROOM, (spot.to - spot.from) >> 1);
+  const from = spot.dir > 0 ? spot.from : spot.from + room;
+  const to = spot.dir > 0 ? spot.to - room : spot.to;
+  if (self.vx !== 0) {
+    // Moving: it lets go once its slide would stop in the stretch or past it; short of it,
+    // it keeps going.
+    const stop = slideStop(ctx, def);
+    if (stop === null || (self.vx > 0 ? stop >= from : stop <= to)) return { score: 450, input: 0 };
+    const way = self.vx > 0 ? to - self.x : from - self.x;
+    return { score: 450, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
+  }
+  if (self.x < from || self.x > to) {
+    const way = (self.x < from ? from : to) - self.x;
+    return { score: 450, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
+  }
+  if (self.facing !== spot.dir) return { score: 450, input: towardX(0, spot.dir) | Btn.Soft };
+  // There, facing the target: it stands still while the target is busy (`COMMITTED`: in a
+  // move, a shield, a landing or a reel), which is when the target is about to be held, so
+  // that it is still standing when it is (`fireFinalSmash` fires from a standstill only). A
+  // target free to act is fought as before: no standoff with one who waits too.
+  return COMMITTED.includes(ctx.view.targetAction) ? { score: 450, input: 0 } : NOTHING;
+}
+
+/**
+ * UNVERIFIED (CPU judgement): steps past its move's own length a whiff is followed, so a
+ * part whose air length is the longer still ends inside the run.
+ */
+const WHIFF_MARGIN = 30;
+
+/**
+ * The stage as the engine collides a body with it, from the CPU's view of it: the main
+ * platform between its ledges, and the soft platforms (Plan 5 final wave 2, fix round 1,
+ * ruling R-FW2n). What a whiff's run lands on, walks off and falls past.
+ */
+function floorsOf(stage: StageView): StageDef {
+  return {
+    id: "whiffFloors",
+    name: "a whiff's floors",
+    series: "",
+    platforms: [
+      { x: (stage.leftLedge + stage.rightLedge) >> 1, y: stage.groundY, halfWidth: (stage.rightLedge - stage.leftLedge) >> 1, soft: false, ledges: true },
+      ...stage.platforms.map((p) => ({ x: p.x, y: p.y, halfWidth: p.halfWidth, soft: true, ledges: false, ...(p.motion !== undefined ? { motion: p.motion } : {}) })),
+    ],
+    blastZone: { left: stage.blastLeft, right: stage.blastRight, top: stage.blastTop, bottom: stage.blastBottom },
+    spawns: [{ x: 0, y: stage.groundY }],
+    theme: "",
+  };
+}
+
+/**
+ * Where a travelling Final Smash, pressed now and whiffed, leaves its user as its move
+ * ends (Plan 5 final wave 2, fix round 1, ruling R-FW2n): a copy of the fighter stepped by
+ * `step()`'s own rules for one fighter (its status, its movement and the hold of an aerial
+ * Final Smash, `holdsAloft`; its collision with the stage's floors, `resolveCollision`, its
+ * edge rule and its landings), nobody else there, so nothing it would trap stops it. Null
+ * when a blast line takes it on the way. Not modelled: a ledge (no Final Smash part takes
+ * one), a wall (the dash runs along a floor or through the open air), and the bake's body
+ * (the attributes' box is the ECB here). Pure: the fighter is copied.
+ */
+export function whiffEnd(def: FighterDef, self: FighterState, stage: StageView, frame0: number, stageFrame0: number): { readonly fighter: FighterState; readonly steps: number } | null {
+  const floors = floorsOf(stage);
+  const f = cloneFighter(self);
+  const ctx: StateContext = { def, stage: floors, frame: frame0, stageFrame: stageFrame0, fighters: [f] };
+  const limit = (def.moves.finalSmash?.totalFrames ?? 0) + WHIFF_MARGIN;
+  let prev: InputFrame = 0;
+  for (let i = 1; i <= limit; i++) {
+    const input = i === 1 ? Btn.Special : 0;
+    const now = { ...ctx, frame: frame0 + i, stageFrame: stageFrame0 + i };
+    updateInputTracking(f, input, prev);
+    const intent = interpretInput(f, input, prev);
+    prev = input;
+    if (!f.grounded && f.ledge === null) f.airTime += 1;
+    advanceFighter(f, intent, now);
+    if (i > 1 && !(f.action === "special" && isFinalSlot(f.move))) return { fighter: f, steps: i };
+    let at = { x: f.x, y: f.y };
+    if (holdsAloft(f, def)) kineticClear(f);
+    else {
+      applyMovement(f, intent, now);
+      at = { x: f.x, y: f.y };
+      integrate(f);
+    }
+    const underfoot = f.grounded && f.platform >= 0 ? floors.platforms[f.platform] : undefined;
+    const outward = underfoot === undefined ? 0 : f.x >= platformCentreX(underfoot, now.stageFrame) ? 1 : -1;
+    const move = f.move === null ? undefined : def.moves[f.move];
+    const edgeEnds = move?.dashEnd?.edge === true && underfoot !== undefined && inDash(f, move);
+    const overEdge = edgeEnds && abs(f.x - platformCentreX(underfoot!, now.stageFrame)) > underfoot!.halfWidth;
+    const fromAir = begunInAir(f);
+    const out = resolveCollision(f, at.x, at.y, floors, def.attributes, now.stageFrame, { cliffStop: stopsAtEdge(f, outward) || edgeEnds });
+    if (overEdge) endDash(f, move!);
+    if (out.landed) onLanded(f, now, fromAir);
+    else if (out.leftGround) onLeftGround(f);
+    if (f.x < stage.blastLeft || f.x > stage.blastRight || f.y < stage.blastBottom || f.y > stage.blastTop) return null;
+  }
+  return { fighter: f, steps: limit };
+}
+
+/**
+ * Whether the CPU's own recovery model gets this fighter back from where it is, in the
+ * air (Plan 5 final wave 2, fix round 1, ruling R-FW2n), as `recover` would set about it:
+ * its own fall lands on a floor (`overFloor`); or its up special, now, reaches the stage or
+ * the nearer ledge with one of its sticks (`upBPlan`); or, with a midair jump left, the up
+ * special does from the top of that jump, drifting toward the ledge. Helpless, nothing
+ * does. A "no" may be a fighter `recover` would still save, by drifting closer first: the
+ * model is the cautious one.
+ */
+export function recoversFrom(def: FighterDef, self: FighterState, stage: StageView, r: RecoveryMove | null, jumps: number, frame0: number, stageFrame0: number): boolean {
+  if (isHelpless(self)) return false;
+  if (overFloor(def, self, stage, frame0, stageFrame0)) return true;
+  if (r === null) return false;
+  const ledge = self.x < 0 ? stage.leftLedge : stage.rightLedge;
+  if (upBPlan(self, ledge, stage, r, frame0) !== null) return true;
+  if (self.jumpsUsed >= jumps) return false;
+  const f = cloneFighter(self);
+  const ctx = ghostContext(def, frame0, f);
+  const toward = towardX(f.x, ledge);
+  let prev: InputFrame = 0;
+  for (let i = 1; i <= JUMP_APEX_FRAMES; i++) {
+    const input = i === 1 ? toward | Btn.Jump : toward;
+    ctx.frame = frame0 + i;
+    ghostStep(f, input, prev, ctx);
+    prev = input;
+    if (i > 1 && f.vy <= 0) break;
+  }
+  return upBPlan(f, ledge, stage, r, ctx.frame) !== null;
+}
+
+/** UNVERIFIED (CPU judgement): the most frames `recoversFrom` follows a midair jump's rise. */
+const JUMP_APEX_FRAMES = 60;
+
+/**
+ * Whether a travelling Final Smash, whiffed from here, ends where its user comes back
+ * from (Plan 5 final wave 2, fix round 1, ruling R-FW2n, in place of part 1's R-FW1t, which
+ * fired only where the whole whiff stayed on the floor and so never fired Volt Tackle):
+ * judged by where it ends (`whiffEnd`), not by its path. On a floor, it fires; in the air,
+ * if the CPU's own recovery model gets it back from there (`recoversFrom`); not past a
+ * blast line, and not helpless. Of the roster's Final Smashes only Critical Hit and Volt
+ * Tackle travel; Critical Hit's dash stops at the edge on the ground (`MoveDef.dashEnd.edge`),
+ * so only Volt Tackle is judged here. (Part 1's scene, fox-pikachu@townAndCity, seed 97040:
+ * a level-7 Pikachu at -45.3 facing left, whose dash took him off the left ledge and on
+ * past the blast line: still not fired.)
+ */
+function whiffComesBack(ctx: BehaviourContext): boolean {
+  const def = ctx.fighterDef;
+  if (def === null) return false;
+  const end = whiffEnd(def, ctx.view.self, ctx.stage, ctx.view.frame, ctx.state.stageFrame);
+  if (end === null) return false;
+  if (end.fighter.grounded) return true;
+  return recoversFrom(def, end.fighter, ctx.stage, ctx.recovery, ctx.jumps, ctx.view.frame + end.steps, ctx.state.stageFrame + end.steps);
 }
 
 /* ----------------------------------------------------------- Smash Ball -- */
