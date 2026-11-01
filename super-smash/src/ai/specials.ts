@@ -480,12 +480,15 @@ function slideStop(ctx: BehaviourContext, def: FighterDef): number | null {
 /**
  * While it holds a travelling Final Smash that ignores the edge (Volt Tackle), the CPU goes
  * to the nearest spot it would fire it from with its target ahead (`finalSmashSpotFor`),
- * turns to face the target there, and leaves the rest to its other behaviours, from which
- * `fireFinalSmash` fires when the target is held point-blank (ruling R-T19d unchanged) (Plan 5
- * final wave 2, fix round 1, ruling R-FW2n: judged by where the whiff ends, the CPU's Volt
- * Tackles were still 0 on Battlefield and Small Battlefield over the sweep). On its own floor
- * and free to act only; where no spot has the target ahead (a target in the stage's middle,
- * say), it does nothing, and the fight goes on as before.
+ * turns to face the target there, and waits, from where `fireFinalSmash` fires when the
+ * target is held point-blank (ruling R-T19d unchanged) (Plan 5 final wave 2, fix round 1,
+ * ruling R-FW2n: judged by where the whiff ends, the CPU's Volt Tackles were still 0 on
+ * Battlefield and Small Battlefield over the sweep). It does so only while the target is
+ * busy (`COMMITTED`: in a move, a shield, a landing or a reel), which is when it is about to
+ * be held. A target free to act is fought as before: going to the spot then, the CPU stood
+ * off an idle player's free target for up to 5,469 frames (the idle-human probe, ball on)
+ * and a free CPU target for good. On its own floor and free to act only; where no spot has
+ * the target ahead (a target in the stage's middle, say), it does nothing.
  *
  * Getting there: Smashville's stretch is 5 units wide, so it lets go where its slide stops
  * in the stretch (`slideStop`), runs from `SPOT_WALK` away and walks nearer, and, arriving
@@ -498,6 +501,7 @@ function finalSmashSpot(ctx: BehaviourContext): BehaviourResult {
   const fs = def?.moves.finalSmash;
   if (def === null || fs === undefined || self.finalSmashReady <= 0 || target === null || !free(self) || !self.grounded) return NOTHING;
   if (dashTravel(fs) === 0 || fs.dashEnd?.edge === true || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
+  if (!COMMITTED.includes(ctx.view.targetAction)) return NOTHING;
   const spot = finalSmashSpotFor(def, ctx.stage, self.x, self.x + dx);
   if (spot === null) return NOTHING;
   // The part of the stretch it stops in: all of it facing the target, short of the target's
@@ -518,11 +522,9 @@ function finalSmashSpot(ctx: BehaviourContext): BehaviourResult {
     return { score: 450, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
   }
   if (self.facing !== spot.dir) return { score: 450, input: towardX(0, spot.dir) | Btn.Soft };
-  // There, facing the target: it stands still while the target is busy (`COMMITTED`: in a
-  // move, a shield, a landing or a reel), which is when the target is about to be held, so
-  // that it is still standing when it is (`fireFinalSmash` fires from a standstill only). A
-  // target free to act is fought as before: no standoff with one who waits too.
-  return COMMITTED.includes(ctx.view.targetAction) ? { score: 450, input: 0 } : NOTHING;
+  // There, facing the busy target: it stands still, so that it is still standing when the
+  // target is held (`fireFinalSmash` fires from a standstill only).
+  return { score: 450, input: 0 };
 }
 
 /**

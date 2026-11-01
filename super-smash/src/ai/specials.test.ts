@@ -339,15 +339,23 @@ describe("the Final Smash", () => {
     expect(firingBands(pikachu, FD)).toBe(firingBands(pikachu, FD));
   });
 
-  it("at its spot, turns to face a busy target and waits there, still; it leaves a target free to act to the other behaviours (ruling R-FW2n)", () => {
+  it("goes to its spot for a busy target, turns to face it there and waits, still; a target free to act it leaves to the other behaviours (ruling R-FW2n)", () => {
     const at = (facing: number, action: GameState["fighters"][number]["action"]) =>
       makeState({ fighters: [makeFighter({ port: 0, x: fx(-60), finalSmashReady: FINAL_SMASH_READY, facing, defId: "pikachu", actionFrame: 30 }), makeFighter({ port: 1, x: fx(-45), action, actionFrame: 20 })] });
     // A target in a move of its own: busy, not held. Facing away, it turns (a soft press).
     expect(finalSmash(context(at(-1, "attack"), pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: Btn.Right | Btn.Soft });
     // Facing it, it stands still.
     expect(finalSmash(context(at(1, "attack"), pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: 0 });
-    // A target standing free: no wait, the fight goes on.
+    // A target standing free: no wait, the fight goes on, and from away from the spot it
+    // is not gone to either: going to it then stood the CPU off an idle player for up to
+    // 5,469 frames (the idle-human probe, ball on).
     expect(finalSmash(context(at(1, "stand"), pikachu, 9, undefined, FD)).score).toBe(0);
+    const away = at(1, "stand");
+    away.fighters[0].x = fx(-20);
+    expect(finalSmashSpotFor(pikachu, FD, fx(-20), fx(-45))).not.toBeNull();
+    expect(finalSmash(context(away, pikachu, 9, undefined, FD)).score).toBe(0);
+    away.fighters[1] = { ...away.fighters[1], action: "attack" };
+    expect(finalSmash(context(away, pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: Btn.Left });
     // Facing away within the turn's room of the stretch's target-side end (-54), it steps
     // out of it before it turns.
     const near = at(-1, "attack");
