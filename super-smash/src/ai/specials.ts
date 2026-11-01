@@ -283,8 +283,36 @@ export const finalSmash: Behaviour = (ctx) => {
     if (abs(dy) > FINAL_SMASH_BAND || isOffstage(self, ctx.stage) || (!target.grounded && !committed)) return NOTHING;
   }
   if (!facingTarget) return self.grounded ? { score: 880, input: pressToward(self, dx) } : NOTHING;
+  // Its own safety, read where it is (Plan 5 final wave, fix round 3, ruling R-FW1t): one
+  // that travels (`dashTravel`) and does not stop at the edge is not fired where its whiff
+  // would carry it off the floor it stands on (`whiffLeaves`). The target is judged on the
+  // view as above (R-T19d); the user's own position is not delayed.
+  if (travel > 0 && !(fs.dashEnd?.edge === true && self.grounded) && whiffLeaves(ctx, fs)) return NOTHING;
   return { score: 900, input: pulse(ctx.view.frame, self.port, 2, 1) ? Btn.Special : 0 };
 };
+
+/**
+ * Whether a travelling Final Smash, whiffed, carries its user off the floor it stands on
+ * (ruling R-FW1t; fox-pikachu@townAndCity, seed 97040: a level-7 Pikachu fired Volt
+ * Tackle at a Fox its view, 10 frames behind, put in front, and the dash took him off
+ * the left ledge). Along its facing from its live position: its own dash windows
+ * (`dashTravel`, the move's momentum, read, never copied, so a re-tuned speed is read as
+ * it is) and the slide of the last window's speed after, braked by its traction
+ * (`ground_brake`), against the room to the end of its floor (`floorEnds`). Of the
+ * roster's Final Smashes only Critical Hit and Volt Tackle travel; Critical Hit's dash
+ * stops at the edge on the ground (`MoveDef.dashEnd.edge`), so only Volt Tackle is
+ * judged here. Off a floor, it leaves.
+ */
+function whiffLeaves(ctx: BehaviourContext, fs: MoveDef): boolean {
+  const { self } = ctx.view;
+  const floor = floorEnds(self, ctx.stage, ctx.state.stageFrame);
+  if (floor === null || ctx.fighterDef === null) return true;
+  const windows = fs.momentum ?? [];
+  const last = windows.length === 0 ? 0 : abs(windows[windows.length - 1].x);
+  const slide = abs(dodgeDrift(last, fighterParams(ctx.fighterDef).ground_brake, Number.MAX_SAFE_INTEGER));
+  const room = self.facing > 0 ? floor.right - self.x : self.x - floor.left;
+  return dashTravel(fs) + slide > room;
+}
 
 /* ----------------------------------------------------------- Smash Ball -- */
 

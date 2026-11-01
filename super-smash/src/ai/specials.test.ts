@@ -104,6 +104,12 @@ describe("the Final Smash", () => {
   const landing = (gap: number) =>
     makeState({ fighters: [makeFighter({ port: 0, finalSmashReady: FINAL_SMASH_READY, facing: 1 }), makeFighter({ port: 1, x: fx(gap), action: "landingLag", actionFrame: 20 })] });
 
+  /** Pikachu with Volt Tackle's dash at `speed` a frame (its momentum's own windows), as a re-tune could make it. */
+  const tackle = (speed: number): FighterDef => ({
+    ...pikachu,
+    moves: { ...pikachu.moves, finalSmash: { ...pikachu.moves.finalSmash!, momentum: pikachu.moves.finalSmash!.momentum!.map((m) => ({ ...m, x: fx(speed) })) } },
+  });
+
   it("is used at once when it needs no aim, and only in reach when it traps", () => {
     expect(finalSmash(context(ready(150), mario)).score).toBeGreaterThan(0);
     expect(finalSmash(context(landing(150), kirby)).score).toBe(0);
@@ -174,11 +180,14 @@ describe("the Final Smash", () => {
   });
 
   it("never whiffs Volt Tackle toward an open blast line: point-blank on a committed target only", () => {
-    // Its 166-unit dash is longer than any stage, and a whiff carries on and falls.
+    // Its 166-unit dash is longer than any stage, and a whiff carries on and falls. Fix
+    // round 3 (ruling R-FW1t): with that dash nowhere is safe to whiff it from, so at
+    // this tuning it is never fired at all; a shorter one is (`tackle`, below).
     expect(finalSmash(context(ready(40, { x: 0 }), pikachu)).score).toBe(0);
     expect(finalSmash(context(ready(20, { x: 0 }), pikachu)).score).toBe(0);
-    expect(finalSmash(context(landing(20), pikachu)).score).toBeGreaterThan(0);
-    expect(finalSmash(context(landing(40), pikachu)).score).toBe(0);
+    expect(finalSmash(context(landing(20), pikachu)).score).toBe(0);
+    expect(finalSmash(context(landing(20), tackle(1.5))).score).toBeGreaterThan(0);
+    expect(finalSmash(context(landing(40), tackle(1.5))).score).toBe(0);
   });
 
   it("never starts Volt Tackle at a free target however much stage is ahead: point-blank on a held one only (ruling R-T19h)", () => {
@@ -190,9 +199,43 @@ describe("the Final Smash", () => {
     const s = makeState({ fighters: [makeFighter({ port: 0, x: at, finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "pikachu" }), makeFighter({ port: 1, x: at + fx(108) })] });
     expect(ps2.rightLedge - at).toBeGreaterThan(fx(166.5));
     expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBe(0);
-    // Point-blank on a target that cannot act soon, from a standstill, it still is.
+    // Point-blank on a target that cannot act soon, from a standstill, it still is: with a
+    // dash its whiff keeps on the stage (fix round 3, ruling R-FW1t; `tackle`).
     s.fighters[1] = makeFighter({ port: 1, x: at + fx(20), action: "landingLag", actionFrame: 20 });
-    expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBeGreaterThan(0);
+    expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBe(0);
+    expect(finalSmash(context(s, tackle(1.5), 9, undefined, ps2)).score).toBeGreaterThan(0);
+  });
+
+  it("does not fire a Final Smash whose whiff travel along its facing, from where it stands, leaves the stage (ruling R-FW1t)", () => {
+    // fox-pikachu@townAndCity, seed 97040: a level-7 Pikachu at -45.3 facing left, Fox in
+    // hitstun at -32.2 behind him, launched past at 1.4 a frame. Its view, 10 frames
+    // behind, puts Fox in front, held and point blank, and Volt Tackle went left, off the
+    // ledge. Its own travel is read where it is: its dash windows (`dashTravel`) and the
+    // slide after, along its facing.
+    const tc = stageViewFromDef(STAGES.find((x) => x.id === "townAndCity")!);
+    const scene = makeState({
+      fighters: [
+        makeFighter({ port: 0, x: fx(-45.3), finalSmashReady: FINAL_SMASH_READY, facing: -1, defId: "pikachu", actionFrame: 1 }),
+        makeFighter({ port: 1, x: fx(-32.2), vx: fx(1.4), action: "hitstun", actionFrame: 12, hitstun: 20, defId: "fox" }),
+      ],
+    });
+    const seen = finalSmash(context(scene, pikachu, 7, undefined, tc));
+    expect(held(seen.input, Btn.Special)).toBe(false);
+    // The pins, one a Final Smash that travels. Volt Tackle reads its own momentum: shorter,
+    // from the middle of Final Destination at a held target, its whiff keeps on the stage
+    // and it fires; 40 in from the ledge it faces, it would leave, and it does not.
+    const fd = (x: number) => makeState({ fighters: [makeFighter({ port: 0, x: fx(x), finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "pikachu" }), makeFighter({ port: 1, x: fx(x + 20), action: "landingLag", actionFrame: 20 })] });
+    const fire = (st: GameState, def: FighterDef) => [0, 1, 2, 3].some((f) => held(finalSmash(context({ ...st, frame: f }, def, 9, undefined, FD)).input, Btn.Special));
+    expect(fire(fd(0), tackle(1.5))).toBe(true);
+    expect(fire(fd(FD.rightLedge / 4096 - 40), tackle(1.5))).toBe(false);
+    // The slide after the dash counts too (the last window's speed braked by its traction):
+    // 59 in, past the dash's 55.5 but short of its slide's end, it does not fire.
+    expect(fire(fd(FD.rightLedge / 4096 - 59), tackle(1.5))).toBe(false);
+    expect(fire(fd(0), pikachu)).toBe(false);
+    // Critical Hit's dash stops at the edge on the ground (`dashEnd.edge`): safe to whiff
+    // facing the near ledge.
+    const marthAt = makeState({ fighters: [makeFighter({ port: 0, x: FD.rightLedge - fx(30), finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "marth" }), makeFighter({ port: 1, x: FD.rightLedge - fx(18), action: "landingLag", actionFrame: 20 })] });
+    expect([0, 1, 2, 3].some((f) => held(finalSmash(context({ ...marthAt, frame: f }, marth, 9, undefined, FD)).input, Btn.Special))).toBe(true);
   });
 
   it("does not start a dash from a run whose slide would carry it off the floor it stands on, a side platform's end included (Task 19 fix round 1's sweep)", () => {
