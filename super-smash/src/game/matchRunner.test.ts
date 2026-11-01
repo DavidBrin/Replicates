@@ -26,7 +26,8 @@ import {
 } from "./matchRunner";
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
 import { GAME_SIM_CONTEXT } from "./simContext";
-import { meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { recoveryFromDef } from "@/ai/recovery";
 import { cpuDef, cpuInput, cpuWorldFromDef } from "@/ai/cpu";
 import { hashState } from "@/engine/hash";
 import { KO_FREEZE_FRAMES, createInitialState } from "@/engine/simulate";

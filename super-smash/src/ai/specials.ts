@@ -49,23 +49,21 @@ import {
   THREAT_RANGE,
   VERTICAL_REACH,
   canAct,
-  counterWait,
   dodgeDrift,
   free,
   fullHopPulse,
   isOffstage,
   moveReach,
-  pressToward,
   pulse,
-  sideRecoveryFromDef,
-  specialWith,
   towardX,
-  upBInReach,
   type Behaviour,
   type BehaviourContext,
   type BehaviourResult,
   type StageView,
 } from "./behaviours";
+import { sideRecoveryFromDef, upBInReach } from "./recovery";
+import { counterWait, specialWith } from "./defence";
+import { pressToward } from "./offence";
 
 const NOTHING: BehaviourResult = { score: 0, input: 0 };
 
@@ -88,7 +86,7 @@ function skilled(ctx: BehaviourContext): boolean {
 }
 
 /* `specialWith` (a fighter's special with a property) and the counter's timing are
- * `behaviours.ts`'s, which `shield` reads too (ruling R-T19l). */
+ * `defence.ts`'s, which `shield` reads too (ruling R-T19l). */
 
 /** A projectile's definition, from the fighter whose moveset defines it (`ProjectileState.source`). */
 function projectileDefOf(ctx: BehaviourContext, p: ProjectileState): ProjectileDef | undefined {

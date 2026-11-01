@@ -13,17 +13,13 @@ import {
   GRAB_RANGE,
   MELEE_RANGE,
   ROLL_RECOVER,
-  POINT_BLANK,
   ROLL_SHIELD,
-  approach,
-  attack,
   blastMargin,
   canAct,
   diDirection,
   digitalDirection,
   dodgeDrift,
   sideDodgeTravel,
-  edgeguard,
   fullHopPulse,
   isHelpless,
   isOffstage,
@@ -31,20 +27,24 @@ import {
   meleeReachFromDef,
   moveReach,
   observe,
-  platformMove,
-  pressToward,
   pulse,
-  recover,
-  recoveryFromDef,
-  shield,
   shortHopPulse,
   stageViewFromDef,
-  survive,
   towardX,
   type BehaviourContext,
   type LevelTuning,
   type RecoveryMove,
 } from "./behaviours";
+import { recover, recoveryFromDef } from "./recovery";
+import { shield, survive } from "./defence";
+import {
+  POINT_BLANK,
+  approach,
+  attack,
+  edgeguard,
+  platformMove,
+  pressToward,
+} from "./offence";
 import { FIGHTERS, getFighter } from "@/fighters";
 import { ENTRY_INTANGIBILITY, dodgeWindow } from "@/engine/states";
 import { FOOTSTOOL_INTANGIBLE_FIRST } from "@/engine/footstool";

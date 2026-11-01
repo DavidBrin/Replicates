@@ -1,6 +1,7 @@
 /**
  * The CPU player: nine levels of opponent, expressed as nine sets of weights
- * over the behaviours in `behaviours.ts`.
+ * over the behaviours in `recovery.ts`, `defence.ts`, `offence.ts` and
+ * `specials.ts` (what they share is `behaviours.ts`).
  *
  * `cpuInput` is a **pure function**. Same state, same port, same level, same
  * seed, same answer, every time, on every machine — which is the only way a CPU
@@ -37,24 +38,9 @@ import {
   DEFAULT_STAGE_VIEW,
   MELEE_RANGE,
   ROLL_FUMBLE,
-  aerialStrands,
   airBrakeFromDef,
   airDodgeFromDef,
-  approach,
-  attack,
-  centre,
-  edgeguard,
-  escape,
-  idle,
   meleeReachFromDef,
-  parry,
-  platformMove,
-  recover,
-  recoveryFromDef,
-  retreat,
-  shield,
-  survive,
-  tech,
   type Behaviour,
   type BehaviourContext,
   type BehaviourName,
@@ -63,8 +49,29 @@ import {
   type StageView,
   observe,
   towardX,
-  upBHold,
 } from "./behaviours";
+import {
+  aerialStrands,
+  recover,
+  recoveryFromDef,
+  upBHold,
+} from "./recovery";
+import {
+  escape,
+  parry,
+  shield,
+  survive,
+  tech,
+} from "./defence";
+import {
+  approach,
+  attack,
+  centre,
+  edgeguard,
+  idle,
+  platformMove,
+  retreat,
+} from "./offence";
 import { counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, storeCharge } from "./specials";
 
 /** Ultimate's CPU levels. Anything outside is clamped. */
@@ -224,8 +231,8 @@ export function tuningForLevel(level: number): LevelTuning {
  * Every behaviour, in the order ties break. Earlier wins a tie, which is why
  * the survival and recovery behaviours are listed first: when two scores land
  * equal after jitter, not dying is the better default. Built here rather than
- * in `behaviours.ts`, which `specials.ts` imports from: the table needs both, and
- * neither of them each other at load (the drift note's import cycle).
+ * in a behaviour module, which `specials.ts` or another imports from: the table
+ * needs them all, and none of them the table at load (the drift note's import cycle).
  */
 export const BEHAVIOURS: readonly { readonly name: BehaviourName; readonly run: Behaviour }[] = [
   { name: "tech", run: tech },

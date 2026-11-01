@@ -31,22 +31,18 @@ import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
   MELEE_RANGE,
-  COUNTER_AIM,
   ROLL_SPECIAL,
   THREAT_RANGE,
   free,
   isOffstage,
-  shield,
-  sideRecoveryFromDef,
-  upBInReach,
   observe,
-  recoveryFromDef,
   stageViewFromDef,
-  swingHitFrame,
   towardX,
   type BehaviourContext,
   type StageView,
 } from "./behaviours";
+import { sideRecoveryFromDef, upBInReach, recoveryFromDef } from "./recovery";
+import { COUNTER_AIM, shield, swingHitFrame } from "./defence";
 import { BEHAVIOURS, cpuDef, cpuInput, cpuWorldFromDef, decideCpu, tuningForLevel } from "./cpu";
 import {
   CARGO_CARRY_FRAMES,

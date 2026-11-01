@@ -27,7 +27,21 @@ import { battlefield } from "@/stages/battlefield";
 import { finalDestination } from "@/stages/finalDestination";
 import { townAndCity } from "@/stages/townAndCity";
 import { cpuWorldFromDef } from "./cpu";
-import { floorContact, recoveryFromDef, stageViewFromDef, upBHold, upBInReach, upBNowOrNever, upBPath, upBPlan, upBPress, upBReach, upBStickNow, upBSticks, type UpBStick } from "./behaviours";
+import { stageViewFromDef } from "./behaviours";
+import {
+  floorContact,
+  recoveryFromDef,
+  upBHold,
+  upBInReach,
+  upBNowOrNever,
+  upBPath,
+  upBPlan,
+  upBPress,
+  upBReach,
+  upBStickNow,
+  upBSticks,
+  type UpBStick,
+} from "./recovery";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 

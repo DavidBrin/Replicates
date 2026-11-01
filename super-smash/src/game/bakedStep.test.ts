@@ -15,7 +15,8 @@ import { FIGHTERS } from "@/fighters";
 import { LIMB_SCRIPT_SLOTS } from "@/fighters/acmd/limb";
 import { bakedContext } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
-import { PARRY_AIM, stageViewFromDef } from "@/ai/behaviours";
+import { stageViewFromDef } from "@/ai/behaviours";
+import { PARRY_AIM } from "@/ai/defence";
 import { cpuWorldFromDef, decideCpu } from "@/ai/cpu";
 
 /**
