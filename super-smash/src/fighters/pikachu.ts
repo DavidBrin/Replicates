@@ -1057,15 +1057,22 @@ const legacy: FighterDef = {
     //   game frame 55 at its FT_MOTION_RATE 0.7 (`gameFrameOfMotion`): its 54 frames, the
     //   CancelFrame − 1 every part's length is (Plan 5 final wave 2, ruling R-FW2g; Task 15
     //   re-review 1), so 83 + 54 = 137.
+    //   The end opens with SET_SPEED_EX(3, 0, KINETIC_ENERGY_RESERVE_ATTRIBUTE_MAIN), as
+    //   game_finalairdashend does: its slide starts from 3 a frame, set on its first frame
+    //   (84, `momentum`'s second window; fix round 1 of the final wave's part 2, the
+    //   re-review's M3).
     //   It ignores edges, and takes no ledge (Task 14 fix round 1, ruling R-T14j).
     // UNVERIFIED: the tackle's speed, 3.2 a frame on frames 47-83: SSBU moves Pikachu
     // by status, unpublished. Tuned to SmashWiki "Volt Tackle": "The initial tackle travels
     // almost the entire length of [Final Destination]", whose floor is 160 (Plan 5 final
-    // wave 2, ruling R-FW2i, amended): whiffed from a standstill, the tackle (118.4) and
-    // the slide after it travel 152.4, 95% of the floor; 3.2 is the fastest tenth whose
-    // whiff stays under the floor in the CPU's own reading of it too (its dash windows and
-    // the last one's speed braked by `ground_brake`: 155.6; at 3.3, 161.7). Task 15's 4.5
-    // carried the tackle alone 166.5 and the whiff 236.4, more than any stage.
+    // wave 2, ruling R-FW2i, amended), as the fastest tenth whose whiff stayed under the
+    // floor in the CPU's own reading of it too (its dash windows and the last one's speed
+    // braked by `ground_brake`), when the slide started from the tackle's own speed: 152.4
+    // whiffed, 155.6 read (3.3 read 161.7). With the end's published 3 (fix round 1), the
+    // tackle (118.4) and the slide after it travel 150.9 from a standstill, 94% of the
+    // floor, and the CPU reads 154.0; by the same rule 3.3 would now pass (154.6 whiffed,
+    // 157.7 read) and 3.4 would not (161.4 read). The speed is left at the ruled 3.2.
+    // Task 15's 4.5 carried the tackle alone 166.5 and the whiff 236.4, more than any stage.
     // UNVERIFIED: the six sparks' frames (the page counts six; `Rehit=6` from 10 allows
     // a seventh on 46), and that the 47-49 box and the dash's both trap: the scripts
     // mark neither as the catch.
@@ -1091,7 +1098,14 @@ const legacy: FighterDef = {
       name: "Volt Tackle",
       totalFrames: 137,
       intangible: [1, 137],
-      momentum: [{ frame: 47, x: fx(3.2), y: fx(0), hold: 36 }],
+      momentum: [
+        { frame: 47, x: fx(3.2), y: fx(0), hold: 36 },
+        // The end's first frame: game_finaldashend (and game_finalairdashend) open with
+        // SET_SPEED_EX(3, 0, KINETIC_ENERGY_RESERVE_ATTRIBUTE_MAIN) (rubendal Data Viewer
+        // 13.0.1), so the slide starts from 3, not from the tackle's speed (Plan 5 final wave
+        // 2, fix round 1, the re-review's M3).
+        { frame: 84, x: fx(3), y: fx(0) },
+      ],
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 8 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "start", trap: true, next: "finalAttack", nextAt: 47, sceneGap: fx(8) },

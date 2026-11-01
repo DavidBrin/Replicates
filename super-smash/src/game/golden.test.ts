@@ -1292,6 +1292,13 @@ describe("engine golden trace", () => {
   // matches, the script and the eight other labs are byte-identical: none whiffs Critical
   // Hit or Volt Tackle, plays Team Star Fox's end, or traps a fighter behind its user or
   // facing away from it. Every count is as above.
+  // Its third, part 2's fix round 1 (the re-review's M3: Volt Tackle's end sets its slide
+  // going at 3, `game_finalairdashend`'s SET_SPEED_EX(3, 0), on its first frame, 84),
+  // moved the dash lab alone. From -150 Pikachu, slowed to 3, landed on the stage's far
+  // edge, so the lab starts him 10 nearer, at -140, and the trace moves from its first
+  // frame: the tackle carries him to -21.6 on 83, he reaches the right edge on 123 and
+  // falls off the bottom blast line on 221; Fox is held to 276 as before. No hit and one
+  // KO, as before; every other trace is byte-identical, and every count is as above.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

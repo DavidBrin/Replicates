@@ -1424,7 +1424,9 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
         if (move?.final !== undefined && travelWindows(d, move.slot).length > 0) travel[`${d.id} ${move.slot}`] = travelWindows(d, move.slot);
       }
     }
-    expect(travel).toEqual({ "marth finalSmash": [[25, 70]], "pikachu finalSmash": [[47, 83]] });
+    // Volt Tackle's second, one frame long, is its end's first: `game_finaldashend`'s
+    // SET_SPEED_EX(3, 0) (fix round 1 of the final wave's part 2, the re-review's M3).
+    expect(travel).toEqual({ "marth finalSmash": [[25, 70]], "pikachu finalSmash": [[47, 83], [84, 84]] });
   });
 });
 

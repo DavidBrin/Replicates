@@ -487,7 +487,7 @@ function slideStop(ctx: BehaviourContext, def: FighterDef): number | null {
  * and free to act only; where no spot has the target ahead (a target in the stage's middle,
  * say), it does nothing, and the fight goes on as before.
  *
- * Getting there: Smashville's stretch is 4 units wide, so it lets go where its slide stops
+ * Getting there: Smashville's stretch is 5 units wide, so it lets go where its slide stops
  * in the stretch (`slideStop`), runs from `SPOT_WALK` away and walks nearer, and, arriving
  * facing away, stops `SPOT_TURN_ROOM` short of the stretch's target-side end, then turns
  * with a walk's first step.
