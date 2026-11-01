@@ -155,9 +155,18 @@ export async function holdForFrames(page: Page, code: string, frames: number): P
  * inputs have to land on particular frames asks for `stepped` instead: the
  * clock stops as the match mounts, the fighters walk on (`READY_FRAME`), and
  * the match stays still until the test cranks it (`stepFrames`).
+ *
+ * A test about port 0's own controls asks for `idleP2` as well: P2 is seated as
+ * a human nobody plays, instead of the CPU, which reaches port 0 within a few
+ * dozen frames and would race whatever the test holds. Nothing drives that
+ * human. Its default scheme (Config 2) shares six keys with Config 1, so `/play`
+ * gives it no keyboard (`conflictFreeSelection`, D8), and one pad goes to the
+ * first human. That is the app's doing, not this helper's, so a test that
+ * relies on it checks P2 really stands still.
  */
 export interface MatchOptions {
   readonly stepped?: boolean;
+  readonly idleP2?: boolean;
 }
 
 /**
@@ -198,6 +207,10 @@ export async function startMatchFromMenu(page: Page, options: MatchOptions = {})
   const roster = page.getByLabel("Fighters").getByRole("button");
   await roster.nth(0).click();
   await roster.nth(1).click();
+  if (options.idleP2) {
+    await page.getByRole("button", { name: "HMN for P2", exact: true }).click();
+    await page.getByRole("button", { name: "HMN for P2", exact: true, pressed: true }).waitFor();
+  }
 
   await page.getByRole("button", { name: /ready|fight/i }).first().click();
   await page.waitForURL(`**${ROUTES.play}`);

@@ -1,5 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
-import { P1, ROUTES, readFighters, startFromTitle, startMatch, startMatchFromMenu, stepFrames, type DebugFighter } from "./helpers";
+import {
+  P1,
+  ROUTES,
+  readFighters,
+  startFromTitle,
+  startMatch,
+  startMatchFromMenu,
+  stepFrames,
+  type DebugFighter,
+  type MatchOptions,
+} from "./helpers";
 
 /**
  * Plan 5's control options on /controls: Stick Jump per player (Task 20), a
@@ -21,12 +31,17 @@ import { P1, ROUTES, readFighters, startFromTitle, startMatch, startMatchFromMen
  *
  * Every match here is stepped: inputs are held for counted simulation frames,
  * not milliseconds, and the fighter is read after every frame, so a jumpsquat
- * three frames long cannot fall between two samples. And every match is
- * short. The CPU is beside the player by `READY_FRAME` and, left alone,
- * dash-attacks them about thirty frames later, so each test is done within
- * thirty frames of it, and a fighter that should do nothing is checked to
- * have only stood: a hit would hide a jump as well as a correct option does.
+ * three frames long cannot fall between two samples. And P2 is a human nobody
+ * plays (`idleP2`), not the CPU, so nothing races the test: it is checked to
+ * stand still on every frame read. A fighter that should do nothing is
+ * checked to have only stood, so a wrong action cannot hide a jump.
  */
+
+/** A key that no preset claims, so it cannot pass by coincidence. */
+const NEW_TILT = "KeyM";
+
+/** Every match here: stepped, against a P2 nobody plays. */
+const MATCH: MatchOptions = { stepped: true, idleP2: true };
 
 /** What the fake pad holds: button numbers in the standard mapping (0 is A, 3 is Y), and its four axes. */
 interface FakePad {
@@ -69,12 +84,18 @@ async function setPadAxes(page: Page, axes: readonly number[]): Promise<void> {
   }, axes);
 }
 
-/** Port 0 after each of `frames` simulation frames, run one at a time, with whatever is held. */
-async function p1EachFrame(page: Page, frames: number): Promise<DebugFighter[]> {
+/**
+ * Port 0 after each of `frames` simulation frames, run one at a time, with
+ * whatever is held. P2 is checked on every one of them: it stands still, or
+ * something other than the test is playing the match.
+ */
+async function eachFrame(page: Page, frames: number): Promise<DebugFighter[]> {
   const seen: DebugFighter[] = [];
   for (let i = 0; i < frames; i++) {
     await stepFrames(page, 1);
-    seen.push((await readFighters(page))[0]);
+    const [p1, p2] = await readFighters(page);
+    expect(p2.action, `P2 is not idle: ${p2.action}`).toBe("stand");
+    seen.push(p1);
   }
   return seen;
 }
@@ -82,7 +103,7 @@ async function p1EachFrame(page: Page, frames: number): Promise<DebugFighter[]> 
 /** Port 0 after each of `frames` frames with `codes` held: pressed before the first frame, released after the last. */
 async function whileHoldingKeys(page: Page, codes: readonly string[], frames: number): Promise<DebugFighter[]> {
   for (const code of codes) await page.keyboard.down(code);
-  const seen = await p1EachFrame(page, frames);
+  const seen = await eachFrame(page, frames);
   for (const code of codes) await page.keyboard.up(code);
   return seen;
 }
@@ -90,9 +111,21 @@ async function whileHoldingKeys(page: Page, codes: readonly string[], frames: nu
 /** The same with the pad's `buttons` held. */
 async function whilePressingPad(page: Page, buttons: readonly number[], frames: number): Promise<DebugFighter[]> {
   await setPadButtons(page, buttons);
-  const seen = await p1EachFrame(page, frames);
+  const seen = await eachFrame(page, frames);
   await setPadButtons(page, []);
   return seen;
+}
+
+/** Both fighters stand as the match is handed over: port 0 to be played, P2 idle. */
+async function expectBothStanding(page: Page): Promise<void> {
+  const [p1, p2] = await readFighters(page);
+  expect([p1.action, p2.action], "at the start, P1 and P2 should both stand").toEqual(["stand", "stand"]);
+}
+
+/** Run frames, with nothing held, until port 0 stands again out of a move's end lag. */
+async function untilStanding(page: Page, limit = 90): Promise<void> {
+  for (let i = 0; i < limit && (await readFighters(page))[0].action !== "stand"; i++) await eachFrame(page, 1);
+  expect((await readFighters(page))[0].action, `port 0 was not standing again ${limit} frames later`).toBe("stand");
 }
 
 /** The action states passed through, each once, in order. */
@@ -130,7 +163,7 @@ test("stick jump can be turned off for player 1", async ({ page }) => {
 test("a gamepad button is rebound by pressing it", async ({ page }) => {
   await page.goto(ROUTES.controls);
   await page.getByRole("button", { name: "P1 attack: A", exact: true }).click();
-  await expect(page.getByText("Press a button on your gamepad…")).toBeVisible();
+  await expect(page.getByText("Press a button on your gamepad…", { exact: true })).toBeVisible();
   await setPadButtons(page, [3]);
   await expect(page.getByRole("button", { name: "P1 attack: Y", exact: true })).toBeVisible();
   // Y has left jump. Exact, as every name here: a string name is otherwise a
@@ -140,18 +173,26 @@ test("a gamepad button is rebound by pressing it", async ({ page }) => {
   await expect(page.getByRole("combobox", { name: "P1 right stick", exact: true })).toHaveValue("special");
 });
 
-test("stick jump off reaches the match: up no longer jumps, the jump button still does", async ({ page }) => {
+test("stick jump off reaches the match: up no longer jumps but still up-tilts, and the jump button still jumps", async ({ page }) => {
   await openControls(page);
   const toggle = page.getByRole("switch", { name: "P1 stick jump", exact: true });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await backToMenu(page);
-  await startMatchFromMenu(page, { stepped: true });
+  await startMatchFromMenu(page, MATCH);
+  await expectBothStanding(page);
 
   // Twelve frames: with Stick Jump on, a held up jumps once five pass unclaimed.
-  const onUp = await whileHoldingKeys(page, [P1.up], 12);
+  await page.keyboard.down(P1.up);
+  const onUp = await eachFrame(page, 12);
   expect(statesOf(onUp), `up did more than stand: ${statesOf(onUp).join(", ")}`).toEqual(["stand"]);
-  await stepFrames(page, 4);
+  // Up is still up, which is what the option is for: Attack with it held is an
+  // up tilt. Without this, an option that swallowed Up whole would pass.
+  const upAttack = await whileHoldingKeys(page, [P1.attack], 3);
+  await page.keyboard.up(P1.up);
+  expect(firstMove(upAttack), `up and Attack: ${played(upAttack)}`).toBe("utilt");
+
+  await untilStanding(page);
   // The positive half, without which "nothing jumps" would pass a fighter that never moves.
   const onJump = await whileHoldingKeys(page, [P1.jump], 8);
   expect(statesOf(onJump).some((a) => jumping.test(a)), `the jump button did nothing: ${statesOf(onJump).join(", ")}`).toBe(true);
@@ -165,11 +206,12 @@ test("a rebound pad button plays the match: the new button attacks, the old one 
   // Let go before the match: a button down when it starts reads as a press on its first frame.
   await setPadButtons(page, []);
   await backToMenu(page);
-  await startMatchFromMenu(page, { stepped: true });
+  await startMatchFromMenu(page, MATCH);
+  await expectBothStanding(page);
 
   const onOld = await whilePressingPad(page, [0], 8);
   expect(statesOf(onOld), `A did more than stand: ${statesOf(onOld).join(", ")}`).toEqual(["stand"]);
-  await stepFrames(page, 4);
+  await eachFrame(page, 4);
   const onNew = await whilePressingPad(page, [3], 8);
   expect(statesOf(onNew).some((a) => a === "attack"), `Y did not attack: ${statesOf(onNew).join(", ")}`).toBe(true);
 });
@@ -180,13 +222,14 @@ test("the right stick set to special plays the match: a flick is a side special,
   await stick.selectOption("special");
   await expect(stick).toHaveValue("special");
   await backToMenu(page);
-  await startMatchFromMenu(page, { stepped: true });
+  await startMatchFromMenu(page, MATCH);
+  await expectBothStanding(page);
 
   // A flick starts from rest: the stick arms only once a poll has read it
   // there. It has been at rest on every frame so far; one more says so.
-  await stepFrames(page, 1);
+  await eachFrame(page, 1);
   await setPadAxes(page, [0, 0, 1, 0]);
-  const flick = await p1EachFrame(page, 6);
+  const flick = await eachFrame(page, 6);
   await setPadAxes(page, [0, 0, 0, 0]);
   // On the default setting, the same flick is a forward smash.
   expect(firstMove(flick), `the flick right was not a side special: ${played(flick)}`).toBe("sideB");
@@ -195,24 +238,22 @@ test("the right stick set to special plays the match: a flick is a side special,
 test("the keyboard's Tilt key, from stand: Tilt + Right and Attack is a forward tilt; Tilt + Up never jumps, and Attack is an up tilt", async ({
   page,
 }) => {
-  // Each half from a fresh match: the first's end lag would run into the CPU's arrival.
-  await startMatch(page, { stepped: true });
-  expect((await readFighters(page))[0].action).toBe("stand");
+  await startMatch(page, MATCH);
+  await expectBothStanding(page);
   await page.keyboard.down(P1.tilt);
   await page.keyboard.down(P1.right);
-  await stepFrames(page, 1);
+  await eachFrame(page, 1);
   // A frame after a fresh Right: without Tilt, inside the smash window, a forward smash.
   const forward = await whileHoldingKeys(page, [P1.attack], 3);
   await page.keyboard.up(P1.right);
   await page.keyboard.up(P1.tilt);
   expect(firstMove(forward), `Tilt + Right and Attack: ${played(forward)}`).toBe("ftilt");
 
-  await startMatch(page, { stepped: true });
-  expect((await readFighters(page))[0].action).toBe("stand");
+  await untilStanding(page);
   await page.keyboard.down(P1.tilt);
   await page.keyboard.down(P1.up);
   // Twelve frames: without Tilt, a held up jumps once five pass unclaimed.
-  const held = await p1EachFrame(page, 12);
+  const held = await eachFrame(page, 12);
   expect(statesOf(held), `Tilt + Up did more than stand: ${statesOf(held).join(", ")}`).toEqual(["stand"]);
   const up = await whileHoldingKeys(page, [P1.attack], 3);
   await page.keyboard.up(P1.up);
@@ -220,21 +261,19 @@ test("the keyboard's Tilt key, from stand: Tilt + Right and Attack is a forward 
   expect(firstMove(up), `Tilt + Up and Attack: ${played(up)}`).toBe("utilt");
 });
 
-/** A key that no preset claims, so it cannot pass by coincidence. */
-const NEW_TILT = "KeyM";
-
 test("a Tilt key rebound on /controls plays the match: the new key holds up short of a jump, the old one no longer does", async ({ page }) => {
   await openControls(page);
   await page.getByRole("button", { name: /^Rebind Tilt/i }).click();
   await page.keyboard.press(NEW_TILT);
   await expect(page.getByRole("button", { name: /^Rebind Tilt, currently M$/i })).toBeVisible();
   await backToMenu(page);
-  await startMatchFromMenu(page, { stepped: true });
+  await startMatchFromMenu(page, MATCH);
+  await expectBothStanding(page);
 
   // Twelve frames: a full up jumps once five pass unclaimed, and a soft one never does.
   const onNew = await whileHoldingKeys(page, [NEW_TILT, P1.up], 12);
   expect(statesOf(onNew), `the rebound Tilt key + up did more than stand: ${statesOf(onNew).join(", ")}`).toEqual(["stand"]);
-  await stepFrames(page, 4);
+  await eachFrame(page, 4);
   const onOld = await whileHoldingKeys(page, [P1.tilt, P1.up], 12);
   expect(statesOf(onOld).some((a) => jumping.test(a)), `the old Tilt key still softened up: ${statesOf(onOld).join(", ")}`).toBe(true);
 });
