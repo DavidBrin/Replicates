@@ -1353,8 +1353,9 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   // falling as it was (`startAirDodge`, Task 20b).
   const dodge = directionalDodgeFrame(f);
   if (dodge !== null && dodge.phase !== "handOff") {
+    const gravityBefore = f.kinetic.gravityY;
     kineticAirDodge(f, dodge.x, dodge.y, dodge.phase === "slide", params);
-    status.exec?.(f, intent, ctx);
+    status.exec?.(f, intent, ctx, gravityBefore);
     return;
   }
   if (dodge !== null) kineticAirDodgeHandOff(f, dodge.x, dodge.y);
@@ -1372,6 +1373,9 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   const phase = phaseMove === undefined ? undefined : movePhase(phaseMove, f);
   const moving =
     helpless?.airAccel !== undefined ? { ...params, air_accel_x_add: helpless.airAccel } : phase !== undefined ? phaseParams(params, phase) : params;
+  // The vertical speed's own energy before this frame's step, for a status that
+  // replaces the step's gravity with its move's (`FighterStatus.exec`; ruling R-FW2j).
+  const gravityBefore = f.kinetic.gravityY;
   kineticExec(f, type, {
     stickX: phase?.noControl === true ? 0 : intent.x,
     stickMag: intent.soft ? ONE >> 1 : ONE,
@@ -1382,7 +1386,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     // A status that walks faster or slower than the fighter's walk (Plan 5: the carry).
     ...(status.walkMul !== undefined ? { walkMul: status.walkMul } : {}),
   });
-  status.exec?.(f, intent, ctx);
+  status.exec?.(f, intent, ctx, gravityBefore);
 }
 
 /* -------------------------------------------------------------- landings -- */

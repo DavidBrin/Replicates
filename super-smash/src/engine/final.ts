@@ -72,7 +72,9 @@ import type { FighterDef, FighterState, GameState, MoveDef, MoveSlot } from "./t
  * Final Smash is used (or the Smash Ball is dropped)"; SmashWiki "Final Smash" gives
  * only the Meter's a limit, "As of the 4.0.0 update, a charged FS Meter now has a
  * time limit of 20 seconds". It is also lost with a dropped ball (`dropSmashBall`)
- * and, UNVERIFIED, with a stock (`step`'s KO).
+ * and, UNVERIFIED, with a stock (`step`'s KO). UNVERIFIED: that the standby has no time
+ * limit in Ultimate; no source publishes one, or a number (Plan 5 final wave 2, ruling
+ * R-FW2m: `SMASH_BALL_SPAWN_INTERVAL`'s note). Left to the polish phase.
  */
 export const FINAL_SMASH_READY = 1;
 

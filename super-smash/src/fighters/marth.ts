@@ -1200,6 +1200,10 @@ const legacy: FighterDef = {
     // last command, on 25): SSBU moves Marth by his animation, which is unpublished,
     // and loops the dash by status.
     // UNVERIFIED: the catch box's offset (8 ahead, 7 up): it hangs off the sword.
+    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
+    // SLOW_OPPONENT(4, 45), its slowing of the other fighters through the startup, is not
+    // modelled (the page publishes neither its rate nor its length, and the arguments'
+    // meaning is unpublished): they move at full speed.
     // UNVERIFIED-simplified: the strike is one frame (its script's 2-5; it "only
     // hits once", `finalKit.ts`). Its boxes are world boxes in its script (no
     // `set_catch_only_all`; SmashWiki "Critical Hit": "it is also possible for a

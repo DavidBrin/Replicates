@@ -1073,6 +1073,10 @@ const legacy: FighterDef = {
     // (its status lands it; the script only sets it). An ATTACK_ABS has no box: the
     // lasers' and the end's offsets are the stand-ins (`finalKit.ts`), and they reach
     // the trapped wherever they are.
+    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finallockon`'s
+    // SLOW_OPPONENT(4, 30), its slowing of the other fighters through the startup, is not
+    // modelled (the page publishes neither its rate nor its length, and the arguments'
+    // meaning is unpublished): they move at full speed.
     // UNVERIFIED: the reticle's ATTACK_LR_CHECK_SPEED, unmodelled: it traps, and
     // launches nothing.
     finalSmash: {

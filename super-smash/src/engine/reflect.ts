@@ -24,7 +24,6 @@ import { actionFrameOf, circle, moveFrameOf, sweptCapsulePenetration } from "./h
 import type { Capsule } from "./hitbox";
 import { kineticSetX, kineticSetY } from "./kinetic";
 import { fighterParams } from "./params";
-import type { FighterParams } from "./params";
 import { startAction, startRoll } from "./states";
 import type { Intent, StateContext } from "./states";
 import type { FighterDef, FighterState, GameState, ProjectileDef, ProjectileState, ReflectorDef, StallDef, StepEvents } from "./types";
@@ -236,7 +235,7 @@ function reflectEscape(f: FighterState, intent: Intent, ctx: StateContext): bool
  * as B is held; the stall is once per airtime, so every later pass falls by the
  * move's gravity.
  */
-export function specialStallExec(f: FighterState, ctx: StateContext, stall: StallDef): void {
+export function specialStallExec(f: FighterState, ctx: StateContext, stall: StallDef, gravityBefore: number): void {
   if (f.grounded) return;
   const g = moveFrameOf(f.actionFrame);
   if (g === 1 && !f.combat.specialStall) {
@@ -253,7 +252,13 @@ export function specialStallExec(f: FighterState, ctx: StateContext, stall: Stal
   }
   if (!f.combat.stalling && stall.everyUse !== true) return;
   const p = fighterParams(ctx.def);
-  const before = beforeOwnGravity(f, p);
+  // The speed before this frame's own gravity, which the move's replaces: the FALL
+  // step's change to GRAVITY, undone exactly (Plan 5 final wave 2, ruling R-FW2j; Task
+  // 4 re-review 1, Minor 3). Read back from the step's result, as it was before, a step
+  // stopped at the fighter's terminal looked like one that never reached it: a frame
+  // starting within his own gravity of it went there at once (Fox, 0.198 too far),
+  // and a fast fall's terminal had to be told apart by hand.
+  const before = f.vy - (f.kinetic.gravityY - gravityBefore);
   if (f.combat.stalling && g <= stall.noGravityFrames && f.charge === 0) {
     // No gravity at all: the speed the stop left holds, a boost included.
     kineticSetY(f, before);
@@ -261,18 +266,6 @@ export function specialStallExec(f: FighterState, ctx: StateContext, stall: Stal
   }
   const terminal = -(stall.fallSpeed ?? p.air_speed_y_stable);
   kineticSetY(f, Math.max(terminal, before - stall.gravity));
-}
-
-/**
- * `f.vy` before this frame's FALL step took the fighter's own gravity off it,
- * so the move's can replace it. At the fighter's own terminal speed the step
- * may have been cut short, so nothing is undone there, and a stall falling that
- * fast settles at its own terminal (the Task 4 review's Minor 3: undoing the
- * whole gravity there settled Fox at −1.897, not −2.1).
- */
-function beforeOwnGravity(f: FighterState, p: FighterParams): number {
-  const own = -(f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
-  return f.vy > own ? f.vy + p.air_accel_y : f.vy;
 }
 
 /**

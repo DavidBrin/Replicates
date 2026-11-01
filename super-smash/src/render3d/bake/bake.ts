@@ -256,7 +256,8 @@ export interface MotionSampler {
  * The sampler for each slot's active script motion. A move that plays another's
  * motion (`MoveDef.motionOf`; Plan 5, Task 13d: Link's smash throw) bakes none of
  * its own: it runs that motion's clock, and a longer one holds its last frame
- * (`poseIndexOf` clamps). The other move must be there and run the same motion.
+ * (`poseIndexOf` clamps). The other move must be there and run the same motion,
+ * and the alias may not be shorter than it.
  */
 export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & { slot: MoveSlot }> {
   const out = new Map<MotionKind, MotionSampler & { slot: MoveSlot }>();
@@ -265,9 +266,17 @@ export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & {
     const script = gameScriptFor(def, slot);
     if (move === undefined || script === null) continue;
     if (move.motionOf !== undefined) {
-      const theirs = def.moves[move.motionOf] === undefined ? null : gameScriptFor(def, move.motionOf);
-      if (theirs === null || theirs.motion !== script.motion) {
+      const of = def.moves[move.motionOf];
+      const theirs = of === undefined ? null : gameScriptFor(def, move.motionOf);
+      if (of === undefined || theirs === null || theirs.motion !== script.motion) {
         throw new Error(`bake ${def.id}: ${def.id} ${slot} plays ${move.motionOf}'s motion, which ${move.motionOf} does not run`);
+      }
+      // Never shorter than the motion it plays (Plan 5 final wave 2, ruling R-FW2l): it is
+      // baked to the other move's length, and a shorter alias would stop part-way through it.
+      const mine = scriptTiming(script, move.totalFrames).frames;
+      const full = scriptTiming(theirs, of.totalFrames).frames;
+      if (mine < full) {
+        throw new Error(`bake ${def.id}: ${def.id} ${slot} plays ${move.motionOf}'s motion for ${mine} frames, shorter than ${move.motionOf}'s ${full}`);
       }
       continue;
     }

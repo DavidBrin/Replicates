@@ -1011,6 +1011,10 @@ const legacy: FighterDef = {
     //   boxes, with no rate: final_air_end's CancelFrame 47, 46 frames
     //   (`aerialTotalFrames`, read where Donkey Kong is when it could end; UNVERIFIED:
     //   the game picks final_air_end where the end begins).
+    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
+    // SLOW_OPPONENT(7, 30), its slowing of the other fighters through the startup, is not
+    // modelled (the page publishes neither its rate nor its length, and the arguments'
+    // meaning is unpublished): they move at full speed.
     // UNVERIFIED-simplified: each scene hit is the first frame of its window (the
     // page's "6-7" is one hit; `finalKit.ts`). The barrage's knockback (FKB 40) is
     // the scene's: a trapped fighter is held. `DisableHitlag=true` is not modelled,

@@ -1170,6 +1170,9 @@ export function step(
     f.combat.mash = 0;
     f.combat.launchSource = -1;
     f.combat.swingQueued = false;
+    // ...nor a smash let go in it (Plan 5 final wave 2, ruling R-FW2e; the final
+    // review's M4): `startMove` clears it for the next swing, and a KO is an exit too.
+    f.combat.smashLetGo = false;
     // A stored charge goes with the stock (Plan 5): SmashWiki "Charge"
     // (https://www.ssbwiki.com/Charge) notes surviving a KO only for Oil Panic
     // and Wario Waft ("Charge can be held even after ... is KO'd").

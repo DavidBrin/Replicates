@@ -6233,6 +6233,18 @@ describe("a KO, a new shield break and a grab release leave nothing behind (fina
     expect(ko.state.fighters[1].combat).toMatchObject({ mash: 0, launchSource: -1, swingQueued: false });
   });
 
+  // Plan 5 final wave 2, ruling R-FW2e (the final review's M4): a smash let go in the
+  // lost stock (`CombatState.smashLetGo`) does not ride into the respawn either.
+  it("clears a smash's let-go mark on a KO (ruling R-FW2e)", () => {
+    const s = standing();
+    const v = s.fighters[1];
+    Object.assign(v, { action: "fall", y: fx(-200), grounded: false, platform: -1 });
+    v.combat.smashLetGo = true;
+    const [ko] = play(s, 1, () => [0, 0]);
+    expect(ko.events.kos.map((k) => k.port)).toEqual([1]);
+    expect(ko.state.fighters[1].combat.smashLetGo).toBe(false);
+  });
+
   /** One button press's worth of shield-break stun, for a fighter whose shield breaks with `mash` tenths left over. */
   const firstPressAfterBreak = (mash: number): { mash: number; earned: number } => {
     const s = standing();

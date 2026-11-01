@@ -502,6 +502,38 @@ describe("Fox's Reflector in the air", () => {
     const states = run(s, 100, () => [0, Btn.Down | Btn.Special]).states;
     expect(states.slice(90).map((x) => [x.fighters[1].action, x.fighters[1].vy])).toEqual(states.slice(90).map(() => ["special", -fx(2.1)]));
   });
+
+  // Plan 5 final wave 2, ruling R-FW2j (Task 4 re-review 1, Minor 3): the move's gravity
+  // replaces Fox's from the speed the frame started with, so it reaches his terminal
+  // 0.027 at a time. It used to read that speed back from his own fall's, which stops at
+  // his terminal: a frame starting within 0.23 (his own gravity) of −2.1 went to −2.1 at
+  // once, 0.198 too far at the worst.
+  /** Each frame's fall from the 5th on, against the move's own: `vy` less 0.027, never past −2.1. */
+  function offTheMovesGravity(s: GameState): string[] {
+    const states = run(s, 100, () => [0, Btn.Down | Btn.Special]).states;
+    const off: string[] = [];
+    for (let i = 5; i < 100; i++) {
+      const want = Math.max(-fx(2.1), states[i - 1].fighters[1].vy - fx(0.027));
+      if (states[i].fighters[1].vy !== want) off.push(`${i}: ${toFloat(states[i - 1].fighters[1].vy)} -> ${toFloat(states[i].fighters[1].vy)}`);
+    }
+    expect(states[99].fighters[1].vy).toBe(-fx(2.1));
+    return off;
+  }
+
+  it("held from high up, falls into Fox's terminal by the move's gravity alone: no one-frame snap within 0.23 of it (ruling R-FW2j)", () => {
+    const s = falling();
+    s.fighters[1].y = fx(160);
+    expect(offTheMovesGravity(s)).toEqual([]);
+  });
+
+  // Fast falling, his own fall's step stops at his fast-fall speed instead (3.4), which
+  // the move's physics must not mistake for his falling speed (the Task 4 report's
+  // surviving "terminal guard ignores fast fall" mutant; ruling R-FW2j).
+  it("held while fast falling, falls into the move's terminal by the move's gravity alone too", () => {
+    const s = falling();
+    Object.assign(s.fighters[1], { y: fx(160), fastFalling: true });
+    expect(offTheMovesGravity(s)).toEqual([]);
+  });
 });
 
 describe("what the Reflector reflects", () => {

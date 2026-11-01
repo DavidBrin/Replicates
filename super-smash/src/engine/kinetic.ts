@@ -220,6 +220,25 @@ export function kineticSetX(f: FighterState, vx: number, carrier: HorizontalCarr
 }
 
 /**
+ * Stop the horizontal speed toward `side` (+1 right, −1 left), energy by energy: an
+ * energy carrying the fighter away from that side keeps its speed (Plan 5 final wave
+ * 2, ruling R-FW2f; Task 12 re-review 2). A launch stopped along this axis keeps only
+ * its other one, as in `kineticSetX`. With every energy pointing toward `side`, it is
+ * `kineticSetX(f, 0)`. The same precondition: `vx`/`vy` equal the energies' sum.
+ */
+export function kineticStopToward(f: FighterState, side: number): void {
+  const k = f.kinetic;
+  if (k.controlX * side > 0) k.controlX = 0;
+  if (k.stopX * side > 0) k.stopX = 0;
+  if (k.motionX * side > 0) k.motionX = 0;
+  if (k.damageX * side > 0) {
+    k.damageX = 0;
+    f.launchSpeed = abs(k.damageY);
+  }
+  kineticSum(f);
+}
+
+/**
  * Set the vertical speed outright, on GRAVITY. The equivalent of `f.vy = vy`.
  * Like `kineticSetX`, it needs `vx`/`vy` to equal the sum already: `kineticAdopt` first if a raw write is pending.
  */

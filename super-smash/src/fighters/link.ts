@@ -1157,6 +1157,10 @@ const legacy: FighterDef = {
     //   alternative.
     // UNVERIFIED: the arrow's speed (6 a frame), lifetime (60 frames) and launch offset
     // (10 ahead, 7 up).
+    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_final`'s
+    // SLOW_OPPONENT(30, 100), its slowing of the other fighters through the startup, is not
+    // modelled (the page publishes neither its rate nor its length, and the arguments'
+    // meaning is unpublished): they move at full speed.
     // UNVERIFIED-simplified: the explosion lands on the fighter the arrow reaches, not
     // on everybody within its 25 units ("A small explosion occurs as the opponent is
     // hit, damaging anybody else near the victim at the time"), and the flying box's

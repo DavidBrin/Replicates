@@ -1173,8 +1173,11 @@ const legacy: FighterDef = {
     // and changes the hits' spacing. A side effect: as her own move's, the beam's hits
     // take the fresh-move bonus, where Mario Finale's flames and the Ancient Arrow, as
     // projectiles, do not.
-    // Not modelled: the laser's thruster box (1.5% behind its muzzle), `SLOW_OPPONENT`
-    // and aiming the beam.
+    // Not modelled: the laser's thruster box (1.5% behind its muzzle) and aiming the beam.
+    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
+    // SLOW_OPPONENT(5, 50), its slowing of the other fighters through the startup, is not
+    // modelled (the page publishes neither its rate nor its length, and the arguments'
+    // meaning is unpublished): they move at full speed.
     finalSmash: {
       slot: "finalSmash",
       name: "Zero Laser",

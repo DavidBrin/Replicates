@@ -380,6 +380,36 @@ describe("platform collision", () => {
     expect(f.x - centre).toBe(drift);
     expect(drift).not.toBe(0);
   });
+
+  // Plan 5 final wave 2, ruling R-FW2f (Task 12 re-review 2): a status that stops at the
+  // edge (`CollisionOptions.cliffStop`) stops the speed that carries it over, and only
+  // that. Each horizontal energy is stopped if it points toward the edge it reached; one
+  // carrying the fighter away from it is left as it is: an attack's own slide toward the
+  // edge stops, and a windbox's DAMAGE push back in keeps pushing.
+  it("stops at the edge only the energies that point toward it, on either side (ruling R-FW2f)", () => {
+    for (const side of [1, -1]) {
+      const f = fighter({ action: "attack", grounded: true, platform: 0, x: side * fx(80.6), y: 0 });
+      Object.assign(f.kinetic, { motionX: side * fx(1.2), controlX: side * fx(0.3), damageX: -side * fx(0.4), damageY: 0 });
+      f.launchSpeed = fx(0.4);
+      f.vx = side * fx(1.1);
+      const out = resolveCollision(f, side * fx(79.4), 0, STAGE, ATTRS, 0, { cliffStop: true });
+      expect(out.leftGround, `side ${side}`).toBe(false);
+      expect(f.x).toBe(side * fx(80));
+      expect(f.kinetic, `side ${side}`).toMatchObject({ motionX: 0, controlX: 0, damageX: -side * fx(0.4) });
+      expect(f.launchSpeed).toBe(fx(0.4));
+      expect(f.vx).toBe(-side * fx(0.4));
+      // A DAMAGE push toward the edge, in a status that always stops there (a roll), stops
+      // with the rest; the braking STOP energy carrying the roll back in is kept.
+      const g = fighter({ action: "roll", grounded: true, platform: 0, x: side * fx(80.6), y: 0 });
+      Object.assign(g.kinetic, { stopX: -side * fx(0.2), damageX: side * fx(0.5) });
+      g.launchSpeed = fx(0.5);
+      g.vx = side * fx(0.3);
+      resolveCollision(g, side * fx(79.4), 0, STAGE, ATTRS, 0, { cliffStop: true });
+      expect(g.kinetic, `side ${side}`).toMatchObject({ stopX: -side * fx(0.2), damageX: 0 });
+      expect(g.launchSpeed).toBe(0);
+      expect(g.vx).toBe(-side * fx(0.2));
+    }
+  });
 });
 
 /*
@@ -485,9 +515,65 @@ describe("clampShiftToStage", () => {
     expect([f.x, f.y]).toEqual([fx(80), 0]);
   });
 
-  it("does not touch a fighter that was already inside the body", () => {
+  it("does not touch a fighter that was already inside the body, moving no deeper", () => {
     const f = shifted(fighter({ x: 0, y: fx(-31) }), 0, fx(-30));
     expect([f.x, f.y]).toEqual([0, fx(-31)]);
+  });
+
+  // Plan 5 final wave 2, ruling R-FW2d (the final review's M3): a fighter already
+  // overlapping a body is not let any deeper into it. The shift is clamped on the way
+  // out the clamp would push it (its way in, as `resolveCollision` decides one): an
+  // origin beyond the platform's edge goes out sideways, so its pulse may not carry it
+  // further in; one within the span goes out under it, so its pulse may not lift it.
+  // The other half of a diagonal pulse is kept. The review's scene (Fox SDI'd from x
+  // 82.7 to 79.4 at y −26 beside Final Destination's underside lip, his origin left
+  // inside the stage) is replayed on the real stage and bake in `stateInvariants.test.ts`.
+  it("keeps an overlapping body's origin out when a pulse beside the stage pushes it in (ruling R-FW2d)", () => {
+    // 82.7 past an 80 edge, a body 4 wide: its side is in the wall.
+    const f = shifted(fighter({ x: fx(79.4), y: fx(-26) }), fx(82.7), fx(-26));
+    expect([f.x, f.y]).toEqual([fx(82.7), fx(-26)]);
+    // The left side, mirrored, and a diagonal pulse: the inward half is undone, the downward kept.
+    const g = shifted(fighter({ x: fx(-79.4), y: fx(-28) }), fx(-82.7), fx(-26));
+    expect([g.x, g.y]).toEqual([fx(-82.7), fx(-28)]);
+    // A pulse outward from there is the way out, and kept.
+    const h = shifted(fighter({ x: fx(85), y: fx(-26) }), fx(82.7), fx(-26));
+    expect([h.x, h.y]).toEqual([fx(85), fx(-26)]);
+  });
+
+  it("keeps a fighter whose head overlaps the underside from being lifted further in, and lets it drop or slide (ruling R-FW2d)", () => {
+    const head = ATTRS.height;
+    // The head 3 units into the underside, the origin under the span.
+    const y0 = -HARD_PLATFORM_DEPTH - head + fx(3);
+    expect(shifted(fighter({ x: fx(10), y: y0 + fx(2) }), fx(10), y0).y).toBe(y0);
+    expect(shifted(fighter({ x: fx(10), y: y0 - fx(2) }), fx(10), y0).y).toBe(y0 - fx(2));
+    // Sideways under the stage goes no deeper, and is kept; a diagonal up loses its lift only.
+    const side = shifted(fighter({ x: fx(12), y: y0 }), fx(10), y0);
+    expect([side.x, side.y]).toEqual([fx(12), y0]);
+    const d = shifted(fighter({ x: fx(12), y: y0 + fx(2) }), fx(10), y0);
+    expect([d.x, d.y]).toEqual([fx(12), y0]);
+  });
+
+  it("never carries an overlapping fighter deeper: no origin past the edge further in, no origin under the span higher up", () => {
+    const reach = fx(80);
+    const body = reach + ATTRS.width;
+    const inside = (x: number, y: number): boolean => Math.abs(x) < body && y < 0 && y + ATTRS.height > -HARD_PLATFORM_DEPTH;
+    let checked = 0;
+    for (let x = -84; x <= 84; x += 1.5) {
+      for (let y = -74; y <= -1; y += 2.5) {
+        if (!inside(fx(x), fx(y))) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+          const fromX = fx(x);
+          const fromY = fx(y);
+          const f = fighter({ x: fromX + dx * fx(3.3), y: fromY + dy * fx(3.3) });
+          clampShiftToStage(f, fromX, fromY, STAGE, ATTRS, 0);
+          if (!inside(f.x, f.y)) continue;
+          checked++;
+          if (Math.abs(fromX) > reach) expect(Math.abs(f.x), `${x},${y} ${dx},${dy}`).toBeGreaterThanOrEqual(Math.abs(fromX));
+          else expect(f.y, `${x},${y} ${dx},${dy}`).toBeLessThanOrEqual(fromY);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
   });
 
   // Plan 4, ruling R6: with a bake the fighter's body is its bones' ECB, which `step`

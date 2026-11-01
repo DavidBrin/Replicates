@@ -206,8 +206,14 @@ export interface FighterStatus {
    * (Plan 5: Fox's Reflector, Mario's Cape, `specialStallExec`) use it. Not called
    * on the frames `applyMovement` returns early: hanging on a
    * ledge, under a live scripted-momentum hold, and in hitstun.
+   *
+   * `gravityBefore` is the GRAVITY energy as the frame began, before the kinetic
+   * type stepped it (Plan 5 final wave 2, ruling R-FW2j): what a status that
+   * replaces the fighter's own gravity with its move's (the stall) undoes, exactly,
+   * instead of reading it back from a step that may have stopped at the fighter's
+   * terminal speed.
    */
-  readonly exec?: (f: FighterState, intent: Intent, ctx: StateContext) => void;
+  readonly exec?: (f: FighterState, intent: Intent, ctx: StateContext, gravityBefore: number) => void;
   /** status_end: once, on leaving, before the next status's `pre`. */
   readonly end?: (f: FighterState) => void;
 }

@@ -32,7 +32,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
-import { kineticAirDodgeHold, kineticLand, kineticSetX, kineticSetY, kineticTakeStep } from "./kinetic";
+import { kineticAirDodgeHold, kineticLand, kineticSetX, kineticSetY, kineticStopToward, kineticTakeStep } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -244,9 +244,12 @@ export function resolveCollision(
     const p = stage.platforms[f.platform];
     const cx = platformCentreX(p, frame);
     if (opts.cliffStop === true && abs(f.x - cx) > p.halfWidth) {
-      // At the edge: stop on it, not over it, and stay grounded.
-      f.x = f.x > cx ? cx + p.halfWidth : cx - p.halfWidth;
-      kineticSetX(f, 0);
+      // At the edge: stop on it, not over it, and stay grounded. Only the speed that
+      // carried it over stops: an energy pointing back in keeps its speed, a windbox's
+      // push away from the edge included (Plan 5 final wave 2, ruling R-FW2f).
+      const side = f.x > cx ? 1 : -1;
+      f.x = cx + side * p.halfWidth;
+      kineticStopToward(f, side);
     }
     if (abs(f.x - cx) > p.halfWidth) {
       f.grounded = false;
@@ -374,9 +377,9 @@ export function resolveCollision(
  * "was already below the surface — no landing from under"), in through a wall
  * (a fighter whose origin has crossed the edge "came from inside" and is never
  * pushed), or up into an underside. This applies the rules of `resolveCollision`
- * to the shift alone — `(prevX, prevY)` is where the fighter was before it, and
- * only a shift that *newly* overlaps a body is undone, so a fighter already
- * overlapping something is left as it was — and, unlike it, touches no
+ * to the shift alone — `(prevX, prevY)` is where the fighter was before it: a
+ * shift that *newly* overlaps a body is undone, and one that starts overlapping
+ * is kept from going deeper (ruling R-FW2d, below) — and, unlike it, touches no
  * velocity and no grounded state: the fighter is still frozen, and its launch
  * has not happened yet.
  *
@@ -418,7 +421,18 @@ export function clampShiftToStage(
     const bottom = p.y - HARD_PLATFORM_DEPTH;
     const inside = (x: number, y: number): boolean =>
       abs(x - cx) < body && y + ecb.bottom < p.y && y + ecb.top > bottom;
-    if (inside(prevX, prevY) || !inside(f.x, f.y)) continue;
+    if (!inside(f.x, f.y)) continue;
+    if (inside(prevX, prevY)) {
+      // Already overlapping before the shift (Plan 5 final wave 2, ruling R-FW2d; the
+      // final review's M3): it is not let any deeper. The way in decides the way out,
+      // as below: an origin beyond the edge goes out sideways, so the shift may not
+      // carry it further in; one within the span goes out under the body, so the shift
+      // may not lift it. The rest of the shift stands.
+      if (abs(prevX - cx) > reach) {
+        if (abs(f.x - cx) < abs(prevX - cx)) f.x = prevX;
+      } else if (f.y > prevY) f.y = prevY;
+      continue;
+    }
     // From above and now over the span: it lands, as `resolveCollision`'s landing
     // test lands it, even if its origin started past the edge (the lip). Strictly
     // above, as there: a fighter level with the surface past the edge is pushed

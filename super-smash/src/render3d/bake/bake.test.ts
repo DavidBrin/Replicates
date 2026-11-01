@@ -287,6 +287,19 @@ describe("the move motions the bake plays (Plan 5, Task 13d)", () => {
     expect(linkMoves.get(gameScriptFor(link, "sideB")!.motion)).toMatchObject({ slot: "sideB", clock: { kind: "script", frames: 45 } });
   });
 
+  // Plan 5 final wave 2, ruling R-FW2l (Task 13d re-review 1, N2): a move that plays
+  // another's motion may run longer than it (it holds the last frame), never shorter:
+  // the motion is baked to the other move's length, and a shorter one would end its
+  // animation cut off, with no error.
+  it("refuses to bake a move that plays another's motion for fewer frames than that motion runs (ruling R-FW2l)", () => {
+    const link = fighterOf("link");
+    const withSmashThrow = (totalFrames: number): FighterDef => ({ ...link, moves: { ...link.moves, sideBSmash: { ...link.moves.sideBSmash!, totalFrames } } });
+    expect(link.moves.sideBSmash!.totalFrames).toBe(link.moves.sideB!.totalFrames);
+    expect(() => moveSamplers(withSmashThrow(link.moves.sideB!.totalFrames - 1))).toThrow(/link sideBSmash plays sideB's motion for 44 frames, shorter than sideB's 45/);
+    expect(() => moveSamplers(withSmashThrow(link.moves.sideB!.totalFrames))).not.toThrow();
+    expect(() => moveSamplers(withSmashThrow(link.moves.sideB!.totalFrames + 6))).not.toThrow();
+  });
+
   it("bake Link's failed throw on a motion of its own: his throw's clip across its 59 frames, never holding a last pose (Plan 5, Task 17)", () => {
     // The Task 13d fix round played it on the throw's 45 frames and held the last
     // for 46-59; in the game both play one animation, the failed throw's running

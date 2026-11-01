@@ -9,9 +9,13 @@ import { describe, expect, it } from "vitest";
 
 import { fx } from "@/engine/fixed";
 import { HARD_PLATFORM_DEPTH, platformCentreX } from "@/engine/physics";
-import { createInitialState } from "@/engine/simulate";
-import type { FighterState, GameState, Platform, StageDef } from "@/engine/types";
+import { createInitialState, step } from "@/engine/simulate";
+import { Btn } from "@/engine/types";
+import type { FighterState, GameState, InputFrame, Platform, StageDef } from "@/engine/types";
+import { getFighter } from "@/fighters";
 import { STAGES } from "@/stages";
+import { bakedContext } from "./bake";
+import { readBakeFromDisk } from "./bakeNode";
 import { bootstrapEngine } from "./bootstrap";
 import { ledgeInvariantBreaks, stageInvariantBreaks, stateInvariantBreaks } from "./stateInvariants";
 
@@ -86,6 +90,34 @@ describe("no fighter inside the stage", () => {
     // The match's frame is later than the stage's: a pause has stopped the stage.
     expect(stageInvariantBreaks({ ...stateWith(x, -fx(5), {}, frame + 37), stageFrame: frame }, stage, 7)).toHaveLength(1);
     expect(stageInvariantBreaks({ ...stateWith(x, -fx(5), {}, frame), stageFrame: frame + 37 }, stage, 7)).toHaveLength(0);
+  });
+
+  // Plan 5 final wave 2, ruling R-FW2d (the final review's M3, found by this rule in a
+  // four-player free-for-all): Fox, hit during Fire Fox beside Final Destination's
+  // underside lip, was SDI'd from x 82.7 to 79.4 at y −26, his origin inside the stage
+  // for 3 frames. His bones' ECB (half 2.75 in Fire Fox, the committed bake) already
+  // overlapped the wall at 82.7, and the clamp skipped a body that started inside. Here
+  // he is frozen there 20 frames in Fire Fox and mashes in on every other one.
+  it("keeps Fox's origin out of Final Destination as he SDIs in beside its underside lip, his body already overlapping it (ruling R-FW2d)", () => {
+    const ctx = bakedContext({ fighter: (id) => getFighter(id)!, stage: (id) => STAGES.find((st) => st.id === id)! }, readBakeFromDisk());
+    const fd = ctx.stage("finalDestination");
+    let s = createInitialState(fd.id, [{ defId: "mario" }, { defId: "fox" }], RULES, 1, ctx);
+    s.fighters[0].x = fx(-50);
+    Object.assign(s.fighters[1], { x: fx(82.7), y: fx(-26), grounded: false, platform: -1, action: "special", move: "upB", actionFrame: 20, hitstun: 30, hitlag: 20 });
+    s.fighters[1].combat.victimFreeze = true;
+    let prev: InputFrame[] = [0, 0];
+    const xs: number[] = [];
+    const breaks: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const now: InputFrame[] = [0, i % 2 === 0 ? Btn.Left : 0];
+      s = step(s, now, { prevInputs: prev, ctx }).state;
+      prev = now;
+      xs.push(s.fighters[1].x);
+      breaks.push(...stageInvariantBreaks(s, fd, i + 1));
+    }
+    expect(s.fighters[1].hitlag).toBe(0);
+    expect(breaks).toEqual([]);
+    expect(Math.min(...xs)).toBe(fx(82.7));
   });
 });
 

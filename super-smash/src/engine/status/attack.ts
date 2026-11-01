@@ -208,9 +208,9 @@ export const STATUS_SPECIAL: FighterStatus = {
     clearSpecialMove(f);
   },
   main: attackMain,
-  exec(f, _intent, ctx) {
+  exec(f, _intent, ctx, gravityBefore) {
     const stall = f.move === null ? undefined : ctx.def.moves[f.move]?.stall;
-    if (stall !== undefined) specialStallExec(f, ctx, stall);
+    if (stall !== undefined) specialStallExec(f, ctx, stall, gravityBefore);
   },
   // ...and ends clean, however the special ends: its own end, a hit, a grab, a
   // ledge, a landing or a KO. A Copy Ability lost during the copied special goes

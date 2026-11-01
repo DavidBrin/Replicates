@@ -686,7 +686,11 @@ export const SMASH_BALL_SPAWN_INTERVAL = 900;
 // any time by pressing the input for a neutral special move". Only the Final Smash
 // Meter's expires (SmashWiki "Final Smash", https://www.ssbwiki.com/Final_Smash: "As
 // of the 4.0.0 update, a charged FS Meter now has a time limit of 20 seconds"). The
-// ready flag is `FINAL_SMASH_READY` in `final.ts`.
+// ready flag is `FINAL_SMASH_READY` in `final.ts`. UNVERIFIED: that a Smash Ball's
+// standby never runs out. Neither page publishes a limit or a number for it (checked
+// again for Plan 5 final wave 2, ruling R-FW2m); "Smash Ball" times only the ball nobody
+// breaks ("1320 frames in SSB4 and Ultimate", then it flies away). Left to the polish
+// phase, with what the CPU does about a long hold.
 
 /** Sudden death starts everyone here. */
 export const SUDDEN_DEATH_DAMAGE = fx(300);

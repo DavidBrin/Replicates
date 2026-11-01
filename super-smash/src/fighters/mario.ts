@@ -1153,8 +1153,9 @@ const legacy: FighterDef = {
     // UNVERIFIED-simplified: the second flame (`fire2`, 2° flatter, on the article's
     // one hit record) is not modelled, nor the boxes' vertical stretch (8.0.0, "Y
     // offset: 0u, -3u—3u"; a projectile's box is a sphere), their SDI ×0.8, the slowing
-    // of nearby opponents (`SLOW_OPPONENT`), or Mario's own drift: "If used in the air,
-    // it pushes Mario backwards a little, as well as give him a little jump upwards",
+    // of the other fighters (`game_final`'s SLOW_OPPONENT(20, 75), its rate and length
+    // unpublished; Plan 5 final wave 2, ruling R-FW2k), or Mario's own drift: "If used in
+    // the air, it pushes Mario backwards a little, as well as give him a little jump upwards",
     // and "You'll slide backward little by little" on the ground (SmashWiki "Mario
     // Finale"; no numbers). In the air he is held where he is for the move instead, and
     // ends it with his midair jump back, "a desperate recovery tool" (Task 16 fix round
