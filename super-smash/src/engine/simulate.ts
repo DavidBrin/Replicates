@@ -97,6 +97,7 @@ import {
   isFinalProjectile,
   knockProjectile,
   markProjectileHit,
+  NO_STALE,
   projectileAlreadyHit,
   projectileHitboxActive,
   projectileHitboxes,
@@ -1450,9 +1451,11 @@ function spawnDueProjectiles(
       // (`MoveDef.whenOut`), so for his throws this only backs that up.
       if (def.maxOut !== undefined && projectilesOut(s.projectiles, f.port, source, articleOf(def), (pid) => findProjectileDef(defs[i], pid)) >= def.maxOut) continue;
       // Its move's staleness as it is fired, and the slot it will queue as when it lands
-      // (Plan 5 final wave 2, ruling R-FW2b).
+      // (Plan 5 final wave 2, ruling R-FW2b); none for a player-generated item, immune to
+      // staling (fix round 1: `ProjectileDef.item`, Link's Remote Bomb).
       const stale = swingStaleness(f, f.move);
-      const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move), { as: staleSlot(f.move), damage: stale.damage, knockback: stale.knockback });
+      const stamp = def.item === true ? NO_STALE : { as: staleSlot(f.move), damage: stale.damage, knockback: stale.knockback };
+      const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move), stamp);
       // One that would start inside the stage's solid body (its owner beside a wall
       // or under the stage, facing it) is never launched: it is in the wall from
       // its first frame, where one flying into it would die or turn (`bounce`), and

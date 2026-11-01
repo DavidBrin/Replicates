@@ -493,6 +493,17 @@ export interface Staleness {
  * side special's. SmashWiki "Stale Moves"
  * (https://www.ssbwiki.com/Stale_Moves): "any variation of the same special move
  * counts as the same move". Read by slot, for every fighter alike.
+ *
+ * What SmashWiki "Stale-move negation" (https://www.ssbwiki.com/Stale-move_negation; read
+ * for Plan 5 final wave 2, fix round 1) does and does not cover. It does: "any variation of
+ * the same special move counts as the same move" (its example, Giant Punch's charge levels
+ * and its grounded and aerial uses); "Moves that are counter-attacks or absorbers do not
+ * take the staleness of the incoming attack into consideration" (a counter reads the
+ * caught box's damage before staleness, `resolveHits`); and from SSB4 player-generated
+ * items such as Link's Remote Bomb "are therefore immune to staling" (`ProjectileDef.item`).
+ * It does not mention Kirby's Inhale, its spit or the star it spits, nor Marth's Counter or
+ * its counterattack. So `inhaleSpit` and `counterAttack` stale as slots of their own here,
+ * UNVERIFIED: the alternative is that each, as a part of its special, stales as it.
  */
 export const STALES_AS: Readonly<Partial<Record<MoveSlot, MoveSlot>>> = {
   upBAir: "upB",

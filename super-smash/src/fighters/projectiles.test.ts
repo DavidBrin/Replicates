@@ -756,9 +756,43 @@ describe("a repeated projectile stales by its move (ruling R-FW2b)", () => {
     expect(queue).toEqual(["neutralB", "neutralB"]);
   });
 
+  it("a Fireball that meets Fox's shield joins Mario's queue there, marked as a shield's (the re-review's M1)", () => {
+    // "Moves will only become stale if they connect"; in Ultimate a shield is a connection,
+    // its entry marked so it stales at 0.85 (`enterStaleQueue`). Fox holds his shield up.
+    const s = duel("mario", "fox", -20, 0);
+    const { states, events } = run(s, 90, (i) => [i === 0 ? Btn.Special : 0, Btn.Shield]);
+    expect(events.flatMap((e) => e.hits).some((h) => h.attacker === 0)).toBe(false);
+    expect(states.some((st) => st.fighters[1].action === "shieldStun")).toBe(true);
+    expect(states.at(-1)!.fighters[0].staleQueue).toEqual(["neutralB"]);
+    expect(states.at(-1)!.fighters[0].combat.staleShield).toEqual([true]);
+  });
+
   it("rolls back across a stamped shot's flight and its hit: from each snapshot, the same hashes", () => {
     const s = duel("mario", "fox", -20, 0);
     s.fighters[0].staleQueue = ["neutralB"];
     expectRollbackSafe(s, 60, (i) => [i === 0 ? Btn.Special : 0, 0], [-1, 5, 15, 25, 35]);
+  });
+});
+
+// Plan 5 final wave 2, fix round 1: SmashWiki "Stale-move negation"
+// (https://www.ssbwiki.com/Stale-move_negation): from SSB4, "Player-generated items such
+// as Link's Remote Bomb also share this trait, and are therefore immune to staling", and
+// in Ultimate "Items no longer enter the Stale Moves queue, making items unable to stale
+// their damage or refresh other moves". Link's Remote Bomb is the roster's one such item
+// (`ProjectileDef.item`): its hit is neither staled nor freshened, and queues nothing.
+describe("Link's Remote Bomb is an item: immune to staling (SmashWiki \"Stale-move negation\")", () => {
+  it("hits for its 7% however often it lands, and never joins Link's queue", () => {
+    expect(projectileDef("link", "remoteBomb").item).toBe(true);
+    for (const queue of [[], ["downB", "downB"]] as const) {
+      // Link drops a bomb on Fox standing in front of him and sets it off.
+      const s = duel("link", "fox", -20, -8);
+      s.fighters[0].staleQueue = [...queue];
+      s.fighters[0].combat.staleShield = queue.map(() => false);
+      const { states, events } = run(s, 120, (i) => [i === 0 || i === 60 ? Btn.Down | Btn.Special : 0, 0]);
+      const hit = events.flatMap((e) => e.hits).find((h) => h.attacker === 0);
+      expect(hit, `queue ${queue.length}`).toBeDefined();
+      expect(hit!.damage).toBe(fx(7));
+      expect(states.at(-1)!.fighters[0].staleQueue).toEqual([...queue]);
+    }
   });
 });

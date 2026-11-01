@@ -530,6 +530,14 @@ export interface ProjectileDef {
   /** A reflector can send it back (Plan 5): the article's `ATTACK(…, Reflectable=true)`. */
   readonly reflectable?: boolean;
   /**
+   * A player-generated item (Link's Remote Bomb): immune to staling, its hit neither staled
+   * nor freshened, and it joins no stale queue (Plan 5 final wave 2, fix round 1; SmashWiki
+   * "Stale-move negation", https://www.ssbwiki.com/Stale-move_negation: "Player-generated
+   * items such as Link's Remote Bomb also share this trait, and are therefore immune to
+   * staling"; in Ultimate "Items no longer enter the Stale Moves queue").
+   */
+  readonly item?: boolean;
+  /**
    * It may strike a fighter it struck again this many frames of its age later (the
    * article's `ATTACK(…, Rehit=n)`; SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox:
    * "allows the hitbox to strike again after the specified amount of frames"). Plan 5,

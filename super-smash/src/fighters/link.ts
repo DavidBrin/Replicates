@@ -964,6 +964,11 @@ const legacy: FighterDef = {
           // this replica's), so a reflected bomb comes back as that box ×1.4:
           // UNVERIFIED against Ultimate's 1% thrown box.
           reflectable: true,
+          // A player-generated item: immune to staling, and no stale queue (SmashWiki
+          // "Stale-move negation": "Player-generated items such as Link's Remote Bomb also
+          // share this trait, and are therefore immune to staling"; Plan 5 final wave 2, fix
+          // round 1).
+          item: true,
           hitbox: {
             id: 0,
             startFrame: 0,
