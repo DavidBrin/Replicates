@@ -1062,12 +1062,21 @@ const legacy: FighterDef = {
     //   FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_ABS_HIT on 240 (the Arwings' shots
     //   before it are flags, for show).
     // - The end, `game_finalend`: an ATTACK_ABS of 10%, angle 55, KBG 144, BKB 70,
-    //   hitlag ×0, ATTACK_LR_CHECK_POS, set before its first frame; final_end's
-    //   CancelFrame 66 comes on game frame 57 through its FT_MOTION_RATE 0.85 from
-    //   frame 1 (`gameFrameOfMotion`). In the air it is `game_finalairend`, the same
-    //   ATTACK_ABS with no rate: final_air_end's CancelFrame 47, 46 frames
-    //   (`aerialTotalFrames`, read where Fox is when it could end; Task 15 fix round 1;
-    //   UNVERIFIED: the game picks final_air_end where the end begins).
+    //   hitlag ×0, ATTACK_LR_CHECK_POS, set before its first frame. In the air it is
+    //   `game_finalairend`, the same ATTACK_ABS with no rate (`aerialTotalFrames`, read
+    //   where Fox is when it could end; Task 15 fix round 1; UNVERIFIED: the game picks
+    //   final_air_end where the end begins). Both raise
+    //   FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_END_EXIT on motion frame 30, the only one of
+    //   the five ends with an exit flag, and the end exits on it (Plan 5 final wave 2,
+    //   ruling R-FW2g; Task 15 re-review 1): game frame 26 through `game_finalend`'s
+    //   FT_MOTION_RATE 0.85 from frame 1 (`gameFrameOfMotion`), so 25 frames, and frame 30
+    //   in the air, so 29.
+    //   UNVERIFIED: that the status exits on the flag. The status is unpublished
+    //   (rubendal's Data Viewer, and WuBoytH's SSBU-Dumped-Scripts, hold the animation
+    //   scripts, not the status's): the flag is the end scripts' only exit signal, and the
+    //   replica reads its two siblings, FINAL_CLEAR_ATTACK and FINAL_ABS_HIT, as the
+    //   status's own steps too. The alternative: the motions' CancelFrames, final_end's 66
+    //   on game frame 57 (56 frames) and final_air_end's 47 (46).
     // UNVERIFIED: that the scene ends with its hit, on 240 (final_visual_scene
     // publishes no CancelFrame), and that the end's ATTACK_ABS lands on its frame 1
     // (its status lands it; the script only sets it). An ATTACK_ABS has no box: the
@@ -1104,9 +1113,10 @@ const legacy: FighterDef = {
     finalEnd: {
       slot: "finalEnd",
       name: "Team Star Fox (end)",
-      totalFrames: 56,
-      aerialTotalFrames: 46,
-      intangible: [1, 56],
+      totalFrames: 25,
+      aerialTotalFrames: 29,
+      // Through the longer of the two, the aerial end's.
+      intangible: [1, 29],
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 9 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "end", hidesHud: true, sceneGap: fx(9) },

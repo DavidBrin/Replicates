@@ -19,15 +19,18 @@
  * facing it; Fox stands on the floor at 40, facing right. Nobody is ever in reach of
  * either Final Smash:
  * - Volt Tackle, in the air: Pikachu presses it on 1. It holds him at (-150, 30) through
- *   its startup (to 46); the tackle carries him 166.492 to 16.49 on 47-83, over Fox's
- *   head, and from there on nothing holds him: he carries on to the right and falls,
- *   past the stage's right edge on 98, and is KO'd off the side blast line on 136, his
- *   tackle still playing (SmashWiki "Volt Tackle", https://www.ssbwiki.com/Volt_Tackle:
- *   "it is fairly easy to self-destruct off the side blast line if the player misses").
- * - Team Star Fox, in the air, after the KO's freeze (136-150): Fox jumps on 160, jumps
- *   again on 172, and presses it on 178, 50.45 up. Its trap box finds nobody, and it
- *   holds him there through its start, to 261 (ruling R-T16j); he falls with his midair
- *   jump back (`jumpsUsed` 2 → 1, ruling R-T16b) and lands on 290.
+ *   its startup (to 46); the tackle carries him 118.392 to -31.61 on 47-83 (3.2 a frame
+ *   since Plan 5 final wave 2, ruling R-FW2i; 166.492 at Task 15's 4.5, over Fox's
+ *   head), and from there on nothing holds him: he carries on to the right and falls,
+ *   reaching the stage's right edge at the floor's height on 125, his move ending on
+ *   138 under it at (94.9, -8.6), and is KO'd off the bottom blast line on 223 (SmashWiki
+ *   "Volt Tackle", https://www.ssbwiki.com/Volt_Tackle: "it is fairly easy to
+ *   self-destruct off the side blast line if the player misses").
+ * - Team Star Fox, in the air: Fox jumps on 160, jumps again on 172, and presses it on
+ *   178, 50.45 up. Its trap box finds nobody, and it holds him there through its start
+ *   (ruling R-T16j), which Pikachu's KO's freeze (223-237) stretches to 276; he falls
+ *   with his midair jump back (`jumpsUsed` 2 → 1, ruling R-T16b), still in the air when
+ *   the lab ends.
  *
  * Each step's comment gives the frame it starts on and the events it names. They were
  * checked against a run when the match was added; the pins in `golden.test.ts` notice
@@ -48,12 +51,12 @@ const J = Btn.Jump;
 
 const STEPS: readonly ScriptStep[] = [
   [1, B, 0], //                    1: Volt Tackle in the air, held to 46; the tackle 47-83
-  [158, 0, 0], //                     carries Pikachu on, off the right blast line on 136
+  [158, 0, 0], //                     carries Pikachu on; he falls, off the bottom blast line on 223
   [4, 0, J], //                  160: Fox's full hop
   [8, 0, 0],
   [1, 0, J], //                  172: his midair jump
   [5, 0, 0],
-  [1, 0, B], //                  178: Team Star Fox in the air, held to 261; he lands on 290
+  [1, 0, B], //                  178: Team Star Fox in the air, held to 276 (the KO's freeze); then falls
   [122, 0, 0],
 ];
 

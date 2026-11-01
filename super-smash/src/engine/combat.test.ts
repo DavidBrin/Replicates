@@ -450,6 +450,56 @@ describe("a projectile's hit stales by the move that launched it (ruling R-FW2b)
       again.forEach((f, j) => expect(hashState(f.state), `snapshot ${k}, frame ${k + 1 + j}`).toBe(hashState(frames[k + 1 + j].state)));
     }
   });
+
+  // One projectile is one use of its move: a pellet that strikes again and again (its
+  // rehit) queues its move once, on its first connection, and strikes as fresh each time.
+  it("queues a pellet's move once however often the pellet strikes, every strike as fresh as it was fired", () => {
+    const base = pelletShooter();
+    const lingering = { ...base.moves.neutralB!.projectiles![0], vx: fx(0.25), destroyOnHit: false, rehit: 6 };
+    const def: FighterDef = { ...SHOOTER, moves: { ...SHOOTER.moves, neutralB: { ...base.moves.neutralB!, projectiles: [lingering] } } };
+    const c = ctxFor(def);
+    const s = standing(c);
+    Object.assign(s.fighters[1], { x: fx(12), action: "special", move: "downB", actionFrame: 1 });
+    const frames = play(s, 60, (i) => [i === 0 ? Btn.Special : 0, 0], c);
+    const hits = frames.flatMap((f) => f.events.hits).filter((h) => h.attacker === 0);
+    expect(hits.length).toBeGreaterThan(2);
+    expect(new Set(hits.map((h) => h.damage))).toEqual(new Set([mul(pellet, STALE_FRESH_BONUS)]));
+    expect(frames.at(-1)!.state.fighters[0].staleQueue).toEqual(["neutralB"]);
+  });
+
+  // A swing's later hits leave its own entry out of its staleness (Plan 3, Task 16): the
+  // newest of its move's, which is no longer always the front one once a projectile can
+  // land mid-swing and queue its move in front of it.
+  it("keeps a multi-hit swing as fresh through its later hits when its fighter's own pellet lands between them", () => {
+    const base = pelletShooter();
+    const slowPellet = { ...base.moves.neutralB!.projectiles![0], vx: fx(1) };
+    const def: FighterDef = {
+      ...base,
+      moves: {
+        ...base.moves,
+        neutralB: { ...base.moves.neutralB!, projectiles: [slowPellet] },
+        // A 2% box every 3 frames from 2 to 70 (its rehit), on whoever stands 8 ahead.
+        jab1: move("jab1", { totalFrames: 75, hitboxes: [hitbox({ startFrame: 2, endFrame: 70, damage: fx(2), rehit: 3 })] }),
+        downB: move("downB", { totalFrames: 200, hitboxes: [], heavyArmour: fx(1000) }),
+      },
+    };
+    const c = ctxFor(def);
+    const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, c);
+    // Port 0 at 0 facing left; port 1, armoured, 8 to its right; port 2, armoured, 70 to its left.
+    s.fighters.forEach((f, i) => Object.assign(f, { action: i === 0 ? "stand" : "special", move: i === 0 ? null : "downB", actionFrame: 1, grounded: true, platform: 0, y: 0, intangible: 0, x: [0, fx(8), -fx(70)][i], facing: i === 0 ? -1 : 1 }));
+    // B on 0 (the pellet flies left from 6, at 1 a frame); Right on 31 to turn; Attack on 34.
+    const keys = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Special : i === 31 ? Btn.Right : i === 34 ? Btn.Attack : 0, 0, 0];
+    const frames = play(s, 120, keys, c);
+    const swingHits = frames.flatMap((f) => f.events.hits).filter((h) => h.attacker === 0 && h.victim === 1);
+    const pelletAt = frames.findIndex((f) => f.events.hits.some((h) => h.attacker === 0 && h.victim === 2));
+    const firstSwing = frames.findIndex((f) => f.events.hits.some((h) => h.attacker === 0 && h.victim === 1));
+    // The pellet lands after the swing's first hit, with more of the swing's to come.
+    expect(firstSwing).toBeGreaterThan(0);
+    expect(pelletAt).toBeGreaterThan(firstSwing);
+    expect(frames.slice(pelletAt + 1).some((f) => f.events.hits.some((h) => h.attacker === 0 && h.victim === 1))).toBe(true);
+    expect(frames[pelletAt].state.fighters[0].staleQueue.slice(0, 2)).toEqual(["neutralB", "jab1"]);
+    expect(new Set(swingHits.map((h) => h.damage))).toEqual(new Set([mul(fx(2), STALE_FRESH_BONUS)]));
+  });
 });
 
 /* ------------------------------------------- Task 3: Sakurai angle -- */
@@ -7119,6 +7169,37 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
     // The same reading when one fighter is hit twice in a step (the controller's
     // ruling on R-FW2c): each hit's percent is the victim's from before the step, plus
     // that hit's own damage, never the other hit's. Two jabs from either side, at once.
+    // A windbox's push reads the step's starting percents too: its owner's rage is not
+    // raised by a hit it takes on the same step, whichever port is resolved first.
+    it("a windbox's push on the step its owner is hit past 35% reads the owner's percent from before it, in either port order (ruling R-FW2c)", () => {
+      const fan: FighterDef = {
+        ...BASE_DEF,
+        moves: {
+          ...BASE_DEF.moves,
+          // A push on frame 4, the jab's first live frame: one step for both.
+          downB: move("downB", { totalFrames: 20, hitboxes: [hitbox({ startFrame: 4, endFrame: 4, damage: 0, windbox: true, angle: fx(0), baseKnockback: fx(30), knockbackGrowth: fx(100) })] }),
+          jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true })] }),
+        },
+      };
+      const c = ctxFor(fan);
+      /** The fan (at 30%) and the jabber, the fan on port `fanPort`: the push the jabber took, as speeds. */
+      const pushed = (fanPort: 0 | 1) => {
+        const s = standing(c);
+        s.fighters[fanPort].damage = fx(30);
+        const keys = (i: number): readonly InputFrame[] => {
+          if (i !== 0) return [0, 0];
+          return fanPort === 0 ? [Btn.Down | Btn.Special, Btn.Attack] : [Btn.Attack, Btn.Down | Btn.Special];
+        };
+        const frames = play(s, 8, keys, c);
+        const at = frames.findIndex((f) => f.events.pushes.length > 0);
+        expect(at, `fan on ${fanPort}`).toBeGreaterThan(0);
+        expect(frames[at].events.hits.map((h) => h.victim), "the jab lands on the fan the same step").toEqual([fanPort]);
+        const jabber = frames[at].state.fighters[1 - fanPort];
+        return [Math.abs(jabber.kinetic.damageX), jabber.kinetic.damageY];
+      };
+      expect(pushed(0)).toEqual(pushed(1));
+    });
+
     it("two hits on one fighter in one step each read its percent from before the step: the same knockback from either side (ruling R-FW2c)", () => {
       // Transcendent jabs, so the two meeting over the victim trade rather than clank.
       const ctx = ctxFor({ ...BASE_DEF, moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true })] }) } });

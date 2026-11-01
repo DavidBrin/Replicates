@@ -155,34 +155,37 @@ function run(user: string, gap: number): Frame[] {
 /**
  * [user, activation gap, where it traps Mario]: each cinematic Final Smash's real
  * trap distances (the re-review's N2 table: Fox where Mario stands, Kirby from 3
- * (it misses at 2), Pikachu 6.9 to 15 after its dash, Marth −4 to 20, his dash
+ * (it misses at 2), Pikachu 8.2 to 15.6 after its dash (6.9 to 15 before its speed's
+ * re-tune, Plan 5 final wave 2, ruling R-FW2i), Marth 4 behind to 20, his dash
  * carrying him level with or past Mario at the closest; Donkey Kong where Mario
- * stands).
+ * stands). A user that traps only fighters behind it turns to face them on the trap's
+ * step (Plan 5 final wave 2, ruling R-FW2h), so those are ahead of it when caught.
  */
 const TRAPS = [
   ["donkeyKong", 2, 2],
   ["donkeyKong", 8, 8],
   ["donkeyKong", 12, 12],
   // Behind him (the re-review 2's N5): his trap box reaches back, and with no
-  // body push it catches a fighter inside or just behind him, to 7 back.
-  ["donkeyKong", -0.5, -0.5],
-  ["donkeyKong", -2, -2],
-  ["donkeyKong", -4, -4],
-  ["donkeyKong", -7, -7],
+  // body push it catches a fighter inside or just behind him, to 7 back. He turns to
+  // face them as the trap lands (ruling R-FW2h).
+  ["donkeyKong", -0.5, 0.5],
+  ["donkeyKong", -2, 2],
+  ["donkeyKong", -4, 4],
+  ["donkeyKong", -7, 7],
   ["fox", 2, 2],
   ["fox", 3, 3],
   ["fox", 4, 4],
   ["kirby", 3, 3],
   ["kirby", 4, 4],
   ["kirby", 5, 5],
-  ["pikachu", 2, 6.9],
-  ["pikachu", 4, 8.9],
-  ["pikachu", 8, 8.6],
-  ["pikachu", 10, 11],
-  ["pikachu", 30, 12],
-  ["pikachu", 54, 13.5],
-  ["pikachu", 42, 15],
-  ["marth", 2, -4],
+  ["pikachu", 2, 8.2],
+  ["pikachu", 4, 10.2],
+  ["pikachu", 8, 11.2],
+  ["pikachu", 10, 12.3],
+  ["pikachu", 30, 14],
+  ["pikachu", 54, 15.6],
+  ["pikachu", 42, 13.2],
+  ["marth", 2, 4],
   ["marth", 6, 0],
   ["marth", 10, 4],
   ["marth", 14, 8],

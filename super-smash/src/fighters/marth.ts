@@ -1195,11 +1195,14 @@ const legacy: FighterDef = {
     //   (SSBU)"). Either way the move goes on from frame 71: its whiff's end.
     // - The whiff: the dash to 70, then final_dash_end, whose CancelFrame 85 comes on
     //   game frame 48 at its FT_MOTION_RATE 0.6, then 0.5 from 50
-    //   (`gameFrameOfMotion`): 70 + 48 = 118 frames.
+    //   (`gameFrameOfMotion`): its 47 frames, the CancelFrame − 1 every part's length
+    //   is (Plan 5 final wave 2, ruling R-FW2g; Task 15 re-review 1), so 70 + 47 = 117.
     // UNVERIFIED: the dash, 6 units a frame on frames 25-70 (from `game_finalstart`'s
     // last command, on 25): SSBU moves Marth by his animation, which is unpublished,
     // and loops the dash by status.
-    // UNVERIFIED: the catch box's offset (8 ahead, 7 up): it hangs off the sword.
+    // UNVERIFIED: the catch box's offset (10 ahead, 7 up): it hangs off the sword, whose
+    // place in the dash is unpublished. 10 ahead, its radius, reaches no further behind
+    // Marth than his origin (Plan 5 final wave 2, ruling R-FW2h; it was 8, 2 behind).
     // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
     // SLOW_OPPONENT(4, 45), its slowing of the other fighters through the startup, is not
     // modelled (the page publishes neither its rate nor its length, and the arguments'
@@ -1213,14 +1216,14 @@ const legacy: FighterDef = {
     finalSmash: {
       slot: "finalSmash",
       name: "Critical Hit",
-      totalFrames: 118,
-      intangible: [1, 118],
+      totalFrames: 117,
+      intangible: [1, 117],
       momentum: [{ frame: 25, x: fx(6), y: fx(0), hold: 45 }],
       dashEnd: { edge: true, special: true },
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "start", trap: true, next: "finalEnd", nextAt: 25, sceneGap: fx(13) },
-      hitboxes: [finalBox(0, 25, 70, { damage: 0, angle: 361, kbg: 0, radius: 10, x: 8, y: 7, hitlag: 0, transcendent: true, lr: "position" })],
+      hitboxes: [finalBox(0, 25, 70, { damage: 0, angle: 361, kbg: 0, radius: 10, x: 10, y: 7, hitlag: 0, transcendent: true, lr: "position" })],
     },
     finalEnd: {
       slot: "finalEnd",

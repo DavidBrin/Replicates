@@ -86,6 +86,10 @@ describe("Fox's Reflector", () => {
     // Mario takes the fireball's 5% × 1.4 × 1.2 (one-on-one); Fox takes nothing.
     expect(toFloat(state.fighters[0].damage)).toBeCloseTo(5 * 1.4 * 1.2, 2);
     expect(state.fighters[1].damage).toBe(0);
+    // Fox's now, it stales by none of his moves and queues none: neither Fox's queue nor
+    // Mario's has the Fireball's move (Plan 5 final wave 2, ruling R-FW2b; UNVERIFIED).
+    expect(state.fighters[1].staleQueue).not.toContain("neutralB");
+    expect(state.fighters[0].staleQueue).toEqual([]);
   });
 
   it("stays up while B is held and ends 14 frames after it is let go", () => {

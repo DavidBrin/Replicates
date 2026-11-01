@@ -1054,10 +1054,18 @@ const legacy: FighterDef = {
     //   read where Pikachu is when it could end; UNVERIFIED: the game picks final_air2
     //   where the end begins).
     // - The whiff: the tackle to 83, then final_dash_end, whose CancelFrame 78 comes on
-    //   game frame 55 at its FT_MOTION_RATE 0.7 (`gameFrameOfMotion`): 83 + 55 = 138.
+    //   game frame 55 at its FT_MOTION_RATE 0.7 (`gameFrameOfMotion`): its 54 frames, the
+    //   CancelFrame − 1 every part's length is (Plan 5 final wave 2, ruling R-FW2g; Task 15
+    //   re-review 1), so 83 + 54 = 137.
     //   It ignores edges, and takes no ledge (Task 14 fix round 1, ruling R-T14j).
-    // UNVERIFIED: the tackle's speed, 4.5 a frame on frames 47-83: SSBU moves Pikachu
-    // by status, unpublished.
+    // UNVERIFIED: the tackle's speed, 3.2 a frame on frames 47-83: SSBU moves Pikachu
+    // by status, unpublished. Tuned to SmashWiki "Volt Tackle": "The initial tackle travels
+    // almost the entire length of [Final Destination]", whose floor is 160 (Plan 5 final
+    // wave 2, ruling R-FW2i, amended): whiffed from a standstill, the tackle (118.4) and
+    // the slide after it travel 152.4, 95% of the floor; 3.2 is the fastest tenth whose
+    // whiff stays under the floor in the CPU's own reading of it too (its dash windows and
+    // the last one's speed braked by `ground_brake`: 155.6; at 3.3, 161.7). Task 15's 4.5
+    // carried the tackle alone 166.5 and the whiff 236.4, more than any stage.
     // UNVERIFIED: the six sparks' frames (the page counts six; `Rehit=6` from 10 allows
     // a seventh on 46), and that the 47-49 box and the dash's both trap: the scripts
     // mark neither as the catch.
@@ -1081,9 +1089,9 @@ const legacy: FighterDef = {
     finalSmash: {
       slot: "finalSmash",
       name: "Volt Tackle",
-      totalFrames: 138,
-      intangible: [1, 138],
-      momentum: [{ frame: 47, x: fx(4.5), y: fx(0), hold: 36 }],
+      totalFrames: 137,
+      intangible: [1, 137],
+      momentum: [{ frame: 47, x: fx(3.2), y: fx(0), hold: 36 }],
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 8 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "start", trap: true, next: "finalAttack", nextAt: 47, sceneGap: fx(8) },

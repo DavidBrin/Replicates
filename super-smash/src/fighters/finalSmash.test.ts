@@ -11,6 +11,7 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { frame, motionRate, script, setFlag } from "@/engine/acmd/dsl";
 import { gameFrameOfMotion } from "@/engine/acmd/interpreter";
 import { SMASH_BALL_SPAWN_INTERVAL } from "@/engine/constants";
 import { FINAL_SMASH_READY, travelWindows } from "@/engine/final";
@@ -25,6 +26,9 @@ import { cloneState, createInitialState, registerFighters, registerStages, step 
 import { Btn } from "@/engine/types";
 import type { ChargedHitbox, FighterDef, FighterState, GameState, Hitbox, InputFrame, MatchRules, MoveSlot, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
+import { dodgeDrift } from "@/ai/behaviours";
+import { dashTravel } from "@/ai/specials";
+import { fighterParams } from "@/engine/params";
 import { REFERENCE_SCRIPTS } from "./acmd/index";
 import { barrage, finalBox } from "./finalKit";
 import { FIGHTERS, getFighter } from "./index";
@@ -246,28 +250,173 @@ describe("each finishing blow", () => {
 });
 
 /**
+ * Plan 5 final wave 2, ruling R-FW2i (Task 16 re-review 3, and the controller's amendment
+ * after part 1's fix round 3): Volt Tackle's whiff, its tackle and the slide after it,
+ * "travels almost the entire length of Final Destination" (SmashWiki "Volt Tackle",
+ * https://www.ssbwiki.com/Volt_Tackle), whose floor is 160 units (79.995 either side of
+ * its centre). Its speed is UNVERIFIED (`pikachu.ts`), re-tuned to that: the whiff stays
+ * under the floor's length, in the engine and in the CPU's own reading of it (its dash
+ * windows, `dashTravel`, and the last window's speed braked by `ground_brake`), and it is
+ * almost all of it (90% or more).
+ */
+describe("Volt Tackle's whiffed travel (ruling R-FW2i)", () => {
+  /** Final Destination's floor, end to end. */
+  const floor = () => toFloat(2 * FD_FLOOR.halfWidth);
+
+  it("whiffed from a standstill, carries Pikachu almost the length of Final Destination's floor, and not past it", () => {
+    // On a floor as long as it needs, so nothing but the move stops it.
+    const wide = { ...FD_STAGE, id: "wideFD", platforms: [{ ...FD_FLOOR, halfWidth: fx(2000) }], blastZone: { ...FD_STAGE.blastZone, left: -fx(3000), right: fx(3000) } };
+    registerStages([...STAGES, wide]);
+    try {
+      const s = createInitialState("wideFD", [{ defId: "pikachu" }, { defId: "mario" }], RULES, 6);
+      Object.assign(s.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: 0, y: 0, facing: 1, intangible: 0, finalSmashReady: FINAL_SMASH_READY });
+      Object.assign(s.fighters[1], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: -fx(500), y: 0, facing: 1 });
+      let st = s;
+      let prev: InputFrame[] = [0, 0];
+      for (let i = 0; i < 300 && !(i > 140 && st.fighters[0].vx === 0); i++) {
+        const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
+        st = step(st, now, { prevInputs: prev }).state;
+        prev = now;
+      }
+      expect(st.fighters[0].action).not.toBe("special");
+      const travel = toFloat(st.fighters[0].x);
+      expect(travel).toBeLessThan(floor());
+      expect(travel).toBeGreaterThanOrEqual(0.9 * floor());
+    } finally {
+      registerStages(STAGES);
+    }
+  });
+
+  it("whiffs under the floor's length in the CPU's reading of it too, its dash windows and their slide", () => {
+    const fs = def("pikachu").moves.finalSmash!;
+    const last = fs.momentum!.at(-1)!.x;
+    const slide = Math.abs(dodgeDrift(last, fighterParams(def("pikachu")).ground_brake, Number.MAX_SAFE_INTEGER));
+    expect(toFloat(dashTravel(fs) + slide)).toBeLessThan(floor());
+  });
+});
+
+/**
+ * Plan 5 final wave 2, ruling R-FW2h (Task 17 re-reviews 1-3): how far behind its user
+ * each trapping box reaches, its radius past its nearest end, against its script. Donkey
+ * Kong's `game_finalstart` catch (Z 8 to 28, Size 13) and Pikachu's `game_finaldash`
+ * (Z 0, Size 13; `game_final`'s 47-49 capsules from 5 ahead to 5 behind, 5.5) reach
+ * behind by their scripts; Kirby's (Z 15, Size 10) and Fox's (Z 20 to 36, Size 18) do
+ * not. Marth's hangs off `sword1`, whose place is unpublished: its stand-in, 8 ahead with
+ * the script's radius 10, reached 2 behind, and no longer does.
+ */
+const TRAP_REACH_BEHIND: Readonly<Record<string, number>> = { donkeyKong: 5, marth: 0, kirby: -5, fox: -2, pikachu: 13 };
+
+describe("a trap behind its user (ruling R-FW2h)", () => {
+  it.each(CINEMATIC.map((c) => c.id))("%s's trap boxes reach behind it only as far as its script's do", (id) => {
+    const start = def(id).moves.finalSmash!;
+    const behind = start.hitboxes.filter((hb) => hb.trap !== false).map((hb) => toFloat(hb.radius) - Math.min(toFloat(hb.x), toFloat(hb.x2 ?? hb.x)));
+    expect(Math.max(...behind)).toBeCloseTo(TRAP_REACH_BEHIND[id], 6);
+  });
+
+  // UNVERIFIED (no source places a fighter trapped behind its user, or turns the user):
+  // the user turns to face what it trapped when everything it trapped is behind it, as the
+  // scene starts, so it strikes, and launches, the fighter it holds and not the air ahead.
+  // The alternative is to place the trapped in front of the user.
+  /** Donkey Kong at −30 facing right, Mario at −30 + `mario`, Fox at −30 + `fox`: the steps of his Jungle Rush. */
+  function jungleRush(mario: number, fox: number): GameState[] {
+    const s = ready("donkeyKong", mario);
+    s.fighters[2].x = fx(-30 + fox);
+    return run(s, 300).states;
+  }
+
+  it("Donkey Kong turns to face a fighter he traps 3 behind him, and faces it through the scene", () => {
+    const states = jungleRush(-3, -45);
+    const scene = states.filter((st) => st.cinematic === 0);
+    expect(scene.length).toBeGreaterThan(10);
+    expect(states.some((st) => st.fighters[1].action === "finalTrapped")).toBe(true);
+    expect(scene.every((st) => st.fighters[0].facing === -1)).toBe(true);
+    expect(scene[0].fighters[1].x).toBeLessThan(scene[0].fighters[0].x);
+    // Mario stood facing left, away from him: trapped, he faces Donkey Kong, as a held
+    // fighter faces its captor (UNVERIFIED).
+    expect(states[0].fighters[1].facing).toBe(-1);
+    expect(scene.every((st) => st.fighters[1].facing === 1)).toBe(true);
+  });
+
+  it("keeps his facing when he traps one fighter ahead and one behind", () => {
+    const states = jungleRush(18, -3);
+    const scene = states.filter((st) => st.cinematic === 0);
+    expect(scene.length).toBeGreaterThan(10);
+    expect([1, 2].every((p) => states.some((st) => st.fighters[p].action === "finalTrapped"))).toBe(true);
+    expect(scene.every((st) => st.fighters[0].facing === 1)).toBe(true);
+  });
+
+  it("Marth, whose dash carries him past Mario 2 ahead, turns and strikes him away, not back through himself", () => {
+    // Task 17 re-review 1: the dash moves Marth 6 on its frame 25 before the catch
+    // reaches Mario, who ends up 4 behind him.
+    const { states } = run(ready("marth", 2), 200);
+    const trapped = states.findIndex((st) => st.fighters[1].action === "finalTrapped");
+    expect(trapped).toBeGreaterThan(0);
+    expect(states[trapped].fighters[1].x).toBeLessThan(states[trapped].fighters[0].x);
+    const launched = states.findIndex((st, i) => i > trapped && st.fighters[1].action !== "finalTrapped");
+    expect(launched).toBeGreaterThan(trapped);
+    expect(states[launched].fighters[0].facing).toBe(-1);
+    // Launched away from Marth: his strike's 361° from Marth's facing, to the left.
+    const flying = states.slice(launched).find((st) => st.fighters[1].vx !== 0)!;
+    expect(flying.fighters[1].vx).toBeLessThan(0);
+  });
+});
+
+/**
  * Each part's published length, its motion's CancelFrame − 1 in game frames through
  * its FT_MOTION_RATE (`gameFrameOfMotion`; each fighter file quotes them):
  * - Jungle Rush's final_start 97, and final_end 70, game frame 62 at its 0.8 from 30
  *   (ruling R-T15i);
  * - Critical Hit's dash to 70 (UNVERIFIED) and final_dash_end 85, 48 game frames at
- *   its 0.6 and 0.5; final_end 60;
+ *   its 0.6 and 0.5, so 70 + 47 (Plan 5 final wave 2, ruling R-FW2g: the end part's
+ *   CancelFrame − 1, as every other row, where 70 + 48 had counted its CancelFrame);
+ *   final_end 60;
  * - Ultra Sword's final_start 87; final_attack's 219, less its 110-frame scene;
- * - Team Star Fox's final_lock_on 85; final_end 66, game frame 57 at its 0.85;
+ * - Team Star Fox's final_lock_on 85; its end exits on the flag its scripts raise on
+ *   motion frame 30 (ruling R-FW2g, `TEAM_STAR_FOX_END`, below), not final_end's 66;
  * - Volt Tackle's dash to 83 (UNVERIFIED) and final_dash_end 78, 55 game frames at its
- *   0.7; final2 80.
+ *   0.7, so 83 + 54 (ruling R-FW2g); final2 80.
  * In the air (`MoveDef.aerialTotalFrames`): Jungle Rush's final_air_end 47, Critical
- * Hit's final_air_end 50, Team Star Fox's final_air_end 47, Volt Tackle's final_air2 37.
+ * Hit's final_air_end 50, Team Star Fox's exit flag on 30, Volt Tackle's final_air2 37.
  */
 const LENGTHS: Readonly<Record<string, { start: number; end: number; airEnd?: number }>> = {
   donkeyKong: { start: 96, end: 61, airEnd: 46 },
-  marth: { start: 118, end: 59, airEnd: 49 },
+  marth: { start: 117, end: 59, airEnd: 49 },
   kirby: { start: 86, end: 108 },
-  fox: { start: 84, end: 56, airEnd: 46 },
-  pikachu: { start: 138, end: 79, airEnd: 36 },
+  fox: { start: 84, end: 25, airEnd: 29 },
+  pikachu: { start: 137, end: 79, airEnd: 36 },
 };
 
+/**
+ * Team Star Fox's end scripts, as rubendal's Data Viewer 13.0.1 publishes them (Fox
+ * `FinalEnd`, `FinalAirEnd`): the ground one runs FT_MOTION_RATE(FSM=0.85) from its
+ * frame 1, the air one no rate, and both raise
+ * FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_END_EXIT on motion frame 30, the only one of
+ * the five ends with an exit flag (Plan 5 final wave 2, ruling R-FW2g).
+ */
+const TEAM_STAR_FOX_END = {
+  ground: script("game_finalend", "final_end", [frame(1), motionRate(0.85), frame(30), setFlag("FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_END_EXIT")]),
+  air: script("game_finalairend", "final_air_end", [frame(30), setFlag("FIGHTER_FOX_STATUS_WORK_ID_FLAG_FINAL_END_EXIT")]),
+};
+
+describe("Team Star Fox's end exits on its scripts' exit flag (ruling R-FW2g)", () => {
+  it("lasts to the frame before the flag's motion frame 30: 25 on the ground, 29 in the air, not final_end's CancelFrame 66 (56) or final_air_end's 47 (46)", () => {
+    // The same machinery puts final_end's CancelFrame 66 on game frame 57, as before.
+    expect(gameFrameOfMotion(TEAM_STAR_FOX_END.ground, 66)).toBe(57);
+    expect(gameFrameOfMotion(TEAM_STAR_FOX_END.ground, 30) - 1).toBe(LENGTHS.fox.end);
+    expect(gameFrameOfMotion(TEAM_STAR_FOX_END.air, 30) - 1).toBe(LENGTHS.fox.airEnd);
+  });
+});
+
 describe("each part's length", () => {
+  // SmashWiki "Final Smash": Final Smashes "make the user fully intangible": every part's
+  // window runs from its frame 1 through its length, its aerial one included where that
+  // is the longer (Team Star Fox's end, 29 in the air against 25: ruling R-FW2g).
+  it.each(FIGHTERS.map((f) => f.id))("%s's Final Smash parts are intangible through their whole length, on the ground and in the air", (id) => {
+    const parts = (["finalSmash", "finalAttack", "finalEnd"] as const).map((slot) => def(id).moves[slot]).filter((m) => m !== undefined);
+    expect(parts.length).toBeGreaterThan(0);
+    for (const m of parts) expect(m.intangible, `${id} ${m.slot}`).toEqual([1, Math.max(m.totalFrames, m.aerialTotalFrames ?? 0)]);
+  });
+
   it.each(CINEMATIC.map((c) => c.id))("%s's parts are their published lengths, on the ground and in the air", (id) => {
     const { moves } = def(id);
     expect(moves.finalSmash!.totalFrames).toBe(LENGTHS[id].start);
@@ -1129,7 +1278,7 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
   // "In the air, the user will travel at high speed directly forward"; "Volt Tackle",
   // "ignores edges". Whiffed in the air, each dashes on, unheld. UNVERIFIED: the 100
   // units is a floor under both dashes' lengths, which are themselves UNVERIFIED
-  // (`marth.ts`: 6 a frame on 25-70, 276; `pikachu.ts`: 4.5 a frame on 47-83, 166.5).
+  // (`marth.ts`: 6 a frame on 25-70, 276; `pikachu.ts`: 3.2 a frame on 47-83, 118.4).
   it.each([
     ["marth", 100],
     ["pikachu", 100],
@@ -1184,15 +1333,15 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
    *   sparks on 10-46 (…/character/Pikachu/data.json), so 46. Their ends (70, 83) and
    *   speeds are UNVERIFIED (`marth.ts`, `pikachu.ts`): SSBU moves both by status or
    *   animation, unpublished.
-   * - The distances: every window frame but the last moves the window's speed (6, 4.5),
-   *   and on the last the speed is handed to drift, which loses that frame's air brake
-   *   (`applyMoveMomentum`): Marth 275.996 (fx(276) − 15), Pikachu 166.492 (fx(166.5) −
-   *   31). UNVERIFIED, as the speeds are.
+   * - The distances: every window frame but the last moves the window's speed (6, 3.2
+   *   since ruling R-FW2i), and on the last the speed is handed to drift, which loses
+   *   that frame's air brake (`applyMoveMomentum`): Marth 275.996 (fx(276) − 15),
+   *   Pikachu 118.392 (37 × fx(3.2) − 31). UNVERIFIED, as the speeds are.
    * - UNVERIFIED: the kinetics after the window (no page gives them).
    */
   const DASHES = [
     { id: "marth", from: 25, to: 70, speed: fx(6), distance: fx(276) - 15 },
-    { id: "pikachu", from: 47, to: 83, speed: fx(4.5), distance: fx(166.5) - 31 },
+    { id: "pikachu", from: 47, to: 83, speed: fx(3.2), distance: 37 * fx(3.2) - 31 },
   ] as const;
 
   /** `id` in the air at (x, 40), facing right, using its Final Smash; Mario and Fox far behind on the floor. */
@@ -1224,7 +1373,8 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
     for (let k = 1; k < xs.length - 1; k++) expect(xs[k] - xs[k - 1]).toBe(speed);
     expect(dash[dash.length - 1].fighters[0].x - at.x).toBe(distance);
     // From the window on, nothing holds it: it carries on forward and falls, every step,
-    // until it is KO'd off the far side, its start still playing.
+    // until it is KO'd off the far side: Marth's start still playing; Pikachu's, since its
+    // tackle's re-tune (ruling R-FW2i), over by then, and him falling on from it.
     const after = inStart.filter((st) => frameOf(st) > to);
     expect(after.length).toBeGreaterThan(5);
     let prev = dash[dash.length - 1].fighters[0];
@@ -1234,9 +1384,8 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
       prev = st.fighters[0];
     }
     const ko = koOf(states, events);
-    expect(ko.at).toBeGreaterThan(0);
-    expect(ko.before.fighters[0].move).toBe("finalSmash");
-    expect(frameOf(ko.before)).toBeGreaterThan(to);
+    expect(ko.at).toBeGreaterThan(states.indexOf(dash[dash.length - 1]));
+    if (id === "marth") expect([ko.before.fighters[0].move, frameOf(ko.before) > to]).toEqual(["finalSmash", true]);
     expect(ko.before.fighters[0].x).toBeGreaterThan(FD_STAGE.blastZone.right - fx(10));
   });
 
@@ -1256,7 +1405,7 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
   it("pikachu: used in the air at x 60 facing the near blast line, carries on past his dash's end and is KO'd off it", () => {
     const { states, events } = aerialDash("pikachu", fx(60), 160);
     const end = states.find((st) => st.fighters[0].move === "finalSmash" && frameOf(st) === 83)!;
-    expect(end.fighters[0].x).toBe(fx(60) + fx(166.5) - 31);
+    expect(end.fighters[0].x).toBe(fx(60) + 37 * fx(3.2) - 31);
     const ko = koOf(states, events);
     expect(ko.at).toBeGreaterThan(0);
     expect(ko.before.fighters[0].move).toBe("finalSmash");

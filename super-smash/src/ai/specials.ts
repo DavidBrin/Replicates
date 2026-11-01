@@ -247,12 +247,13 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    that ignores the edge (Volt Tackle) whiffed carries on past its window and falls
  *    off the side blast line (SmashWiki "Volt Tackle": "it is fairly easy to
  *    self-destruct off the side blast line if the player misses"; the Task 19 sweep:
- *    a 166-unit dash ended 273 units on), so it is used only point-blank
+ *    a 166-unit dash ended 273 units on, at Task 15's 4.5 a frame; 3.2 since Plan 5
+ *    final wave 2, ruling R-FW2i), so it is used only point-blank
  *    (`FINAL_SMASH_RANGE`) from a standstill on a target held where it stands, on the
  *    ground and unable to act soon (`CANNOT_ACT_SOON`; ruling R-T19d): never toward
  *    an open blast line on a chance. Not where its dash (`dashTravel`) would end over
- *    the stage either (ruling R-T19h): a whiff carries on past its dash windows, about
- *    255 units (the Task 19 review's M2), and Pokémon Stadium 2, wider than the dash,
+ *    the stage either (ruling R-T19h): a whiff carries on past its dash windows (about
+ *    255 units at 4.5 a frame, the Task 19 review's M2), and Pokémon Stadium 2, wider than the dash,
  *    let one fire at a free target from near a ledge. (In the sweep a target merely
  *    committed was not enough: Volt Tackle's startup sparks knocked an aerial one
  *    behind Pikachu; nor was a run, or a stand still sliding from one: its speed slid

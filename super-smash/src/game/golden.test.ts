@@ -62,7 +62,7 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * the air, which holds him there, strike Samus again at theirs, and the Ancient Arrow,
  * in the air too, flies and strikes Mario; and a 300-frame dash lab (`goldenDashLab.ts`,
  * Task 16 fix round 4): Pikachu whiffs Volt Tackle in the air, held through its
- * startup, then tackles, carries on and falls off the side blast line, and Fox whiffs
+ * startup, then tackles, carries on and falls off the bottom blast line, and Fox whiffs
  * Team Star Fox in the air, held through its start.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
@@ -408,7 +408,9 @@ const MATCHES: readonly Match[] = [
  * first tick, a projectile staled by its move, a step's hits read the percents from before
  * them) adds no action and leaves the four CPU matches as they were. The ball-on match
  * reaches `finalTrapped` again (Kirby's Ultra Sword traps Samus) and `roll`, which the four
- * do not. All 59 are visited.
+ * do not. All 59 are visited. Its second (rulings R-FW2g to R-FW2i, the Final Smashes')
+ * adds none either; the dash lab no longer reaches `land` (Fox is still falling when it
+ * ends), which every other match does. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1276,6 +1278,20 @@ describe("engine golden trace", () => {
   // 2624, and Samus goes by a hit, tumbling at 151.9% on 2873. 31 hits, 4 shield hits, one
   // KO. So now: hits 39/36/34/38, 6, 0, 1, 4, 1, 2, 33, 54, 0 and 31; shield hits 0/4/1/2,
   // 3, 0, 0, 0, 0, 0, 0, 0, 0 and 4; KOs 0/0/1/1, 1, 2, 0, 0, 0, 0, 0, 2, 1 and 1.
+  // Its second, the Final Smashes' (rulings R-FW2g to R-FW2i: Critical Hit's and Volt
+  // Tackle's whiffs end on their end parts' CancelFrame − 1, 117 and 137 frames; Team
+  // Star Fox's end exits on its scripts' exit flag, 25 frames on the ground and 29 in the
+  // air; a user whose trap caught only fighters behind it turns to face them, and the
+  // trapped face their user; Marth's catch box reaches no further behind him than his
+  // origin; Volt Tackle's tackle at 3.2 a frame, its whiff almost Final Destination's
+  // length) moved the dash lab alone, from its 1-100 sample: on 47 the tackle carries
+  // Pikachu 3.2 a frame, not 4.5, 118.4 in all to -31.6, and he falls off the bottom
+  // blast line on 223, not off the side one on 136; Fox, held through Team Star Fox's
+  // start, which that KO's freeze stretches to 276, is still falling with his midair jump
+  // back when the lab ends (he landed on 290). No hit and one KO, as before. The four CPU
+  // matches, the script and the eight other labs are byte-identical: none whiffs Critical
+  // Hit or Volt Tackle, plays Team Star Fox's end, or traps a fighter behind its user or
+  // facing away from it. Every count is as above.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1342,9 +1358,10 @@ describe("engine golden trace", () => {
 
   // Plan 5, Task 16 fix round 4: the dash lab whiffs a Final Smash dash and a cinematic
   // Final Smash in the air (`goldenDashLab.ts`); no other golden match uses one in the
-  // air. Held through its startup only, Volt Tackle carries Pikachu off the side blast
-  // line (ruling R-T16l, amended): the match's one KO. Held to its end, he would have
-  // fallen onto the stage.
+  // air. Held through its startup only, Volt Tackle carries Pikachu on past the stage's
+  // edge, and he falls off the bottom blast line (ruling R-T16l, amended; its tackle
+  // re-tuned to 3.2 a frame, Plan 5 final wave 2, ruling R-FW2i): the match's one KO.
+  // Held to its end, he would have fallen onto the stage.
   function expectDashes(): void {
     const lab = played.get(DASH_LAB.name)!;
     expect(["pikachu finalSmash", "fox finalSmash"].filter((m) => !lab.moves.has(m)), "Final Smashes the dash lab no longer whiffs").toEqual([]);

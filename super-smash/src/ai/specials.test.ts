@@ -48,6 +48,7 @@ import {
   CARGO_CARRY_FRAMES,
   REFLECT_AIM,
   counter,
+  dashTravel,
   finalSmash,
   framesToMeet,
   holding,
@@ -180,9 +181,10 @@ describe("the Final Smash", () => {
   });
 
   it("never whiffs Volt Tackle toward an open blast line: point-blank on a committed target only", () => {
-    // Its 166-unit dash is longer than any stage, and a whiff carries on and falls. Fix
-    // round 3 (ruling R-FW1t): with that dash nowhere is safe to whiff it from, so at
-    // this tuning it is never fired at all; a shorter one is (`tackle`, below).
+    // A whiff carries on past its dash and slides: 155.6 in the CPU's reading of it since
+    // part 2 of the final wave (ruling R-FW2i; it was 240.9). Fix round 3 (ruling R-FW1t):
+    // it is fired only where that whiff stays on the floor ahead, so not from the middle
+    // of a stage at all (`tackle`, below, is a shorter one).
     expect(finalSmash(context(ready(40, { x: 0 }), pikachu)).score).toBe(0);
     expect(finalSmash(context(ready(20, { x: 0 }), pikachu)).score).toBe(0);
     expect(finalSmash(context(landing(20), pikachu)).score).toBe(0);
@@ -192,17 +194,20 @@ describe("the Final Smash", () => {
 
   it("never starts Volt Tackle at a free target however much stage is ahead: point-blank on a held one only (ruling R-T19h)", () => {
     // The Task 19 review's M2: Pokémon Stadium 2 is 187.6 wide, more than the dash's
-    // own 166.5 (`dashTravel`), but a whiff carries on past its dash windows (about
-    // 255) and falls; 15 inside its left ledge, at a free standing target 108 ahead.
+    // own travel (`dashTravel`), and a whiff carries on past its dash windows and slides;
+    // 15 inside its left ledge, at a free standing target 108 ahead.
     const ps2 = stageViewFromDef(STAGES.find((x) => x.id === "pokemonStadium2")!);
     const at = ps2.leftLedge + fx(15);
     const s = makeState({ fighters: [makeFighter({ port: 0, x: at, finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "pikachu" }), makeFighter({ port: 1, x: at + fx(108) })] });
-    expect(ps2.rightLedge - at).toBeGreaterThan(fx(166.5));
+    expect(ps2.rightLedge - at).toBeGreaterThan(dashTravel(pikachu.moves.finalSmash!));
     expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBe(0);
-    // Point-blank on a target that cannot act soon, from a standstill, it still is: with a
-    // dash its whiff keeps on the stage (fix round 3, ruling R-FW1t; `tackle`).
+    // Point-blank on a target that cannot act soon, from a standstill, it still is: its
+    // whiff (155.6 since ruling R-FW2i) keeps on the floor ahead, 172.6 (fix round 3,
+    // ruling R-FW1t). The whiff of Task 15's tuning (240.9) did not, nor does 2.5 times
+    // that speed's.
     s.fighters[1] = makeFighter({ port: 1, x: at + fx(20), action: "landingLag", actionFrame: 20 });
-    expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBe(0);
+    expect(finalSmash(context(s, pikachu, 9, undefined, ps2)).score).toBeGreaterThan(0);
+    expect(finalSmash(context(s, tackle(4.5), 9, undefined, ps2)).score).toBe(0);
     expect(finalSmash(context(s, tackle(1.5), 9, undefined, ps2)).score).toBeGreaterThan(0);
   });
 

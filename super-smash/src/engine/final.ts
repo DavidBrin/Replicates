@@ -196,6 +196,18 @@ export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boo
  * (`releaseGrab` clears both halves), so nobody is left hanging off a fighter
  * who is in the cutscene. The reel it was in ends: the scene's last blow is
  * what launches it. `step` also drops any launch it had parked.
+ *
+ * A user whose trap has caught only fighters behind it turns to face them, on the step
+ * the trap lands (Plan 5 final wave 2, ruling R-FW2h; Task 17 re-reviews 1-3): Jungle
+ * Rush's and Volt Tackle's catches reach behind their users by their scripts, and
+ * Critical Hit's dash can carry Marth past the fighter its catch then reaches. So the
+ * scene strikes, and launches, the fighter it holds, not the air ahead. UNVERIFIED: no
+ * source says what the game does with a fighter trapped behind its user ("Jungle
+ * Rush", "Critical Hit" and "Volt Tackle" are silent); the alternative is to place the
+ * trapped in front of the user. With one trapped on either side, it keeps its facing.
+ * The trapped fighter faces its user, as a held fighter faces its captor
+ * (`holdAtCaptor`); UNVERIFIED too, and the scene's drawing gaps (`FinalPhase.sceneGap`,
+ * Task 17) were measured on fighters that do.
  */
 export function trapVictim(user: FighterState, victim: FighterState, fighters: readonly FighterState[]): void {
   releaseGrab(victim, fighters);
@@ -203,6 +215,8 @@ export function trapVictim(user: FighterState, victim: FighterState, fighters: r
   victim.hitstun = 0;
   startAction(victim, "finalTrapped");
   victim.combat.trappedBy = user.port;
+  if (trappedBy({ fighters }, user.port).every((v) => (v.x - user.x) * user.facing < 0)) user.facing = -user.facing;
+  victim.facing = victim.x === user.x ? -user.facing : user.x > victim.x ? 1 : -1;
 }
 
 /**
