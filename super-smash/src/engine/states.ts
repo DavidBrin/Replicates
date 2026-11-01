@@ -1051,6 +1051,14 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
     throw new Error(`no status registered for "${f.action}"; import "@/engine/status"`);
   }
   status.main(f, intent, ctx);
+  // ...and again for whatever `main` started: a move or a dodge entered this tick is on
+  // its frame 1, and a window from frame 1 holds on it (Plan 5 final wave 2, ruling
+  // R-FW2a; Task 14 review, Minor 5). Read only before `main`, a move's intangibility
+  // first held on its second tick, a Final Smash's part included (Task 14 fix round 1's
+  // carry: the scene part's own window covers its user on the step the scene starts).
+  // A window that begins later (every dodge's) is untouched: the re-check is the same
+  // window at the same frame.
+  updateDodgeIntangibility(f, ctx.def);
 }
 
 /**

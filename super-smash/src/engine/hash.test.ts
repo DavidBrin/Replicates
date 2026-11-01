@@ -82,6 +82,9 @@ function projectile(over: Partial<ProjectileState> = {}): ProjectileState {
     mode: "fly",
     life: 0,
     ground: -1,
+    staleAs: "neutralB",
+    staleDamage: fx(1),
+    staleKnockback: fx(1),
     ...over,
   };
 }
@@ -312,6 +315,12 @@ describe("hashState", () => {
     expect(withProjectile({ mode: "knocked" })).not.toBe(base);
     expect(withProjectile({ life: 5 })).not.toBe(base);
     expect(withProjectile({ ground: 0 })).not.toBe(base);
+    // Plan 5 final wave 2, ruling R-FW2b: the move it stales as, until its first hit
+    // queues it, and its staleness, stamped when it was fired.
+    expect(withProjectile({ staleAs: null })).not.toBe(base);
+    expect(withProjectile({ staleAs: "sideB" })).not.toBe(base);
+    expect(withProjectile({ staleDamage: fx(0.91) })).not.toBe(base);
+    expect(withProjectile({ staleKnockback: fx(0.95) })).not.toBe(base);
   });
 
   it("distinguishes two fighters swapped between ports", () => {

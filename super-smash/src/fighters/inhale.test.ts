@@ -59,7 +59,7 @@ import { ONE, fx, mul, randomInt, toFloat } from "@/engine/fixed";
 import { kineticSet } from "@/engine/kinetic";
 import { hashState } from "@/engine/hash";
 import { COPY_DAMAGE, COPY_GRACE_FRAMES, COPY_LOSS_PENDING } from "@/engine/inhale";
-import { computeHitlag, computeKnockback, framesAfterHit } from "@/engine/knockback";
+import { STALE_FRESH_BONUS, computeHitlag, computeKnockback, computeStaleness, framesAfterHit } from "@/engine/knockback";
 import { fighterParams } from "@/engine/params";
 import { shieldDamage } from "@/engine/shield";
 import { KO_FREEZE_FRAMES, cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
@@ -240,12 +240,13 @@ describe("Kirby's Inhale", () => {
     expect(events.slice(at + 1).some((e) => e.hits.some((h) => h.attacker === 2 && h.victim === 0))).toBe(true);
   });
 
-  it("spits Mario as a star that hits Fox for Mario's weight's 15%", () => {
+  it("spits Mario as a star that hits Fox for Mario's weight's 15% (×1.05 fresh)", () => {
     const { states, events } = inhaled(["mario", "fox"], (i) => (i === 30 ? Btn.Attack : 0), 90, () => 0, FREE_FOR_ALL);
     expect(states.some((s) => s.fighters[1].action === "spatStar")).toBe(true);
     const onFox = events.flatMap((e) => e.hits).find((h) => h.victim === 2);
     expect(onFox).toBeDefined();
-    expect(toFloat(onFox!.damage)).toBeCloseTo(15, 2);
+    // The star stales by the spit, its move, fresh here (Plan 5 final wave 2, ruling R-FW2b).
+    expect(toFloat(onFox!.damage)).toBeCloseTo(15 * 1.05, 2);
     // Mario took the spit's 6%, and is himself again by the end.
     const end = states[states.length - 1];
     expect(toFloat(end.fighters[1].damage)).toBeCloseTo(6, 2);
@@ -650,8 +651,10 @@ describe("the spit and the star", () => {
     const at = events.findIndex((e) => e.hits.some((h) => h.victim === 2));
     expect(at).toBeGreaterThan(7);
     const hit = events[at].hits.find((h) => h.victim === 2)!;
-    expect(hit.damage).toBe(fx(15));
-    expect(states[at].fighters[2].hitlag).toBe(framesAfterHit(computeHitlag(fx(15), { moveMultiplier: fx(2) })));
+    // ×1.05 fresh: the star stales by the spit (Plan 5 final wave 2, ruling R-FW2b), its freeze too.
+    const star = mul(fx(15), STALE_FRESH_BONUS);
+    expect(hit.damage).toBe(star);
+    expect(states[at].fighters[2].hitlag).toBe(framesAfterHit(computeHitlag(star, { moveMultiplier: fx(2) })));
     // It pierces: the star and its rider fly on.
     expect(states[at + 1].fighters[1].action).toBe("spatStar");
     expect(states[at + 1].projectiles).toHaveLength(1);
@@ -784,12 +787,15 @@ describe("the Copy Ability", () => {
   it("hurts ×1.2 with a copied Fireball, which launches only by the higher percent (SmashWiki \"Inhale (Kirby)\")", () => {
     const own = fireball(false).events.flatMap((e) => e.hits)[0];
     const copied = fireball(true).events.flatMap((e) => e.hits)[0];
-    expect(own.damage).toBe(fx(5));
-    expect(copied.damage).toBe(mul(fx(5), COPY_DAMAGE));
+    // Both fresh, ×1.05, as their move was when it was fired (Plan 5 final wave 2, ruling R-FW2b).
+    const fresh = computeStaleness([], "neutralB");
+    const five = mul(fx(5), fresh.damage);
+    expect(own.damage).toBe(five);
+    expect(copied.damage).toBe(mul(five, COPY_DAMAGE));
     const fox = BY_ID.get("fox")!.attributes.weight;
-    const kb = (percent: number) => computeKnockback({ percent, damage: fx(5), weight: fox, baseKnockback: fx(20), knockbackGrowth: fx(30), rage: ONE });
-    expect(own.knockback).toBe(kb(fx(5)));
-    expect(copied.knockback).toBe(kb(mul(fx(5), COPY_DAMAGE)));
+    const kb = (percent: number) => computeKnockback({ percent, damage: mul(fx(5), fresh.knockback), weight: fox, baseKnockback: fx(20), knockbackGrowth: fx(30), rage: ONE });
+    expect(own.knockback).toBe(kb(five));
+    expect(copied.knockback).toBe(kb(mul(five, COPY_DAMAGE)));
   });
 
   it("wears a shield ×1.2 too (Rollout breaks a shield with it)", () => {
@@ -799,7 +805,9 @@ describe("the Copy Ability", () => {
       return states[at - 1].fighters[1].shieldHealth - states[at].fighters[1].shieldHealth;
     };
     // Each frame's wear has the shield's own decay in it too; the two differ by the hits'.
-    expect(worn(true) - worn(false)).toBe(shieldDamage(mul(fx(5), COPY_DAMAGE)) - shieldDamage(fx(5)));
+    // Both fresh, ×1.05 (ruling R-FW2b).
+    const five = mul(fx(5), STALE_FRESH_BONUS);
+    expect(worn(true) - worn(false)).toBe(shieldDamage(mul(five, COPY_DAMAGE)) - shieldDamage(five));
   });
 
   it("counts its 1200-frame grace and stops there", () => {

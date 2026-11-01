@@ -24,6 +24,7 @@ import { actionFrameOf, circle, moveFrameOf, sweptCapsulePenetration } from "./h
 import type { Capsule } from "./hitbox";
 import { kineticSetX, kineticSetY } from "./kinetic";
 import { fighterParams } from "./params";
+import { NO_STALE } from "./projectile";
 import { startAction, startRoll } from "./states";
 import type { Intent, StateContext } from "./states";
 import type { FighterDef, FighterState, GameState, ProjectileDef, ProjectileState, ReflectorDef, StallDef, StepEvents } from "./types";
@@ -59,6 +60,15 @@ export function reflectorBubble(f: FighterState, r: ReflectorDef): Capsule {
  */
 export function reflectProjectile(p: ProjectileState, def: ProjectileDef, by: FighterState, r: ReflectorDef): void {
   p.owner = by.port;
+  // Its new owner's, and none of its moves': it stales by nothing and joins no queue
+  // (Plan 5 final wave 2, ruling R-FW2b: `ProjectileState.staleAs`). UNVERIFIED: no
+  // source says how Ultimate stales a reflected projectile; SmashWiki "Stale-move
+  // negation" has only Melee's "Reflected projectiles ... contribute to the staleness
+  // queue", whose queue it does not name. The alternatives: it keeps the stamp it was
+  // fired with, or it queues the reflecting move.
+  p.staleAs = NO_STALE.as;
+  p.staleDamage = NO_STALE.damage;
+  p.staleKnockback = NO_STALE.knockback;
   // UNVERIFIED: the speed multiplier scales and reverses `vx` only, and `vy`
   // carries on as it was; no source says how a reflector treats a vertical speed.
   p.vx = -mul(p.vx, r.speed);

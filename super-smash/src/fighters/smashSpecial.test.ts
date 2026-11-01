@@ -28,6 +28,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { fx, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
+import { computeStaleness } from "@/engine/knockback";
 import { findProjectileDef, projectileHitbox, spawnProjectile } from "@/engine/projectile";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { beginSpecial, onLanded } from "@/engine/states";
@@ -216,8 +217,9 @@ describe("Samus's Super Missile (SmashWiki \"Samus (SSBU)/Side special\")", () =
     const states = run(duel("samus", "mario", -60, 20), 90, (i) => [i === 0 ? SMASH : 0, 0]);
     const hit = states.findIndex((st) => st.fighters[1].damage > 0);
     expect(hit).toBeGreaterThan(20);
-    // A projectile is exempt from staleness (`swingDamage`): its 12, in a match that is not one-on-one.
-    expect(states[hit].fighters[1].damage).toBe(fx(12));
+    // Its 12, in a match that is not one-on-one, fresh (×1.05): a projectile's hit stales
+    // by its move, here not yet in the queue (Plan 5 final wave 2, ruling R-FW2b).
+    expect(toFloat(states[hit].fighters[1].damage)).toBeCloseTo(12 * 1.05, 2);
     expect(ofId(states[hit], "superMissile")).toEqual([]);
     expect(states[hit - 1].fighters[1].damage).toBe(0);
   });
@@ -306,6 +308,29 @@ describe("Samus's Super Missile (SmashWiki \"Samus (SSBU)/Side special\")", () =
 
   it("rolls back across a Super Missile, hash for hash: its launch, its wait, its acceleration and its hit", () => {
     expectRollbackSafe(duel("samus", "mario", -60, 20), 90, (i) => [i === 0 ? SMASH : 0, 0], [-1, 19, 20, 21, 45, 46, 47, 60, 70]);
+  });
+});
+
+// Plan 5 final wave 2, ruling R-FW2b (R-T13d-f): a smash-input side special and a failed
+// throw are the side special's versions, and stale as it (`STALES_AS`). SmashWiki "Stale
+// Moves" (https://www.ssbwiki.com/Stale_Moves): "any variation of the same special move
+// counts as the same move". With projectile hits staling, the missile's and the
+// boomerang's hits now carry it.
+describe("a side special's versions stale as the side special (ruling R-FW2b)", () => {
+  it("looks a smash-input side special and a failed throw up, and queues them, as the side special", () => {
+    for (const version of ["sideBSmash", "sideBFailed"] as const) {
+      expect(computeStaleness(["sideB"], version), version).toEqual(computeStaleness(["sideB"], "sideB"));
+      expect(computeStaleness([version], "sideB"), version).toEqual(computeStaleness(["sideB"], "sideB"));
+      expect(computeStaleness(["sideB"], version).damage).toBeLessThan(fx(1));
+    }
+  });
+
+  it("queues Samus's Super Missile as her side special when it lands", () => {
+    const states = run(duel("samus", "mario", -60, 20), 90, (i) => [i === 0 ? Btn.Right | Btn.Special : 0, 0]);
+    const hit = states.findIndex((st) => st.fighters[1].damage > 0);
+    expect(hit).toBeGreaterThan(20);
+    expect(states[hit - 1].fighters[0].staleQueue).toEqual([]);
+    expect(states[hit].fighters[0].staleQueue).toEqual(["sideB"]);
   });
 });
 

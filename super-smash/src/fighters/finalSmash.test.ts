@@ -545,8 +545,9 @@ describe("Final Smashes that are not cinematics", () => {
     const first = events.findIndex((e) => e.hits.some((h) => h.victim === 1));
     expect(first + 1).toBe(65);
     expect(onMario.length).toBeGreaterThan(5);
-    const damages = new Set(onMario.map((h) => Math.round(toFloat(h.damage) * 100)));
-    // 2.5% early, then the hotter stages; a projectile is never staled (or freshened).
+    // 2.5% early, then the hotter stages, each ×1.05: a projectile stales as its move was
+    // when it was fired, here fresh (Plan 5 final wave 2, ruling R-FW2b).
+    const damages = new Set(onMario.map((h) => Math.round((toFloat(h.damage) / 1.05) * 100)));
     expect(damages.has(250)).toBe(true);
     expect(damages.has(300)).toBe(true);
     expect(damages.has(350)).toBe(true);
@@ -577,7 +578,8 @@ describe("Final Smashes that are not cinematics", () => {
     const hits = events.flatMap((e) => e.hits);
     const onMario = hits.filter((h) => h.victim === 1);
     expect(onMario).toHaveLength(1);
-    expect(toFloat(onMario[0].damage)).toBeCloseTo(35, 1);
+    // ×1.05: fresh as its move was when it was fired (Plan 5 final wave 2, ruling R-FW2b).
+    expect(toFloat(onMario[0].damage)).toBeCloseTo(35 * 1.05, 1);
     expect(hits.filter((h) => h.victim === 2)).toHaveLength(0);
   });
 });
@@ -649,16 +651,18 @@ describe("the beams strike a fighter held in them again at their rehit", () => {
   // "Late hits 155-224"; 2.5%, 3.0% and 3.5%. Held in the flames from their first hit, a
   // fighter is struck on 65, 72, … 219: six early, seven mid and ten late hits, 71%, the
   // published total (SmashWiki "Mario Finale", https://www.ssbwiki.com/Mario_Finale: "now
-  // dealing about 75%"). A projectile's hit is neither staled nor freshened.
-  it("Mario Finale: every 7 frames from 65, 23 hits for 71%", () => {
+  // dealing about 75%"). Each ×1.05: a projectile's hit stales as its move was when it
+  // was fired, here fresh (Plan 5 final wave 2, ruling R-FW2b), 74.55% in all.
+  it("Mario Finale: every 7 frames from 65, 23 hits for 71% (74.55% fresh)", () => {
     const { events } = runHeld(ready("mario", 45), 240, (s) => {
       const flame = s.projectiles.find((p) => p.defId === "hugeFlame");
       if (flame !== undefined) hold(s.fighters[1], flame.x, flame.y);
     });
     const hits = hitsOnPort1(events);
     expect(hits.map((h) => h.frame)).toEqual(Array.from({ length: 23 }, (_, k) => 65 + 7 * k));
-    expect(hits.map((h) => h.damage)).toEqual([...Array<number>(6).fill(2.5), ...Array<number>(7).fill(3), ...Array<number>(10).fill(3.5)]);
-    expect(hits.reduce((n, h) => n + h.damage, 0)).toBe(71);
+    const fresh = (d: number) => toFloat(mul(fx(d), STALE_FRESH_BONUS));
+    expect(hits.map((h) => h.damage)).toEqual([...Array<number>(6).fill(fresh(2.5)), ...Array<number>(7).fill(fresh(3)), ...Array<number>(10).fill(fresh(3.5))]);
+    expect(hits.reduce((n, h) => n + h.damage, 0)).toBeCloseTo(71 * 1.05, 2);
   });
 
   // The same page's hitbox table: the mid and late flames have an air box (`g=f`: 23°,
@@ -914,7 +918,8 @@ describe("a Final Smash's beams and projectiles are unblockable and not countere
     expect(def("mario").moves.finalSmash!.projectiles!.map((p) => p.reflectable)).toEqual([undefined]);
     const { events } = runHeld(duel("link", "fox", 50), 140, () => {}, (i) => [i === 0 ? Btn.Special : 0, i === 55 ? Btn.Down | Btn.Special : 0]);
     expect(events.flatMap((e) => e.reflects)).toEqual([]);
-    expect(hitsOnPort1(events).map((h) => h.damage)).toEqual([35]);
+    // ×1.05: fresh as its move was when it was fired (Plan 5 final wave 2, ruling R-FW2b).
+    expect(hitsOnPort1(events).map((h) => h.damage)).toEqual([toFloat(mul(fx(35), STALE_FRESH_BONUS))]);
   });
 });
 

@@ -151,7 +151,7 @@ const USE = (i: number): InputFrame[] => [i === 0 ? Btn.Special : 0, 0, 0];
 
 /** The bystander's (port 2) shot, still, at (`x`, `y`): its box is 8 ahead of it (facing left) and 6 up. */
 function hangingShot(x: number, y: number): ProjectileState {
-  return { instanceId: 1, defId: "shot", owner: 2, x, y, vx: 0, vy: 0, facing: -1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1 };
+  return { instanceId: 1, defId: "shot", owner: 2, x, y, vx: 0, vy: 0, facing: -1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1, staleAs: null, staleDamage: ONE, staleKnockback: ONE };
 }
 
 /** For each of `states`, stepped on from `start`: whether its step began with `user`'s scene playing (a paused step, ruling R-T14g). */
@@ -872,6 +872,27 @@ describe("the scene holds the match still, its user and the stage included (Task
     expect(events[0].hits).toEqual([]);
     expect(states[2].fighters[0].damage).toBe(0);
     expect(states[2].fighters[0].move).toBe("finalSmash");
+  });
+
+  // Plan 5 final wave 2, ruling R-FW2a (Task 14 fix round 1's carry): the step a scene
+  // starts on still runs the world, so a shot or a bystander can reach the user on it.
+  // The user is covered there by the scene part's own window from its first tick, not
+  // only by what is left of the start's. The fixture's start ([1, 20], no `nextAt`)
+  // hands over as its window ends: on the entry step only the scene's window can hold.
+  it("covers its user on the step its scene starts by the scene part's own intangibility: a shot on the user then does nothing (ruling R-FW2a)", () => {
+    const straight = run(ready(), 60, USE).states;
+    const entry = straight.findIndex((st) => st.cinematic === 0);
+    expect(entry).toBeGreaterThan(0);
+    expect(straight[entry].fighters[0]).toMatchObject({ move: "finalAttack", actionFrame: 0 });
+    expect(straight[entry].fighters[0].intangible).toBeGreaterThan(0);
+    // Into the step before it, the bystander's shot, still, its box on the user's body.
+    const s = cloneState(straight[entry - 1]);
+    s.projectiles.push(hangingShot(fx(-2), fx(4)));
+    s.nextProjectileId += 1;
+    const { states, events } = run(s, 1, () => [0, 0, 0]);
+    expect(states[0].cinematic).toBe(0);
+    expect(events[0].hits.filter((h) => h.attacker === 2)).toEqual([]);
+    expect(states[0].fighters[0].damage).toBe(straight[entry].fighters[0].damage);
   });
 
   it("holds an airborne, moving bystander, and one whose attack is out, still through the scene: no move, no hit", () => {

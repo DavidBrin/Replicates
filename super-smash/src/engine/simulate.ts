@@ -55,6 +55,7 @@ import {
   computeRage,
   computeShieldstun,
   computeStaleness,
+  type Staleness,
   effectiveHitstun,
   framesAfterHit,
   shieldstunExact,
@@ -737,6 +738,11 @@ export function step(
 
   // Where each hitbox was last frame, for the swept test in phase 6.
   const prevPos = s.fighters.map((f) => ({ x: f.x, y: f.y }));
+  // Every fighter's percent as the step began, before any of its hits: what each hit
+  // this step reads for knockback's percent and for rage (Plan 5 final wave 2, ruling
+  // R-FW2c; Task 7b re-review 2), so a trade is the same whichever port resolves first,
+  // and a fighter hit twice in one step has each hit reckoned from it.
+  const percents = s.fighters.map((f) => f.damage);
 
   /* -- 2. inputs become intent -------------------------------------------- */
 
@@ -1095,8 +1101,8 @@ export function step(
   // Reflectors first: a reflected projectile neither clanks nor hits this frame (Plan 5).
   reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
   resolveClanks(s, candidates, (p) => projectileDefOf(ctx, p), events, destroyed);
-  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut);
-  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut);
+  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents);
+  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents);
   if (destroyed.size > 0) {
     // A star a clank ends lets its rider go, as one whose flight ends does (Plan 5,
     // Task 13c: the star clanks now, `kirby_starmissile`'s `ATTACK_SETOFF_KIND_ON`).
@@ -1443,7 +1449,10 @@ function spawnDueProjectiles(
       // one), and a move with a failed version has already become it at its start
       // (`MoveDef.whenOut`), so for his throws this only backs that up.
       if (def.maxOut !== undefined && projectilesOut(s.projectiles, f.port, source, articleOf(def), (pid) => findProjectileDef(defs[i], pid)) >= def.maxOut) continue;
-      const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move));
+      // Its move's staleness as it is fired, and the slot it will queue as when it lands
+      // (Plan 5 final wave 2, ruling R-FW2b).
+      const stale = swingStaleness(f, f.move);
+      const p = spawnProjectile(def, f, s.nextProjectileId, source, sc?.frames, spawnDamageMul(move), { as: staleSlot(f.move), damage: stale.damage, knockback: stale.knockback });
       // One that would start inside the stage's solid body (its owner beside a wall
       // or under the stage, facing it) is never launched: it is in the wall from
       // its first frame, where one flying into it would die or turn (`bounce`), and
@@ -1801,6 +1810,7 @@ function resolveHits(
   events: StepEvents,
   destroyed: Set<number>,
   finalOut: () => boolean,
+  percents: readonly number[],
 ): void {
   for (let v = 0; v < s.fighters.length; v++) {
     const victim = s.fighters[v];
@@ -1963,14 +1973,14 @@ function resolveHits(
       const contact = contactPoint(capsuleOf(c), hurtboxes[reachOf(c).index]);
       // A windbox only pushes (Plan 5, Task 6: `applyWindbox`), invincible victim
       // and raised shield included, so it goes first.
-      if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c, events);
+      if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c, events, percents);
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
       else if (isInvincible(victim, defs[v])) applyInvincibleHit(attacker, victim, c, contact, events);
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
-        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut);
+        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut, percents);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
         // on contact, whatever else the hit does: a launch, a launch it cannot
         // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
@@ -2044,6 +2054,7 @@ function resolveThrows(
   intents: readonly Intent[],
   events: StepEvents,
   finalOut: () => boolean,
+  percents: readonly number[],
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -2072,7 +2083,7 @@ function resolveThrows(
       const v = victim.port;
       const at = { x: victim.x, y: victim.y };
       const own = f.hitlag;
-      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut);
+      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut, percents);
       f.hitlag = own;
     }
     for (const flash of run.state.flashed) {
@@ -2230,15 +2241,31 @@ function isCrouching(f: FighterState): boolean {
  * victim — are as stale as its first was, not one level more (SmashWiki "Stale
  * Moves": from Brawl on, "later hitboxes of multi-hit moves" are protected
  * "from being staled while the move is in progress"). So once the swing has
- * queued itself, its own entry — the newest, at the front — is left out.
+ * queued itself, its own entry is left out: the newest of its move's. That is the
+ * front one unless a projectile of the fighter's has landed since and queued its own
+ * move in front of it (Plan 5 final wave 2, ruling R-FW2b, `enterProjectileQueue`).
  */
-function swingStaleness(attacker: FighterState, slot: MoveSlot) {
-  const queued = attacker.combat.swingQueued;
-  return computeStaleness(
-    queued ? attacker.staleQueue.slice(1) : attacker.staleQueue,
-    slot,
-    queued ? attacker.combat.staleShield.slice(1) : attacker.combat.staleShield,
-  );
+function swingStaleness(attacker: FighterState, slot: MoveSlot): Staleness {
+  const own = attacker.combat.swingQueued ? attacker.staleQueue.indexOf(staleSlot(slot)) : -1;
+  if (own < 0) return computeStaleness(attacker.staleQueue, slot, attacker.combat.staleShield);
+  const without = <T>(xs: readonly T[]): T[] => [...xs.slice(0, own), ...xs.slice(own + 1)];
+  return computeStaleness(without(attacker.staleQueue), slot, without(attacker.combat.staleShield));
+}
+
+/**
+ * How stale a candidate's hit is (Plan 5 final wave 2, ruling R-FW2b): a swing's by its
+ * move's place in the queue (`swingStaleness`); a projectile's as its move was when it
+ * was fired, stamped on it (`ProjectileState.staleDamage`, `staleKnockback`). SmashWiki
+ * "Stale-move negation" (https://www.ssbwiki.com/Stale-move_negation): in Melee "each
+ * projectile fired will have its staleness set to the move's staleness at the time it is
+ * fired", and from Brawl "the staleness of a projectile is now attached to its existence
+ * as an object rather than to each hitbox". A box of no move's (a throw's candidate
+ * names its move) is fresh and unbonused.
+ */
+function hitStaleness(attacker: FighterState, c: Candidate): Staleness {
+  if (c.slot !== null) return swingStaleness(attacker, c.slot);
+  if (c.projectile !== null) return { damage: c.projectile.staleDamage, knockback: c.projectile.staleKnockback };
+  return { damage: ONE, knockback: ONE };
 }
 
 /**
@@ -2253,13 +2280,13 @@ function swingStaleness(attacker: FighterState, slot: MoveSlot) {
  *
  * Shared between an ordinary hit and one that lands on an invincible fighter,
  * because the two must agree: the attacker's freeze cannot depend on the state
- * of the person they hit. A projectile is exempt from staleness and short hop —
- * its charge was baked in at launch and the staleness queue is keyed by move
- * slot, which an arrow in flight no longer has. `applyHit` works the same
- * numbers out inline, with the knockback's staleness beside them.
+ * of the person they hit. A projectile is exempt from short hop (its charge was
+ * baked in at launch), and stale as its move was when it was fired (`hitStaleness`;
+ * ruling R-FW2b). `applyHit` works the same numbers out inline, with the knockback's
+ * staleness beside them.
  */
 function swingDamage(attacker: FighterState, c: Candidate): number {
-  const staleness = c.slot === null ? ONE : swingStaleness(attacker, c.slot).damage;
+  const staleness = hitStaleness(attacker, c).damage;
   const shortHopped = c.slot !== null && isAerialSlot(c.slot) && attacker.shortHop;
   const charged = mul(c.hitbox.damage, c.chargeScale);
   const base = shortHopped ? mul(charged, SHORT_HOP_DAMAGE) : charged;
@@ -2717,12 +2744,31 @@ function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield
   if (slot === null || attacker.combat.swingQueued) return;
   attacker.combat.swingQueued = true;
   // A version of another move joins as that move (`STALES_AS`, ruling R-T13b-f).
-  attacker.staleQueue.unshift(staleSlot(slot));
-  attacker.combat.staleShield.unshift(onShield);
-  if (attacker.staleQueue.length > STALE_QUEUE_LENGTH) attacker.staleQueue.length = STALE_QUEUE_LENGTH;
-  if (attacker.combat.staleShield.length > STALE_QUEUE_LENGTH) {
-    attacker.combat.staleShield.length = STALE_QUEUE_LENGTH;
-  }
+  pushStaleEntry(attacker, staleSlot(slot), onShield);
+}
+
+/**
+ * A projectile joins its owner's queue as its move once, on its first connection, a
+ * shield's included (Plan 5 final wave 2, ruling R-FW2b): SmashWiki "Stale-move
+ * negation", "Moves will only become stale if they connect", and from Brawl a
+ * projectile's staleness is "attached to its existence as an object". Each projectile
+ * is its own use of its move: two out at once queue twice. UNVERIFIED: that a
+ * projectile launched by a swing that has queued itself would queue again (no move in
+ * the roster both swings and launches), and Melee's "only one projectile produced per
+ * animation can count in the queue" (Ultimate's section says nothing of projectiles).
+ */
+function enterProjectileQueue(owner: FighterState, p: ProjectileState, onShield: boolean): void {
+  if (p.staleAs === null) return;
+  pushStaleEntry(owner, p.staleAs, onShield);
+  p.staleAs = null;
+}
+
+/** One entry at the front of `f`'s queue, newest first, marked if it met a shield; nine kept. */
+function pushStaleEntry(f: FighterState, slot: MoveSlot, onShield: boolean): void {
+  f.staleQueue.unshift(slot);
+  f.combat.staleShield.unshift(onShield);
+  if (f.staleQueue.length > STALE_QUEUE_LENGTH) f.staleQueue.length = STALE_QUEUE_LENGTH;
+  if (f.combat.staleShield.length > STALE_QUEUE_LENGTH) f.combat.staleShield.length = STALE_QUEUE_LENGTH;
 }
 
 /**
@@ -2853,6 +2899,7 @@ function applyHit(
   victimIntent: Intent,
   events: StepEvents,
   finalOut: () => boolean,
+  percents: readonly number[],
 ): void {
   const hb = c.hitbox;
   const fromProjectile = c.projectile !== null;
@@ -2955,10 +3002,10 @@ function applyHit(
     return;
   }
 
-  // A projectile is already in the air, so nothing about the swing that launched
-  // it still applies: its charge was baked in at launch, and it does not stale —
-  // the staleness queue is keyed by move slot and an arrow has left its move.
-  const staleness = c.slot === null ? { damage: ONE, knockback: ONE } : swingStaleness(attacker, c.slot);
+  // A projectile is already in the air: its charge was baked in at launch, and so was
+  // its staleness, its move's as it was fired (Plan 5 final wave 2, ruling R-FW2b:
+  // `hitStaleness`).
+  const staleness = hitStaleness(attacker, c);
   // An aerial thrown out of a short hop deals 0.85×, and the reduction is
   // applied to the damage *before* knockback is computed rather than to the
   // knockback afterwards — the formula takes damage as an input twice over (the
@@ -3007,6 +3054,7 @@ function applyHit(
   // Smashes are unblockable", one that "cannot be defended against with a shield".
   const onShield = c.final === null && hitReachesShield(victim, victimDef, c);
   enterStaleQueue(attacker, c.slot, onShield);
+  if (c.projectile !== null) enterProjectileQueue(attacker, c.projectile, onShield);
 
   /* ---- the shield path ---- */
   // The 1v1 bonus never reaches a shield (Plan 5, Task 7b fix round 2, ruling
@@ -3109,8 +3157,9 @@ function applyHit(
 
   /* ---- the damage path ---- */
   // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback): p is "counted after
-  // the attack's damage is added", the damage before the 1v1 bonus (R-7b-b).
-  const kbPercent = victim.damage + takenBefore1v1;
+  // the attack's damage is added", the damage before the 1v1 bonus (R-7b-b), added
+  // to the victim's percent from before this step's hits (ruling R-FW2c).
+  const kbPercent = percents[victim.port] + takenBefore1v1;
   victim.damage += damage;
   // A Kirby hit may lose his Copy Ability (Plan 5, Task 9: `maybeLoseCopy`).
   maybeLoseCopy(s, victim, damage);
@@ -3188,7 +3237,8 @@ function applyHit(
     weight: victimDef.attributes.weight,
     baseKnockback: hb.baseKnockback,
     knockbackGrowth: hb.knockbackGrowth,
-    rage: computeRage(attacker.damage),
+    // The attacker's percent from before this step's hits (ruling R-FW2c).
+    rage: computeRage(percents[attacker.port]),
     crouchCancel,
     fixedKnockback: hb.fixedKnockback,
     setWeight: hb.setWeight,
@@ -3441,7 +3491,7 @@ function applyHit(
  * Every windbox on this roster deals 0% (`schema.test.ts`), the case the shield
  * rule names, so no damage is dealt here.
  */
-function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate, events: StepEvents): void {
+function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate, events: StepEvents, percents: readonly number[]): void {
   if (!unrecorded(c)) recordHit(c, attacker, victim.port);
   if (isInvincible(victim, victimDef) || hitReachesShield(victim, victimDef, c)) return;
   // It reached the body: who pushed whom, for the results screen's kill credit
@@ -3454,13 +3504,14 @@ function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: F
   const hb = c.hitbox;
   // F.L.U.D.D. is set knockback, which reads neither rage nor crouch cancel
   // (`computeKnockback`); a windbox without one is a launch's knockback.
+  // Both percents from before this step's hits, as for a hit (ruling R-FW2c).
   const kb = computeKnockback({
-    percent: victim.damage,
+    percent: percents[victim.port],
     damage: mul(hb.damage, c.chargeScale),
     weight: victimDef.attributes.weight,
     baseKnockback: hb.baseKnockback,
     knockbackGrowth: hb.knockbackGrowth,
-    rage: computeRage(attacker.damage),
+    rage: computeRage(percents[attacker.port]),
     crouchCancel: isCrouching(victim),
     fixedKnockback: hb.fixedKnockback,
     setWeight: hb.setWeight,

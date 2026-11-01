@@ -1170,9 +1170,9 @@ const legacy: FighterDef = {
     // do. SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag): "Hitlag only affects the
     // object that deals the damage", which makes the laser article the frozen one; the
     // alternative is a victim-only freeze for `world` boxes, which keeps 263 real frames
-    // and changes the hits' spacing. A side effect: as her own move's, the beam's hits
-    // take the fresh-move bonus, where Mario Finale's flames and the Ancient Arrow, as
-    // projectiles, do not.
+    // and changes the hits' spacing. As her own move's, the beam's hits take the fresh-move
+    // bonus; Mario Finale's flames and the Ancient Arrow take it too, as projectiles stamped
+    // with their move's staleness as they are fired (Plan 5 final wave 2, ruling R-FW2b).
     // Not modelled: the laser's thruster box (1.5% behind its muzzle) and aiming the beam.
     // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
     // SLOW_OPPONENT(5, 50), its slowing of the other fighters through the startup, is not

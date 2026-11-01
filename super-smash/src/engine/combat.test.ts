@@ -304,12 +304,12 @@ describe("super armour counts the damage once (Plan 3, Task 1)", () => {
     expect(after.fighters[1].hitstun).toBe(0);
     expect(after.fighters[1].action).toBe("special");
     // On the frame the pellet lands (a hitlag would run out well before the end):
-    // the projectile's 6%, which no staleness touches, ⌊6 × 0.65 + 6⌋ = 9, counted
-    // from that frame.
+    // the projectile's 6%, fresh as its move was when it was fired (Plan 5 final wave
+    // 2, ruling R-FW2b: ×1.05), ⌊6.3 × 0.65 + 6⌋ = 10, counted from that frame.
     const landed = frames[frames.findIndex((f) => f.events.hits.length > 0)].state;
-    expect(computeHitlag(fx(6))).toBe(9);
+    expect(computeHitlag(mul(fx(6), STALE_FRESH_BONUS))).toBe(10);
     expect(landed.fighters[0].hitlag).toBe(0);
-    expect(landed.fighters[1].hitlag).toBe(9 - 1);
+    expect(landed.fighters[1].hitlag).toBe(10 - 1);
   });
 
   it("control: the same pellet on an unarmoured victim launches it", () => {
@@ -394,6 +394,61 @@ describe("the stale queue remembers shield hits (Plan 3, Task 2)", () => {
     expect(after.action).toBe("dead");
     expect(after.staleQueue).toEqual([]);
     expect(after.combat.staleShield).toEqual([]);
+  });
+});
+
+/*
+ * Plan 5 final wave 2, ruling R-FW2b (R-T13d-f): a projectile's hit stales by the move
+ * that launched it. SmashWiki "Stale-move negation"
+ * (https://www.ssbwiki.com/Stale-move_negation): in Melee "each projectile fired will
+ * have its staleness set to the move's staleness at the time it is fired"; from Brawl
+ * "the staleness of a projectile is now attached to its existence as an object rather
+ * than to each hitbox"; "Moves will only become stale if they connect". So a projectile
+ * carries the staleness its move had when it was fired, and joins its owner's queue
+ * once, on its first connection.
+ */
+describe("a projectile's hit stales by the move that launched it (ruling R-FW2b)", () => {
+  /** The shooter, whose pellets a fighter in a 200-frame armour (no knockback) takes standing still. */
+  const SHOOTER: FighterDef = (() => {
+    const d = pelletShooter();
+    return { ...d, moves: { ...d.moves, downB: move("downB", { totalFrames: 200, hitboxes: [], heavyArmour: fx(1000) }) } };
+  })();
+  const ctx = ctxFor(SHOOTER);
+  /** Port 0 at x −70 fires on each frame of `at`; port 1, armoured, waits at 70. */
+  function volley(at: readonly number[], frames = 150): { frames: Frame[]; keys: (i: number) => readonly InputFrame[] } {
+    const s = standing(ctx);
+    s.fighters[0].x = -fx(70);
+    Object.assign(s.fighters[1], { x: fx(70), action: "special", move: "downB", actionFrame: 1 });
+    const keys = (i: number): readonly InputFrame[] => [at.includes(i) ? Btn.Special : 0, 0];
+    return { frames: play(s, frames, keys, ctx), keys };
+  }
+  const pellet = fx(6);
+
+  it("two pellets out at once both carry the fresh staleness they were fired with, and each joins the queue on its hit", () => {
+    // The second is fired (on 31, spawned on 37) before the first lands (about 40).
+    const { frames } = volley([0, 31]);
+    const hits = frames.flatMap((f) => f.events.hits).filter((h) => h.attacker === 0);
+    expect(hits.map((h) => h.damage)).toEqual([mul(pellet, STALE_FRESH_BONUS), mul(pellet, STALE_FRESH_BONUS)]);
+    const second = frames.findIndex((f) => f.events.hits.length > 0 && f.state.fighters[0].staleQueue.length === 2);
+    expect(second).toBeGreaterThan(0);
+    expect(frames.at(-1)!.state.fighters[0].staleQueue).toEqual(["neutralB", "neutralB"]);
+    expect(frames.at(-1)!.state.fighters[0].combat.staleShield).toEqual([false, false]);
+  });
+
+  it("a pellet fired after two have landed is staled by both, by its move's place in the queue", () => {
+    const { frames } = volley([0, 31, 100], 160);
+    const hits = frames.flatMap((f) => f.events.hits).filter((h) => h.attacker === 0);
+    expect(hits).toHaveLength(3);
+    expect(hits[2].damage).toBe(mul(pellet, computeStaleness(["neutralB", "neutralB"], "neutralB").damage));
+    expect(toFloat(hits[2].damage)).toBeCloseTo(6 * (1 - 0.09 - 0.08545), 2);
+  });
+
+  it("rolls back with the projectiles' stamps and queue marks: from every snapshot, the same hashes", () => {
+    const { frames, keys } = volley([0, 31, 100], 160);
+    for (let k = 0; k < 159; k += 3) {
+      const again = play(cloneState(frames[k].state), 159 - k, (i) => keys(i + k + 1), ctx);
+      again.forEach((f, j) => expect(hashState(f.state), `snapshot ${k}, frame ${k + 1 + j}`).toBe(hashState(frames[k + 1 + j].state)));
+    }
   });
 });
 
@@ -7028,6 +7083,62 @@ describe("a freeze of n frames counts the frame it starts on (Plan 5, Task 7b)",
           again.forEach((f, j) => expect(hashState(f.state), `snapshot ${k}, frame ${k + 1 + j}`).toBe(hashState(frames[k + 1 + j].state)));
         }
       }
+    });
+
+    // Plan 5 final wave 2, ruling R-FW2c (Task 7b re-review 2): every hit a step resolves
+    // reads both fighters' percents as they were before that step's hits: the victim's
+    // for knockback's percent (its own damage on top), the attacker's for rage. A trade
+    // that takes a fighter past 35% (rage's start) was not port-symmetric: the hit
+    // resolved second read a percent the first had already added to. Both at 30% here:
+    // the jab (10.5%) takes its victim to 40.5%, the 20% (21%) to 51%.
+    it("a trade past 35%: each hit's rage and percent are read from before the step's hits, whichever port resolves first (ruling R-FW2c)", () => {
+      const twenty: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, downB: move("downB", { totalFrames: 40, hitboxes: [hitbox({ damage: fx(20), transcendent: true })] }) },
+      };
+      const ctx = ctxFor(twenty);
+      const traded = (strong: 0 | 1) => {
+        const s = standing(ctx);
+        for (const f of s.fighters) f.damage = fx(30);
+        const keys = (i: number): readonly InputFrame[] =>
+          i === 0 ? (strong === 1 ? [Btn.Attack, Btn.Down | Btn.Special] : [Btn.Down | Btn.Special, Btn.Attack]) : [0, 0];
+        const frames = play(s, 40, keys, ctx);
+        const h = frames.findIndex((f) => f.events.hits.length === 2);
+        expect(h, `port ${strong} strong`).toBeGreaterThan(0);
+        return frames[h];
+      };
+      const [a, b] = [traded(1), traded(0)];
+      // The knockback each hit reported, by which fighter landed it: the 20% and the jab.
+      const kb = (f: Frame, strong: 0 | 1) => [f.events.hits.find((x) => x.attacker === strong)!.knockback, f.events.hits.find((x) => x.attacker !== strong)!.knockback];
+      expect(kb(b, 0)).toEqual(kb(a, 1));
+      // ...and the launches they park are mirror images.
+      const parked = (f: Frame) => f.state.fighters.map((x) => [x.pendingKnockback, x.pendingAngle]);
+      expect(parked(b)).toEqual([...parked(a)].reverse());
+    });
+
+    // The same reading when one fighter is hit twice in a step (the controller's
+    // ruling on R-FW2c): each hit's percent is the victim's from before the step, plus
+    // that hit's own damage, never the other hit's. Two jabs from either side, at once.
+    it("two hits on one fighter in one step each read its percent from before the step: the same knockback from either side (ruling R-FW2c)", () => {
+      // Transcendent jabs, so the two meeting over the victim trade rather than clank.
+      const ctx = ctxFor({ ...BASE_DEF, moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true })] }) } });
+      const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+      s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0, x: [-fx(2), fx(8), fx(18)][i], facing: i === 2 ? -1 : 1 }));
+      s.fighters[1].damage = fx(60);
+      let state = s;
+      let prev: readonly InputFrame[] = [0, 0, 0];
+      let both: StepEvents | null = null;
+      for (let i = 0; i < 12 && both === null; i++) {
+        const now: readonly InputFrame[] = i === 0 ? [Btn.Attack, 0, Btn.Attack] : [0, 0, 0];
+        const r = step(state, now, { prevInputs: prev, ctx });
+        if (r.events.hits.length === 2) both = r.events;
+        state = r.state;
+        prev = now;
+      }
+      expect(both).not.toBeNull();
+      const [first, second] = both!.hits;
+      expect([first.victim, second.victim]).toEqual([1, 1]);
+      expect(first.knockback).toBe(second.knockback);
     });
 
     it("an invincible fighter: the attacker n − 1, the 1v1 multiplier left out", () => {

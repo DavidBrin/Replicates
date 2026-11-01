@@ -341,11 +341,12 @@ describe("a charged shot hits with its charged hitbox", () => {
     return toFloat(play(s, inputs).state.fighters[1].damage);
   }
 
-  it("a full Charge Shot lands 28%, an uncharged one 5% (×1.2 one-on-one)", () => {
+  it("a full Charge Shot lands 28%, an uncharged one 5% (×1.2 one-on-one, ×1.05 fresh)", () => {
     // SmashWiki "Samus (SSBU)/Neutral special": 5% uncharged, 28% at full. A
-    // projectile's hit is not staled here, fresh bonus included (`effectiveDamage`).
-    expect(shotInto(112)).toBeCloseTo(28 * 1.2, 2);
-    expect(shotInto(0)).toBeCloseTo(5 * 1.2, 2);
+    // projectile's hit stales as its move was when it was fired (Plan 5 final wave 2,
+    // ruling R-FW2b): here fresh, ×1.05 (`effectiveDamage`).
+    expect(shotInto(112)).toBeCloseTo(28 * 1.05 * 1.2, 2);
+    expect(shotInto(0)).toBeCloseTo(5 * 1.05 * 1.2, 2);
   });
 });
 

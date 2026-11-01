@@ -1633,6 +1633,19 @@ export interface ProjectileState {
    * in it (its index in `StageDef.platforms`), or −1. Plan 5, Task 13c.
    */
   ground: number;
+  /**
+   * The move it stales as (Plan 5 final wave 2, ruling R-FW2b): the slot that launched
+   * it, as the stale queue keys it (`staleSlot`), until its first connection queues it on
+   * its owner's queue; null after that, for one a reflector has made its own, and for
+   * one no move launched.
+   */
+  staleAs: MoveSlot | null;
+  /**
+   * Its staleness, stamped when it was fired: its move's damage and knockback
+   * multipliers then (`computeStaleness`), Q12. `ONE` for neither.
+   */
+  staleDamage: number;
+  staleKnockback: number;
 }
 
 /** `ProjectileState.mode` (Plan 5, Task 13c). */

@@ -709,3 +709,56 @@ describe("projectiles clank by their own script and SmashWiki's rules (\"Priorit
     expectRollbackSafe(s2, 90, (i) => [0, i === boomerang.k ? Btn.Attack : 0], [-1, boomerang.at - 1, boomerang.at, boomerang.at + 5]);
   });
 });
+
+// Plan 5 final wave 2, ruling R-FW2b (R-T13d-f): a projectile's hit stales by the move
+// that launched it, with the staleness that move had when it was fired (SmashWiki
+// "Stale-move negation", https://www.ssbwiki.com/Stale-move_negation: "each projectile
+// fired will have its staleness set to the move's staleness at the time it is fired";
+// from Brawl, "attached to its existence as an object"), and joins the queue once it
+// connects ("Moves will only become stale if they connect").
+describe("a repeated projectile stales by its move (ruling R-FW2b)", () => {
+  /**
+   * `shots` rounds of `attacker`'s neutral special into Fox standing 20 ahead, each from
+   * a fresh duel that keeps only the attacker's stale queue (and `setup`): the damage
+   * each landed, and the queue after.
+   */
+  function rounds(attacker: string, shots: number, setup: (s: GameState) => void = () => {}): { damages: number[]; queue: string[] } {
+    const damages: number[] = [];
+    let queue: GameState["fighters"][number]["staleQueue"] = [];
+    let marks: boolean[] = [];
+    for (let k = 0; k < shots; k++) {
+      const s = duel(attacker, "fox", -20, 0);
+      s.fighters[0].staleQueue = queue.slice();
+      s.fighters[0].combat.staleShield = marks.slice();
+      setup(s);
+      const { states, events } = run(s, 90, (i) => [i === 0 ? Btn.Special : 0, 0]);
+      const hit = events.flatMap((e) => e.hits).find((h) => h.attacker === 0);
+      expect(hit, `${attacker} shot ${k}`).toBeDefined();
+      damages.push(hit!.damage);
+      queue = states.at(-1)!.fighters[0].staleQueue;
+      marks = states.at(-1)!.fighters[0].combat.staleShield;
+    }
+    return { damages, queue };
+  }
+
+  it("Mario's Fireball: 5% fresh ×1.05, then ×(1 − 0.09), then ×(1 − 0.09 − 0.08545)", () => {
+    const { damages, queue } = rounds("mario", 3);
+    [5 * 1.05, 5 * (1 - 0.09), 5 * (1 - 0.09 - 0.08545)].forEach((want, k) => expect(toFloat(damages[k]), `shot ${k}`).toBeCloseTo(want, 2));
+    expect(queue).toEqual(["neutralB", "neutralB", "neutralB"]);
+  });
+
+  it("Samus's Charge Shot, a full one from a stored charge: 28% fresh ×1.05, then ×(1 − 0.09)", () => {
+    const { damages, queue } = rounds("samus", 2, (s) => {
+      s.fighters[0].combat.storedCharge = 112;
+    });
+    expect(toFloat(damages[0])).toBeCloseTo(28 * 1.05, 2);
+    expect(toFloat(damages[1])).toBeCloseTo(28 * 0.91, 2);
+    expect(queue).toEqual(["neutralB", "neutralB"]);
+  });
+
+  it("rolls back across a stamped shot's flight and its hit: from each snapshot, the same hashes", () => {
+    const s = duel("mario", "fox", -20, 0);
+    s.fighters[0].staleQueue = ["neutralB"];
+    expectRollbackSafe(s, 60, (i) => [i === 0 ? Btn.Special : 0, 0], [-1, 5, 15, 25, 35]);
+  });
+});

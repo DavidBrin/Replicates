@@ -655,6 +655,55 @@ describe("shield", () => {
   });
 });
 
+// Plan 5 final wave 2, ruling R-FW2a (Task 14 review, Minor 5, reading 16): a move's
+// intangible window holds from its first tick. `advanceFighter` asserted the window
+// before the status's `main` started the move, so a window from its frame 1 first held
+// on frame 2. Each window is counted here from the tick its status was entered on, its
+// frame 1, through a real press; the dodges' windows begin later (Mario's: spot dodge 3,
+// forward roll 4, back roll 5, air dodge 3) and must not move a frame earlier for it.
+describe("a move's intangibility from its first tick (ruling R-FW2a)", () => {
+  /** The frames, counting the entry tick as frame 1, that `f` is intangible on, for `n` ticks from the `press` that enters it. */
+  function framesFrom(f: FighterState, press: InputFrame, prev: InputFrame, held: InputFrame, n: number, c: () => StateContext = ctx): number[] {
+    const seen: number[] = [];
+    for (let frame = 1; frame <= n; frame++) {
+      f.intangible = 0;
+      clock += 1;
+      const input = frame === 1 ? press : held;
+      const before = frame === 1 ? prev : frame === 2 ? press : held;
+      updateInputTracking(f, input, before);
+      const intent = interpretInput(f, input, before);
+      advanceFighter(f, intent, c());
+      applyMovement(f, intent, c());
+      if (frame === 1) expect(f.actionFrame, "entered on this tick").toBe(0);
+      if (f.intangible > 0) seen.push(frame);
+    }
+    return seen;
+  }
+
+  const span = (from: number, to: number): number[] => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+  it("holds a move's window from its frame 1 on the tick it is pressed: an up special intangible on 1-4", () => {
+    const def: FighterDef = { ...DEF, moves: { ...DEF.moves, upB: move("upB", { intangible: [1, 4], hitboxes: [] }) } };
+    const own = (): StateContext => ({ def, stage: STAGE, frame: clock, fighters: roster });
+    expect(framesFrom(fighter(), Btn.Up | Btn.Special, 0, 0, 8, own)).toEqual(span(1, 4));
+  });
+
+  it("holds a spot dodge's from its frame 3, as published, not a frame sooner", () => {
+    const f = fighter({ action: "shield", actionFrame: 10 });
+    expect(DEFAULT_GROUND_DODGE.spotDodge.intangible).toEqual([3, 17]);
+    expect(framesFrom(f, Btn.Shield | Btn.Down, Btn.Shield, 0, 24)).toEqual(span(3, 17));
+  });
+
+  it("holds a roll's from its frame 4 forward and 5 back, as published", () => {
+    expect(framesFrom(fighter({ action: "shield", actionFrame: 10 }), Btn.Shield | Btn.Right, Btn.Shield, 0, 30)).toEqual(span(4, 15));
+    expect(framesFrom(fighter({ action: "shield", actionFrame: 10 }), Btn.Shield | Btn.Left, Btn.Shield, 0, 30)).toEqual(span(5, 16));
+  });
+
+  it("holds an air dodge's from its frame 3, as published", () => {
+    expect(framesFrom(fighter({ grounded: false, action: "fall", y: fx(1000) }), Btn.Shield, 0, 0, 40)).toEqual(span(3, 29));
+  });
+});
+
 describe("air dodge", () => {
   // The tester authors no air dodge, so it dodges as Mario does (`DEFAULT_AIR_DODGE`:
   // fudgepop01/amiibo_research `fighter_param_motion.xml` @523374aa, Mario's entry).

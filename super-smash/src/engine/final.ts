@@ -60,7 +60,7 @@ import { kineticClear } from "./kinetic";
 import { SMASH_BALL_HEALTH } from "./constants";
 import { fx } from "./fixed";
 import { actionFrameOf, moveFrameOf } from "./hitbox";
-import { releaseGrab, startAction, startMove, updateDodgeIntangibility } from "./states";
+import { releaseGrab, startAction, startMove } from "./states";
 import type { StateContext } from "./states";
 import type { FighterDef, FighterState, GameState, MoveDef, MoveSlot } from "./types";
 
@@ -177,15 +177,15 @@ export function trappedBy(s: { readonly fighters: readonly FighterState[] }, use
  *
  * The user is intangible from the step the power is spent (fix round 1, ruling
  * R-T14i): SmashWiki "Final Smash", "Final Smashes are unblockable, make the user
- * fully intangible". A move's own intangible window otherwise first holds on its
- * second step (`advanceFighter` reads it before the status starts the move), and a
- * hit on the first would cost the Final Smash it had just spent.
+ * fully intangible". A move's window holds from its first step (`advanceFighter`
+ * asserts it again after the status's `main`, which is where this is called; Plan 5
+ * final wave 2, ruling R-FW2a), so a hit on that step cannot cost the Final Smash it
+ * had just spent; nor, on the step its scene starts, the scene.
  */
 export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boolean): boolean {
   if (!neutral || f.finalSmashReady <= 0 || ctx.def.moves.finalSmash === undefined || finalSmashActive(ctx, ctx.finalProjectileOut?.() === true)) return false;
   f.finalSmashReady = 0;
   startMove(f, "special", "finalSmash");
-  updateDodgeIntangibility(f, ctx.def);
   return true;
 }
 

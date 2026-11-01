@@ -489,11 +489,19 @@ export interface Staleness {
 /**
  * The slot a move stales as, where it is a version of another (Plan 5, Task 13b fix
  * round 1, ruling R-T13b-f): an aerial up special of its own (Link's Spin Attack in
- * the air) is the up special's. SmashWiki "Stale Moves"
+ * the air) is the up special's, and a side special's smash and failed versions the
+ * side special's. SmashWiki "Stale Moves"
  * (https://www.ssbwiki.com/Stale_Moves): "any variation of the same special move
  * counts as the same move". Read by slot, for every fighter alike.
  */
-export const STALES_AS: Readonly<Partial<Record<MoveSlot, MoveSlot>>> = { upBAir: "upB" };
+export const STALES_AS: Readonly<Partial<Record<MoveSlot, MoveSlot>>> = {
+  upBAir: "upB",
+  // A smash-input side special (Plan 5, Task 13d, ruling P5-R29) and Link's failed
+  // throw (fix round 1, R-T13d-d) are the side special's (Plan 5 final wave 2, ruling
+  // R-FW2b; carried as R-T13d-f).
+  sideBSmash: "sideB",
+  sideBFailed: "sideB",
+};
 
 /** The slot `slot` joins and is looked up in the stale queue as (`STALES_AS`). */
 export function staleSlot(slot: MoveSlot): MoveSlot {

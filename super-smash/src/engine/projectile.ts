@@ -26,10 +26,25 @@ import type {
   FighterState,
   Hitbox,
   MoveDef,
+  MoveSlot,
   ProjectileDef,
   ProjectileState,
   StageDef,
 } from "./types";
+
+/**
+ * What a projectile stales as and how stale it is, stamped when it is fired (Plan 5
+ * final wave 2, ruling R-FW2b: `ProjectileState.staleAs`, `staleDamage`,
+ * `staleKnockback`).
+ */
+export interface ProjectileStale {
+  readonly as: MoveSlot | null;
+  readonly damage: number;
+  readonly knockback: number;
+}
+
+/** No move's staleness: the default stamp, and a reflected projectile's (`reflect.ts`). */
+export const NO_STALE: ProjectileStale = { as: null, damage: ONE, knockback: ONE };
 
 /** How close a returning projectile must get to its owner to be caught. */
 export const CATCH_RADIUS = fx(8);
@@ -110,7 +125,8 @@ export function projectileChargeScale(def: ProjectileDef, charge: number, frames
  * roster authors one Fireball and it comes out of the correct hand in both
  * directions. `vy` is absolute: up is up whichever way you are looking.
  * `damageMul` is the launching move's own damage multiplier (Plan 5, Task 9:
- * a copied special's ×1.2, `MoveDef.copyDamage`).
+ * a copied special's ×1.2, `MoveDef.copyDamage`); `stale`, the launching move's
+ * staleness as it is fired, and the slot it stales as (ruling R-FW2b).
  */
 export function spawnProjectile(
   def: ProjectileDef,
@@ -119,6 +135,7 @@ export function spawnProjectile(
   source: string = owner.defId,
   chargeFrames: number = SMASH_CHARGE_MAX,
   damageMul: number = ONE,
+  stale: ProjectileStale = NO_STALE,
 ): ProjectileState {
   const facing = owner.facing >= 0 ? 1 : -1;
   const chargeScale = projectileChargeScale(def, owner.charge, chargeFrames);
@@ -149,6 +166,9 @@ export function spawnProjectile(
     mode: "fly",
     life: 0,
     ground: -1,
+    staleAs: stale.as,
+    staleDamage: stale.damage,
+    staleKnockback: stale.knockback,
   };
 }
 
@@ -679,5 +699,8 @@ export function cloneProjectile(p: ProjectileState): ProjectileState {
     mode: p.mode,
     life: p.life,
     ground: p.ground,
+    staleAs: p.staleAs,
+    staleDamage: p.staleDamage,
+    staleKnockback: p.staleKnockback,
   };
 }
