@@ -112,7 +112,7 @@ const SCHEME_BY_MENU_ID: Record<SchemeId, Scheme> = {
  * diagram update, start a match and find the original keys still driving their
  * fighter. The store recorded the change and nothing downstream read it.
  *
- * The two vocabularies use the same nine action names (`CONTROL_ACTIONS` and
+ * The two vocabularies use the same ten action names (`CONTROL_ACTIONS` and
  * `GAME_ACTIONS`), which is why this is a spread rather than a translation —
  * and why `bootstrap.test.ts` asserts the two lists have not drifted apart.
  */

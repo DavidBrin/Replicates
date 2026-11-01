@@ -14,7 +14,15 @@ import { Btn } from "@/engine/types";
 
 /* ----------------------------------------------------------------- actions -- */
 
-/** The nine things a player can ask a fighter to do. One bit each. */
+/**
+ * The ten things a player can ask a fighter to do. One bit each.
+ *
+ * Nine are buttons and directions. The tenth, `tilt` (Plan 5, Task 21b, ruling
+ * P5-R27), is held to make a direction a part-way push of the stick:
+ * `Btn.Soft`, the bit a gamepad's partial tilt sets. A key is otherwise always
+ * a full push, so without it a keyboard could neither walk nor tilt from a
+ * standstill (SPEC §6).
+ */
 export type GameAction =
   | "left"
   | "right"
@@ -24,7 +32,8 @@ export type GameAction =
   | "special"
   | "shield"
   | "jump"
-  | "grab";
+  | "grab"
+  | "tilt";
 
 /** Stable order, so UI lists and conflict reports are deterministic. */
 export const GAME_ACTIONS: readonly GameAction[] = [
@@ -37,6 +46,7 @@ export const GAME_ACTIONS: readonly GameAction[] = [
   "shield",
   "jump",
   "grab",
+  "tilt",
 ];
 
 /** Which bit of an `InputFrame` each action sets. */
@@ -50,6 +60,7 @@ export const ACTION_BUTTON: Readonly<Record<GameAction, Btn>> = {
   shield: Btn.Shield,
   jump: Btn.Jump,
   grab: Btn.Grab,
+  tilt: Btn.Soft,
 };
 
 export type Bindings = Readonly<Record<GameAction, string>>;
@@ -71,6 +82,13 @@ export interface Scheme {
  * The action cluster is a deliberate shape: three keys on the top row and two
  * on the home row with a gap between them, so the resting hand finds jump
  * (middle finger, `W`) and attack (index, `D`) without looking.
+ *
+ * Tilt (Plan 5, Task 21b) is `V`, under the left thumb. It is held through
+ * other presses, and the thumb is the one finger the cluster leaves idle: it
+ * rests on `Space`, which no preset binds (see Config 3), and `V` is the key
+ * just above it. The gap key `S` would be closer, but it is Config 2's down:
+ * a seventh key the two mirror presets give opposite meanings
+ * (`detectConflicts`).
  */
 export const CONFIG_ARROWS: Scheme = {
   id: "arrows",
@@ -86,6 +104,7 @@ export const CONFIG_ARROWS: Scheme = {
     grab: "KeyQ",
     shield: "KeyE",
     jump: "KeyW",
+    tilt: "KeyV",
   },
 };
 
@@ -96,6 +115,11 @@ export const CONFIG_ARROWS: Scheme = {
  * the arrows plus `ShiftLeft` and `Slash`. For a player who already thinks in
  * WASD this is the natural preset; it is not a second player's preset, for the
  * reason set out under `detectConflicts` below.
+ *
+ * Tilt (Plan 5, Task 21b) is `C`, under the steering hand's thumb, which
+ * suits a key that changes how far the stick is pushed. The acting hand's one
+ * free key, `ArrowDown`, is Config 1's down: one more mirror key. `V` is
+ * Config 1's Tilt, so this takes its neighbour.
  */
 export const CONFIG_WASD: Scheme = {
   id: "wasd",
@@ -111,6 +135,7 @@ export const CONFIG_WASD: Scheme = {
     jump: "ArrowUp",
     shield: "ShiftLeft",
     grab: "Slash",
+    tilt: "KeyC",
   },
 };
 
@@ -120,7 +145,8 @@ export const CONFIG_WASD: Scheme = {
  * Constraints this had to satisfy, in the order they mattered:
  *
  *  1. **Disjoint from both presets above.** Configs 1 and 2 between them claim
- *     `ArrowLeft/Right/Up/Down`, `KeyQ W E A S D`, `ShiftLeft` and `Slash`.
+ *     `ArrowLeft/Right/Up/Down`, `KeyQ W E A S D`, `ShiftLeft`, `Slash` and
+ *     their Tilt keys `KeyV` and `KeyC`.
  *     Config 3 touches none of them, so it can be paired with *either* one
  *     without a single ambiguous key — which is the whole point of its
  *     existing.
@@ -148,6 +174,9 @@ export const CONFIG_WASD: Scheme = {
  * the top row (`U I O` = grab, jump, shield) and two on the home row with a gap
  * (`J _ L` = special, attack), so a player who has learned either preset can
  * read this one off muscle memory.
+ *
+ * Tilt (Plan 5, Task 21b) is `N`, under the steering hand's thumb, as in
+ * Config 2, and clear of the `V` and `C` the first seat's thumb may hold.
  */
 export const CONFIG_LOCAL_P2: Scheme = {
   id: "localP2",
@@ -163,6 +192,7 @@ export const CONFIG_LOCAL_P2: Scheme = {
     shield: "KeyO",
     special: "KeyJ",
     attack: "KeyL",
+    tilt: "KeyN",
   },
 };
 

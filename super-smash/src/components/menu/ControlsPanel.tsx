@@ -33,6 +33,8 @@ const ACTION_TONE: Record<ControlAction, string> = {
   right: "var(--p2)",
   up: "var(--p2)",
   down: "var(--p2)",
+  // A paler blue than the directions it changes: a part-way push (Plan 5, Task 21b).
+  tilt: "#9dbcff",
   jump: "var(--p4)",
   attack: "var(--p1)",
   special: "var(--smash-yellow)",
@@ -227,6 +229,24 @@ export function ControlsPanel() {
             you press it — that is what it is there for. As in Ultimate,{" "}
             <strong className="text-white">Stick jump</strong> can be turned off below for each person playing on
             this machine: then Up only aims, and only the Jump key jumps.
+          </p>
+        </SkewPanel>
+
+        {/* Plan 5, Task 21b (ruling P5-R27): the one key that is held rather
+            than pressed, and what it changes. */}
+        <SkewPanel
+          className="mt-4 border-[3px] border-panel-ink bg-[#181b20]"
+          innerClassName="px-6 py-4"
+        >
+          <h2 className="font-display text-xl tracking-[0.1em] text-smash-yellow uppercase">
+            Hold Tilt to walk
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">
+            A key is always a full push of the stick, so a held direction dashes, and a fresh one with Attack is a
+            smash. Hold <strong className="text-white">Tilt</strong> ({keyLabel(active.tilt)} on{" "}
+            {SCHEME_INFO[scheme].name}) for a part-way push, as a gamepad&apos;s stick can give: a held direction
+            walks, Attack is a tilt and never a smash, a side special is never its smash version, and Up never
+            jumps.
           </p>
         </SkewPanel>
 

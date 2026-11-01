@@ -465,11 +465,12 @@ export const DIRECTION_MASK: InputFrame = Btn.Left | Btn.Right | Btn.Up | Btn.Do
  *
  * A key is a full deflection, so a direction held on the keyboard cancels the
  * stick's "soft": otherwise a player resting a thumb on the stick could never
- * dash with the arrow keys.
+ * dash with the arrow keys. The keyboard's own soft, its Tilt key (Plan 5,
+ * Task 21b), is kept: that is the player asking for a part-way push.
  */
 export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame): InputFrame {
   const merged = keys | pad;
-  return (keys & DIRECTION_MASK) !== 0 ? merged & ~Btn.Soft : merged;
+  return (keys & DIRECTION_MASK) !== 0 ? (merged & ~Btn.Soft) | (keys & Btn.Soft) : merged;
 }
 
 /**

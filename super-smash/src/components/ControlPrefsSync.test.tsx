@@ -1,9 +1,10 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
+import { schemeForMenuId } from "@/game/bootstrap";
 import { DEFAULT_PAD_SETTINGS, PAD_BUTTON_LIMIT, rebind } from "@/input/gamepad";
 import { CONTROL_PREFS_KEY } from "@/lib/controlPrefs";
-import { useMatchConfig } from "@/lib/matchConfig";
+import { CONTROL_SCHEMES, DEFAULT_BINDINGS, useMatchConfig } from "@/lib/matchConfig";
 import { bindSession, leaveOnline, setOwnPad, setOwnStickJump } from "@/lib/onlineStore";
 import { memoryStorage } from "@/lib/testing/memoryStorage";
 import { setActiveSession } from "@/net/online/session";
@@ -50,6 +51,29 @@ describe("ControlPrefsSync (Plan 5)", () => {
     render(<ControlPrefsSync />);
     expect(useMatchConfig.getState().players[0].stickJump).toBe(false);
     expect(useMatchConfig.getState().players[0].pad).toEqual(DEFAULT_PAD_SETTINGS);
+  });
+
+  /**
+   * Plan 5, Task 21b (item 6): what was saved before the Tilt key existed. The
+   * keyboard's keys are never saved, only Stick Jump and the pad, so such
+   * prefs name no key at all: they load as before, and every preset has its
+   * default Tilt key, never an empty one. Keys stored beside them by any build
+   * are not read.
+   */
+  it("loads prefs saved before the Tilt key, and every preset keeps its default Tilt key", () => {
+    const pad = rebind(DEFAULT_PAD_SETTINGS, "attack", 3);
+    const stray = { arrows: { ...DEFAULT_BINDINGS.arrows, tilt: "" }, tilt: "" };
+    localStorage.setItem(CONTROL_PREFS_KEY, JSON.stringify({ 0: { stickJump: false, pad, bindings: stray }, 1: { stickJump: false } }));
+    render(<ControlPrefsSync />);
+    const { players, bindings } = useMatchConfig.getState();
+    expect(players.map((p) => [p.stickJump, p.pad])).toEqual([
+      [false, pad],
+      [false, DEFAULT_PAD_SETTINGS],
+    ]);
+    expect(CONTROL_SCHEMES.map((id) => bindings[id].tilt)).toEqual(["KeyV", "KeyC", "KeyN"]);
+    expect(bindings).toEqual(DEFAULT_BINDINGS);
+    // And the match P1 starts plays it.
+    expect(schemeForMenuId(players[0].scheme, bindings[players[0].scheme]).bindings.tilt).toBe("KeyV");
   });
 
   it("starts from the defaults when nothing valid is saved", () => {

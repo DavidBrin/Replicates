@@ -116,6 +116,14 @@ interface CodeTarget {
   readonly button: Btn;
 }
 
+/**
+ * The bits whose coming and going are presses and releases. The Tilt key's
+ * `Btn.Soft` (Plan 5, Task 21b) is a modifier on a direction, not a button,
+ * as on a pad (`GamepadInput.poll`): it is held in the frame while its key is,
+ * and never carried as a press (`matchRunner`'s refused-tick presses).
+ */
+const EDGE_BUTTONS = ~Btn.Soft;
+
 export class KeyboardInput {
   private readonly win: Window;
   private readonly bindings: readonly PortBinding[];
@@ -228,11 +236,11 @@ export class KeyboardInput {
       const t = this.codes.get(code);
       if (!t) continue;
       frames[t.port] |= t.button;
-      pressed[t.port] |= t.button;
+      pressed[t.port] |= t.button & EDGE_BUTTONS;
     }
     for (const code of this.releasedCodes) {
       const t = this.codes.get(code);
-      if (t) released[t.port] |= t.button;
+      if (t) released[t.port] |= t.button & EDGE_BUTTONS;
     }
 
     this.pressedCodes.clear();

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  ACTION_LABELS,
+  CONTROL_ACTIONS,
+  CONTROL_SCHEMES,
   DEFAULT_BINDINGS,
   MAX_PLAYERS,
   MAX_STOCKS,
@@ -179,6 +182,33 @@ describe("control bindings", () => {
 
     store().resetBindings("arrows");
     expect(store().bindings.arrows).toEqual(DEFAULT_BINDINGS.arrows);
+  });
+
+  /**
+   * Plan 5, Task 21b (ruling P5-R27): each preset's Tilt key, a key no other
+   * default binding holds, so the six mirror keys stay six and Config 3 stays
+   * disjoint (the two tests above, which now count it).
+   */
+  it("gives every preset a Tilt key of its own, from the start and after a reset", () => {
+    expect(CONTROL_ACTIONS).toContain("tilt");
+    expect(ACTION_LABELS.tilt).toBe("Tilt");
+    const tilts = () => CONTROL_SCHEMES.map((id) => store().bindings[id].tilt);
+    expect(tilts()).toEqual(["KeyV", "KeyC", "KeyN"]);
+    expect(CONTROL_SCHEMES.map((id) => DEFAULT_BINDINGS[id].tilt)).toEqual(["KeyV", "KeyC", "KeyN"]);
+
+    store().rebind("arrows", "tilt", "KeyB");
+    expect(store().bindings.arrows.tilt).toBe("KeyB");
+    store().resetBindings("arrows");
+    expect(tilts()).toEqual(["KeyV", "KeyC", "KeyN"]);
+  });
+
+  it("rebinds Tilt like any action: a swap within a preset, refused onto another human's key", () => {
+    expect(store().rebind("arrows", "tilt", "KeyD").ok).toBe(true);
+    expect([store().bindings.arrows.tilt, store().bindings.arrows.attack]).toEqual(["KeyD", "KeyV"]);
+
+    store().setPlayerKind(1, "human");
+    expect(store().setScheme(1, "rightCluster")).toBe(true);
+    expect(store().rebind("arrows", "tilt", "KeyN")).toEqual({ ok: false, conflictPort: 1, conflictAction: "tilt" });
   });
 });
 

@@ -1,7 +1,7 @@
 /**
  * The seam between the menus' idea of a control scheme and the input layer's.
  *
- * Two vocabularies for the same nine actions meet here, and the join is a
+ * Two vocabularies for the same ten actions meet here, and the join is a
  * spread rather than a translation — which is fast and readable right up until
  * one side gains an action and the other does not, at which point a binding is
  * silently dropped and one button stops working in matches while continuing to
@@ -9,13 +9,28 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONTROL_ACTIONS, DEFAULT_BINDINGS, type Bindings } from "@/lib/matchConfig";
+import { CONTROL_ACTIONS, CONTROL_SCHEMES, DEFAULT_BINDINGS, type Bindings } from "@/lib/matchConfig";
 import { GAME_ACTIONS } from "@/input/schemes";
 import { FIGHTERS, STAGES, resolveFighterId, resolveMatchStage, schemeForMenuId } from "./bootstrap";
 
 describe("the two action vocabularies", () => {
-  it("name the same nine things", () => {
+  it("name the same ten things", () => {
     expect([...CONTROL_ACTIONS].sort()).toEqual([...GAME_ACTIONS].sort());
+  });
+
+  /**
+   * Plan 5, Task 21b: a config's Tilt key is one key in both vocabularies, and
+   * no other default binding in either holds it, so it can never cost a preset
+   * its disjointness (Config 3) or add a seventh mirror key (Configs 1 and 2).
+   */
+  it("give each config one Tilt key that no other default binding holds", () => {
+    const menus = CONTROL_SCHEMES.map((id) => DEFAULT_BINDINGS[id]);
+    const presets = CONTROL_SCHEMES.map((id) => schemeForMenuId(id).bindings);
+    expect(presets.map((b) => b.tilt)).toEqual(menus.map((b) => b.tilt));
+    for (const tilt of menus.map((b) => b.tilt)) {
+      const holders = [...menus, ...presets].flatMap((b) => CONTROL_ACTIONS.filter((a) => b[a] === tilt));
+      expect(holders, tilt).toEqual(["tilt", "tilt"]);
+    }
   });
 });
 

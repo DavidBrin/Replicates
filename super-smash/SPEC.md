@@ -203,6 +203,7 @@ layouts.
 | Action | Config 1 (arrows) | Config 2 (mirrored) |
 |---|---|---|
 | Move | `←` `→` `↑` `↓` | `W` `A` `S` `D` |
+| Tilt (held) | `V` | `C` |
 | Special | `A` | `←` |
 | Attack | `D` | `→` |
 | Jump | `W` | `↑` |
@@ -223,8 +224,9 @@ timing instead:
 
 | Distinction | Rule |
 |---|---|
-| Step vs. dash | A tap is a small step; a held direction dashes and then runs. |
-| Tilt vs. smash | Attack within 5 frames of a *fresh* direction press is a smash; otherwise a tilt. |
+| Step vs. dash | A tap is a small step; a held direction dashes and then runs. With Tilt held, it walks. |
+| Tilt vs. smash | Attack within 5 frames of a *fresh* direction press is a smash; otherwise a tilt. With Tilt held, always a tilt. |
+| Smash side special | A side special within the move's own window of a *fresh* direction press is its smash version (Samus 5 frames, Link 8); otherwise, or with Tilt held, the ordinary one. |
 | Dash attack | Attack while already at run speed. |
 | Short vs. full hop | Jump released within the 3-frame jumpsquat is a short hop. |
 | Fast fall | Down pressed after the jump apex. |
@@ -232,15 +234,16 @@ timing instead:
 | SDI | Each fresh direction press during hitlag is one pulse — mashing works exactly as it does in the real game. |
 | Directional air dodge | Shield in the air with a direction held. |
 
-**Walking is not reachable, and that is correct rather than missing.** A key is *always a
-full deflection*, and a fully-deflected stick in the real game dashes and then runs — a
-walk requires a partial tilt, which no key can express. So a held direction dashes, and
-micro-spacing comes from tapping, which produces a short step before the dash commits. The
-same limitation is why an all-digital controller plays Smash the way it does.
+**Walking takes the Tilt key.** A key is *always a full deflection*, and a fully-deflected
+stick in the real game dashes and then runs; a walk, like a standing tilt, needs a partial
+tilt. Each preset has a **Tilt** key (Config 3's is `N`), held for a part-way push: it sets
+the same bit as a gamepad's partial tilt (`Btn.Soft`), so a held direction walks, Attack is
+a tilt, DI bends a quarter as far, and Up never jumps. Without it a held direction dashes,
+and micro-spacing comes from tapping, which produces a short step before the dash commits.
 
-**Tap jump defaults off.** On a stick you can push up 25% and get an up-tilt; a key is
-always 100%, so with tap jump on, every up-tilt becomes a jump. Both schemes already give
-a dedicated jump key. It remains a toggle.
+**Stick jump defaults on** (D31). Up jumps, as pushing the stick up does, once five frames
+pass with no attack, special or grab to claim the press; the Jump key fires at once. As in
+Ultimate it is a per-player option (`/controls`), and a soft Up (Tilt held) never jumps.
 
 ---
 

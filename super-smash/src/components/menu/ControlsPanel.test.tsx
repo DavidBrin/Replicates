@@ -34,6 +34,33 @@ describe("ControlsPanel", () => {
     expect(screen.getByRole("combobox", { name: "P1 right stick" })).toHaveValue("smash");
   });
 
+  /** Plan 5, Task 21b (ruling P5-R27): the Tilt key, in the list, on the diagram, and explained. */
+  it("lists the Tilt key, marks it on the diagram, and says what holding it does", () => {
+    const { container } = render(<ControlsPanel />);
+    expect(screen.getByRole("button", { name: "Rebind Tilt, currently V" })).toBeInTheDocument();
+    expect(container.querySelector('[data-key="KeyV"]')).toHaveAttribute("data-bound", "tilt");
+    const panel = screen.getByRole("heading", { name: /hold tilt to walk/i }).parentElement!;
+    expect(panel).toHaveTextContent(/hold tilt \(v on config 1\)/i);
+    expect(panel).toHaveTextContent(/walks/i);
+    expect(panel).toHaveTextContent(/never a smash/i);
+    expect(panel).toHaveTextContent(/up never jumps/i);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Config 2" }));
+    expect(screen.getByRole("button", { name: "Rebind Tilt, currently C" })).toBeInTheDocument();
+    expect(panel).toHaveTextContent(/hold tilt \(c on config 2\)/i);
+  });
+
+  it("rebinds the Tilt key by pressing it", () => {
+    render(<ControlsPanel />);
+
+    fireEvent.click(screen.getByRole("button", { name: /rebind tilt/i }));
+    fireEvent.keyDown(window, { code: "KeyB", key: "b" });
+
+    expect(useMatchConfig.getState().bindings.arrows.tilt).toBe("KeyB");
+    expect(screen.getByRole("status")).toHaveTextContent(/tilt is now b/i);
+    expect(screen.getByRole("button", { name: "Rebind Tilt, currently B" })).toBeInTheDocument();
+  });
+
   it("states the mirror-image problem in the numbers, not in prose alone", () => {
     render(<ControlsPanel />);
     expect(screen.getByText(/6 physical keys carry opposite meanings/i)).toBeInTheDocument();

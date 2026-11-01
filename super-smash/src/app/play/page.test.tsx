@@ -15,6 +15,7 @@ import { routerMock } from "../../../vitest.setup";
 import { AudioEngine } from "@/audio";
 import { STALL_HINT_MS } from "@/components/match/NetHud";
 import { CharacterSelect } from "@/components/menu/CharacterSelect";
+import { ControlsPanel } from "@/components/menu/ControlsPanel";
 import { Results } from "@/components/menu/Results";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { getFighterOrThrow, resolveMatchStage } from "@/game/bootstrap";
@@ -24,7 +25,7 @@ import { localBuild, runnerSlotsFor } from "@/game/onlineConfig";
 import { GAME_SIM_CONTEXT } from "@/game/simContext";
 import type { World3dModule } from "@/game/useWorld3d";
 import type { WorldLayers, WorldOptions } from "@/game/world3d";
-import { CONTROL_STICK_JUMP_OFF, type FighterDef, type StageDef } from "@/engine/types";
+import { Btn, CONTROL_STICK_JUMP_OFF, type FighterDef, type StageDef } from "@/engine/types";
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { DEFAULT_PAD_SETTINGS, mappingFrom, rebind, type GamepadOptions } from "@/input/gamepad";
 import { claimContext } from "@/render3d/fakeContext";
@@ -180,6 +181,15 @@ function goOnline(role: Role): { fake: FakeSession; link: { status: DoSignalStat
   return { fake, link };
 }
 
+/** Config 1's Tilt key rebound on /controls, by pressing `code`, before the match (Plan 5, Task 21b). */
+function rebindTiltOnControls(code: string) {
+  const controls = render(<ControlsPanel />);
+  fireEvent.click(screen.getByRole("button", { name: /rebind tilt/i }));
+  fireEvent.keyDown(window, { code });
+  expect(useMatchConfig.getState().bindings.arrows.tilt).toBe(code);
+  controls.unmount();
+}
+
 function only<T>(list: readonly T[]): T {
   expect(list).toHaveLength(1);
   return list[0];
@@ -245,6 +255,17 @@ describe("the play page, online", () => {
     expect(options.net?.transport).toBe(fake.session.transport);
     expect(options.net?.localPorts).toEqual([port]);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  /** Plan 5, Task 21b: this machine's Tilt key, rebound on /controls, on its own port. */
+  it("plays this machine's Tilt key as rebound on /controls, on its own port", async () => {
+    rebindTiltOnControls("KeyB");
+    goOnline("guest");
+    await renderPage();
+    const keyboard = only(mocks.runners).options.keyboard!;
+    fireEvent.keyDown(window, { code: "KeyB" });
+    fireEvent.keyDown(window, { code: "ArrowUp" });
+    expect(keyboard.drain().frames).toEqual([0, Btn.Soft | Btn.Up]);
   });
 
   it("hands an online result to the results screen, and leaves the room to it", async () => {
@@ -787,6 +808,22 @@ describe("the play page, local", () => {
       unlock.mockRestore();
       dispose.mockRestore();
     }
+  });
+
+  /**
+   * Plan 5, Task 21b: a Tilt key rebound on /controls is the one the match's
+   * keyboard reads, and the default one stops (the e2e is Task 22's).
+   */
+  it("plays a Tilt key rebound on /controls, and not the default one", async () => {
+    rebindTiltOnControls("KeyB");
+    await renderPage();
+    const keyboard = only(mocks.runners).options.keyboard!;
+    fireEvent.keyDown(window, { code: "KeyB" });
+    fireEvent.keyDown(window, { code: "ArrowRight" });
+    expect(keyboard.drain().frames[0]).toBe(Btn.Soft | Btn.Right);
+    fireEvent.keyUp(window, { code: "KeyB" });
+    fireEvent.keyDown(window, { code: "KeyV" });
+    expect(keyboard.drain().frames[0]).toBe(Btn.Right);
   });
 
   it("plays the menus' match with no network, each pad held to its human's port", async () => {

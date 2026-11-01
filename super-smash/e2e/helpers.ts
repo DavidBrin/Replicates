@@ -30,6 +30,8 @@ export const P1 = {
   grab: "KeyQ",
   shield: "KeyE",
   jump: "KeyW",
+  /** Held for a part-way push of the stick: a walk, a tilt (Plan 5, Task 21b). */
+  tilt: "KeyV",
 } as const;
 
 /**

@@ -110,6 +110,57 @@ describe("latching: a tap between two frames must not vanish", () => {
   });
 });
 
+/**
+ * Plan 5, Task 21b (ruling P5-R27): Config 1's Tilt key (`V`) is a part-way
+ * push of the stick, `Btn.Soft`, as a gamepad's partial tilt sets it: a
+ * modifier on a direction, so its coming and going is not a press or a
+ * release (as `GamepadInput.poll` has it).
+ */
+describe("the Tilt key", () => {
+  it("holds the stick's soft bit beside the direction, frame after frame", () => {
+    const kb = makeInput([{ port: 0, scheme: CONFIG_ARROWS }]);
+    keydown("KeyV");
+    keydown("ArrowRight");
+
+    const first = kb.drain();
+    expect(first.frames[0]).toBe(Btn.Soft | Btn.Right);
+    expect(first.pressed[0]).toBe(Btn.Right);
+    expect(kb.drain().frames[0]).toBe(Btn.Soft | Btn.Right);
+
+    keyup("ArrowRight");
+    const off = kb.drain();
+    expect(off.frames[0]).toBe(Btn.Soft);
+    expect(off.released[0]).toBe(Btn.Right);
+  });
+
+  it("is not a press, and letting go of it is not a release", () => {
+    const kb = makeInput([{ port: 0, scheme: CONFIG_ARROWS }]);
+    expect(keydown("KeyV").defaultPrevented).toBe(true);
+
+    const on = kb.drain();
+    expect(on.frames[0]).toBe(Btn.Soft);
+    expect(on.pressed[0]).toBe(0);
+
+    keyup("KeyV");
+    const off = kb.drain();
+    expect(off.frames[0]).toBe(0);
+    expect(off.released[0]).toBe(0);
+  });
+
+  it("is each port's own", () => {
+    const kb = makeInput([
+      { port: 0, scheme: CONFIG_ARROWS },
+      { port: 1, scheme: CONFIG_LOCAL_P2 },
+    ]);
+    keydown("KeyN"); // Config 3's Tilt
+    keydown("KeyH"); // P2 right
+    keydown("ArrowRight"); // P1 right
+
+    const { frames } = kb.drain();
+    expect(frames).toEqual([Btn.Right, Btn.Soft | Btn.Right]);
+  });
+});
+
 describe("preventDefault", () => {
   it("cancels every bound key and nothing else", () => {
     makeInput([{ port: 0, scheme: CONFIG_ARROWS }]);
@@ -227,7 +278,7 @@ describe("the UI-facing surface", () => {
   it("lists every key it will swallow", () => {
     const kb = makeInput([{ port: 0, scheme: CONFIG_ARROWS }]);
     expect(kb.boundCodes.sort()).toEqual(
-      ["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "KeyA", "KeyD", "KeyE", "KeyQ", "KeyW"].sort(),
+      ["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "KeyA", "KeyD", "KeyE", "KeyQ", "KeyV", "KeyW"].sort(),
     );
   });
 

@@ -372,6 +372,17 @@ describe("mergeKeyboardAndPad", () => {
     expect(mergeKeyboardAndPad(Btn.Attack, Btn.Left | Btn.Soft)).toBe(Btn.Attack | Btn.Left | Btn.Soft);
   });
 
+  // Plan 5, Task 21b: the keyboard's own soft is its Tilt key, a player asking
+  // for a part-way push on purpose, so a key direction never cancels it.
+  it("keeps the keyboard's own soft, its Tilt key, beside a key direction", () => {
+    expect(mergeKeyboardAndPad(Btn.Soft | Btn.Right, 0)).toBe(Btn.Soft | Btn.Right);
+    expect(mergeKeyboardAndPad(Btn.Soft | Btn.Up | Btn.Attack, 0)).toBe(Btn.Soft | Btn.Up | Btn.Attack);
+    expect(mergeKeyboardAndPad(Btn.Soft | Btn.Right, Btn.Left)).toBe(Btn.Soft | Btn.Right | Btn.Left);
+    expect(mergeKeyboardAndPad(Btn.Soft | Btn.Right, Btn.Right | Btn.Soft)).toBe(Btn.Soft | Btn.Right);
+    // Held with the stick's full push, it makes that push a part-way one too.
+    expect(mergeKeyboardAndPad(Btn.Soft, Btn.Right)).toBe(Btn.Soft | Btn.Right);
+  });
+
   it("covers the four directions in its mask", () => {
     expect(DIRECTION_MASK).toBe(Btn.Left | Btn.Right | Btn.Up | Btn.Down);
   });

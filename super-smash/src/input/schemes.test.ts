@@ -18,6 +18,7 @@ import {
   schemeById,
   schemesConflict,
 } from "./schemes";
+import { MODIFIER_CODES } from "./keyboard";
 
 /** The six keys Configs 1 and 2 fight over, because they are mirror images. */
 const MIRROR_COLLISIONS = ["ArrowLeft", "ArrowRight", "ArrowUp", "KeyA", "KeyD", "KeyW"];
@@ -139,6 +140,32 @@ describe("Config 3 is the second seat", () => {
     expect(movementKeys.sort()).toEqual(["KeyF", "KeyG", "KeyH", "KeyT"]);
     expect(actionKeys.sort()).toEqual(["KeyI", "KeyJ", "KeyL", "KeyO", "KeyU"]);
     expect(movementKeys.some((k) => actionKeys.includes(k))).toBe(false);
+  });
+});
+
+/**
+ * Plan 5, Task 21b (ruling P5-R27): the Tilt key, held for a part-way push of
+ * the stick, so a keyboard can walk and tilt.
+ */
+describe("the Tilt key", () => {
+  it("sets the stick's soft bit, the one a gamepad's partial tilt sets", () => {
+    expect(GAME_ACTIONS).toContain("tilt");
+    expect(ACTION_BUTTON.tilt).toBe(Btn.Soft);
+  });
+
+  it("is V, C and N in Configs 1 to 3: a key no other action in any preset claims", () => {
+    expect(SCHEMES.map((s) => s.bindings.tilt)).toEqual(["KeyV", "KeyC", "KeyN"]);
+    for (const scheme of SCHEMES) {
+      const elsewhere = SCHEMES.flatMap((other) =>
+        GAME_ACTIONS.filter((a) => other !== scheme || a !== "tilt").map((a) => other.bindings[a]),
+      );
+      expect(elsewhere, `${scheme.id}.tilt`).not.toContain(scheme.bindings.tilt);
+    }
+  });
+
+  it("is held, so it is no modifier and nothing the browser or OS owns", () => {
+    const forbidden = [...MODIFIER_CODES, "CapsLock", "Space", "Enter", "Tab", "Escape", "Backspace"];
+    for (const scheme of SCHEMES) expect(forbidden, scheme.id).not.toContain(scheme.bindings.tilt);
   });
 });
 

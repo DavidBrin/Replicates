@@ -458,11 +458,18 @@ export function findStage(roster: Roster, id: string): MenuStage | null {
    Controls
    ========================================================================== */
 
+/**
+ * What a player binds, one key each, in the order `/controls` lists them.
+ * `tilt` (Plan 5, Task 21b, ruling P5-R27) is held for a part-way push of the
+ * stick, so a direction walks and Attack is a tilt (`Btn.Soft`; SPEC §6): it
+ * sits with the directions it changes.
+ */
 export const CONTROL_ACTIONS = [
   "left",
   "right",
   "up",
   "down",
+  "tilt",
   "jump",
   "attack",
   "special",
@@ -496,12 +503,18 @@ export const SCHEME_INFO: Record<SchemeId, { name: string; hand: string; note: s
   },
 };
 
+/**
+ * The Tilt keys `V`, `C` and `N` are each under a thumb, and held by no other
+ * default binding here or in the input layer's presets (`input/schemes.ts`
+ * says why each), so Configs 1 and 2 still share six keys and Config 3 none.
+ */
 export const DEFAULT_BINDINGS: Record<SchemeId, Bindings> = {
   arrows: {
     left: "ArrowLeft",
     right: "ArrowRight",
     up: "ArrowUp",
     down: "ArrowDown",
+    tilt: "KeyV",
     jump: "KeyW",
     attack: "KeyD",
     special: "KeyA",
@@ -513,6 +526,7 @@ export const DEFAULT_BINDINGS: Record<SchemeId, Bindings> = {
     right: "KeyD",
     up: "KeyW",
     down: "KeyS",
+    tilt: "KeyC",
     jump: "ArrowUp",
     attack: "ArrowRight",
     special: "ArrowLeft",
@@ -524,6 +538,7 @@ export const DEFAULT_BINDINGS: Record<SchemeId, Bindings> = {
     right: "KeyL",
     up: "KeyI",
     down: "KeyK",
+    tilt: "KeyN",
     jump: "KeyP",
     attack: "KeyO",
     special: "KeyU",
@@ -537,6 +552,7 @@ export const ACTION_LABELS: Record<ControlAction, string> = {
   right: "Right",
   up: "Up",
   down: "Down",
+  tilt: "Tilt",
   jump: "Jump",
   attack: "Attack",
   special: "Special",
@@ -898,6 +914,20 @@ function withDerivedRules(rules: MatchRules, players: readonly PlayerSlot[]): Ma
   return oneOnOne === rules.oneOnOne ? rules : { ...rules, oneOnOne };
 }
 
+/**
+ * Every preset's default keys, each its own copy: what a page starts with and
+ * `reset` restores. Keys are never saved between visits (only Stick Jump and
+ * the pad are, `lib/controlPrefs.ts`), so this is also what every visit loads,
+ * the Tilt key included (Plan 5, Task 21b).
+ */
+function defaultBindings(): Record<SchemeId, Bindings> {
+  return {
+    arrows: { ...DEFAULT_BINDINGS.arrows },
+    mirrored: { ...DEFAULT_BINDINGS.mirrored },
+    rightCluster: { ...DEFAULT_BINDINGS.rightCluster },
+  };
+}
+
 const INITIAL_RULES: MatchRules = {
   mode: "stock",
   stocks: 3,
@@ -911,11 +941,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   stageId: "battlefield",
   stageForm: "normal",
   players: initialPlayers(),
-  bindings: {
-    arrows: { ...DEFAULT_BINDINGS.arrows },
-    mirrored: { ...DEFAULT_BINDINGS.mirrored },
-    rightCluster: { ...DEFAULT_BINDINGS.rightCluster },
-  },
+  bindings: defaultBindings(),
   result: null,
   online: false,
   localOptions: DEFAULT_CONTROL_OPTIONS,
@@ -1081,11 +1107,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
       stageId: "battlefield",
       stageForm: "normal",
       players: initialPlayers(),
-      bindings: {
-        arrows: { ...DEFAULT_BINDINGS.arrows },
-        mirrored: { ...DEFAULT_BINDINGS.mirrored },
-        rightCluster: { ...DEFAULT_BINDINGS.rightCluster },
-      },
+      bindings: defaultBindings(),
       result: null,
       online: false,
       localOptions: DEFAULT_CONTROL_OPTIONS,
