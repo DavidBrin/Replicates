@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
+import { DEFAULT_PAD_SETTINGS } from "@/input/gamepad";
 import { controlsOf, useMatchConfig } from "@/lib/matchConfig";
 import { bindSession, leaveOnline } from "@/lib/onlineStore";
 import { setActiveSession } from "@/net/online/session";
@@ -70,7 +71,7 @@ describe("PlayerOptions online (R-T20a)", () => {
     fireEvent.click(screen.getByRole("switch", { name: `${tag} stick jump` }));
     expect(useMatchConfig.getState().players[own].stickJump).toBe(false);
     expect(useMatchConfig.getState().players[1 - own].stickJump).toBe(true);
-    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false });
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false, pad: DEFAULT_PAD_SETTINGS });
     expect(fake.sent).toEqual([{ kind: "pick", fighterId: null, costume: own, stickJump: false }]);
   });
 });

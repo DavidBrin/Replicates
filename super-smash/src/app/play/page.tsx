@@ -45,10 +45,10 @@ import { useWorld3d, type World3dModule } from "@/game/useWorld3d";
 import type { WorldLayers } from "@/game/world3d";
 import type { Presenter3D } from "@/render3d/renderer3d";
 import { createKeyboardInput, type KeyboardInput } from "@/input/keyboard";
-import { createGamepadInput, padPortMap, type GamepadInput } from "@/input/gamepad";
+import { DEFAULT_PAD_SETTINGS, createGamepadInput, padPortMap, type GamepadInput } from "@/input/gamepad";
 import { AudioEngine } from "@/audio";
 import { conflictFreeSelection } from "@/input/schemes";
-import { controlsOf, useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
+import { controlsOf, padMappingOf, useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { NetHud } from "@/components/match/NetHud";
 import type { OnlineMatchConfig, RefuseReason } from "@/net/online/lobby";
@@ -504,7 +504,13 @@ export default function PlayPage() {
         keyboardRef.current = keyboard;
         // One pad per human, in connection order: the first pad is the first
         // human. Held for the match, so a pad unplugging moves nobody else's.
-        gamepad = createGamepadInput({ portForPad: padPortMap(humans.map((p) => p.port)), holdPorts: true });
+        // Each reads its human's own buttons and right stick (Plan 5).
+        const mappings = new Map(humans.map((p) => [p.port, padMappingOf(p)]));
+        gamepad = createGamepadInput({
+          portForPad: padPortMap(humans.map((p) => p.port)),
+          holdPorts: true,
+          mappingForPort: (port) => mappings.get(port) ?? padMappingOf({ pad: DEFAULT_PAD_SETTINGS }),
+        });
         gamepad.attach();
       }
 
@@ -641,9 +647,12 @@ export default function PlayPage() {
       if (event.type === "lobby" && event.message.kind === "refuse" && session.role === "host") refused(event.message.reason);
     });
     // Each player is on their own machine, so each gets Config 1 (with their
-    // own rebinding) and every pad, on their own port.
+    // own rebinding) and every pad, on their own port, with their own pad
+    // settings (Plan 5). Those stay here: only the packed frame travels. Read
+    // once, as the match starts, like the start config.
     const keyboard = createKeyboardInput([{ port: localPort, scheme: schemeForMenuId("arrows", bindings.arrows) }]);
-    const gamepad = createGamepadInput({ portForPad: () => localPort });
+    const ownPad = padMappingOf(useMatchConfig.getState().players.find((p) => p.port === localPort) ?? { pad: DEFAULT_PAD_SETTINGS });
+    const gamepad = createGamepadInput({ portForPad: () => localPort, mappingForPort: () => ownPad });
 
     const finish = (result: MatchResult, delayMs: number) => {
       if (finished) return;

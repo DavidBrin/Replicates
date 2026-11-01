@@ -4,6 +4,7 @@ import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
 import { CONTROL_STICK_JUMP_OFF, type MatchRules } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
+import { DEFAULT_PAD_SETTINGS } from "@/input/gamepad";
 import { RANDOM_FIGHTER, RANDOM_STAGE, useMatchConfig, type PlayerSlot } from "@/lib/matchConfig";
 import { parseLobbyMessage } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
@@ -16,8 +17,8 @@ const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 9000, smashBall
 
 function players(a: string | null, b: string | null): PlayerSlot[] {
   return [
-    { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows", stickJump: true },
-    { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows", stickJump: false },
+    { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows", stickJump: true, pad: DEFAULT_PAD_SETTINGS },
+    { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows", stickJump: false, pad: DEFAULT_PAD_SETTINGS },
   ];
 }
 

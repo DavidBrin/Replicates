@@ -4,6 +4,7 @@ import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
+import { DEFAULT_PAD_SETTINGS, rebind } from "@/input/gamepad";
 import { buildStartConfig, localBuild } from "@/game/onlineConfig";
 import { GAME_SIM_CONTEXT, engineFingerprint, rulesFingerprint } from "@/game/simContext";
 import { NEGOTIATION_TIMEOUT_MS } from "@/net/adapters/doSignal";
@@ -30,6 +31,7 @@ import {
   roomErrorMessage,
   sendLobby,
   sendOwnPick,
+  setOwnPad,
   setOwnStickJump,
   useOnlineStore,
   type OnlineErrorReason,
@@ -1240,10 +1242,10 @@ describe("this machine's own Stick Jump during an online session (R-T20a)", () =
   it.each(["host", "guest"] as const)("keeps the change on leaving, as the %s, whatever the other player's pick says after it", (role) => {
     const { fake } = seated(role);
     setOwnStickJump(false);
-    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false });
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false, pad: DEFAULT_PAD_SETTINGS });
     // The other player's pick, theirs on, after the change: their port only.
     fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 3 } });
-    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false });
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false, pad: DEFAULT_PAD_SETTINGS });
     expect(useMatchConfig.getState().players[role === "host" ? 1 : 0].stickJump).toBe(true);
     leaveOnline();
     expect(useMatchConfig.getState().players.map((p) => [p.kind, p.stickJump])).toEqual([
@@ -1256,7 +1258,7 @@ describe("this machine's own Stick Jump during an online session (R-T20a)", () =
     const { fake } = seated("guest");
     fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 0, stickJump: false } });
     expect(useMatchConfig.getState().players[0].stickJump).toBe(false);
-    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true });
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true, pad: DEFAULT_PAD_SETTINGS });
     leaveOnline();
     expect(useMatchConfig.getState().players[0].stickJump).toBe(true);
   });
@@ -1268,6 +1270,28 @@ describe("this machine's own Stick Jump during an online session (R-T20a)", () =
     setActiveSession(unseated.session);
     expect(setOwnStickJump(false)).toBe(false);
     expect(unseated.sent).toEqual([]);
-    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true });
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true, pad: DEFAULT_PAD_SETTINGS });
+  });
+
+  /** Plan 5, Task 21: the pad is this machine's alone, read here; only the packed frame travels, so nothing is said. */
+  it.each(["host", "guest"] as const)("keeps this machine's own pad on its own port, as the %s, sending nothing, and for after the session", (role) => {
+    const { fake, own } = seated(role);
+    const pad = rebind(DEFAULT_PAD_SETTINGS, "attack", 3);
+    expect(setOwnPad(pad)).toBe(true);
+    expect(useMatchConfig.getState().players.map((p) => p.pad)).toEqual(own === 0 ? [pad, DEFAULT_PAD_SETTINGS] : [DEFAULT_PAD_SETTINGS, pad]);
+    expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: true, pad });
+    expect(fake.sent).toEqual([]);
+    leaveOnline();
+    expect(useMatchConfig.getState().players[0].pad).toEqual(pad);
+  });
+
+  it("changes no pad with no session seated", () => {
+    const pad = rebind(DEFAULT_PAD_SETTINGS, "attack", 3);
+    expect(setOwnPad(pad)).toBe(false);
+    const unseated = fakeSession();
+    setActiveSession(unseated.session);
+    expect(setOwnPad(pad)).toBe(false);
+    expect(useMatchConfig.getState().players.map((p) => p.pad)).toEqual([DEFAULT_PAD_SETTINGS, DEFAULT_PAD_SETTINGS]);
+    expect(useMatchConfig.getState().localOptions.pad).toEqual(DEFAULT_PAD_SETTINGS);
   });
 });

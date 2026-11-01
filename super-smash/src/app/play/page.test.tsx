@@ -26,7 +26,7 @@ import type { World3dModule } from "@/game/useWorld3d";
 import type { WorldLayers, WorldOptions } from "@/game/world3d";
 import { CONTROL_STICK_JUMP_OFF, type FighterDef, type StageDef } from "@/engine/types";
 import type { BakeTables } from "@/engine/acmd/bakeTables";
-import type { GamepadOptions } from "@/input/gamepad";
+import { DEFAULT_PAD_SETTINGS, mappingFrom, rebind, type GamepadOptions } from "@/input/gamepad";
 import { claimContext } from "@/render3d/fakeContext";
 import { createModelCache } from "@/render3d/models/loader";
 import { CONTEXT_RESTORE_WAIT_MS, createRenderer3D, type GLLike, type Presenter3D } from "@/render3d/renderer3d";
@@ -494,9 +494,13 @@ describe("the play page, online", () => {
 
   it("lets every pad drive this player's own port, and lets go of them on unmount", async () => {
     goOnline("guest");
+    // Plan 5, Task 21: this machine's own pad settings, on its own seat (the other seat's are never read here).
+    const mine = rebind(DEFAULT_PAD_SETTINGS, "attack", 3);
+    useMatchConfig.getState().setLocalPad(1, mine);
     const { unmount } = await renderPage();
     const pad = only(mocks.pads);
     expect([0, 1, 2, 3].map((ordinal) => pad.options.portForPad?.(ordinal))).toEqual([1, 1, 1, 1]);
+    expect([0, 1].map((port) => pad.options.mappingForPort?.(port))).toEqual([mappingFrom(mine), mappingFrom(mine)]);
     expect(only(mocks.runners).options.gamepad).toBeTruthy();
     unmount();
     expect(pad.detach).toHaveBeenCalled();
@@ -789,6 +793,9 @@ describe("the play page, local", () => {
     const config = useMatchConfig.getState();
     config.addPlayer();
     config.setPlayerKind(2, "human");
+    // Plan 5, Task 21: each human's own pad settings, by port.
+    const third = rebind(DEFAULT_PAD_SETTINGS, "attack", 3);
+    config.setPad(2, third);
     const { unmount } = await renderPage();
     const { options } = only(mocks.runners);
     expect(options.net).toBeNull();
@@ -797,6 +804,7 @@ describe("the play page, local", () => {
     const pad = only(mocks.pads);
     expect(pad.options.holdPorts).toBe(true);
     expect([0, 1, 2].map((ordinal) => pad.options.portForPad?.(ordinal))).toEqual([0, 2, -1]);
+    expect([0, 2].map((port) => pad.options.mappingForPort?.(port))).toEqual([mappingFrom(DEFAULT_PAD_SETTINGS), mappingFrom(third)]);
     unmount();
     expect(pad.detach).toHaveBeenCalled();
   });

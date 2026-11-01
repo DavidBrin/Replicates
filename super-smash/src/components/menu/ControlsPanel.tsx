@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
 import { SkewPanel, SkewTag } from "@/components/ui/SkewPanel";
 import { cn } from "@/lib/cn";
+import { PadOptions } from "./PadOptions";
 import { PlayerOptions } from "./PlayerOptions";
 import {
   ACTION_LABELS,
@@ -224,8 +225,8 @@ export function ControlsPanel() {
             press waits five frames to see whether an attack follows it. The{" "}
             <strong className="text-white">Jump</strong> key has nothing to work out, so it fires the instant
             you press it — that is what it is there for. As in Ultimate,{" "}
-            <strong className="text-white">Stick jump</strong> can be turned off for each player below: then Up
-            only aims, and only the Jump key jumps.
+            <strong className="text-white">Stick jump</strong> can be turned off below for each person playing on
+            this machine: then Up only aims, and only the Jump key jumps.
           </p>
         </SkewPanel>
 
@@ -325,6 +326,7 @@ export function ControlsPanel() {
         </section>
 
         <PlayerOptions />
+        <PadOptions />
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_18rem]">
           <Keyboard bindings={active} />

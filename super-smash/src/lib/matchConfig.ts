@@ -3,6 +3,7 @@ import { create } from "zustand";
 
 import { fx } from "@/engine/fixed";
 import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
+import { DEFAULT_PAD_SETTINGS, mappingFrom, type GamepadMapping, type PadSettings } from "@/input/gamepad";
 import type {
   FighterDef,
   FighterPalette,
@@ -626,12 +627,27 @@ export interface PlayerSlot {
   scheme: SchemeId;
   /** Plan 5: Ultimate's "Stick Jump" (tap jump) — up on the stick jumps. On by default. Ignored for CPUs. */
   stickJump: boolean;
+  /**
+   * Plan 5: this player's gamepad buttons and right stick. Read on this
+   * machine only: what travels online is the packed frame.
+   */
+  pad: PadSettings;
 }
 
 /** A player's own control options (Plan 5): what `/controls` sets per port, and what an online session must not overwrite. */
-export type ControlOptions = Pick<PlayerSlot, "stickJump">;
+export type ControlOptions = Pick<PlayerSlot, "stickJump" | "pad">;
 
-const DEFAULT_CONTROL_OPTIONS: ControlOptions = { stickJump: true };
+const DEFAULT_CONTROL_OPTIONS: ControlOptions = { stickJump: true, pad: DEFAULT_PAD_SETTINGS };
+
+/** `slot` with `options` (or as it is, with none), field by field: a saved entry never brings anything else along. */
+function withOptions(slot: PlayerSlot, options: ControlOptions | undefined): PlayerSlot {
+  return options === undefined ? slot : { ...slot, stickJump: options.stickJump, pad: options.pad };
+}
+
+/** The gamepad mapping for a slot's pad settings (Plan 5). */
+export function padMappingOf(slot: Pick<PlayerSlot, "pad">): GamepadMapping {
+  return mappingFrom(slot.pad);
+}
 
 /** A slot's control options as the simulation's `CONTROL_*` bits (Plan 5). A CPU plays the default. */
 export function controlsOf(slot: Pick<PlayerSlot, "kind" | "stickJump">): number {
@@ -725,12 +741,22 @@ interface MatchConfigState {
   /**
    * Plan 5: this machine's player's control options through an online session:
    * taken from the offline seats by `configureOnline`, changed only by this
-   * machine's own edits (`setLocalStickJump`), never by the other player's pick,
-   * and seated again by `leaveOnline` (rulings P5-R26, R-T20a). Meaningful only
-   * while `online`: offline the seats hold the options, and this is left as the
-   * last session left it, unread.
+   * machine's own edits (`setLocalStickJump`, `setLocalPad`) and the load
+   * (`applyControlPrefs`), never by the other player's pick, and seated again
+   * by `leaveOnline` (rulings P5-R26, R-T20a). Meaningful only while `online`:
+   * offline the seats hold the options, and this is what the last session or
+   * load left, unread.
    */
   localOptions: ControlOptions;
+  /**
+   * Plan 5: each port's control options as kept between visits
+   * (`lib/controlPrefs.ts`): what `applyControlPrefs` loaded, with every
+   * `/controls` edit since. Only those setters and the load change it: never
+   * the other player's pick, an online session's seating, or adding or
+   * dropping a player (ruling P5-R26). `ControlPrefsSync` saves it whenever it
+   * changes, and a seat added or seated again takes its port's entry.
+   */
+  controlPrefs: ControlPrefs;
 
   setMode(mode: MatchRules["mode"]): void;
   setStocks(stocks: number): void;
@@ -750,14 +776,30 @@ interface MatchConfigState {
   setFighter(port: number, fighterId: string | null): void;
   setCostume(port: number, costume: number): void;
   setScheme(port: number, scheme: SchemeId): boolean;
-  /** Plan 5: turn a port's stick jump on or off. */
+  /** Plan 5: turn a port's stick jump on or off, on `/controls`; kept (`controlPrefs`). */
   setStickJump(port: number, on: boolean): void;
+  /**
+   * Plan 5: the other peer's Stick Jump, from their pick (P5-R25). Theirs, not
+   * this machine's: their port's seat alone, never kept (P5-R26).
+   */
+  setPeerStickJump(port: number, on: boolean): void;
+  /** Plan 5: a port's gamepad buttons and right stick, on `/controls`; kept (`controlPrefs`). */
+  setPad(port: number, pad: PadSettings): void;
   /**
    * Plan 5 (ruling R-T20a): this machine's own port's stick jump during an online
    * session, kept for after it (`localOptions`). `onlineStore.setOwnStickJump`,
    * which knows the port, calls it; the other player's pick never does.
    */
   setLocalStickJump(port: number, on: boolean): void;
+  /** Plan 5: this machine's own port's pad settings during an online session, as `setLocalStickJump` (`onlineStore.setOwnPad`). */
+  setLocalPad(port: number, pad: PadSettings): void;
+  /**
+   * Plan 5: each port's saved Stick Jump and pad settings (`ControlPrefsSync`).
+   * Offline they take their seats, and this machine's options follow its
+   * first human's. During an online session the seats are the session's:
+   * only this machine's options take port 0's, for `leaveOnline` to seat.
+   */
+  applyControlPrefs(prefs: ControlPrefs): void;
   /** Two humans, one per machine, each on their own keyboard's Config 1, both with this machine's control options. */
   configureOnline(): void;
   /** Back to the offline default: one human, with this machine's control options again, and a CPU. */
@@ -769,6 +811,16 @@ interface MatchConfigState {
   setResult(result: MatchResult | null): void;
   reset(): void;
 }
+
+/** Each port's kept control options (Plan 5); a port with none is absent. */
+export type ControlPrefs = Partial<Record<number, ControlOptions>>;
+
+/**
+ * Where this machine's player's options are kept while an online session
+ * holds them: port 0, where `leaveOnline` seats them again, so a reload
+ * brings back what leaving did.
+ */
+const LOCAL_PREFS_PORT = 0;
 
 function makePlayer(port: number): PlayerSlot {
   return {
@@ -784,18 +836,19 @@ function makePlayer(port: number): PlayerSlot {
   };
 }
 
-/** One human, with `local`'s control options, and a CPU. */
-function initialPlayers(local: ControlOptions = DEFAULT_CONTROL_OPTIONS): PlayerSlot[] {
-  return [{ ...makePlayer(0), ...local }, makePlayer(1)];
+/** One human, with `local`'s control options, and a CPU with its port's kept ones (`saved`). */
+function initialPlayers(local: ControlOptions = DEFAULT_CONTROL_OPTIONS, saved: ControlPrefs = {}): PlayerSlot[] {
+  return [withOptions(makePlayer(0), local), withOptions(makePlayer(1), saved[1])];
 }
 
 /**
  * An online port. Both start with this machine's player's control options —
- * the local port keeps them, and the remote one is overwritten by the other
- * peer's pick (`onlineStore`).
+ * the local port keeps them, and the remote one's Stick Jump is overwritten by
+ * the other peer's pick (`onlineStore`). The remote one's pad settings are
+ * never read here: the other peer's pad is on their machine.
  */
 function onlinePlayer(port: number, local: ControlOptions): PlayerSlot {
-  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows", ...local };
+  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows", stickJump: local.stickJump, pad: local.pad };
 }
 
 /**
@@ -805,7 +858,32 @@ function onlinePlayer(port: number, local: ControlOptions): PlayerSlot {
 function localOptionsOf(s: Pick<MatchConfigState, "online" | "localOptions" | "players">): ControlOptions {
   if (s.online) return s.localOptions;
   const local = s.players.find((p) => p.kind === "human") ?? s.players[0];
-  return local === undefined ? DEFAULT_CONTROL_OPTIONS : { stickJump: local.stickJump };
+  return local === undefined ? DEFAULT_CONTROL_OPTIONS : { stickJump: local.stickJump, pad: local.pad };
+}
+
+/** A `/controls` edit to `port`'s seat (Plan 5): the seat changes, and so does what is kept for the port. */
+function editSeat(s: MatchConfigState, port: number, edit: Partial<ControlOptions>): Partial<MatchConfigState> {
+  const seat = s.players.find((p) => p.port === port);
+  if (seat === undefined) return {};
+  const options: ControlOptions = { stickJump: seat.stickJump, pad: seat.pad, ...edit };
+  return {
+    players: s.players.map((p) => (p === seat ? withOptions(p, options) : p)),
+    controlPrefs: { ...s.controlPrefs, [port]: options },
+  };
+}
+
+/**
+ * This machine's own edit during an online session (R-T20a): its own seat,
+ * its options for after the session (`localOptions`), and what is kept for
+ * them, under `LOCAL_PREFS_PORT`.
+ */
+function editLocal(s: MatchConfigState, port: number, edit: Partial<ControlOptions>): Partial<MatchConfigState> {
+  const localOptions: ControlOptions = { ...s.localOptions, ...edit };
+  return {
+    players: s.players.map((p) => (p.port === port ? withOptions(p, { stickJump: p.stickJump, pad: p.pad, ...edit }) : p)),
+    localOptions,
+    controlPrefs: { ...s.controlPrefs, [LOCAL_PREFS_PORT]: localOptions },
+  };
 }
 
 /**
@@ -840,6 +918,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   result: null,
   online: false,
   localOptions: DEFAULT_CONTROL_OPTIONS,
+  controlPrefs: {},
 
   setMode: (mode) => set((s) => ({ rules: { ...s.rules, mode } })),
 
@@ -860,7 +939,8 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   addPlayer: () =>
     set((s) => {
       if (s.players.length >= MAX_PLAYERS) return s;
-      const players = [...s.players, makePlayer(s.players.length)];
+      const port = s.players.length;
+      const players = [...s.players, withOptions(makePlayer(port), s.controlPrefs[port])];
       return { players, rules: withDerivedRules(s.rules, players) };
     }),
 
@@ -922,14 +1002,24 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
     return true;
   },
 
-  setStickJump: (port, on) =>
+  setStickJump: (port, on) => set((s) => editSeat(s, port, { stickJump: on })),
+
+  setPeerStickJump: (port, on) =>
     set((s) => ({ players: s.players.map((p) => (p.port === port ? { ...p, stickJump: on } : p)) })),
 
-  setLocalStickJump: (port, on) =>
-    set((s) => ({
-      players: s.players.map((p) => (p.port === port ? { ...p, stickJump: on } : p)),
-      localOptions: { ...s.localOptions, stickJump: on },
-    })),
+  setPad: (port, pad) => set((s) => editSeat(s, port, { pad })),
+
+  setLocalStickJump: (port, on) => set((s) => editLocal(s, port, { stickJump: on })),
+
+  setLocalPad: (port, pad) => set((s) => editLocal(s, port, { pad })),
+
+  applyControlPrefs: (prefs) =>
+    set((s) => {
+      const controlPrefs = { ...prefs };
+      if (s.online) return { controlPrefs, localOptions: prefs[LOCAL_PREFS_PORT] ?? s.localOptions };
+      const players = s.players.map((p) => withOptions(p, prefs[p.port]));
+      return { players, controlPrefs, localOptions: localOptionsOf({ ...s, players }) };
+    }),
 
   configureOnline: () =>
     set((s) => {
@@ -941,11 +1031,12 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   // `result` is kept: the results screen calls this on its way out, and
   // clearing it there would flash "No match yet" before the navigation lands.
   // The local player's control options come back with the seat (P5-R26): the
-  // session, and the other player's pick, never change them.
+  // session, and the other player's pick, never change them. The CPU's seat
+  // takes its port's kept options, as a seat added does.
   leaveOnline: () =>
     set((s) => {
       const local = localOptionsOf(s);
-      const players = initialPlayers(local);
+      const players = initialPlayers(local, s.controlPrefs);
       return { players, rules: withDerivedRules(s.rules, players), online: false, localOptions: local };
     }),
 
@@ -996,6 +1087,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
       result: null,
       online: false,
       localOptions: DEFAULT_CONTROL_OPTIONS,
+      controlPrefs: {},
     }),
 }));
 

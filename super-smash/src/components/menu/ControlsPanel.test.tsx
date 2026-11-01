@@ -15,11 +15,23 @@ beforeEach(() => {
 });
 
 describe("ControlsPanel", () => {
-  /** Plan 5, Task 20 (item 7, and the fix round's M2): the player options are on the screen, and the Up rule says Stick Jump turns off. */
+  /**
+   * Plan 5, Task 20 (item 7, and the fix round's M2): the player options are on the screen, and the Up rule says Stick Jump turns off.
+   * Task 21 (item 10): for each person playing on this machine, which is every human offline and only this machine's player online (R-T20a).
+   */
   it("offers each human's Stick Jump, and says that it can be turned off", () => {
     render(<ControlsPanel />);
     expect(screen.getByRole("switch", { name: "P1 stick jump" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("heading", { name: /up jumps, like the stick/i }).parentElement).toHaveTextContent(/stick jump can be turned off/i);
+    expect(screen.getByRole("heading", { name: /up jumps, like the stick/i }).parentElement).toHaveTextContent(
+      /stick jump can be turned off below for each person playing on this machine/i,
+    );
+  });
+
+  /** Plan 5, Task 21: each human's gamepad buttons and right stick. */
+  it("offers each human's gamepad options", () => {
+    render(<ControlsPanel />);
+    expect(screen.getByRole("region", { name: "Gamepad" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "P1 right stick" })).toHaveValue("smash");
   });
 
   it("states the mirror-image problem in the numbers, not in prose alone", () => {

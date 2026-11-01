@@ -11,6 +11,7 @@ import { create } from "zustand";
 
 import type { MatchRules } from "@/engine/types";
 import { buildMismatch, describeMismatch, localBuild } from "@/game/onlineConfig";
+import type { PadSettings } from "@/input/gamepad";
 import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage, RefuseReason } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
@@ -426,7 +427,8 @@ function applyLobby(message: Extract<LobbyMessage, { kind: "pick" | "stage" | "a
       match.setFighter(remote, message.fighterId);
       match.setCostume(remote, message.costume);
       // Plan 5: their Stick Jump, which their pick leaves out when it is on (P5-R25).
-      match.setStickJump(remote, message.stickJump ?? true);
+      // Theirs, so never kept on this machine (P5-R26).
+      match.setPeerStickJump(remote, message.stickJump ?? true);
       return;
     }
     case "stage": {
@@ -476,6 +478,21 @@ export function setOwnStickJump(on: boolean): boolean {
   if (port === null) return false;
   useMatchConfig.getState().setLocalStickJump(port, on);
   sendOwnPick(port);
+  return true;
+}
+
+/**
+ * This machine's own pad settings, changed on `/controls` during an online
+ * session (Plan 5, Task 21; ruling R-T20a, as `setOwnStickJump`): only this
+ * machine's port is its to change, and the change is kept for after the
+ * session (`localOptions`). Nothing is said: the pad is read on this machine,
+ * and only the packed frame crosses the wire. False, changing nothing, with no
+ * session or one the room has not seated.
+ */
+export function setOwnPad(pad: PadSettings): boolean {
+  const port = getActiveSession()?.localPort ?? null;
+  if (port === null) return false;
+  useMatchConfig.getState().setLocalPad(port, pad);
   return true;
 }
 

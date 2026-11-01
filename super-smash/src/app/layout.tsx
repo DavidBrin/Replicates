@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Anton, M_PLUS_Rounded_1c } from "next/font/google";
 
+import { ControlPrefsSync } from "@/components/ControlPrefsSync";
 import { PRODUCT_NAME } from "@/lib/brand";
 
 import "./globals.css";
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-full bg-[#101215] antialiased" suppressHydrationWarning>
+        <ControlPrefsSync />
         {children}
       </body>
     </html>

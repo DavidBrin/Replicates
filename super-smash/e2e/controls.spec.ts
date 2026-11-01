@@ -13,11 +13,13 @@ import { ROUTES } from "./helpers";
 test("both control schemes are documented on the controls screen", async ({ page }) => {
   await page.goto(ROUTES.controls);
 
-  // Every action in Config 1, by the key a player would actually press.
+  // Every action in Config 1, by the key a player would actually press, bound
+  // on the keyboard diagram itself: the gamepad options name buttons "A" too.
+  const diagram = page.getByLabel("Keyboard diagram");
+  await expect(diagram).toBeVisible();
   for (const key of ["A", "D", "Q", "E", "W"]) {
-    await expect(page.getByText(key, { exact: true }).first()).toBeVisible();
+    await expect(diagram.locator(`[data-key="Key${key}"][data-bound]`).getByText(key, { exact: true })).toBeVisible();
   }
-  await expect(page.getByLabel("Keyboard diagram").first()).toBeVisible();
 });
 
 test("the screen explains why the two schemes cannot be used together", async ({ page }) => {
