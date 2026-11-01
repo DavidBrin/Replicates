@@ -113,7 +113,7 @@ import { ageWallContact, forgetWallContact, noteWallContact } from "./wallJump";
 import { ageFootstool, applyFootstools, footstoolHeads, type Footstool } from "./footstool";
 import { stopsAtEdge } from "./groundExit";
 import { dropsThroughSoft } from "./softDrop";
-import { FINAL_SMASH_READY, dropSmashBall, endDash, finalSmashActive, holdsAloft, inCinematic, inDash, trapVictim, updateCinematic } from "./final";
+import { FINAL_SMASH_READY, dropSmashBall, endDash, faceTrapped, finalSmashActive, holdsAloft, inCinematic, inDash, trapVictim, updateCinematic } from "./final";
 import {
   COPY_GRACE_FRAMES,
   HOLD_BLAST_REACH,
@@ -1102,8 +1102,17 @@ export function step(
   // Reflectors first: a reflected projectile neither clanks nor hits this frame (Plan 5).
   reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
   resolveClanks(s, candidates, (p) => projectileDefOf(ctx, p), events, destroyed);
+  // Who each fighter's trap held before the step's hits, and how each fighter faced: a
+  // trap's facings are settled once all of them have landed (`faceTrapped`; part 2's fix
+  // round 1, ruling R-FW2o), whatever order the ports take them in.
+  const trappedBefore = s.fighters.map((f) => (f.action === "finalTrapped" ? f.combat.trappedBy : -1));
+  const facingBefore = s.fighters.map((f) => f.facing);
   resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents);
   resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents);
+  for (const user of s.fighters) {
+    const caught = s.fighters.filter((v, i) => v.action === "finalTrapped" && v.combat.trappedBy === user.port && trappedBefore[i] !== user.port);
+    faceTrapped(user, caught, facingBefore[user.port]);
+  }
   if (destroyed.size > 0) {
     // A star a clank ends lets its rider go, as one whose flight ends does (Plan 5,
     // Task 13c: the star clanks now, `kirby_starmissile`'s `ATTACK_SETOFF_KIND_ON`).

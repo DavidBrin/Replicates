@@ -197,6 +197,17 @@ export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boo
  * who is in the cutscene. The reel it was in ends: the scene's last blow is
  * what launches it. `step` also drops any launch it had parked.
  *
+ * Who faces whom is settled once the step's traps have all landed (`faceTrapped`).
+ */
+export function trapVictim(user: FighterState, victim: FighterState, fighters: readonly FighterState[]): void {
+  releaseGrab(victim, fighters);
+  kineticClear(victim);
+  victim.hitstun = 0;
+  startAction(victim, "finalTrapped");
+  victim.combat.trappedBy = user.port;
+}
+
+/**
  * A user whose trap has caught only fighters behind it turns to face them, on the step
  * the trap lands (Plan 5 final wave 2, ruling R-FW2h; Task 17 re-reviews 1-3): Jungle
  * Rush's and Volt Tackle's catches reach behind their users by their scripts, and
@@ -208,15 +219,16 @@ export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boo
  * The trapped fighter faces its user, as a held fighter faces its captor
  * (`holdAtCaptor`); UNVERIFIED too, and the scene's drawing gaps (`FinalPhase.sceneGap`,
  * Task 17) were measured on fighters that do.
+ *
+ * Decided once, after all of the step's trap hits (`victims`, the fighters `user` trapped
+ * this step), against `facing`, the user's facing before them (part 2's fix round 1,
+ * ruling R-FW2o): a decision taken victim by victim, in port order, turned the user for
+ * the lower-port one alone when it was behind, and the outcome changed with the ports.
  */
-export function trapVictim(user: FighterState, victim: FighterState, fighters: readonly FighterState[]): void {
-  releaseGrab(victim, fighters);
-  kineticClear(victim);
-  victim.hitstun = 0;
-  startAction(victim, "finalTrapped");
-  victim.combat.trappedBy = user.port;
-  if (trappedBy({ fighters }, user.port).every((v) => (v.x - user.x) * user.facing < 0)) user.facing = -user.facing;
-  victim.facing = victim.x === user.x ? -user.facing : user.x > victim.x ? 1 : -1;
+export function faceTrapped(user: FighterState, victims: readonly FighterState[], facing: number): void {
+  if (victims.length === 0) return;
+  if (victims.every((v) => (v.x - user.x) * facing < 0)) user.facing = -facing;
+  for (const v of victims) v.facing = v.x === user.x ? -user.facing : user.x > v.x ? 1 : -1;
 }
 
 /**

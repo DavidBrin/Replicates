@@ -345,6 +345,50 @@ describe("a trap behind its user (ruling R-FW2h)", () => {
     expect(scene.every((st) => st.fighters[0].facing === 1)).toBe(true);
   });
 
+  // Part 2's fix round 1, ruling R-FW2o (its re-review's I1): the turn is decided once,
+  // after the step's trap hits, against the user's facing before them (`faceTrapped`), so
+  // swapping only the ports of the two fighters it traps changes nothing. Each scene traps
+  // one fighter ahead of its user and one behind (Marth's: one his dash carries him past)
+  // on one step. Kirby's catch reaches nobody behind him (`TRAP_REACH_BEHIND`), and no
+  // scene traps one either side of him (a scan of 1 to 30 ahead and 0.25 to 16 behind,
+  // three pairs of victims), so he has none.
+  const TWO_SIDED = [
+    { user: "donkeyKong", a: ["mario", 18], b: ["fox", -3] },
+    { user: "marth", a: ["mario", 12], b: ["fox", 3] },
+    { user: "fox", a: ["fox", 10], b: ["donkeyKong", -0.5] },
+    { user: "pikachu", a: ["mario", 4], b: ["fox", -2] },
+  ] as const;
+
+  it.each(TWO_SIDED)("$user, trapping one fighter either side on one step, faces and launches the same with their ports swapped (ruling R-FW2o)", ({ user, a, b }) => {
+    /** `user` at −30 facing right, the two others at −30 + their gaps, facing left, on ports in `order`. */
+    const play = (order: readonly (readonly [string, number])[]) => {
+      const s = createInitialState("finalDestination", [{ defId: user }, ...order.map(([id]) => ({ defId: id }))], RULES, 6);
+      const xs = [fx(-30), ...order.map(([, gap]) => fx(-30 + gap))];
+      s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: xs[i], y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+      s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+      const { states } = run(s, 400);
+      const trappedOn = [1, 2].map((p) => states.findIndex((st) => st.fighters[p].action === "finalTrapped"));
+      expect(trappedOn[0]).toBeGreaterThan(0);
+      expect(trappedOn[1]).toBe(trappedOn[0]);
+      const t = trappedOn[0];
+      // Which way each (by fighter, not port) is launched when the scene lets it go.
+      const launch = (p: number) => Math.sign(states.slice(t).find((st) => st.fighters[p].action !== "finalTrapped" && st.fighters[p].vx !== 0)?.fighters[p].vx ?? 0);
+      return {
+        facing: states[t].fighters[0].facing,
+        scene: states.filter((st) => st.cinematic === 0).map((st) => st.fighters[0].facing),
+        faced: [1, 2].map((p) => states[t].fighters[p].facing === Math.sign(states[t].fighters[0].x - states[t].fighters[p].x)),
+        launched: Object.fromEntries([1, 2].map((p) => [`${order[p - 1][0]} ${order[p - 1][1]}`, launch(p)])),
+      };
+    };
+    const ab = play([a, b]);
+    const ba = play([b, a]);
+    expect(ab.facing).toBe(1);
+    expect(ab.scene.length).toBeGreaterThan(0);
+    expect(ab.scene.every((f) => f === 1)).toBe(true);
+    expect(ab.faced).toEqual([true, true]);
+    expect(ba).toEqual(ab);
+  });
+
   it("Marth, whose dash carries him past Mario 2 ahead, turns and strikes him away, not back through himself", () => {
     // Task 17 re-review 1: the dash moves Marth 6 on its frame 25 before the catch
     // reaches Mario, who ends up 4 behind him.
