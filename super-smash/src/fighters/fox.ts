@@ -1115,6 +1115,11 @@ const legacy: FighterDef = {
       name: "Team Star Fox (end)",
       totalFrames: 25,
       aerialTotalFrames: 29,
+      // Visual only (part 2's fix round 1, the re-review's M4): the bake holds
+      // `final_end`'s clip alone, 25 frames, and the renderer has no aerial length, so in
+      // the air the end's last pose holds for its last 4 frames. It follows from the
+      // UNVERIFIED reading of FINAL_END_EXIT above; the bake is left as it is (an aerial
+      // clip, `final_air_end`'s, would need the renderer to pick a clip by where Fox is).
       // Through the longer of the two, the aerial end's.
       intangible: [1, 29],
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 9 to the

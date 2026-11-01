@@ -63,8 +63,9 @@ export function rollOf(a: GroundDodgeAttributes, charge: number): DodgeFrames {
 /**
  * A ground dodge's intangible window as [first, last] `actionFrame`: UFD's
  * frames a-b are `actionFrame` a − 1 to b − 1 (the module's convention). The
- * roster's earliest is frame 3, so the window never starts on the entry frame,
- * which `updateDodgeIntangibility` does not see (the status changes after it).
+ * roster's earliest is frame 3, so the window never starts on the entry frame;
+ * one that did would hold there too, as `updateDodgeIntangibility` is run again
+ * after the status (`advanceFighter`; Plan 5 final wave 2, ruling R-FW2a).
  */
 export function dodgeIntangible(d: DodgeFrames): readonly [number, number] {
   return [d.intangible[0] - 1, d.intangible[1] - 1];

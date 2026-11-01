@@ -133,8 +133,9 @@ export function airDodgeFrames(a: AirDodgeAttributes, charge: number): number {
  * gives published frames `xlu` to `xlu + normal − 1` (`AirDodgeAttributes`),
  * which are `actionFrame` `xlu − 1` to `xlu + normal − 2` (the module's
  * convention, above): Mario's directional 3-21 is `actionFrame` 2-20. The
- * roster's smallest `xlu` is 2, so the window never starts on the entry frame,
- * which `updateDodgeIntangibility` does not see (the status changes after it).
+ * roster's smallest `xlu` is 2, so the window never starts on the entry frame;
+ * one that did would hold there too, as `updateDodgeIntangibility` is run again
+ * after the status (`advanceFighter`; Plan 5 final wave 2, ruling R-FW2a).
  */
 export function airDodgeIntangible(a: AirDodgeAttributes, charge: number): readonly [number, number] {
   const d = airDodgeDirection(charge);
