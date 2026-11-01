@@ -35,6 +35,7 @@
 
 import {
   Btn,
+  CONTROL_STICK_JUMP_OFF,
   type ActionState,
   type AirDodgeAttributes,
   type FighterDef,
@@ -50,6 +51,7 @@ import {
   type StageDef,
 } from "@/engine/types";
 import { cloneFighter } from "@/engine/simulate";
+import { emptyKinetic } from "@/engine/kinetic";
 import { isFinalSlot } from "@/engine/final";
 import {
   DOWNED_FRAMES,
@@ -92,6 +94,7 @@ import {
   SDI_INPUT_INTERVAL,
   SHIELD_MIN_HOLD,
   SMASH_INPUT_WINDOW,
+  TAP_JUMP_FRAMES,
   BOUNCE_FLOOR_LAUNCH_RATIO,
   TECH_FLOOR_MAX_SPEED,
   TECH_LOCKOUT,
@@ -1847,16 +1850,34 @@ export const recover: Behaviour = (ctx) => {
     // one fires on, reads as the up special and not a side or neutral one. A held
     // Up turns into a tap jump five frames on, which takes the buffer from a
     // Special pressed during an aerial (Task 19, the Task 13b fix round 1's
-    // concern): it presses again on the first frame Special is up after that.
+    // concern): it presses again on the first frame Special is up after that. And
+    // it never presses Special on the step that tap jump fires (Plan 5 final wave,
+    // ruling R-FW1g; Task 20 fix round 1's probe 3): a jump outranks a special in the
+    // buffer (`bufferPress`), so that press was lost and the up special came out 3 to
+    // 22 frames late. It waits that one step and presses on the next, where the
+    // Special it held off is up (`tapJumped`).
     const b = self.bufferedAction;
     const displaced = b !== null && b.kind === "jump" && ctx.view.frame + 1 - b.frame <= BUFFER_FRAMES;
-    const firing = displaced ? !pulse(ctx.view.frame - 1, self.port, 6, 3) : pulse(ctx.view.frame, self.port, 6, 3);
+    const heldBefore = pulse(ctx.view.frame - 1, self.port, 6, 3) && !tapJumped(self, 0);
+    const firing = (displaced ? !heldBefore : pulse(ctx.view.frame, self.port, 6, 3)) && !tapJumped(self, 1);
     const stick = plan === null ? drift : upBStickNow(plan, self, r!);
     return { score: 950, input: firing ? upBPress(stick) : upBHold(stick) };
   }
 
   return { score: 900, input: drift | (jumping ? Btn.Jump : 0) };
 };
+
+/**
+ * Whether a held Up's tap jump fires on the step `ahead` from now (1: the next step,
+ * the one this frame's press is read on; 0: the step just run): the fighter's own Stick
+ * Jump on (`CombatState.controls`; Plan 5, Task 20), Up the last direction pressed, and
+ * held to the window's end (`interpretInput`: `TAP_JUMP_FRAMES` after the press, counted
+ * on the step that reads the input). `recover` holds Up throughout, so it is held.
+ */
+function tapJumped(self: FighterState, ahead: number): boolean {
+  if ((self.combat.controls & CONTROL_STICK_JUMP_OFF) !== 0 || self.lastDirPressed !== Btn.Up) return false;
+  return self.framesSinceDirPress + ahead === TAP_JUMP_FRAMES;
+}
 
 /**
  * UNVERIFIED (CPU judgement): within this of a ledge, or past one, an aerial is
@@ -1974,8 +1995,11 @@ const UPB_LOOKAHEAD_FRAMES = 120;
  * `findLedgeGrab` refuses: then only coming down on the stage gets it back. And
  * whether the path on the way passes through the main stage's solid body, under
  * its top (`throughWall`): the engine's stage stops a body there, so a line that
- * does is one the model cannot vouch for (`upBPlan` takes another where one gets
- * back; the Task 13b re-review's Fox at f2681 re-planned into one).
+ * does is one the model cannot vouch for, and it is no way back (Plan 5 final wave,
+ * ruling R-FW1f; the Task 4b re-review's carry, 28 of 1,888 "yes" at Task 4b): the
+ * path stops where it meets the body. Not modelled, as for the ledge: the body's
+ * half-width (the origin meets the wall), so a line that only grazes it with the
+ * body's side is still judged by the origin.
  */
 export function upBReach(
   self: FighterState,
@@ -2002,7 +2026,7 @@ export function upBReach(
     // Facing the ledge as the path faces it then (the move may have turned it).
     const range = p.facing === toward ? LEDGE_GRAB_RANGE_X : mul(LEDGE_GRAB_RANGE_X, LEDGE_GRAB_BACK_PENALTY);
     if (ledgeFree && p.vy <= 0 && past <= 0 && -past <= range && drop >= 0 && drop <= LEDGE_GRAB_RANGE_Y) return (reached = true);
-    if (onStage && y < stage.groundY && y > stage.groundY - HARD_PLATFORM_DEPTH) throughWall = true;
+    if (onStage && y < stage.groundY && y > stage.groundY - HARD_PLATFORM_DEPTH) return (throughWall = true);
     prevY = y;
     return p.helpless && drop > LEDGE_GRAB_RANGE_Y;
   });
@@ -2017,21 +2041,15 @@ export function upBInReach(self: FighterState, ledge: number, stage: StageView, 
 /**
  * The first stick, in `upBSticks`' order, with which the up special gets the
  * fighter back from here, or null. Used before the move, to decide to spend it,
- * and during it, to hold the stick that keeps it on course. A line the stage's
- * wall does not block comes before one it does (`upBReach`'s `throughWall`; Plan
- * 5, Task 19), so the plan in the move is the plan it was pressed with, not a
- * diagonal into the wall.
+ * and during it, to hold the stick that keeps it on course. A line through the
+ * stage's wall is no way back (`upBReach`; ruling R-FW1f, where Task 19 had taken one
+ * when no other got back), so the plan in the move is the plan it was pressed with,
+ * not a diagonal into the wall.
  */
 export function upBPlan(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove, frame0 = 0, ledgeFree = true): UpBStick | null {
   const toward = ledge > self.x ? 1 : -1;
-  let blocked: UpBStick | null = null;
-  for (const plan of upBSticks(r, toward)) {
-    const reach = upBReach(self, ledge, stage, r, plan, frame0, ledgeFree);
-    if (!reach.reached) continue;
-    if (!reach.throughWall) return plan;
-    blocked ??= plan;
-  }
-  return blocked;
+  for (const plan of upBSticks(r, toward)) if (upBReach(self, ledge, stage, r, plan, frame0, ledgeFree).reached) return plan;
+  return null;
 }
 
 /**
@@ -2219,7 +2237,13 @@ function cannotAct(f: FighterState): boolean {
  * (none); one whose first sight `threatBefore` rebuilds out of range on the frame
  * after a last-frame decision whose roll failed (two; a passing roll's press waits in
  * the buffer, and `shield` stands on it); one first seen in a helpless move that
- * lands into its special landing (two, `heldFor`). Each is counted in the sweep.
+ * lands into its special landing (two, `heldFor`); for a fighter with a counter, a
+ * swing that leaves the range and comes back into it after its counter frame (two:
+ * R-T19l amended decides at every range entry past the counter's frame, and where the
+ * swing was on that frame is kept nowhere; the Task 19 re-review's New Breakage 1);
+ * and one whose one-frame rebuild (`threatBefore`) puts it just out of range where the
+ * view had it just inside, its velocity having changed on the way (two; the hitlag
+ * kind is closed: ruling R-FW1h). Each is counted in the sweep.
  */
 function shieldDecides(ctx: BehaviourContext): boolean {
   const { self, targetActionAge } = ctx.view;
@@ -2283,10 +2307,19 @@ function threatNow(ctx: BehaviourContext): boolean {
  * then (it had been visible a frame already) and in range then: the target one
  * frame further back on its velocity (`rewind`, as `observe` sees it), this
  * fighter one frame back on its own.
+ *
+ * An attacker frozen in hitlag holds its frame (Plan 5 final wave, ruling R-FW1h):
+ * first seen in its freeze, it shows the same first sight on every frame of the
+ * freeze, so each read as new and was decided again (about 2,900 times in 48 sweeps,
+ * the Task 19 re-review counted). Its first sight is taken as the freeze's last frame
+ * (hitlag 0), as the counter takes it (`counterWait`): one decision. Older than its
+ * first sight, a freeze is rebuilt on its velocity like any frame (the edge of the
+ * range is the residual: `shieldDecides`).
  */
 function threatBefore(ctx: BehaviourContext): boolean {
   const { self, target, targetActionAge } = ctx.view;
-  if (target === null || targetActionAge < 1) return false;
+  if (target === null || targetActionAge < 0) return false;
+  if (targetActionAge === 0) return target.hitlag > 0;
   const dx = target.x - target.vx - (self.x - self.vx);
   const dy = target.y - target.vy - (self.y - self.vy);
   return magnitude(dx, dy) <= THREAT_RANGE;
@@ -2359,8 +2392,14 @@ export const attack: Behaviour = (ctx) => {
 
   const toward = towardX(0, dx);
   if (!facingTarget && self.grounded && toward !== 0) {
-    // Turning is an input, not a free action; hold the direction one frame.
-    return { score: 380, input: toward };
+    // Turning is an input, not a free action; hold the direction one frame. At point
+    // blank, the press that turns it without carrying it past the target (ruling
+    // R-FW1a: `pressToward`); and too close for any swing it has, it goes on stepping
+    // back, turned away, until one would land (ruling R-FW1b: `stepBack`).
+    if (abs(dx) < POINT_BLANK && free(self) && self.action !== "dashStart" && self.action !== "run" && landingSwing(facing(ctx)) === null && stepBack(ctx)) {
+      return { score: 380, input: towardX(dx, 0) };
+    }
+    return { score: 380, input: pressToward(self, dx) };
   }
 
   const swinging = pulse(ctx.view.frame, self.port, 10, 3);
@@ -2407,11 +2446,159 @@ export const attack: Behaviour = (ctx) => {
   // The default: a tilt if the direction has gone stale, a jab if it has not —
   // never an accidental smash, which is the classic keyboard misfire.
   const stale = self.framesSinceDirPress > SMASH_INPUT_WINDOW;
+  // A swing on the ground that would not land is not thrown (Plan 5 final wave, ruling
+  // R-FW1b): judged on the frame it would be pressed, by the move's own boxes run by the
+  // engine's rules from here against the target's body (`swingLands`). A dash's swing is
+  // its dash attack, whose slide carries it past a target too close: it ends the dash
+  // instead (ruling R-FW1a's stop, before a swing). From a standstill it swings the first
+  // of its jab and tilts that lands (`landingSwing`), and with none, at point blank, it
+  // steps back a frame (`stepBack`). Pressed during its own swing or a landing's lag, a
+  // swing waits in the buffer to come out from a standstill where it stands, so it is
+  // judged from there (`standing`), and one that would not land is not pressed: the
+  // first free frame chooses (the review's whiff loop was swing after swing, each
+  // pressed inside the last). Its forward tilt is pressed with a part-way push, which is
+  // a tilt whatever was held before: a direction the CPU let go of (a dash it ended)
+  // and pressed again with the button was a fresh flick, and so a smash, which slid it
+  // through the target.
+  const waits = self.action === "attack" || self.action === "landingLag" || self.action === "land";
+  if (swinging && self.grounded && (free(self) || waits)) {
+    const swing = (stale ? toward | Btn.Soft : 0) | Btn.Attack;
+    if (swingLands(waits ? standing(ctx) : ctx, swing)) return { score: 400, input: swing };
+    if (waits) return { score: 400, input: 0 };
+    if (self.action === "dashStart" || self.action === "run") return { score: 400, input: 0 };
+    const pick = landingSwing(ctx);
+    if (pick !== null) return { score: 400, input: pick };
+    if (abs(dx) < POINT_BLANK && stepBack(ctx)) return { score: 400, input: towardX(dx, 0) };
+  }
   return {
     score: 400,
     input: (stale ? toward : 0) | (swinging ? Btn.Attack : 0),
   };
 };
+
+/**
+ * UNVERIFIED (CPU judgement, measured; Plan 5 final wave, ruling R-FW1a): nearer than this
+ * in x, a target is point blank. A full press there starts a dash, or restarts one the
+ * other way (`groundMain`), whose first frame alone carries the fighter about two units
+ * (an initial dash, `dash_speed`: 1.87 to 2.25 across the roster), past a target that
+ * near before it can face it, so the next frame it is behind again: the final review's
+ * I1, a CPU turning every frame beside a standing opponent and never attacking. The
+ * review's figure, about three frames of an initial dash; measured, the idle-human
+ * probe's dash dances (29 of 64 matchups for 30 s or more) were gone at every distance
+ * from 3 to 12.
+ */
+export const POINT_BLANK = fx(6);
+
+/**
+ * The press that moves a grounded fighter toward a target `dx` away in x (ruling
+ * R-FW1a): the whole stick from `POINT_BLANK` or further. Nearer, in a dash or a run it
+ * lets go of the stick for a frame, which ends the dash (`stand`) or brakes the run
+ * (`runBrake`); from anything else, a part-way push (`Btn.Soft`), which walks and never
+ * dashes, never makes a smash and never a stick jump (`interpretInput`). The one place
+ * the rule is written: `attack`'s turn, `finalSmash`'s turn (`specials.ts`) and
+ * `approach` press through it.
+ */
+export function pressToward(self: FighterState, dx: number): InputFrame {
+  const toward = towardX(0, dx);
+  if (toward === 0 || abs(dx) >= POINT_BLANK) return toward;
+  if (self.action === "dashStart" || self.action === "run") return 0;
+  return toward | Btn.Soft;
+}
+
+/**
+ * The swings a CPU standing on the ground can choose, in the order it tries them (ruling
+ * R-FW1b): its jab, and its forward, up and down tilts, each with a part-way push
+ * (`Btn.Soft`), so a tilt is never a smash and an Up never a stick jump.
+ */
+const GROUND_SWINGS: readonly ((toward: InputFrame) => InputFrame)[] = [
+  () => Btn.Attack,
+  (toward) => toward | Btn.Soft | Btn.Attack,
+  () => Btn.Up | Btn.Soft | Btn.Attack,
+  () => Btn.Down | Btn.Soft | Btn.Attack,
+];
+
+/** The first of `GROUND_SWINGS` that lands from where the fighter stands (`swingLands`), or null. */
+function landingSwing(ctx: BehaviourContext): InputFrame | null {
+  const toward = towardX(0, ctx.view.dx);
+  for (const swing of GROUND_SWINGS) {
+    const input = swing(toward);
+    if (swingLands(ctx, input)) return input;
+  }
+  return null;
+}
+
+/** The context as if the fighter stood still where it is, as a swing pressed in its own swing or a landing comes out (`attack`). */
+function standing(ctx: BehaviourContext): BehaviourContext {
+  const self: FighterState = { ...ctx.view.self, action: "stand", actionFrame: 0, move: null, vx: 0, vy: 0, kinetic: emptyKinetic() };
+  return { ...ctx, view: { ...ctx.view, self } };
+}
+
+/** The context as if the fighter faced its target from where it stands: what a turn would swing from (`attack`'s step back). */
+function facing(ctx: BehaviourContext): BehaviourContext {
+  const self: FighterState = { ...ctx.view.self, facing: ctx.view.dx >= 0 ? 1 : -1 };
+  return { ...ctx, view: { ...ctx.view, self, facingTarget: true } };
+}
+
+/**
+ * Whether a step back, away from the target (ruling R-FW1b), keeps the fighter on the
+ * stage: not within `POINT_BLANK` of the ledge behind it, where walking away from the
+ * target would walk it off.
+ */
+function stepBack(ctx: BehaviourContext): boolean {
+  const { self, dx } = ctx.view;
+  return !isOffstage({ ...self, x: self.x + (dx > 0 ? -POINT_BLANK : POINT_BLANK) }, ctx.stage);
+}
+
+/** UNVERIFIED (CPU judgement): the most frames a swing is run for (`swingLands`), past any first hit on the roster. */
+const SWING_LOOKAHEAD_FRAMES = 40;
+
+/**
+ * Whether `input`, pressed now (nothing held the frame before), starts a swing whose
+ * boxes reach the target's body (ruling R-FW1b): the fighter's own copy run by the
+ * engine's rules (`ghostStep`), the swing's live boxes on each of its frames placed where
+ * the copy is then (a dash attack's slide included), swept as the engine sweeps them, and
+ * reaching the target's hurt capsules (the bake's, `fighterHurtboxes`, with one; Plan 2's
+ * single capsule without) at least a glancing blow deep, the target carried on its own
+ * velocity, as the parry carries a swing (`parry`). True without the data to judge it
+ * (no definitions): the swing it always threw. Not modelled: the target's own animation
+ * past the frame seen (its pose as it is now).
+ */
+function swingLands(ctx: BehaviourContext, input: InputFrame): boolean {
+  const { self, target } = ctx.view;
+  const def = ctx.fighterDef;
+  const targetDef = target === null ? undefined : ctx.matchDefs[target.port];
+  if (def === null || target === null || targetDef === undefined) return true;
+  const f = cloneFighter(self);
+  const g = ghostContext(def, ctx.view.frame, f);
+  let prev: InputFrame = 0;
+  for (let k = 1; k <= SWING_LOOKAHEAD_FRAMES; k++) {
+    const was = { x: f.x, y: f.y };
+    const now = k === 1 ? input : input & ~Btn.Attack;
+    g.frame = ctx.view.frame + k;
+    ghostStep(f, now, prev, g);
+    prev = now;
+    const move = f.action === "attack" && f.move !== null ? def.moves[f.move] : undefined;
+    if (move === undefined) return false;
+    const moveFrame = f.actionFrame + 1;
+    const live = move.hitboxes.filter(
+      (hb) =>
+        strikes(hb) &&
+        hb.startFrame <= moveFrame &&
+        moveFrame <= hb.endFrame &&
+        (hb.whileGrounded === undefined || hb.whileGrounded === f.grounded) &&
+        !((hb.situation === "ground" && !target.grounded) || (hb.situation === "air" && target.grounded)),
+    );
+    if (live.length === 0) continue;
+    const at = { x: target.x + target.vx * k, y: target.y + target.vy * k };
+    const body = (ctx.bake === undefined ? null : fighterHurtboxes(targetDef, { ...target, ...at }, ctx.view.frame + k, ctx.bake)) ?? [hurtboxCapsule(at, targetDef.attributes)];
+    for (const hb of live) {
+      const box = boxCapsule(f, hb);
+      const from = hitboxWorldPos(was.x, was.y, f.facing, hb);
+      if (deepestReach(from.x, from.y, box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, box.r, body).depth >= GLANCING_BLOW_DEPTH) return true;
+    }
+  }
+  return false;
+}
 
 /** UNVERIFIED (CPU judgement): the swings in a row on a shield, one move, that make a loop to break. */
 export const SHIELD_LOOP = 3;
@@ -2479,7 +2666,9 @@ export const approach: Behaviour = (ctx) => {
   // and punch nothing for the rest of the match.
   if (distance <= ctx.meleeReach) return NOTHING;
 
-  let input = towardX(0, dx);
+  // On the ground, the press that does not dash past a target straight above or below
+  // (ruling R-FW1a: `pressToward`), which turned it every frame under a falling target.
+  let input = self.grounded ? pressToward(self, dx) : towardX(0, dx);
   // Jumping toward a target well above is the same decision as platformMove,
   // scored lower here so the platform-aware version wins when it applies.
   if (dy > VERTICAL_REACH * 2 && self.grounded && fullHopPulse(ctx.view.frame, self.port)) {

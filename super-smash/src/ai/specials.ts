@@ -37,6 +37,7 @@ import {
   type ActionState,
   type FighterDef,
   type FighterState,
+  type Hitbox,
   type MoveDef,
   type MoveSlot,
   type ProjectileDef,
@@ -54,6 +55,7 @@ import {
   fullHopPulse,
   isOffstage,
   moveReach,
+  pressToward,
   pulse,
   sideRecoveryFromDef,
   specialWith,
@@ -233,7 +235,10 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *  - one that traps with its first hit is used with the target inside that hit's
  *    reach (`finalReach`, from its own boxes), in front, and committed: its windup
  *    is long (Jungle Rush's trap comes out on 29, Team Star Fox's on 28), and a
- *    target free to move walks out of it;
+ *    target free to move walks out of it; and, as the one that fires along the stage,
+ *    with the user over the stage (Plan 5 final wave, ruling R-FW1d; the final
+ *    review's M1: Kirby started Ultra Sword off the stage in 5 of 123 natural uses, and
+ *    under stress whiffed it at a recovering Samus and fell short);
  *  - one that dashes (Critical Hit, Volt Tackle; `MoveDef.momentum`) only from the
  *    ground, with floor ahead for its momentum's slide and `FINAL_SMASH_EDGE_ROOM`
  *    more (`roomAhead`: the floor it stands on, a soft platform's end included), and
@@ -254,8 +259,10 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    behind Pikachu; nor was a run, or a stand still sliding from one: its speed slid
  *    Pikachu past the target in the windup, and the dash went on alone.)
  *
- * It turns to face the target first (a grounded turn is an input). No roll: the
- * power is a sure thing, kept until the moment comes.
+ * It turns to face the target first (a grounded turn is an input), at point blank with
+ * the press that does not carry it past (ruling R-FW1a: `pressToward`; the review's I1:
+ * the CPU held the power through a dash dance, which stopped the Smash Ball for
+ * everybody). No roll: the power is a sure thing, kept until the moment comes.
  */
 export const finalSmash: Behaviour = (ctx) => {
   const { self, target, targetAction, dx, dy, facingTarget } = ctx.view;
@@ -272,11 +279,11 @@ export const finalSmash: Behaviour = (ctx) => {
     const safe = fs.dashEnd?.edge === true || (ahead <= FINAL_SMASH_RANGE && held);
     if (!safe) return NOTHING;
   } else if (fs.final?.trap === true) {
-    if (abs(dy) > VERTICAL_REACH || ahead > finalReach(fs) || !committed) return NOTHING;
+    if (abs(dy) > VERTICAL_REACH || ahead > finalReach(fs) || !committed || isOffstage(self, ctx.stage)) return NOTHING;
   } else {
     if (abs(dy) > FINAL_SMASH_BAND || isOffstage(self, ctx.stage) || (!target.grounded && !committed)) return NOTHING;
   }
-  if (!facingTarget) return self.grounded ? { score: 880, input: towardX(0, dx) } : NOTHING;
+  if (!facingTarget) return self.grounded ? { score: 880, input: pressToward(self, dx) } : NOTHING;
   return { score: 900, input: pulse(ctx.view.frame, self.port, 2, 1) ? Btn.Special : 0 };
 };
 
@@ -486,6 +493,16 @@ export function moveRange(move: MoveDef, full = false): number {
   return range;
 }
 
+/**
+ * Whether a move's release can hurt anybody: a box of its own or of a projectile it
+ * launches that deals damage, not a windbox, which only pushes (F.L.U.D.D.'s water:
+ * `mario.ts`, `waterPump`), nor a catch.
+ */
+function releaseHurts(move: MoveDef): boolean {
+  const hurts = (hb: Pick<Hitbox, "damage" | "windbox" | "grabbing">) => hb.damage > 0 && hb.windbox !== true && hb.grabbing !== true;
+  return move.hitboxes.some(hurts) || (move.projectiles ?? []).some((p) => hurts(p.hitbox));
+}
+
 /** The target in front, level, and within `range`: where a straight shot meets it. */
 function linedUp(ctx: BehaviourContext, range: number): boolean {
   const { dx, dy, facingTarget } = ctx.view;
@@ -501,7 +518,10 @@ function linedUp(ctx: BehaviourContext, range: number): boolean {
  *    (`CHARGE_FAR`), lets the move build it, and puts it away with its shield if
  *    the opponent comes close (`storeMain`); with a full one kept, it lets it go
  *    lined up, inside the move's range (`moveRange`). Starting and firing are each
- *    one roll an opening.
+ *    one roll an opening. One whose release only pushes (`releaseHurts`: no box of
+ *    it deals damage, F.L.U.D.D.'s water) it lets go only at an opponent off the
+ *    stage, where a push is a gimp, and otherwise keeps (Plan 5 final wave: R-FW1c's
+ *    probe had a Mario CPU charge and spray an idle player for 120 s without a hit).
  *  - **Held B charges** (`HoldCharge`) with a projectile (Hero's Bow): started the
  *    same way, lined up and far; held while the opponent stays out of reach and
  *    the charge is short of full, let go otherwise.
@@ -544,7 +564,8 @@ export const storeCharge: Behaviour = (ctx) => {
   if (store !== null) {
     const sc = store.move.specialCharge!;
     const full = self.combat.storedCharge >= sc.frames;
-    if (full && linedUp(ctx, moveRange(store.move, true))) return skilled(ctx) ? { score: 470, input: store.dir | Btn.Special } : NOTHING;
+    const pushOnly = !releaseHurts(store.move);
+    if (full && linedUp(ctx, moveRange(store.move, true)) && (!pushOnly || isOffstage(target, ctx.stage))) return skilled(ctx) ? { score: 470, input: store.dir | Btn.Special } : NOTHING;
     if (!full && distance > CHARGE_FAR) return skilled(ctx) ? { score: 350, input: store.dir | Btn.Special } : NOTHING;
   }
   if (bow !== null && distance > CHARGE_FAR && linedUp(ctx, moveRange(bow.move))) {

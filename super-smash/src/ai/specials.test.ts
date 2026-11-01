@@ -152,6 +152,31 @@ describe("the Final Smash", () => {
     expect(held(r.input, Btn.Special)).toBe(false);
   });
 
+  it("turns at point blank as `attack` does: a dash let go for a frame, a standstill's part-way push (ruling R-FW1a)", () => {
+    // The final review's I1: the CPU holds any Final Smash power through a dash dance, so
+    // the loop stopped the Smash Ball for everybody. A target 0.6 behind.
+    const near = (action: "dashStart" | "stand") => ready(0.6, { facing: -1, action, framesSinceDirPress: 30 });
+    expect(finalSmash(context(near("dashStart"), mario)).input).toBe(0);
+    expect(finalSmash(context(near("stand"), mario)).input).toBe(Btn.Right | Btn.Soft);
+  });
+
+  it("does not fire a trapping one from off the stage, as it fires none that needs no aim (ruling R-FW1d; the final review's M1)", () => {
+    // Kirby just off Final Destination's right ledge, in the air facing in, a committed
+    // target on the stage inside Ultra Sword's reach: it whiffed offstage under stress.
+    const off = makeState({
+      fighters: [
+        makeFighter({ port: 0, x: FD.rightLedge + fx(4), y: fx(4), grounded: false, action: "fall", finalSmashReady: FINAL_SMASH_READY, facing: -1, defId: "kirby" }),
+        makeFighter({ port: 1, x: FD.rightLedge - fx(8), action: "landingLag", actionFrame: 20 }),
+      ],
+    });
+    expect(isOffstage(off.fighters[0], FD)).toBe(true);
+    expect(finalSmash(context(off, kirby, 9, undefined, FD)).score).toBe(0);
+    // Over the stage, the same target in the same reach: used.
+    off.fighters[0] = makeFighter({ port: 0, x: FD.rightLedge - fx(16), y: fx(4), grounded: false, action: "fall", finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "kirby" });
+    const fire = [0, 1, 2, 3].map((f) => finalSmash(context({ ...off, frame: f }, kirby, 9, undefined, FD)).input);
+    expect(fire.some((i) => held(i, Btn.Special))).toBe(true);
+  });
+
   it("never whiffs Volt Tackle toward an open blast line: point-blank on a committed target only", () => {
     // Its 166-unit dash is longer than any stage, and a whiff carries on and falls.
     expect(finalSmash(context(ready(40, { x: 0 }), pikachu)).score).toBe(0);
@@ -640,6 +665,24 @@ describe("stored charges", () => {
     // Above it, the shot flies under: nothing.
     lined.fighters[1].y = fx(40);
     expect(storeCharge(context(lined, samus)).score).toBe(0);
+  });
+
+  it("keeps a full charge that only pushes for an opponent off the stage: F.L.U.D.D.'s water, at one standing on it, is kept (Plan 5 final wave)", () => {
+    // R-FW1c's probe: a level-9 Mario charged F.L.U.D.D. at an idle player, sprayed water
+    // that lands no damage (its boxes are all windboxes), charged again, and never hit
+    // anybody for the whole 120 seconds.
+    const fludd = mario.moves.downB!;
+    expect(fludd.specialCharge?.mode).toBe("store");
+    expect([...fludd.hitboxes, ...(fludd.projectiles ?? []).map((p) => p.hitbox)].every((hb) => hb.windbox === true || hb.damage === 0)).toBe(true);
+    const lined = (x: number, y = 0) => {
+      const s = makeState({ fighters: [makeFighter({ port: 0, facing: 1, defId: "mario" }), makeFighter({ port: 1, x: fx(x), y: fx(y), grounded: y === 0, action: y === 0 ? "stand" : "fall" })] });
+      s.fighters[0].combat.storedCharge = fludd.specialCharge!.frames;
+      return s;
+    };
+    expect(storeCharge(context(lined(50), mario, 9, undefined, FD)).score).toBe(0);
+    // Off the stage, where a push is a gimp, it is let go.
+    expect(held(storeCharge(context(lined(FD.rightLedge / 4096 + 10, 4), mario, 9, undefined, FD)).input, Btn.Special)).toBe(true);
+    // A charge that hurts is let go at one on the stage, as before (Samus, above).
   });
 
   it("lets the charge build while the opponent is far, and puts it away with its shield when they come close", () => {

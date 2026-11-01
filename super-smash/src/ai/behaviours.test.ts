@@ -13,6 +13,8 @@ import {
   GRAB_RANGE,
   MELEE_RANGE,
   ROLL_RECOVER,
+  POINT_BLANK,
+  ROLL_SHIELD,
   approach,
   attack,
   blastMargin,
@@ -30,6 +32,7 @@ import {
   moveReach,
   observe,
   platformMove,
+  pressToward,
   pulse,
   recover,
   recoveryFromDef,
@@ -42,10 +45,15 @@ import {
   type LevelTuning,
   type RecoveryMove,
 } from "./behaviours";
-import { getFighter } from "@/fighters";
+import { FIGHTERS, getFighter } from "@/fighters";
 import { ENTRY_INTANGIBILITY, dodgeWindow } from "@/engine/states";
 import { FOOTSTOOL_INTANGIBLE_FIRST } from "@/engine/footstool";
-import { BEHAVIOURS, tuningForLevel } from "./cpu";
+import { createInitialState, step } from "@/engine/simulate";
+import type { InputFrame } from "@/engine/types";
+import { bakedContext } from "@/game/bake";
+import { readBakeFromDisk } from "@/game/bakeNode";
+import { STAGES } from "@/stages";
+import { BEHAVIOURS, cpuWorldFromDef, decideCpu, tuningForLevel } from "./cpu";
 
 /* --------------------------------------------------------------- fixtures -- */
 
@@ -993,5 +1001,196 @@ describe("leaving the edge while the opponent respawns (Plan 5, Task 19)", () =>
     expect(BEHAVIOURS.map((b) => b.run(context(away, L9))).some((r) => r.score > 1 && held(r.input, Btn.Left))).toBe(true);
     const home = gameState([fighter(0, { x: fx(3) }), fighter(1, { action: "respawnPlatform", x: fx(-20), y: fx(60) })]);
     expect(BEHAVIOURS.map((b) => b.run(context(home, L9))).every((r) => r.score <= 1)).toBe(true);
+  });
+});
+
+/* ----------------------------------- point blank (Plan 5 final wave, R-FW1a, R-FW1b) -- */
+
+describe("turning at point blank (Plan 5 final wave, ruling R-FW1a; the final review's I1)", () => {
+  // A target 0.6 behind: a full press would start a dash that carries the CPU about two
+  // units past it (I1's trace: Pikachu at 28.1 and 30.0 in turn, every frame, around an
+  // idle Fox at 28.7), and next frame it would be behind again.
+  const behind = (over: Partial<FighterState>, gap = 0.6) => gameState([fighter(0, { facing: -1, framesSinceDirPress: 30, ...over }), fighter(1, { x: fx(gap), actionFrame: 30 })]);
+
+  it("in a dash or a run, lets go of the stick for a frame, so the dash ends, rather than dash back past the target", () => {
+    for (const action of ["dashStart", "run"] as const) {
+      expect(attack(context(behind({ action, vx: -fx(1.9) }), L9)).input, action).toBe(0);
+      expect(pressToward(behind({ action }).fighters[0], fx(0.6)), action).toBe(0);
+    }
+  });
+
+  it("from a standstill or a walk, turns with a part-way push, which never dashes, smashes or stick-jumps", () => {
+    for (const action of ["stand", "walk"] as const) {
+      expect(attack(context(behind({ action }), L9)).input, action).toBe(Btn.Right | Btn.Soft);
+    }
+  });
+
+  it("turns with the whole stick from further than point blank, as before", () => {
+    expect(POINT_BLANK).toBe(fx(6));
+    expect(attack(context(behind({ action: "dashStart" }, 6), L9)).input).toBe(Btn.Right);
+    expect(attack(context(behind({ action: "stand" }, 12), L9)).input).toBe(Btn.Right);
+    expect(pressToward(behind({ action: "run" }).fighters[0], fx(5.99))).toBe(0);
+    expect(pressToward(behind({ action: "run" }).fighters[0], -fx(6))).toBe(Btn.Left);
+  });
+
+  it("approaches a target straight above with the same press: no dash back and forth under it", () => {
+    // Out of reach only by height: the review's approach dance under a falling target.
+    const under = (action: "dashStart" | "stand") => gameState([fighter(0, { action, facing: -1, framesSinceDirPress: 30 }), fighter(1, { x: fx(0.6), y: fx(22), grounded: false, action: "fall", actionFrame: 30 })]);
+    expect(approach(context(under("dashStart"), L9)).input).toBe(0);
+    expect(approach(context(under("stand"), L9)).input).toBe(Btn.Right | Btn.Soft);
+  });
+});
+
+/**
+ * The game's baked world (Plan 4), for the swings a point-blank CPU reads off its own move
+ * data: its boxes, run by the engine's own rules from where it stands, against the
+ * target's baked hurt capsules.
+ */
+const BAKED = bakedContext(
+  { fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((x) => x.id === id)! },
+  readBakeFromDisk(),
+);
+
+/** `a` on port 0 facing right at x 0, `b` on port 1 `gap` ahead, both standing on Final Destination; frame 0 is a swing frame. */
+function pointBlank(a: string, b: string, gap: number, over: Partial<FighterState> = {}): GameState {
+  const s = createInitialState("finalDestination", [{ defId: a }, { defId: b }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5, BAKED);
+  Object.assign(s.fighters[0], { x: 0, y: 0, facing: 1, action: "stand", actionFrame: 30, grounded: true, intangible: 0, invincible: 0, framesSinceDirPress: 30, ...over });
+  Object.assign(s.fighters[1], { x: fx(gap), y: 0, facing: -1, action: "stand", actionFrame: 30, grounded: true, intangible: 0, invincible: 0 });
+  s.frame = 0;
+  return s;
+}
+
+/** The level-9 context `decideCpu` builds for port 0 in the baked world. */
+function bakedCtx(state: GameState): BehaviourContext {
+  const defs = state.fighters.map((f) => BAKED.fighter(f.defId));
+  const view = stageViewFromDef(BAKED.stage(state.stageId));
+  const world = cpuWorldFromDef(defs[0], view, defs, (id) => BAKED.fighter(id), BAKED.bake);
+  return {
+    state,
+    view: observe(state, 0, L9.reactionFrames, defs),
+    stage: view,
+    tuning: L9,
+    jumps: world.jumps!,
+    meleeReach: world.meleeReach!,
+    airBrake: world.airBrake!,
+    airDodge: world.airDodge!,
+    recovery: world.recovery ?? null,
+    fighterDef: defs[0],
+    matchDefs: defs,
+    bake: BAKED.bake,
+    rolls: new Array(DECISION_ROLLS).fill(0),
+  };
+}
+
+/** Whether `input`, pressed on the scene's first frame and nothing after, lands a hit on port 1 in the engine. */
+function landsInEngine(state: GameState, input: InputFrame): boolean {
+  let s = state;
+  let prev: readonly InputFrame[] = [0, 0];
+  for (let i = 0; i < 60; i++) {
+    const now = [i === 0 ? input : 0, 0];
+    const out = step(s, now, { prevInputs: prev, ctx: BAKED });
+    if (out.events.hits.some((h) => h.attacker === 0 && h.victim === 1)) return true;
+    s = out.state;
+    prev = now;
+  }
+  return false;
+}
+
+describe("swinging at point blank at a short target (Plan 5 final wave, ruling R-FW1b; the final review's I1)", () => {
+  const JAB = Btn.Attack;
+  const FTILT = Btn.Right | Btn.Soft | Btn.Attack;
+  const UTILT = Btn.Up | Btn.Soft | Btn.Attack;
+  const DTILT = Btn.Down | Btn.Soft | Btn.Attack;
+
+  it("uses the tilt whose box covers the overlap, read off its move data: Marth's and Link's down tilts on Kirby", () => {
+    // Marth's jab, forward tilt and up tilt pass over Kirby at 1.5; his down tilt reaches him.
+    expect(attack(bakedCtx(pointBlank("marth", "kirby", 1.5))).input).toBe(DTILT);
+    // Link's jab and forward tilt reach Kirby only from further out; his down tilt does here.
+    expect(attack(bakedCtx(pointBlank("link", "kirby", 0.5))).input).toBe(DTILT);
+  });
+
+  it("swings the jab, not the forward tilt its stale direction would make, where only the jab reaches: Donkey Kong on Mario", () => {
+    expect(attack(bakedCtx(pointBlank("donkeyKong", "mario", 1))).input).toBe(JAB);
+  });
+
+  it("steps back a frame where nothing it has reaches: Marth over Kirby at 0.14, and on Pikachu at 1.5", () => {
+    // The final review's whiff loops: Marth's jabs and tilts through a short fighter
+    // standing at his own origin, thousands of frames, never connecting.
+    for (const [b, gap] of [["kirby", 0.14], ["pikachu", 1.5]] as const) {
+      const r = attack(bakedCtx(pointBlank("marth", b, gap)));
+      expect([held(r.input, Btn.Attack), r.input & (Btn.Left | Btn.Right)], b).toEqual([false, Btn.Left]);
+    }
+  });
+
+  it("agrees with the engine: what it swings lands, and where it steps back, nothing it has would", () => {
+    expect(landsInEngine(pointBlank("marth", "kirby", 1.5), DTILT)).toBe(true);
+    expect(landsInEngine(pointBlank("link", "kirby", 0.5), DTILT)).toBe(true);
+    expect(landsInEngine(pointBlank("donkeyKong", "mario", 1), JAB)).toBe(true);
+    expect(landsInEngine(pointBlank("donkeyKong", "mario", 1), FTILT)).toBe(false);
+    for (const [b, gap] of [["kirby", 0.14], ["pikachu", 1.5]] as const)
+      for (const swing of [JAB, FTILT, UTILT, DTILT]) expect(landsInEngine(pointBlank("marth", b, gap), swing), `${b} swing ${swing}`).toBe(false);
+  });
+
+  it("ends a dash rather than swing a dash attack that would carry it past the target: Pikachu at an idle Link 1.2 ahead", () => {
+    // The sweep's dash-attack loop: from 1.2, the dash attack's slide takes Pikachu past
+    // Link before its box comes out, and then back again from the other side.
+    const dashing = pointBlank("pikachu", "link", 1.2, { action: "dashStart", actionFrame: 4, vx: fx(2.04) });
+    expect(landsInEngine(dashing, Btn.Right | Btn.Attack)).toBe(false);
+    expect(attack(bakedCtx(dashing)).input).toBe(0);
+  });
+
+  it("judges a swing pressed in its own swing as it would come out, from a standstill there, and presses none that would not land", () => {
+    // The review's whiff loop was swing after swing, each pressed inside the last: Marth
+    // mid-jab over Kirby at 0.14 presses nothing, and the first free frame chooses.
+    expect(attack(bakedCtx(pointBlank("marth", "kirby", 0.14, { action: "attack", move: "jab1", actionFrame: 12 }))).input).toBe(0);
+    // Where the swing would land from there, it is pressed: Donkey Kong's jab on Mario at 1.
+    expect(attack(bakedCtx(pointBlank("donkeyKong", "mario", 1, { action: "attack", move: "jab1", actionFrame: 12, framesSinceDirPress: 2 }))).input).toBe(JAB);
+  });
+
+  it("does not step back off the stage: its back to the ledge, it swings where it stands", () => {
+    // Marth facing in, a unit inside Final Destination's right ledge, Kirby at 0.14: a step
+    // back would walk him off.
+    const s = pointBlank("marth", "kirby", 0.14);
+    const ledge = stageViewFromDef(BAKED.stage("finalDestination")).rightLedge;
+    Object.assign(s.fighters[0], { x: ledge - fx(1), facing: -1 });
+    s.fighters[1].x = ledge - fx(1.14);
+    expect(attack(bakedCtx(s)).input & Btn.Right).toBe(0);
+  });
+
+  it("keeps stepping back, turned away, until a swing would reach, then turns once and lands it", () => {
+    let s = pointBlank("marth", "kirby", 0.14);
+    const world = cpuWorldFromDef(BAKED.fighter("marth"), stageViewFromDef(BAKED.stage("finalDestination")), [BAKED.fighter("marth"), BAKED.fighter("kirby")], (id) => BAKED.fighter(id), BAKED.bake);
+    let prev: readonly InputFrame[] = [0, 0];
+    let seed = 7;
+    let turns = 0;
+    let hit = -1;
+    for (let f = 1; f <= 120 && hit < 0; f++) {
+      const d = decideCpu(s, 0, 9, seed, world);
+      seed = d.seed;
+      const out = step(s, [d.input, 0], { prevInputs: prev, ctx: BAKED });
+      if (out.state.fighters[0].facing !== s.fighters[0].facing) turns++;
+      if (out.events.hits.some((h) => h.attacker === 0)) hit = f;
+      s = out.state;
+      prev = [d.input, 0];
+    }
+    expect([hit > 0 && hit <= 60, turns <= 2], `hit on ${hit}, ${turns} turns`).toEqual([true, true]);
+  });
+});
+
+describe("a threat first seen in its attacker's freeze (Plan 5 final wave, ruling R-FW1h)", () => {
+  const rollsWith = (slot: number, value: number): number[] => {
+    const rolls = new Array<number>(DECISION_ROLLS).fill(0);
+    rolls[slot] = value;
+    return rolls;
+  };
+
+  it("is decided once, on the freeze's last frame, not on every frame the attacker is frozen at its first sight", () => {
+    // A jab first seen by a level 9 (4 frames) on its fourth frame, the frame its hit
+    // froze it (on something else): the freeze holds its frame, so the view shows it
+    // first seen on every frame of the freeze. Its last frame (hitlag 0) is the one.
+    const frozen = (actionFrame: number, hitlag: number) => gameState([fighter(0), fighter(1, { x: fx(10), facing: -1, action: "attack", move: "jab1", actionFrame, hitlag })]);
+    const decides = (s: GameState) => shield(context(s, L9)).input === Btn.Shield && shield(context(s, L9, rollsWith(ROLL_SHIELD, 0.99))).input === 0;
+    const freeze = [3, 2, 1, 0].map((h) => decides(frozen(L9.reactionFrames, h)));
+    expect([...freeze, decides(frozen(L9.reactionFrames + 1, 0))]).toEqual([false, false, false, true, false]);
   });
 });

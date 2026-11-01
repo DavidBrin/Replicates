@@ -316,11 +316,14 @@ describe("when the CPU spends its up special", () => {
   });
 
   it("is sound: wherever it finds a stick that gets back, the engine's up special with that stick reaches the stage", () => {
+    // Plan 5 final wave (ruling R-FW1f; the Task 4b re-review's carry): a column at the
+    // stage's wall under the ledge, 4 and 15 out, where a path through the stage's body
+    // was once judged a way back (28 of 1,888 at Task 4b).
     for (const def of FIGHTERS) {
       const r = recoveryFromDef(def)!;
       for (const facing of [1, -1])
-        for (const x of [-100, -130, -160])
-          for (const y of [-40, 0, 40]) {
+        for (const x of [-84, -95, -100, -130, -160])
+          for (const y of [-50, -40, -30, 0, 40]) {
             const at = { x: fx(x), y: fx(y), vx: 0, vy: 0, facing };
             const self = airborne("finalDestination", def.id, at).fighters[0];
             const plan = upBPlan(self, fd.leftLedge, fd, r);
@@ -329,6 +332,35 @@ describe("when the CPU spends its up special", () => {
             expect(engine.some(recovered), `${def.id} facing ${facing} at ${x}, ${y}`).toBe(true);
           }
     }
+  });
+
+  it("judges no way back a path that passes through the stage's solid body under the ledge (ruling R-FW1f)", () => {
+    // Mario 4 out from Final Destination's left ledge, 30 under its top, out of jumps:
+    // Super Jump Punch straight up from here runs, in the model, through the stage's body,
+    // where the engine's stage would stop him. The model cannot vouch for that line.
+    const mario = FIGHTERS.find((d) => d.id === "mario")!;
+    const r = recoveryFromDef(mario)!;
+    const self = airborne("finalDestination", "mario", { x: fd.leftLedge - fx(4), y: fx(-30), vx: 0, vy: 0, facing: 1 }).fighters[0];
+    expect(upBReach(self, fd.leftLedge, fd, r, Btn.Right)).toEqual({ reached: false, throughWall: true });
+    // And no plan the CPU makes runs through it: each it returns is clear of the body.
+    for (const def of FIGHTERS)
+      for (const x of [-82, -84, -88, -95])
+        for (const y of [-70, -50, -30, -10]) {
+          const at = airborne("finalDestination", def.id, { x: fx(x), y: fx(y), vx: 0, vy: 0, facing: 1 }).fighters[0];
+          const rr = recoveryFromDef(def)!;
+          const plan = upBPlan(at, fd.leftLedge, fd, rr);
+          if (plan !== null) expect(upBReach(at, fd.leftLedge, fd, rr, plan).throughWall, `${def.id} at ${x}, ${y}`).toBe(false);
+        }
+  });
+
+  it("reaches a ledge from behind 40% less far than facing it, as findLedgeGrab does (LEDGE_GRAB_BACK_PENALTY)", () => {
+    // Helpless, falling 2.5 outside Final Destination's left ledge and 3 under its top:
+    // inside the grab's 3.2 facing the ledge, outside its 1.92 from behind.
+    const mario = FIGHTERS.find((d) => d.id === "mario")!;
+    const r = recoveryFromDef(mario)!;
+    const falling = (facing: number) => airborne("finalDestination", "mario", { action: "specialFall", x: fd.leftLedge - fx(2.5), y: fx(-3), vx: 0, vy: -fx(1), facing }).fighters[0];
+    expect(upBReach(falling(1), fd.leftLedge, fd, r).reached, "facing the ledge").toBe(true);
+    expect(upBReach(falling(-1), fd.leftLedge, fd, r).reached, "its back to the ledge").toBe(false);
   });
 
   it("gets Fox back from the Task 4b review's mario-fox case: out of jumps, facing away, rising", () => {
@@ -580,9 +612,10 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
   });
 
   it("prefers a line the stage's wall does not block, in its plan and in its up special (the Task 13b re-review's walls)", () => {
-    // Fox under Final Destination's left ledge: both up and up-toward get him back
-    // in the model, and up-toward runs into the stage's wall on the way. A line into
-    // the wall is the one the engine stops (Fox at f2681 re-planned into one).
+    // Fox under Final Destination's left ledge: up gets him back, and up-toward runs
+    // into the stage's wall on the way. A line into the wall is the one the engine stops
+    // (Fox at f2681 re-planned into one); since the final wave (ruling R-FW1f) it is no
+    // way back at all, where Task 19 had taken it when no other line got back.
     const fox = def("fox");
     const r = recoveryFromDef(fox)!;
     let checked = 0;
@@ -591,7 +624,8 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
         const f = airborne("finalDestination", "fox", { x: fx(x), y: fx(y), facing: 1 }).fighters[0];
         const up = upBReach(f, fd.leftLedge, fd, r, Btn.Up);
         const toward = upBReach(f, fd.leftLedge, fd, r, Btn.Up | Btn.Right);
-        if (!up.reached || !toward.reached || !toward.throughWall || up.throughWall) continue;
+        if (!up.reached || !toward.throughWall || up.throughWall) continue;
+        expect(toward.reached, `${x}, ${y}: a line into the wall`).toBe(false);
         checked++;
         expect(upBPlan(f, fd.leftLedge, fd, r)?.first, `${x}, ${y}`).toBe(Btn.Up);
       }
@@ -655,6 +689,50 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
         expect([s.fighters[0].action, s.fighters[0].move], `${into} frames in, phase ${phase}`).toEqual(["special", "upB"]);
       }
     expect(checked).toBeGreaterThan(0);
+  });
+
+  it("gets an up special pressed in an offstage aerial out on the aerial's first free frame, its press never on the step a held Up tap-jumps (ruling R-FW1g)", () => {
+    // Task 20 fix round 1's probe 3: Mario on port 2 (Stick Jump on, the CPU's default),
+    // out of jumps, in three aerials off Final Destination's left ledge, from every other
+    // frame of the aerial and every phase of the press pulse. A Special pressed on the very
+    // step a held Up's tap jump fired lost the buffer to the jump (a jump ranks above a
+    // special, `bufferPress`), and the up special came out 3 to 22 frames late.
+    const mario = def("mario");
+    const world = cpuWorldFromDef(mario, fd);
+    const late: string[] = [];
+    let checked = 0;
+    for (const [move, x, y] of [["nair", -110, 5], ["nair", -100, 10], ["fair", -110, 10]] as const)
+      for (let into = 0; into <= 40; into += 2)
+        for (let phase = 0; phase < 6; phase++) {
+          const start = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "mario" }], RULES, 5);
+          Object.assign(start.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(40), y: 0, intangible: 0, invincible: 0 });
+          Object.assign(start.fighters[1], { action: "attack", move, actionFrame: into, grounded: false, platform: -1, x: fx(x), y: fx(y), facing: 1, jumpsUsed: 2, intangible: 0, invincible: 0 });
+          start.frame = phase;
+          const { state: s, pressed } = throughTheAerial(start, 1, world);
+          if (!pressed) continue;
+          checked++;
+          const f = s.fighters[1];
+          if (f.action !== "special" || f.move !== "upB") late.push(`${move} ${x} ${y}, ${into} frames in, phase ${phase}: ${f.action}`);
+        }
+    expect(checked).toBeGreaterThan(300);
+    expect(late).toEqual([]);
+  }, 30_000);
+
+  it("holds its Special off the one step a held Up tap-jumps on, and only with its own Stick Jump on (ruling R-FW1g)", () => {
+    // Mario out of jumps 20 off Final Destination's left ledge, Up pressed four frames ago
+    // and held: the next step tap-jumps. On a frame its press pulse is on, it holds Up and
+    // presses Special a step later; with its own Stick Jump off there is no tap jump, and
+    // it presses at once.
+    const mario = def("mario");
+    const world = cpuWorldFromDef(mario, fd);
+    const pressed = (controls: number) => {
+      const s = airborne("finalDestination", "mario", { x: fx(-100), y: fx(-20), vy: -fx(1), facing: 1, jumpsUsed: 2, lastDirPressed: Btn.Up, framesSinceDirPress: 4 }, fx(40));
+      s.fighters[0].combat.controls = controls;
+      s.frame = 0;
+      expect(upBPlan(s.fighters[0], fd.leftLedge, fd, recoveryFromDef(mario)!)).not.toBeNull();
+      return (decideCpu(s, 0, 9, 7, world).input & Btn.Special) !== 0;
+    };
+    expect([pressed(0), pressed(CONTROL_STICK_JUMP_OFF)]).toEqual([false, true]);
   });
 
   it("steers its up special on every frame at every level: no fumble drops the plan's stick (the level-7 SD on an aim frame)", () => {
@@ -753,17 +831,17 @@ describe("a CPU on the default control options (Plan 5, Task 20)", () => {
 
   it("gets its up special out of an offstage aerial with the local player's Stick Jump off, through its own tap jump", () => {
     // The CPU, on port 2 beside a local player with Stick Jump off, in a forward air 25
-    // left of Final Destination's ledge, out of jumps, from every frame of the aerial
-    // and every phase of the press pulse. Decided on its up special, it holds Up, which
-    // tap-jumps five frames on and takes the buffer from the Special; it presses again
-    // (Task 19), and the up special comes out on the aerial's first free frame. That
-    // path is Stick Jump's: with the CPU's own option forced off there is no tap jump
-    // to take the buffer, and this fails (Task 20 fix round 1's M1). Every other frame
-    // of Task 19's grid, for the time: each run is two (the option on, then forced off).
+    // left of Final Destination's ledge, out of jumps, from every other frame of the
+    // aerial (Task 19's grid) and every phase of the press pulse. Decided on its up
+    // special, it holds Up, which tap-jumps five frames on and takes the buffer from the
+    // Special; it presses again (Task 19), and the up special comes out on the aerial's
+    // first free frame. That path is Stick Jump's: with the CPU's own option forced off
+    // there is no tap jump to take the buffer, and this fails (Task 20 fix round 1's M1).
+    // Each run is two (the option on, then forced off), hence its own timeout.
     const world = cpuWorldFromDef(def("mario"), fd);
     const runs = (own?: number) => {
       const out: { at: string; state: GameState; pressed: boolean; tapJumped: boolean }[] = [];
-      for (let into = 0; into <= 40; into += 4)
+      for (let into = 0; into <= 40; into += 2)
         for (let phase = 0; phase < 6; phase++) {
           const start = localOffCpu({ x: fx(-110), y: fx(5), action: "attack", move: "fair", actionFrame: into, facing: 1, jumpsUsed: 2 });
           expect(start.fighters.map((f) => f.combat.controls)).toEqual([CONTROL_STICK_JUMP_OFF, 0]);
@@ -781,7 +859,7 @@ describe("a CPU on the default control options (Plan 5, Task 20)", () => {
     }
     // The CPU's own option forced off: the same aerials never tap-jump.
     expect(runs(CONTROL_STICK_JUMP_OFF).filter((r) => r.tapJumped)).toEqual([]);
-  });
+  }, 30_000);
 
   it("models its own fall on its own Stick Jump: a held Up jumps in its model as it does in step()", () => {
     // Mario falling over the middle of the stage, his midair jump left, Up pressed and

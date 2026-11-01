@@ -27,7 +27,7 @@ import {
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
 import { GAME_SIM_CONTEXT } from "./simContext";
 import { meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
-import { cpuDef, cpuWorldFromDef } from "@/ai/cpu";
+import { cpuDef, cpuInput, cpuWorldFromDef } from "@/ai/cpu";
 import { hashState } from "@/engine/hash";
 import { KO_FREEZE_FRAMES, createInitialState } from "@/engine/simulate";
 import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engine/types";
@@ -53,6 +53,11 @@ vi.mock("@/render/renderer", () => ({
 vi.mock("@/render/vfx", async (original) => {
   const real = await original<typeof import("@/render/vfx")>();
   return { ...real, stepVfx: vi.fn(real.stepVfx) };
+});
+// The real `cpuInput`, watched, so a test can see the world the runner hands its CPUs.
+vi.mock("@/ai/cpu", async (original) => {
+  const real = await original<typeof import("@/ai/cpu")>();
+  return { ...real, cpuInput: vi.fn(real.cpuInput) };
 });
 
 const RULES: MatchRules = {
@@ -295,6 +300,25 @@ describe("the worlds the game's CPUs see", () => {
     } finally {
       GAME_SIM_CONTEXT.bake = installed;
     }
+  });
+
+  it("are the ones the runner's own CPUs play with: the shared builder's, up special model and all (Plan 5 final wave, R-FW1f)", () => {
+    // The Task 4b re-review's residual: the line in `createMatchRunner` that builds them.
+    const stage = getStageOrThrow("finalDestination");
+    const players: PlayerSlot[] = [
+      { selection: { defId: "mario" }, cpuLevel: null, label: "P1" },
+      { selection: { defId: "fox" }, cpuLevel: 9, label: "CPU" },
+    ];
+    const defs = players.map((p) => getFighterOrThrow(p.selection.defId));
+    const runner = createMatchRunner({ stage, players, rules: RULES, seed: 7, getFighter: getFighterOrThrow });
+    vi.mocked(cpuInput).mockClear();
+    runner.advance(1);
+    const calls = vi.mocked(cpuInput).mock.calls;
+    expect(calls.map((c) => c[1])).toEqual([1]);
+    const world = calls[0][4]!;
+    expect(world.recovery).toEqual(recoveryFromDef(getFighterOrThrow("fox")));
+    expect(world.recovery).not.toBeNull();
+    expect(world).toEqual(matchCpuWorlds(stage, defs, getFighterOrThrow)[1]);
   });
 
   it("give a Kirby CPU the neutral special its Copy Ability runs (Plan 5, Task 19)", () => {

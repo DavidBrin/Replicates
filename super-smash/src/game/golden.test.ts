@@ -34,8 +34,10 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Thirteen matches on the real roster and real stages: four CPU-vs-CPU stock
- * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
+ * Fourteen matches on the real roster and real stages: four CPU-vs-CPU stock
+ * matches (levels 9 and 7) for 3,600 frames each, a fifth with the Smash Ball on
+ * (Plan 5 final wave, ruling R-FW1e: the CPU's Smash Ball and Final Smash decisions,
+ * last in `MATCHES`), one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
  * CPU ever takes, a 100-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
@@ -124,14 +126,16 @@ interface Match {
 }
 
 const CPU_RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
+/** The Smash Ball on (Plan 5 final wave, ruling R-FW1e): the CPU's `smashBall` and `finalSmash` decisions. */
+const BALL_RULES: MatchRules = { ...CPU_RULES, smashBall: true };
 
-function cpuMatch(name: string, stage: string, fighters: readonly [string, string], seed: number): Match {
+function cpuMatch(name: string, stage: string, fighters: readonly [string, string], seed: number, rules: MatchRules = CPU_RULES): Match {
   return {
     name,
     stage,
     fighters,
     seed,
-    rules: CPU_RULES,
+    rules,
     frames: 3600,
     cpu: true,
     driver() {
@@ -220,10 +224,15 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => DASH_LAB.inputs(frame);
     },
   },
+  // Plan 5 final wave (ruling R-FW1e; the final review's M5): the one CPU match with the
+  // Smash Ball on, so the CPU's own Smash Ball and Final Smash decisions are in the trace.
+  // Both CPUs break a ball and land their Final Smash: Samus (level 9) fires Zero Laser
+  // along Town & City's floor, and Kirby (level 7) traps Samus in Ultra Sword.
+  cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 606, BALL_RULES),
 ];
 
 /**
- * Every `ActionState` the thirteen matches must visit between them: all 59. A `Record`
+ * Every `ActionState` the fourteen matches must visit between them: all 59. A `Record`
  * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
@@ -369,6 +378,14 @@ const MATCHES: readonly Match[] = [
  * action. The four CPU matches reach 46 between them, down from 47: kirby-marth
  * ledge-rolls, and none gets up from lying down or is shield-stunned any more, which the
  * states lab and the script reach. All 59 are visited.
+ * Plan 5's final wave, part 1 (the CPU turns and swings at point blank without dashing
+ * past the target, and throws no ground swing that would not land, rulings R-FW1a and
+ * R-FW1b; a threat frozen at its first sight decided once, R-FW1h; a recovery line
+ * through the stage's wall no way back, R-FW1f; an up special's press never on a tap
+ * jump's step, R-FW1g) adds no action. The four CPU matches reach 46 between them, as
+ * before: they get up from lying down and are shield-stunned again, and none ledge-rolls
+ * or rebounds any more, which the script and the projectile lab reach. The ball-on CPU
+ * match (R-FW1e) reaches nothing the four do not. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -609,6 +626,9 @@ interface Played {
   readonly moves: ReadonlySet<string>;
   /** The first few frames that broke `invariantBreaks`, if any did. */
   readonly invariantBreaks: readonly string[];
+  /** Smash Balls broken, and Final Smashes started (Plan 5 final wave, ruling R-FW1e). */
+  readonly ballsBroken: number;
+  readonly finalSmashes: number;
 }
 
 function play(match: Match): Played {
@@ -635,6 +655,8 @@ function play(match: Match): Played {
   let hits = 0;
   let shieldHits = 0;
   let kos = 0;
+  let ballsBroken = 0;
+  let finalSmashes = 0;
   for (let frame = 1; frame <= match.frames; frame++) {
     const inputs = inputsFor(state, frame);
     const out = step(state, inputs, { prevInputs: prev, ctx: CTX });
@@ -658,12 +680,14 @@ function play(match: Match): Played {
     for (const h of out.events.hits) hitKinds.add(hitKind(out.state.fighters[h.attacker]));
     shieldHits += out.events.shieldHits.length;
     kos += out.events.kos.length;
+    if (out.events.smashBallBroken !== null) ballsBroken++;
+    finalSmashes += out.events.finalSmashes.length;
     roll = mixInt(roll, digest(state));
     if (frame % EVERY === 0) digests.push(roll >>> 0);
   }
   const projectilePaths = new Map<ProjectilePath, number>();
   for (const set of reached.values()) for (const path of set) projectilePaths.set(path, (projectilePaths.get(path) ?? 0) + 1);
-  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, launched, moves, invariantBreaks: breaks };
+  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, projectilePaths, launched, moves, invariantBreaks: breaks, ballsBroken, finalSmashes };
 }
 
 describe("engine golden trace", () => {
@@ -1147,6 +1171,21 @@ describe("engine golden trace", () => {
   // Plan 5 Task 18's fix round 4 (ruling R-T18s: a ceiling bounce keeps the gravity from
   // before the collision again, as rubendal does, not the ceiling stop's zero) left every
   // trace byte-identical, so the counts are as above.
+  // Plan 5's final wave, part 1 moved the four CPU matches, each from the first decision
+  // it changes: mario-fox on 45 (the 1-100 sample, its digest from 101-200), where Mario's
+  // approach toward Fox 1.9 above him presses part-way, not the whole stick (ruling R-FW1a:
+  // `pressToward`); donkeyKong-pikachu on 70, where Pikachu's forward tilt is pressed
+  // part-way, never a smash (R-FW1b); link-samus on 71 and kirby-marth on 70, where Link's
+  // and Marth's dash attacks would have slid past their targets before their boxes came
+  // out, and they end the run instead (R-FW1b). Hits 44, 47, 30 and 34; shield hits 2, 7,
+  // 1 and 2; KOs 0, 0, 0 and 1 (were 37/29/26/18, 5/10/0/0 and 0/0/0/1): Marth by a hit,
+  // tumbling at 126.8% on 3279, where he fell past a held ledge on 2429 before. The
+  // script and the eight labs are byte-identical. It added the ball-on CPU match
+  // (R-FW1e): Samus (level 9) breaks the first Smash Ball on 1278 and lands Zero Laser on
+  // 1383; Kirby (level 7) breaks the next on 2446 and traps Samus in Ultra Sword on 2491;
+  // Kirby falls on 3546 at 93.3%, a self-destruct out of a jump. 46 hits, no shield hit,
+  // one KO. So now: hits 44/47/30/34, 6, 0, 1, 4, 1, 2, 33, 54, 0 and 46; shield hits
+  // 2/7/1/2, 3, 0, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2, 1 and 1.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1223,6 +1262,17 @@ describe("engine golden trace", () => {
     expect([lab.hits, lab.kos], "no hit, and Volt Tackle's self-destruct").toEqual([0, 1]);
   }
 
+  // Plan 5 final wave (ruling R-FW1e; the final review's M5): the ball-on CPU match runs
+  // the CPU's Smash Ball chase and its Final Smash, so a change to either moves the trace.
+  // Pinned by what it plays, not only by its digest: a ball broken, and a Final Smash
+  // started by a CPU (both, as measured: Samus's on 1383 and Kirby's on 2491).
+  function expectCpuFinalSmash(): void {
+    const m = played.get("samus-kirby-townAndCity-ball")!;
+    expect(m.ballsBroken, "Smash Balls broken in the ball-on CPU match").toBeGreaterThan(0);
+    expect(m.finalSmashes, "Final Smashes started by its CPUs").toBeGreaterThan(0);
+    expect([...m.moves].some((x) => x.endsWith(" finalSmash")), "a CPU in its Final Smash").toBe(true);
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -1235,6 +1285,7 @@ describe("engine golden trace", () => {
   it("smash-inputs both side specials in the projectile lab", expectSmashSpecials);
   it("plays the beams and the arrow in the beams lab", expectBeams);
   it("whiffs a dash and a cinematic Final Smash in the air in the dash lab", expectDashes);
+  it("breaks the Smash Ball and uses a Final Smash in the ball-on CPU match", expectCpuFinalSmash);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -1247,6 +1298,7 @@ describe("engine golden trace", () => {
       expectSmashSpecials();
       expectBeams();
       expectDashes();
+      expectCpuFinalSmash();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;
