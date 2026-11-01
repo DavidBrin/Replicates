@@ -1,7 +1,7 @@
-import { act, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import { DEFAULT_PAD_SETTINGS, rebind } from "@/input/gamepad";
+import { DEFAULT_PAD_SETTINGS, PAD_BUTTON_LIMIT, rebind } from "@/input/gamepad";
 import { CONTROL_PREFS_KEY } from "@/lib/controlPrefs";
 import { useMatchConfig } from "@/lib/matchConfig";
 import { bindSession, leaveOnline, setOwnPad, setOwnStickJump } from "@/lib/onlineStore";
@@ -41,6 +41,15 @@ describe("ControlPrefsSync (Plan 5)", () => {
     const [p0, p1] = useMatchConfig.getState().players;
     expect([p0.pad, p0.stickJump]).toEqual([pad, false]);
     expect([p1.pad, p1.stickJump]).toEqual([pad, false]);
+  });
+
+  /** R-T21b: a bad pad takes the default pad, and the port keeps its Stick Jump. */
+  it("keeps a saved Stick Jump when the pad saved beside it is bad", () => {
+    const bad = { ...DEFAULT_PAD_SETTINGS, buttons: { ...DEFAULT_PAD_SETTINGS.buttons, grab: [PAD_BUTTON_LIMIT + 3] } };
+    localStorage.setItem(CONTROL_PREFS_KEY, JSON.stringify({ 0: { stickJump: false, pad: bad } }));
+    render(<ControlPrefsSync />);
+    expect(useMatchConfig.getState().players[0].stickJump).toBe(false);
+    expect(useMatchConfig.getState().players[0].pad).toEqual(DEFAULT_PAD_SETTINGS);
   });
 
   it("starts from the defaults when nothing valid is saved", () => {
@@ -157,6 +166,46 @@ describe("only /controls saves (P5-R26)", () => {
     expect(stored()).toEqual({ ...SAVED, 0: { stickJump: true, pad: DEFAULT_PAD_SETTINGS } });
     act(() => leaveOnline());
     expect(useMatchConfig.getState().players[0]).toMatchObject({ stickJump: true, pad: DEFAULT_PAD_SETTINGS });
+  });
+});
+
+/**
+ * R-T21c (accepted, and pinned here): online, this machine's options are port
+ * 0's, the seat it comes back to. With its first human on port 1 offline (port
+ * 0 a CPU) and no online edit, leaving seats port 1's options on port 0, while
+ * a reload seats port 0's own saved entry. Neither writes anything.
+ */
+describe("leaving versus reloading, with the first human off port 0 (R-T21c)", () => {
+  const SAVED = {
+    0: { stickJump: false, pad: rebind(DEFAULT_PAD_SETTINGS, "attack", 3) },
+    1: { stickJump: false, pad: { ...DEFAULT_PAD_SETTINGS, rightStick: "special" as const } },
+  };
+  const STORED = JSON.stringify(SAVED);
+  const seat = (port: number) => {
+    const p = useMatchConfig.getState().players[port];
+    return { stickJump: p.stickJump, pad: p.pad };
+  };
+
+  it("seats port 1's options on port 0 on leaving, and port 0's own on a reload, writing neither", () => {
+    localStorage.setItem(CONTROL_PREFS_KEY, STORED);
+    const writes = vi.spyOn(localStorage, "setItem");
+    render(<ControlPrefsSync />);
+    act(() => useMatchConfig.getState().setPlayerKind(0, "cpu"));
+    act(() => useMatchConfig.getState().setPlayerKind(1, "human"));
+    const fake = fakeSession();
+    setActiveSession(fake.session);
+    bindSession(fake.session);
+    act(() => fake.emit({ type: "joined", role: "guest" }));
+    act(() => leaveOnline());
+    expect(useMatchConfig.getState().players[0].kind).toBe("human");
+    expect(seat(0)).toEqual(SAVED[1]);
+    // A reload: a fresh store, loaded from what is saved.
+    cleanup();
+    useMatchConfig.getState().reset();
+    render(<ControlPrefsSync />);
+    expect(seat(0)).toEqual(SAVED[0]);
+    expect(writes).not.toHaveBeenCalled();
+    expect(localStorage.getItem(CONTROL_PREFS_KEY)).toBe(STORED);
   });
 });
 

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   DEFAULT_PAD_SETTINGS,
   PAD_ACTIONS,
+  PAD_BUTTON_LIMIT,
   RIGHT_STICK_MODES,
   padButtonName,
   padsInOrder,
@@ -46,13 +47,17 @@ function noSubscription(): () => void {
   return () => {};
 }
 
-/** Every button down right now on the pads `source` names (another player's pad is theirs). */
+/**
+ * Every button down right now on the pads `source` names (another player's
+ * pad is theirs), among the button numbers settings may hold
+ * (`PAD_BUTTON_LIMIT`): one past them would be saved, then refused on reload.
+ */
 function buttonsDown(source: PadSource): Set<number> {
   const down = new Set<number>();
   padsInOrder(navigator.getGamepads()).forEach((pad, ordinal) => {
     if (source !== "every" && ordinal !== source) return;
     pad.buttons.forEach((b, i) => {
-      if (b.pressed) down.add(i);
+      if (b.pressed && i < PAD_BUTTON_LIMIT) down.add(i);
     });
   });
   return down;
@@ -182,7 +187,7 @@ export function PadOptions() {
         ))}
       </ul>
       <p className="mt-2 text-xs text-white/45">
-        {online ? "Every pad on this machine plays as you." : "The first pad connected plays as the first human, the next as the second."} A
+        {online ? "Every pad on this machine plays as you." : "The first pad connected plays as the first human, and each next pad as the next human."} A
         d-pad button given an action no longer moves you. A flick of the right stick is a smash attack, or a special, in
         its direction.
       </p>

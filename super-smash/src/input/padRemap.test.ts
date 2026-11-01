@@ -24,13 +24,13 @@ import {
   type PadSettings,
 } from "./gamepad";
 
-function pad(over: { buttons?: number[]; axes?: number[]; index?: number } = {}): Gamepad {
+function pad(over: { buttons?: number[]; axes?: number[]; index?: number; mapping?: GamepadMappingType } = {}): Gamepad {
   const pressed = new Set(over.buttons ?? []);
   return {
     id: "fake",
     index: over.index ?? 0,
     connected: true,
-    mapping: "standard",
+    mapping: over.mapping ?? "standard",
     timestamp: 0,
     axes: over.axes ?? [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.has(i), touched: pressed.has(i), value: pressed.has(i) ? 1 : 0 })),
@@ -157,9 +157,16 @@ describe("the right stick", () => {
     return run(settings, Array.from({ length: 4 }, () => [left[0], left[1], axes[2], axes[3]]));
   }
 
+  /**
+   * The packed frames over `polls`, after one poll (not reported) with the
+   * right stick at rest and the left as on the first: a flick needs the stick
+   * seen at rest first (R-T21a).
+   */
   function run(settings: PadSettings, polls: readonly number[][]): InputFrame[] {
     const { nav, set } = livePad();
     const pads = input(nav, mappingFrom(settings));
+    set(pad({ axes: [polls[0][0], polls[0][1], 0, 0] }));
+    pads.poll(1);
     return polls.map((axes) => {
       set(pad({ axes }));
       return pads.poll(1).frames[0];
@@ -189,6 +196,7 @@ describe("the right stick", () => {
   it("reports the attack and the direction as presses on the second frame", () => {
     const { nav, set } = livePad();
     const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    pads.poll(1);
     set(pad({ axes: RIGHT }));
     expect(pads.poll(1).pressed[0]).toBe(0);
     expect(pads.poll(1).pressed[0]).toBe(Btn.Right | Btn.Attack);
@@ -210,6 +218,7 @@ describe("the right stick", () => {
   it("forgets a flick whose pad is unplugged before its second frame", () => {
     const { nav, set } = livePad();
     const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    pads.poll(1);
     set(pad({ axes: RIGHT }));
     expect(pads.poll(1).frames[0]).toBe(0);
     set(null);
@@ -222,6 +231,7 @@ describe("the right stick", () => {
     const { nav, set } = livePad();
     live = new GamepadInput({ window, navigator: nav, mappingForPort: () => mappingFrom(DEFAULT_PAD_SETTINGS) });
     live.attach();
+    live.poll(1);
     set(pad({ axes: RIGHT }));
     expect(live.poll(1).frames[0]).toBe(0);
     const gone = new Event("gamepaddisconnected") as GamepadEvent;
@@ -236,11 +246,62 @@ describe("the right stick", () => {
     const { nav, set } = livePad();
     live = new GamepadInput({ window, navigator: nav, mappingForPort: () => mappingFrom(DEFAULT_PAD_SETTINGS) });
     live.attach();
+    live.poll(1);
     set(pad({ axes: RIGHT }));
     expect(live.poll(1).frames[0]).toBe(0);
     live.detach();
     set(pad({ axes: NEUTRAL }));
     expect(live.poll(1).frames[0]).toBe(0);
+  });
+
+  /**
+   * R-T21a: axes 2 and 3 are the right stick only in the W3C standard
+   * mapping. On another layout they may be triggers, which rest at an end of
+   * their travel.
+   */
+  it("reads nothing on a pad without the standard mapping: a trigger on axis 2 is not a stick", () => {
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    // At rest at +1 from the first poll, pulled through to -1, let back through 0, and at rest again.
+    const frames = [1, 1, -1, -1, 0, 1, 1].map((trigger) => {
+      set(pad({ axes: [0, 0, trigger, 0], mapping: "" }));
+      return pads.poll(1).frames[0];
+    });
+    expect(frames).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  /** R-T21a: a flick starts from rest, so a stick already pushed when the pads are first read waits to come back. */
+  it("never fires for a stick already pushed on the first poll, until it is back at rest and flicked again", () => {
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    const frames = [RIGHT, RIGHT, NEUTRAL, RIGHT, RIGHT].map((axes) => {
+      set(pad({ axes }));
+      return pads.poll(1).frames[0];
+    });
+    expect(frames).toEqual([0, 0, 0, 0, Btn.Right | Btn.Attack]);
+  });
+
+  it("waits for the stick inside the dead zone: resting short of the walk threshold is not at rest", () => {
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    const frames = [0.25, 1, 1, 0, 1, 1].map((x) => {
+      set(pad({ axes: [0, 0, x, 0] }));
+      return pads.poll(1).frames[0];
+    });
+    expect(frames).toEqual([0, 0, 0, 0, 0, Btn.Right | Btn.Attack]);
+  });
+
+  it("never fires for a stick held through an unplug and back", () => {
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    pads.poll(1);
+    set(null);
+    pads.poll(1);
+    const frames = [RIGHT, RIGHT].map((axes) => {
+      set(pad({ axes }));
+      return pads.poll(1).frames[0];
+    });
+    expect(frames).toEqual([0, 0]);
   });
 });
 

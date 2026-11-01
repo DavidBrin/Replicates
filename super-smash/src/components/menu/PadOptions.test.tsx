@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_PAD_SETTINGS, rebind } from "@/input/gamepad";
+import { DEFAULT_PAD_SETTINGS, PAD_BUTTON_LIMIT, rebind } from "@/input/gamepad";
 import { useMatchConfig } from "@/lib/matchConfig";
 import { bindSession, leaveOnline } from "@/lib/onlineStore";
 import { setActiveSession } from "@/net/online/session";
@@ -18,7 +18,8 @@ function fakePad(index = 0): Gamepad {
     index,
     connected: true,
     axes: [0, 0, 0, 0],
-    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: down.has(i), touched: false, value: down.has(i) ? 1 : 0 })),
+    // More buttons than the standard mapping's 17: a non-standard pad can expose them (R-T21b).
+    buttons: Array.from({ length: 40 }, (_, i) => ({ pressed: down.has(i), touched: false, value: down.has(i) ? 1 : 0 })),
   } as unknown as Gamepad;
 }
 
@@ -98,6 +99,26 @@ describe("PadOptions (Plan 5)", () => {
     Reflect.deleteProperty(navigator, "getGamepads");
     render(<PadOptions />);
     expect(screen.getByText(/no gamepad support/i)).toBeInTheDocument();
+  });
+
+  /** R-T21b: the capture never makes settings the reload would refuse. */
+  it("refuses a button numbered past what the settings may hold, and takes the next one in range", () => {
+    render(<PadOptions />);
+    fireEvent.click(screen.getByRole("button", { name: "P1 attack: A" }));
+    pressed = new Set([PAD_BUTTON_LIMIT]);
+    poll();
+    pressed = new Set([PAD_BUTTON_LIMIT, PAD_BUTTON_LIMIT + 7]);
+    poll();
+    expect(padOf(0).buttons.attack).toEqual([0]);
+    pressed = new Set([PAD_BUTTON_LIMIT, PAD_BUTTON_LIMIT + 7, PAD_BUTTON_LIMIT - 1]);
+    poll();
+    expect(padOf(0).buttons.attack).toEqual([PAD_BUTTON_LIMIT - 1]);
+  });
+
+  /** Review Minor 4: the screen seats up to four humans. */
+  it("says which pad plays whom for every human, not two", () => {
+    render(<PadOptions />);
+    expect(screen.getByText(/the first pad connected plays as the first human, and each next pad as the next human/i)).toBeInTheDocument();
   });
 
   it("offers nothing for a CPU", () => {

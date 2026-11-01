@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_PAD_SETTINGS, rebind } from "@/input/gamepad";
+import { DEFAULT_PAD_SETTINGS, PAD_BUTTON_LIMIT, rebind } from "@/input/gamepad";
 import { CONTROL_PREFS_KEY, readControlPrefs, writeControlPrefs } from "./controlPrefs";
 import { memoryStorage } from "./testing/memoryStorage";
 
@@ -27,9 +27,31 @@ describe("saved control options (Plan 5)", () => {
     expect(readControlPrefs(storage)).toEqual({});
   });
 
-  it("keeps the valid ports and drops a port whose saved shape is wrong", () => {
+  /** R-T21b: defaults on any failure, field by field; a port with nothing valid saved is absent. */
+  it("gives a field whose saved shape is wrong its default, keeping the port's other field", () => {
     const storage = memoryStorage();
-    storage.setItem(CONTROL_PREFS_KEY, JSON.stringify({ 0: { stickJump: false, pad: DEFAULT_PAD_SETTINGS }, 1: { stickJump: "no", pad: DEFAULT_PAD_SETTINGS }, 2: { stickJump: true, pad: { buttons: {}, rightStick: "smash" } } }));
+    const special = { ...DEFAULT_PAD_SETTINGS, rightStick: "special" as const };
+    storage.setItem(
+      CONTROL_PREFS_KEY,
+      JSON.stringify({
+        0: { stickJump: false, pad: DEFAULT_PAD_SETTINGS },
+        1: { stickJump: "no", pad: special },
+        2: { stickJump: false, pad: { buttons: {}, rightStick: "smash" } },
+        3: { stickJump: "no", pad: 7 },
+        4: "on",
+      }),
+    );
+    expect(readControlPrefs(storage)).toEqual({
+      0: { stickJump: false, pad: DEFAULT_PAD_SETTINGS },
+      1: { stickJump: true, pad: special },
+      2: { stickJump: false, pad: DEFAULT_PAD_SETTINGS },
+    });
+  });
+
+  it("keeps a port's Stick Jump when its pad holds a button the capture would refuse", () => {
+    const storage = memoryStorage();
+    const big = { ...DEFAULT_PAD_SETTINGS, buttons: { ...DEFAULT_PAD_SETTINGS.buttons, attack: [PAD_BUTTON_LIMIT] } };
+    storage.setItem(CONTROL_PREFS_KEY, JSON.stringify({ 0: { stickJump: false, pad: big } }));
     expect(readControlPrefs(storage)).toEqual({ 0: { stickJump: false, pad: DEFAULT_PAD_SETTINGS } });
   });
 
@@ -59,10 +81,10 @@ describe("saved control options (Plan 5)", () => {
     expect(readControlPrefs(storage)).toStrictEqual({ 0: { stickJump: false, pad: DEFAULT_PAD_SETTINGS } });
   });
 
-  it("drops a pad that puts one button on two actions", () => {
+  it("gives the default pad for one that puts one button on two actions", () => {
     const storage = memoryStorage();
     const doubled = { ...DEFAULT_PAD_SETTINGS, buttons: { ...DEFAULT_PAD_SETTINGS.buttons, special: [0] } };
-    storage.setItem(CONTROL_PREFS_KEY, JSON.stringify({ 0: { stickJump: true, pad: doubled } }));
-    expect(readControlPrefs(storage)).toEqual({});
+    storage.setItem(CONTROL_PREFS_KEY, JSON.stringify({ 0: { stickJump: false, pad: doubled } }));
+    expect(readControlPrefs(storage)).toEqual({ 0: { stickJump: false, pad: DEFAULT_PAD_SETTINGS } });
   });
 });

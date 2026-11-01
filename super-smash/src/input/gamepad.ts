@@ -209,7 +209,10 @@ export class GamepadInput {
 
   /** Last poll's packed frame per pad index, for edge detection. */
   private readonly lastFrames = new Map<number, InputFrame>();
-  /** Plan 5: last poll's right-stick direction per pad index, and a flick waiting for its second frame. */
+  /**
+   * Plan 5: last poll's right-stick direction per pad index, absent until the
+   * stick has been seen at rest (R-T21a), and a flick waiting for its second frame.
+   */
   private readonly lastRight = new Map<number, InputFrame>();
   private readonly pendingRight = new Map<number, InputFrame>();
   private readonly connected = new Set<number>();
@@ -390,15 +393,23 @@ export class GamepadInput {
    * UNVERIFIED-simplified: this frame-by-frame shape is the replica's own,
    * and holding the stick does not charge the smash, as Ultimate's does
    * (same page): the button is pressed for the one frame.
+   *
+   * Ruling R-T21a: only a pad with the W3C standard mapping has its right
+   * stick on axes 2 and 3; on another layout they may be triggers, which rest
+   * at an end of their travel, so such a pad gets no flick at all. And a
+   * flick starts from rest: until the stick has been seen inside the dead
+   * zone, a deflection (on the first poll, or held since the pad connected)
+   * never fires.
    */
   private rightStickFrame(pad: Gamepad, mapping: GamepadMapping, frame: InputFrame): InputFrame {
     const mode = mapping.rightStick ?? "smash";
-    if (mode === "off") return frame;
+    if (mode === "off" || pad.mapping !== "standard") return frame;
     const r = radialDeadzone(pad.axes[mapping.rightStickX ?? 2] ?? 0, -(pad.axes[mapping.rightStickY ?? 3] ?? 0), this.deadzone);
     // One of four directions, the larger axis: smash attacks and specials are four-way.
     const dir: InputFrame =
       r.magnitude < WALK_THRESHOLD ? 0 : Math.abs(r.x) >= Math.abs(r.y) ? (r.x > 0 ? Btn.Right : Btn.Left) : r.y > 0 ? Btn.Up : Btn.Down;
-    const previous = this.lastRight.get(pad.index) ?? 0;
+    const previous = this.lastRight.get(pad.index);
+    if (previous === undefined && r.magnitude > 0) return frame;
     this.lastRight.set(pad.index, dir);
     const body = frame & ~(DIRECTION_MASK | Btn.Soft);
     const pending = this.pendingRight.get(pad.index);
@@ -554,9 +565,15 @@ export function mappingFrom(settings: PadSettings): GamepadMapping {
   };
 }
 
-/** The most buttons one action keeps, and the button numbers a pad can have (the standard mapping has 17). */
+/** The most buttons one action keeps. */
 const MAX_BUTTONS_PER_ACTION = 8;
-const MAX_BUTTON = 32;
+
+/**
+ * Button numbers a pad's settings may hold run from 0 to one below this (the
+ * standard mapping has 17). The capture on /controls and the storage check
+ * share it, so a capture never makes settings a reload would refuse (R-T21b).
+ */
+export const PAD_BUTTON_LIMIT = 32;
 
 /**
  * Is `value` well-formed `PadSettings` (read back from storage)? Each action
@@ -574,7 +591,7 @@ export function isPadSettings(value: unknown): value is PadSettings {
     const list = buttons[a];
     if (!Array.isArray(list) || list.length === 0 || list.length > MAX_BUTTONS_PER_ACTION) return false;
     return list.every((b: unknown) => {
-      if (!Number.isInteger(b) || (b as number) < 0 || (b as number) >= MAX_BUTTON || seen.has(b as number)) return false;
+      if (!Number.isInteger(b) || (b as number) < 0 || (b as number) >= PAD_BUTTON_LIMIT || seen.has(b as number)) return false;
       seen.add(b as number);
       return true;
     });

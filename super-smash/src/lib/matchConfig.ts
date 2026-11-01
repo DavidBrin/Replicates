@@ -637,7 +637,8 @@ export interface PlayerSlot {
 /** A player's own control options (Plan 5): what `/controls` sets per port, and what an online session must not overwrite. */
 export type ControlOptions = Pick<PlayerSlot, "stickJump" | "pad">;
 
-const DEFAULT_CONTROL_OPTIONS: ControlOptions = { stickJump: true, pad: DEFAULT_PAD_SETTINGS };
+/** A port's options with nothing chosen, and each field's default for a bad saved one (`controlPrefs.ts`). */
+export const DEFAULT_CONTROL_OPTIONS: ControlOptions = { stickJump: true, pad: DEFAULT_PAD_SETTINGS };
 
 /** `slot` with `options` (or as it is, with none), field by field: a saved entry never brings anything else along. */
 function withOptions(slot: PlayerSlot, options: ControlOptions | undefined): PlayerSlot {
@@ -1033,6 +1034,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   // The local player's control options come back with the seat (P5-R26): the
   // session, and the other player's pick, never change them. The CPU's seat
   // takes its port's kept options, as a seat added does.
+  // R-T21c (accepted): port 0 gets the offline first human's options; with that human off port 0, a reload seats port 0's own.
   leaveOnline: () =>
     set((s) => {
       const local = localOptionsOf(s);
