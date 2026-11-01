@@ -177,6 +177,7 @@ survive a non-QWERTY layout.
 | Action | Config 1 — Arrows | Config 2 — WASD |
 |---|---|---|
 | Move | `←` `→` `↑` `↓` | `W` `A` `S` `D` |
+| Tilt (held) | `V` | `C` |
 | Special | `A` | `←` |
 | Attack | `D` | `→` |
 | Jump | `W` | `↑` |
@@ -197,19 +198,28 @@ and a key has none, so an up press waits 5 frames to see whether an attack follo
 becomes a jump. That is precisely as long as it stays eligible to *be* an up-smash. The
 dedicated jump key has no such ambiguity and fires on the frame it is pressed, which is what
 it is for ([D31](DECISIONS.md#d31--up-jumps-and-still-aims-and-the-arbitration-is-five-frames-long)).
+This is Ultimate's Stick Jump, and, as there, a player can turn it off (below).
 
 **A keyboard has no stick magnitude**, so the other distinctions Smash draws from *how far*
 and *how fast* the stick moved are recovered from timing too: an attack within 5 frames of a
 fresh direction press is a smash, otherwise a tilt; a jump released inside the 3-frame
 jumpsquat is a short hop; each fresh direction press during hitlag is one SDI pulse, so
-mashing works exactly as it does in the real game.
+mashing works exactly as it does in the real game. The same goes for the two side specials
+with a smash version: pressed together with a direction, a side special comes out as the
+smash one (Samus's Super Missile, Link's smash-thrown Boomerang), so the ordinary one needs
+the direction held a moment first (past the move's window: 5 frames for Samus, 8 for Link), or
+the Tilt key held.
 
 **Every key is rebindable, per player.** `/controls` assigns a preset to each port and
 rebinds any action in it; the match reads the bindings the player actually chose
 ([D33](DECISIONS.md#d33--a-rebinding-ui-the-match-never-read)).
 
-On a keyboard, walking is not reachable, and that is correct rather than missing — a key is
-always a *full* deflection, and a fully-deflected stick dashes. Micro-spacing comes from tapping.
+**A keyboard walks and tilts with its Tilt key.** A key is always a *full* deflection, and a
+fully-deflected stick dashes, so each preset has a key held for a part-way push instead (`V`,
+`C`, or `N` for the third preset): with it held, a direction walks, at half the fighter's walk
+speed, Attack is never a smash, so a standing forward tilt is there too, DI bends a quarter as
+far, and up never jumps. Without it a held direction dashes, and micro-spacing comes from
+tapping ([D58](DECISIONS.md#d58--every-documented-special-the-final-smashes-a-cpu-that-uses-them-and-pad-options)).
 
 **A gamepad works too**, in local and online matches (W3C standard mapping: A attack, B special,
 X/Y jump, LB/LT/RT shield, RB grab). In a local match pad 1 is the first human and pad 2 the
@@ -217,6 +227,16 @@ second; online, every connected pad drives your own fighter. Ports follow the br
 order; a pad reconnected into a freed lower slot can take an earlier port. The analog
 stick restores what keys cannot: a partial tilt walks, makes a tilt instead of a smash, and DIs a
 quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
+
+**Stick Jump can be turned off, per player** (`/controls`), as in Ultimate: then up only aims,
+and only the jump key jumps. It travels with the match, and online to the other peer.
+
+**A gamepad's buttons are rebindable too.** On `/controls`, click an action and press the pad
+button for it; the button leaves whatever it did before, and an action left with no button
+takes the ones the rebound action had, so no action, jump and attack above all, is ever
+unbound. A d-pad button given an action stops moving you. The right stick does a smash attack
+(Ultimate's default), a special, or nothing. Stick Jump and the pad settings are kept in the
+browser between visits, per player; keyboard bindings are not ([D58](DECISIONS.md#d58--every-documented-special-the-final-smashes-a-cpu-that-uses-them-and-pad-options)).
 
 ---
 
@@ -412,7 +432,10 @@ fails closed: if git cannot say what the uncommitted changes are, a production b
 6. **No items but the Smash Ball**, no Spirits, no World of Light, no Classic Mode. Cutting
    them is what made the remaining part reproducible properly
    ([D1](DECISIONS.md#d1--only-the-brawl-and-only-one-item)).
-7. **Desktop only.** Every control is a physical key and a phone has none, so a touch device
+7. **Some special and Final Smash numbers are stand-ins.** Where no source publishes a value
+   (where a Final Smash's boxes sit, a wall jump's push away from the wall, a footstool's reach
+   and bounce) the code says `UNVERIFIED:` beside it ([D58](DECISIONS.md#d58--every-documented-special-the-final-smashes-a-cpu-that-uses-them-and-pad-options)).
+8. **Desktop only.** Every control is a physical key and a phone has none, so a touch device
    is told so rather than shown a layout nobody can play.
 
 ---

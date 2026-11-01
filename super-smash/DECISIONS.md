@@ -3094,3 +3094,775 @@ summary.
   (R13); blob shadows and a camera tilt; the clip-gain and foot-contact eyeballs; and a SPEC §6
   question found in the lab — a keyboard player cannot forward-tilt from standing, because a held
   direction dashes before the tilt window opens.
+
+## D58 — Every documented special, the Final Smashes, a CPU that uses them, and pad options
+
+**Decision.** Plan 5 implements every special research §2 documents for the eight fighters, their
+Final Smashes and the movement options the replica lacked, gives the CPU all of it, and adds
+Ultimate's Stick Jump option, a gamepad remap and a keyboard Tilt key. It took 23 tasks and six
+inserted ones (4b, 7b, 13b, 13c, 13d, 21b). The numbers are published ones (SmashWiki's per-move
+and Moveset pages, rubendal's Data Viewer scripts for patch 13.0.1, UltimateFrameData), and what
+no source publishes is marked `UNVERIFIED:` beside the stand-in. Where the plan's draft and a
+source disagreed, the source won: the plan's wall-jump heights were a withdrawn table, its Copy
+Ability loss chance was the pre-6.0.0 one, and its Final Smash totals were a sketch. The plan
+was written against plan text for Plans 1 to 4; a drift preflight re-anchored it on Plan 4's
+finished code, and the controller ruled on what it found (below). The controller's folder
+(`.superpowers/sdd/2026-10-24-plan-5-specials-final-smash-cpu/`) holds each task's report and
+the ledger; this is the summary.
+
+- **Charge on B** (`specialCharge.ts`, Task 2). Samus's Charge Shot (112 frames), Donkey Kong's
+  Giant Punch (110) and Mario's F.L.U.D.D. (80) **store** a charge: a shield, roll, spot dodge,
+  jump or air dodge puts it away, the next B fires it, and a full charge puts itself away.
+  Marth's Shield Breaker (60), Kirby's Hammer Flip (120), Pikachu's Skull Bash (80), Link's
+  Hero's Bow (60) and, since 13b, his grounded Spin Attack (60) charge while B is **held**. Below
+  full each grows by its own published formula (`PartialCharge`): Charge Shot every number
+  linearly (its damage `5 + 23·c/112`); Giant Punch `base + 18·c/110` rounded down; Shield
+  Breaker ×`1 + 1.2·c/60`; Hammer Flip `+10.2·c/120` (0.085% a frame); Skull Bash
+  `6.2 + 15.2·c/80`; the bow `4 + 8·c/60` rounded down; Spin Attack ×`1 + 0.6·c/60`. A full
+  charge replaces the boxes outright (Giant Punch 28%, Shield Breaker 24% and 22%, Hammer Flip
+  35% at 361°, Skull Bash 21.4%). At full, Shield Breaker, Skull Bash and Spin Attack fire by
+  themselves; the bow and Hammer Flip wait for B to come up (the bow 180 charge frames at most;
+  Hammer Flip burns Kirby 1% every 26 frames below 100%). A stored full Charge Shot fires on
+  frame 16 and is interruptible on 61; a stored full Giant Punch has super armour on 9–20 (15–20
+  in the air), and an uncharged one has none. A flinch while charging loses the whole charge, a
+  stored one included, and so does a KO. A released charging special stops glowing (P5-R1), and
+  a charged projectile looks charged in flight (P5-R2).
+- **Special fall** (Task 4b). Every up special that ends in the air (Link's only when begun
+  there) leaves its user helpless until a landing or a ledge grab, with its own landing lag
+  (Donkey Kong 38 frames; Mario, Kirby and Link 30; Marth, Pikachu and Samus 24; Fox 20) and its
+  published drift. No side special does in Ultimate (SmashWiki "Helpless"; Fox Illusion "Does
+  not cause helplessness in SSB4 or Ultimate").
+- **Reflectors and counters** (`reflect.ts`, `counter.ts`; Tasks 3 to 5). Fox's Reflector
+  reflects on frames 4–23 at ×1.4 speed and damage (×1 lifetime, an 8.5-unit bubble, a 50%
+  cap), stays up 20 frames after a reflection (a jump, roll or spot dodge cancels them), turns
+  with the stick from frame 5, and stalls Fox once an airtime. Mario's Cape reflects on 9–20 at
+  ×1.5 damage, ×1 speed and ×0.75 lifetime, its bubble 8 in front and 6.5 up, and a projectile
+  close on 6–8 skips it to 9 (SmashWiki: "two frames earlier"; the trigger UNVERIFIED). It turns
+  its victim round, shielding or armoured; in the air its first use an airtime stops the fall,
+  keeping 0.4 of Mario's speed and adding 0.3 up, and every use falls at gravity 0.031 to speed 1
+  with air friction 0.0025 for its 58 frames, interruptible from 36. A reflected projectile
+  becomes the reflector's (its `source` stays the thrower's), and one reflected seven times is
+  deleted on the eighth. Marth's Counter catches whatever reaches its 10.5-unit bubble (10 above
+  his feet) on frames 6–27, freezes 21 frames (a melee attacker with him) and answers ×1.2 (8% at
+  least, 50% at most) with a transcendent strike that goes through armour (P5-R4 split its clip
+  from the strike's); in the air it has its published physics (×0.5, air friction 0.0025, gravity
+  0.04, fall speed 1.2, 79 frames). A countered projectile is gone, and its thrower is not frozen
+  (UNVERIFIED). A grab (SmashWiki "Counterattack") and every Final Smash (SmashWiki "Unblockable
+  attack") go through a counter, and so does a windbox (David's call, UNVERIFIED).
+- **F.L.U.D.D. and windboxes** (Task 6). The pump is `fixedKnockback` 70, its `baseKnockback`
+  0 rising to 55 with the charge (P5-R5), with a water painter of its own (P5-R6). The water is a
+  windbox: its push adds to the victim's damage energy and decays, it can be reflected, it does
+  not push a shield (SmashWiki "Windbox"; the plan's "pushes through shields" had no source), and
+  a fighter it pushes off the stage is the pusher's KO. A box that is flinchless alone is a
+  windbox (SmashWiki "Hitbox").
+- **Throws and pummels** (Tasks 7, 7b). Every throw and pummel runs its `ATTACK_ABS` script (34
+  more slots, 28 on the root and 6 on limbs): `REVERSE_LR` is real (P5-R7, with `MoveDef.turnAt`
+  for legacy back throws), a captor's boxes that are not catch-only skip the fighter it holds
+  (P5-R8), a pummel lasts its script's 6–8 frames (P5-R10), a release's hitlag freezes only the
+  fighter thrown, Marth's catch stops freeze both with the victim invincible, throws have their
+  invincibility, motion frames become game frames by `FT_MOTION_RATE`, and the grab timer runs
+  through a pummel's hitlag (SmashWiki "Grab": "not affected by pummeling"; it replaces Plan 3's
+  UNVERIFIED pause).
+- **Grabs that hold** (`status/cargo.ts`, `status/inhale.ts`, `inhale.ts`; Tasks 8, 9). Donkey
+  Kong's Cargo Carry lifts the fighter he holds (invincible on 1–15), walks at ×1.1 speed and
+  acceleration with one jump, lasts `((90 + 1.7p)·11/6) − g` frames fixed at the grab (R-T8a),
+  and ends in one of four cargo throws with knockback armour 16 (R-T8b), which finish through a
+  landing (UNVERIFIED). Kirby's Inhale catches in its published box (6.0, 5.8 and 5.3 in the
+  air), pulls with windboxes, holds its catch for `180 + 1.1t − k` frames, walks at ×1.08 and
+  short-hops with a mouthful, and swallows (10%) or spits a star (6%) that flies at
+  `2.8 + 0.008(t − k)` units a frame for `25 + 0.5t` frames (60 at most). A swallow copies the
+  neutral special at ×1.2 on all its hitboxes, projectiles included; the Copy Ability is lost
+  with a stock, or, after a 1,200-frame grace, to a hit with a chance of damage/100 (6.0.0's
+  figure; the plan had /70), drawn from the match's seeded RNG (R-T9c).
+- **Final Smashes** (`final.ts`, `fighters/finalKit.ts`; Tasks 14 to 16). Breaking the Smash
+  Ball puts its breaker in standby, and their next *neutral* special is the Final Smash
+  (SmashWiki "Final Smash"; a shield pressed on the same frame wins, R-T14a). A hit that deals
+  hitstun drops the power and the ball roams again (SmashWiki "Smash Ball"; that every such hit
+  drops it, the dropped ball's 40 HP and its place 10 units above the fighter are UNVERIFIED).
+  The power has no time limit (only the Meter's has one), and a KO loses it (UNVERIFIED). One
+  Smash Ball or Final Smash is out at a time, a Final Smash's projectiles included (R-T16a). Five
+  are cinematic: Jungle Rush, Critical Hit, Ultra Sword, Team Star Fox and Volt Tackle. Their
+  first hit traps whoever it touches (letting go of anyone they held or were held by, and never
+  Kirby in Stone), and the scene plays inside the simulation, so it rolls back and replays like
+  any frame: `GameState.cinematic` stands everyone else, every projectile, the ball, the clock
+  and the stage's own clock (`stageFrame`, R-T14f) still. Three are very large moves, not
+  scenes: Mario Finale, Zero Laser and the Ancient Bow and Arrow. Every Final Smash is
+  unblockable and uncounterable; its user is intangible from the frame the power is spent and
+  grabs no ledge in any part; an aerial one holds its user still (a dash only until it travels),
+  and every one that ends in the air gives the midair jumps back. Per-hit numbers come from the
+  fighters' `game_final*` scripts and SmashWiki, over the plan's sketch (R-T15d: Team Star Fox
+  3% + 30% + 10% for 43%, Volt Tackle's 20% final blast; Ultra Sword's ten blows, 44.8%, R-T15e;
+  Jungle Rush's 33 hits); the boxes' offsets and any radius no source quotes are UNVERIFIED.
+- **Movement** (Tasks 10 to 12). Mario, Samus, Fox and Pikachu wall-jump, on a fresh press away
+  (R-T10d), to SmashWiki's published heights (revision 2065734, the table corrected on
+  2026-10-25: Pikachu 34.29, Mario 29.263, Samus 28.35, Fox 22.05; the plan had the withdrawn
+  figures), ×0.96 for each further one before landing; every fighter wall-tech-jumps with a jump
+  held through a wall tech. Footstools follow SmashWiki "Footstool Jump": a fighter in hitstun
+  can be stood on and one in hitlag cannot (R-T11c; the plan had closed hitstun as a guess);
+  never one held, holding, inside Kirby, trapped, invincible or on the respawn platform; a run
+  ends by the jumper's fall speed, after 2 to 6 (R-T11d); the footstooler acts on frame 8 and is
+  intangible on 9–12; and who is stood on is read before the state machines and applied after,
+  so the ports never matter. Pikachu crawls (0.7 forward, 0.5 back), the one of the eight who
+  does.
+- **Moves run their scripts** (Tasks 13, 13c, 13d). The momentum, projectile, armour and charge
+  moves Plan 3 left on legacy tables run their `game_` scripts: 71 root-bone slots (38 at Plan
+  4's end) and 66 limb slots (50). `SETOFF_KIND_OFF` is transcendent and `THRU` tramples
+  (R-T13g). Projectiles bounce, settle, turn and stop as their pages say, at walls and undersides
+  alike, and one spawned inside a solid body is not launched (UNVERIFIED). Clanks weigh damage
+  after multipliers, freeze and rebound, once a meeting (R-T13c-a, R-T13c-g), and aerials clank
+  only with projectiles. Samus's Super Missile and Link's smash-thrown Boomerang are smash-input
+  specials (P5-R29), each with its own published window (Samus 5 frames, Link 8).
+- **Engine-wide, on the way.** The specials found rules the engine had wrong or lacked, and each
+  was fixed for every fighter: a move's own intangibility holds through its owner's hitlag (Task
+  5); every projectile lives its published length, and four lifetimes were corrected to their
+  pages (Task 6); a freeze of n frames adds n − 1, the published count, and its damage leaves out
+  the 1v1 multiplier (Task 7b, which supersedes D28's "1v1-adjusted" freeze); the 1v1 multiplier
+  scales damage only, never knockback or a shield (R-7b-b, R-7b-d: D16's multiplier is damage
+  taken and nothing else); a trade never shortens a freeze (R-7b-e); every grounded-only status
+  has an edge rule (R-T12d to R-T12g); a box with a `Rehit` strikes each target again that many
+  frames after it struck them (Task 16, SmashWiki "Hitbox"); and dropping through a soft platform
+  depends on the action (R-T13b-d, R-T13b-g).
+- **CPU** (`ai/specials.ts`, Tasks 18 and 19). It techs (out of `tumble` and `tumbleFall`,
+  P5-R20), escapes hitstun with an air dodge that stays over the stage (P5-R21), parries timed
+  off the swing's move data, shields once a threat and holds through the swing and its
+  shieldstun, reflects, counters, stores and holds charges, throws and mashes, carries and
+  inhales, breaks the Smash Ball and uses the Final Smash, flicks the smash-input specials, and
+  recovers sideways: a Kirby with a Copy Ability uses the copied move. Each decision draws nine
+  rolls (`DECISION_ROLLS`, 6 at Plan 4's end) from `cpuInput`'s seeded stream, and every Plan 5
+  behaviour decides once a threat, a landing or an opening, never at a rate a frame (R-T18e,
+  R-T18g, R-T19f); four older behaviours still roll every frame (R-T19j, carried). The reach is
+  Plan 4's placed boxes (P5-R22); spacing against the baked bodies was measured, not changed
+  (P5-R23).
+- **Controls** (Tasks 20, 21, 21b). Ultimate's Stick Jump is a per-player option, on by default
+  (D31): sim state (`CombatState.controls`, `CONTROL_STICK_JUMP_OFF`), because it changes what
+  the same input does, set by the match config and carried in the online start. Off, Up only
+  aims, only the Jump key jumps and a held Up no longer wall-tech-jumps; on, a soft Up (a pad's
+  partial tilt, or the Tilt key) still never jumps. CPUs keep the default. A gamepad's five
+  action buttons (attack, special, jump, shield, grab) are rebound on `/controls` by clicking the
+  action and pressing the button; the button moves to that action, and an action left with none
+  takes the action's old buttons (a swap), so no action is ever unbound; a d-pad button bound to
+  an action stops being a direction. The right stick does a smash attack (Ultimate's default,
+  SmashWiki "C-Stick"), a special or nothing: a flick from rest lets go of the left stick's
+  direction for a frame and presses its own, at full strength, with the button on the next
+  (UNVERIFIED-simplified: holding it does not charge the smash), on a standard-mapping pad only
+  and once the stick has been seen at rest (R-T21a). Ultimate's Tilt Attack and Jump modes are
+  not offered. Each port's Stick Jump and pad settings are kept in the browser
+  (`david-smash.controls.v1`), written only by `/controls`'s setters (P5-R26) and read back field
+  by field (R-T21b): an online session or a remote peer's pick never writes them, and leaving
+  online restores the local options. Keyboard bindings are never saved. The Tilt key is below.
+
+**Online.** `ENGINE_RULES_VERSION` is 5 from Task 2, Plan 5's first change to what `step()` does,
+and `RULES_PIN.version` moved with it, once; every later behaviour change rewrote only
+`RULES_PIN.golden`. `engineFingerprint` hashes the bake's bones and `rulesFingerprint` (the
+version and every slot that runs a script, root and limb), so the scripts Plan 5 switched on are
+in it, and the bake digest is too. A peer on other rules is refused at its `hello`, before any
+start. A start this build cannot parse (from a host before Plan 5, whose start has no `controls`)
+arrives as `unreadable-start` carrying the host's stamp, and `buildMismatch` refuses it by name
+("rules", or "build" for a host on another commit), never silently: `OnlineMatchConfig.controls`
+is required and the plan's missing-means-defaults shim was dropped (P5-R24). Stick Jump travels
+per port in the start (`controls`) and in each pick, said only when it is off (`stickJump: false`,
+P5-R25); during an online session `/controls` edits only this machine's port, and a change goes
+out with its next pick, never into a running match (R-T20a). The pad settings never leave the
+machine.
+
+**The inserted tasks.**
+- *4b, special fall* (after Task 4): Task 4 found Mario could up special twice in one airtime.
+  Nothing anywhere had a helpless state, and no plan (2 to 5) nor the spec covered it, though it
+  is a core published rule (SmashWiki "Helpless"). Each up special says whether it ends helpless,
+  with its drift and its landing lag, and the CPU's recovery models its up special by the
+  engine's own rules. In the 56-match sweep, second up specials in one airtime went from 109 to
+  0. The first report's "after" sweep was measured with the new recovery model off; the
+  committed numbers are its fix round's (48 KOs: 8 by a hit, 40 self-destructs).
+- *7b, the hitlag convention* (after Task 8): after Task 7 two conventions coexisted (a catch
+  stop counted its own frame, as UltimateFrameData does, and ordinary hits froze one frame
+  more). Ruled: the published count everywhere, one helper (`max(n − 1, 0)`) at every freeze
+  site, Marth's Counter included; the KO freeze (14 frames, UNVERIFIED: no figure is published)
+  stays out of it, being a whole-game pause. Shield advantage then equals UltimateFrameData on
+  the four moves pinned. R-7b-a to R-7b-e are below.
+- *13b, recovery fidelity* (after 13c, ruled at Task 4b): up specials angle, reverse and
+  travel as published (Fox's 8 ways, Quick Attack's 2, Mario's and Marth's angles, a B-reverse
+  once a move), with their published lengths, per-move helpless landings, Link's helpless air
+  acceleration 0.025 and his aerial Spin Attack in a slot of its own (`upBAir`); the CPU's
+  recovery steers by angle and presses away from a wall first where that helps. Published reach
+  stood although the CPU's self-destructs rose (R-T13b-a).
+- *13c, projectile behaviour* (P5-R28, Task 13 split): Samus's bomb settles and explodes, Link's
+  boomerang turns where its page says, projectiles stop at undersides by each one's wall rule,
+  projectile clang follows `SETOFF_KIND`, refused spawns are tested and rolled back, and a
+  projectile lab joined the golden.
+- *13d, smash-input specials* (P5-R29): the smash-input rule for specials (the stick's speed and
+  window, shared with smash attacks, per move), Samus's Super Missile (its own script, projectile
+  and motion) and Link's smash-thrown Boomerang; one Boomerang out at a time, and a throw with
+  one out is the failed throw (60 frames grounded, 46 aerial; R-T13d-d).
+- *21b, the Tilt key* (P5-R27): "The keyboard forward tilt", below.
+
+**The rulings, P5-R1 to P5-R29.** Each made by the controller on David's behalf, with its cost
+if wrong; the recommended option was adopted every time.
+- *P5-R1 (R-T2a)*: released charging specials stop glowing (`chargeHold = loopFrame − 1`). Cost:
+  none.
+- *P5-R2 (R-T2b)*: charged projectiles look charged in flight (`ProjectileContext.fraction`; the
+  Charge Shot and arrow painters). Cost: one context field.
+- *P5-R3 (R-T4)*: Task 4 moves the golden: Mario's Cape is in the mario-fox CPU match. Cost:
+  none; the plan's "untouched" was wrong.
+- *P5-R4 (R-T5)*: Marth's Counter clip is split into a guard-only `downB` and a new
+  `counterAttack`, the strike on the cut. Cost: a re-bake in Task 5.
+- *P5-R5 (R-T6a)*: F.L.U.D.D.'s pump is `fixedKnockback` 70 with `baseKnockback` 0 → 55 by the
+  charge. Cost: none.
+- *P5-R6 (R-T6b)*: a Mario `water` painter, so a pump never draws as a spark. Cost: none.
+- *P5-R7 (R1)*: `REVERSE_LR` is real; `launchFacing`'s back-throw stand-in is gone, and
+  `MoveDef.turnAt` covers legacy back throws. Cost: the back-throw characterization tests change.
+- *P5-R8 (R2)*: a captor's boxes that are not catch-only skip the fighter it holds. Cost: a
+  narrow fidelity guess.
+- *P5-R9 (R3, R4)*: reconcile and timing use the throw's real strike (`ATK_HIT_ABS`);
+  `reconcile.allow.json`'s throw and pummel entries went from 60 to 10. Cost: none.
+- *P5-R10 (R6)*: a pummel lasts `move.totalFrames`, not `PUMMEL_FRAMES` 10. Cost: the golden
+  moves.
+- *P5-R11 (R7)*: the ledge exclusion is Inhale's alone; D56 stands. Cost: none.
+- *P5-R12 (R8)*: crawling does not count for crouch cancel until a source says so (it stood: a
+  commented-out line in a mod is not one). Cost: none.
+- *P5-R13 (R-T15c)*: the bake budget, below. Cost: the bake grows past 2 MiB (it did not).
+- *P5-R14 (R5 with R-T14)*: new actions are visited, not exempted: a states lab (Task 8,
+  extended by Task 11), an Inhale lab (9) and a crawl lab (12); only `finalTrapped` was exempted,
+  in Task 14, and Task 15's Final Smash lab visits it. Cost: the golden rewritten in four more
+  tasks.
+- *P5-R15 (R-T13a)*: one smash-hold rule, `START_SMASH_HOLD` where the script raises it, else
+  `chargeHoldFrame`. Cost: none.
+- *P5-R16 (R-T13b)*: Mario's and Kirby's forward smashes and Pikachu's up smash join
+  `limb.hold.json`, each with its placement fault. Cost: three moves keep legacy boxes for now.
+- *P5-R17 (R-T13c)*: direction classes for the new limb slots (forward smash F, up smash U, down
+  smash and Link's up special SWEEP). Cost: none.
+- *P5-R18 (R-T15a)*: Volt Tackle's dashes use autolink 367°, UNVERIFIED, with 366° noted. Cost:
+  none.
+- *P5-R19 (R-T15b)*: the far-end compile moves into Task 15. Cost: none.
+- *P5-R20 (R18-1)*: the CPU techs out of `tumbleFall` too, by a neutral shield press near the
+  floor. Cost: the golden's CPU traces move.
+- *P5-R21 (R18-2)*: the CPU's `escape` checks `dodgeCarriesOffstage`, as `shield` does. Cost: none.
+- *P5-R22 (R19-1)*: the plan's `meleeReachFromDef(def, bones)` rewrite is dropped. Cost: none.
+- *P5-R23 (R19-2)*: CPU spacing against baked bodies is measured, not changed. Cost: the CPU may
+  space slightly off until polish.
+- *P5-R24 (R20-1)*: `OnlineMatchConfig.controls` is required. Cost: none.
+- *P5-R25 (R20-2)*: Stick Jump is sent only when off. Cost: none.
+- *P5-R26 (R21-1)*: control prefs are saved only from the `/controls` setters, and
+  `leaveOnline` restores the local options. Cost: none.
+- *P5-R27 (R-KB)*: Task 21b, a bindable Tilt key. Cost: one more key per port, and a task.
+- *P5-R28*: Task 13 is split and Task 13c inserted. Cost: one more implementer and review cycle.
+- *P5-R29*: Task 13d is inserted. Cost: one more task; Samus's side special splits in two moves.
+
+**The task rulings.** Made during each task's reviews, in the ledger, with the cost it gave.
+Where one was amended, its final form is given and marked. R-T13a to c, R-T14 and R-T15a to c
+are P5-R15 to R17, P5-R14 and P5-R18, R19 and R13 above; a brief's own rulings (R-T10a to c,
+R-T11b, R-T12a and b) are in their task reports.
+- *Task 7b, hitlag*:
+  - R-7b-a: shieldstun is not a frame short; measured by when a pressed jump starts, advantage
+    equals UltimateFrameData (Mario jab 1 −14, Fox jab 1 −12, Mario ftilt −13, Marth jab 1 −16),
+    so the test changed. Cost: none.
+  - R-7b-b: the 1v1 multiplier scales damage only; launches and the heavy-armour comparison use
+    the unmultiplied damage. Cost: the golden moves; 1v1 KO percents rise slightly.
+  - R-7b-c: an armoured fighter sustains hitlag, on both armour paths. Cost: armoured moves run
+    longer by their hitlag.
+  - R-7b-d: the 1v1 multiplier never reaches a shield (attacker pushback UNVERIFIED). Cost: the
+    scripted trace moves (Fox's shield break 649 → 659).
+  - R-7b-e: a trade never shortens a freeze, UNVERIFIED. Cost: none on the golden.
+- *Task 8, the carry*:
+  - R-T8a: the carry's length is fixed at the grab. Cost: one field.
+  - R-T8b: cargo throws get heavy armour 16 instead of throw invincibility (the window, the
+    whole throw, UNVERIFIED). Cost: one field and one branch.
+  - R-T8c: `cargoCarry` and `cargoHeld` alias the walk and grabbed motions. Cost: an authored
+    clip adds its own motion later.
+  - R-T8d: the cargo down throw's boost is in the air only. Cost: one pin.
+  - R-T8e: a new lab rather than widening or re-timing an existing one. Cost: one more trace per
+    new lab.
+- *Task 9, Inhale*:
+  - R-T9a: copied projectile specials keep the copy's ×1.2 (the plan's ×1 was a plan bug). Cost:
+    one field carried onto spawned projectiles.
+  - R-T9b: every Inhale release goes through `releaseGrab`. Cost: none.
+  - R-T9c: the copy-loss draw uses the match's seeded RNG, rollback-tested. Cost: none.
+  - R-T9d: a copy lost during a copied special is lost at that move's end, UNVERIFIED. Cost: an
+    armoured copy outlives its loss by one move.
+  - R-T9e: a stored charge clears on a copy's loss and on a new copy, UNVERIFIED. Cost: a stored
+    charge dropped that the game might keep.
+  - R-T9f: Inhale's published catch box, length (64 to act), held loop, pull windboxes, aerial
+    spit and out-star go in now. Cost: the golden and the bake move.
+- *Task 10, wall jumps*:
+  - R-T10d: only a fresh press away wall-jumps. Cost: none.
+  - R-T10e: a wall jump gives way to a special, air dodge, attack or footstool pressed the same
+    frame (WuBor Patch's order, UNVERIFIED beyond it). Cost: a same-frame double press resolves
+    the other way if wrong. Ratified with it: a hit or grab keeps the wall-jump count.
+- *Task 11, footstools*:
+  - R-T11a: a lab may be extended only by steps appended after its last, or by a new lab. Cost:
+    that lab's digest changes by the appended tail only.
+  - R-T11c: hitstun can be footstooled, hitlag cannot; a grounded footstool ends the reel. Cost:
+    none on the golden or the sweep.
+  - R-T11d: a run ends by the jumper's fall speed, 2 to 6 (the mechanism UNVERIFIED). Cost: chain
+    counts shift.
+  - R-T11e: only a jump pressed that frame footstools, UNVERIFIED. Cost: a buffered jump near a
+    head double-jumps instead.
+  - R-T11f: the footstooler acts on frame 8 and is intangible on 9–12, every footstool. Cost: one
+    window.
+- *Task 12, the crawl and the edges*:
+  - R-T12c: `crouchStart` joins `isActionable` and both crawl guards. Cost: the golden may move.
+  - R-T12d: every grounded-only status leaves for its airborne one on leaving the ground, by one
+    edge-rule table. Cost: traces may move.
+  - R-T12e: rolls, tech rolls and the spot dodge stop at the edge (the spot dodge UNVERIFIED).
+    Cost: about 42 of 56 sweep outcomes, two golden traces.
+  - R-T12f: an air dodge's landing stops at the edge (SmashWiki "Wavedash"). Cost: wavelands only.
+  - R-T12g: grounded attacks stop at the edge against their own movement; a push from outside
+    cancels into a fall. Cost: about four CPU traces, most sweep outcomes.
+- *Task 13, scripts on*:
+  - R-T13d: a motion rate set before a script's first frame applies from frame 1 (the Fireball
+    on 17). Cost: none beyond Mario's Fireball.
+  - R-T13e: a smash holds on its `START_SMASH_HOLD` frame − 1. Cost: two golden traces move.
+  - R-T13f: Link's Spin Attack runs its published 7/77 timeline. Cost: Link's up special timing.
+  - R-T13g: `THRU` is trample (`noRebound`). Cost: clank outcomes for those moves.
+  - R-T13h: Kirby's Stone has its published landing hit, on frame 11 when used grounded. Cost:
+    Stone's ground damage.
+  - R-T13i: every legacy smash holds on its published first charge frame. Cost: legacy smashes
+    charge earlier; the golden moves.
+  - R-T13j: the Stone runs its published timeline, with damage-threshold armour and stone
+    protection. Cost: Kirby's down special changes throughout.
+  - R-T13k: an aerial Stone landing early never hits before frame 11, UNVERIFIED. Cost: none.
+  - R-T13l: superseded by R-T13n. Cost (as ruled): the golden and the sweep move where CPUs
+    re-pressed.
+  - R-T13m: the Stone's edge cases (play on at its maximum; 32 after an air cancel). Cost: none.
+  - R-T13n: a smash's charge is decided on its hold frame (held there, it charges; a release
+    closes it; nothing rewinds), UNVERIFIED for Ultimate. Cost: 16 test rows; the golden unmoved.
+  - R-T13o: a full charge holds 120 more frames at full power and releases at 180. Cost: only
+    long human holds.
+- *Task 13b, recovery*:
+  - R-T13b-a (amended): published up-special reach stands although CPU self-destructs rose
+    35 → 40; the "12 out of reach" reading was withdrawn and the causes re-counted. Cost: weaker
+    CPU recovery until Tasks 18 and 19.
+  - R-T13b-b: Spinning Kong's "Gravity multiplier 0.07" is the gravity itself, UNVERIFIED. Cost:
+    one field if a source disagrees.
+  - R-T13b-c: the CPU's up special press is always the up special (Up held through its fire
+    frame). Cost: the golden's CPU traces move.
+  - R-T13b-d (amended by R-T13b-g): dropping through a soft platform depends on the action; Fox's
+    aerial up special aimed down drops. Cost: engine-wide; CPU traces move.
+  - R-T13b-e: a B-reverse turns the fighter and its horizontal speed, once a move. Cost: small.
+  - R-T13b-f: `upBAir` stales as `upB`. Cost: none.
+  - R-T13b-g: `tumbleFall` lands on a soft platform, lying, and never drops through it. Cost:
+    CPU traces may move.
+  - R-T13b-h: the CPU keeps holding Up for its up special; re-pressing after a tap jump went to
+    Task 19. Cost: none.
+- *Task 13c, projectiles and clank*:
+  - R-T13c-a: a clank freezes (the stronger hitlag, boxes off) and rebounds,
+    `floor((d + 4)·15/8)` frames, 58 at most, d the stronger box's damage for both sides (the
+    wording corrected at its re-review). Cost: every sweep clank changes.
+  - R-T13c-b: aerials do not clank with ground attacks or aerials, only with projectiles. Cost:
+    none on the golden.
+  - R-T13c-c, d, e: the boomerang's floor bounce (16°, 30°), the arrow's gravity 0.054 and 2.5°,
+    the Fireball's published flight. Cost: the golden regenerates.
+  - R-T13c-f: a task's own lab may move in its own fix rounds. Cost: none.
+  - R-T13c-g: one clank resolution a meeting (the strongest box each side, the 9% rule once, one
+    event). Cost: clank counts become meetings.
+- *Task 13d, smash-input specials*:
+  - R-T13d-a: Samus's two missile limits (2 Homing, 1 Super) are each counted on their own kind,
+    UNVERIFIED that they don't share. Cost: none if a source says they share.
+  - R-T13d-b: the smash-input window is per move, published (Samus 5, Link 8). Cost: none.
+  - R-T13d-c: on a keyboard, a direction and B together give the smash version; the ordinary one
+    needs the direction held past the window, or the Tilt key. Cost: keyboard players see a
+    change.
+  - R-T13d-d: one Boomerang at a time by a shared article key; a throw with one out is the failed
+    throw. Cost: the golden moves where two were out.
+  - R-T13d-e: a reflected projectile does not re-run its launch wait, and its acceleration never
+    clamps it below its speed, UNVERIFIED. Cost: small.
+  - R-T13d-f: projectile hits stale like their move, the smash and failed side specials as
+    `sideB`: carried to the final wave. Cost: projectile damage drops on repeats.
+- *Task 14, the Final Smash engine*:
+  - R-T14a: the Final Smash starts where the neutral special does; a same-frame shield wins.
+    Cost: none if Ultimate gives the Final Smash priority (one line).
+  - R-T14b: every hit that deals hitstun drops the power, UNVERIFIED (SmashWiki says
+    "randomly"). Cost: it drops more often than in Ultimate.
+  - R-T14c: `finalTrapped` aliases the grabbed motion. Cost: the trapped pose is the grabbed one
+    until a clip is authored.
+  - R-T14d: a scene plays out in full, its user held, and a Final Smash never lands out of
+    itself (UNVERIFIED). Cost: none on the golden.
+  - R-T14e: a cinematic Final Smash does not trap Kirby in Stone; the trap goes through armour,
+    UNVERIFIED. Cost: none.
+  - R-T14f (stood): the stage's motion stops whenever the world is paused, a scene or a KO's
+    freeze, through a hashed `stageFrame` (the KO half UNVERIFIED). Cost: every golden digest
+    moves; Smashville traces move where a KO froze.
+  - R-T14g: the fighters' freeze and the world's start and end on the same frame. Cost: one test
+    moves.
+  - R-T14h: other fighters in standby keep their power through another's Final Smash. Cost: none.
+  - R-T14i: a Final Smash's user is intangible from the frame the power is spent. Cost: none; the
+    engine-wide first-tick gap went to the final wave.
+  - R-T14j: no ledge grab in any Final Smash part (the scene and end parts UNVERIFIED). Cost: none
+    on the golden.
+- *Task 15, the cinematic five*:
+  - R-T15d: published values win over the brief's sketch (Team Star Fox's 43%, Volt Tackle's 20%
+    final blast, Fox's reticle capsule, Donkey Kong's 132 frames). Cost: the totals change.
+  - R-T15e (revised): Ultra Sword is ten blows after the trap, 44.8%. Cost: Kirby's Final Smash
+    changes.
+  - R-T15f: Critical Hit's grounded dash ends at the edge without the swing, and a special press
+    stops it. Cost: none on the golden.
+  - R-T15g: Volt Tackle has no edge stop. Cost: none.
+  - R-T15h: Volt Tackle starts in place; its six 0.3% sparks are ordinary hits, and the trap is
+    the 1% hit on 47. Cost: Volt Tackle changes.
+  - R-T15i: Jungle Rush's end is 61 frames (rate 0.8 from 30). Cost: a re-bake; the lab moves.
+  - R-T15j: a box can be `trap: false` inside a trapping part. Cost: none.
+- *Task 16, Mario Finale, Zero Laser, the Ancient Bow and Arrow*:
+  - R-T16a: a Final Smash is out while its user is in a part or any of its projectiles lives.
+    Cost: none on the golden.
+  - R-T16b: an aerial Final Smash that traps nobody holds its user (UNVERIFIED kinetics); every one
+    ending in the air gives the midair jumps back. Cost: aerial ones stop self-destructing.
+  - R-T16c: Zero Laser's 69-frame start (a 1% charge on 48–69 and two pull windboxes). Cost: its
+    timing; the beams lab moves.
+  - R-T16d: per-box rehits (muzzle 8, beam 10, end 0) and the scripted clears at 8, 12 and 140.
+    Cost: the end on 140; 16 point-blank hits.
+  - R-T16e: `samus_laser2`'s side beams (0.5%, rehit 8, ±14 from 17) and 2.5% blasts. Cost: Zero
+    Laser's damage moves toward 10.5%.
+  - R-T16f: Zero Laser keeps freezing Samus, UNVERIFIED. Cost: 280 frames when holding a fighter.
+  - R-T16g: the Ancient Arrow hits fighters only (`Hitbox.fightersOnly`). Cost: none.
+  - R-T16h: the arrow's `DisableHitlag` means no hitlag, UNVERIFIED against SmashWiki's 0.3. Cost:
+    its victims are not frozen 7 frames.
+  - R-T16i: a clank re-arms a rehit box's target. Cost: none (latent).
+  - R-T16j: a cinematic Final Smash whiffed in the air holds its user, the published dashes
+    excepted. Cost: Donkey Kong, Kirby and Fox stop dying after aerial whiffs.
+  - R-T16k: an aerial Final Smash holds its user through every part. Cost: none on the golden.
+  - R-T16l (amended): the hold applies only before a part's first momentum window; from it, the
+    part has its ordinary kinetics, so a whiffed dash carries on and falls, UNVERIFIED. Cost: a
+    whiffed aerial dash offstage self-destructs again, as published.
+  - R-T16m: the travelling parts are an explicit, pinned list. Cost: none.
+  - R-T16n: the travel windows read what `moveMomentum` applies. Cost: none.
+  - R-T16o: Zero Laser's beam is on its muzzle's height, 15 (fringes ±14). Cost: the beams lab
+    moves.
+  - R-T16p: a new lab for the dash whiffs. Cost: a 13th trace.
+- *Task 17, presentation*:
+  - R-T17a: event fields the sim emits for presentation, outside state and the hash, are
+    presentation (Plan 4's R9). Cost: none.
+  - R-T17b: motions authored for presentation may change their states' baked hurtboxes, with the
+    golden, reach and hurt checked. Cost: Pikachu's crawl and the footstooled hurtboxes follow
+    their new clips.
+  - R-T17c: the Final Smash close-up closes in (at least ×1.4 in a 1v1). Cost: none.
+  - R-T17d: Jungle Rush's barrage does not draw Donkey Kong into Mario (clips and a draw offset,
+    no sim change). Cost: maybe a bake change.
+  - R-T17e: Team Star Fox hides the damage percentages during its scene. Cost: none.
+  - R-T17f: the strong counter flash is brightened. Cost: none.
+  - R-T17g: Zero Laser's beam is drawn at its sim size. Cost: none on the golden.
+  - R-T17h: no intangibility fade during a Final Smash. Cost: none.
+  - R-T17i: every overlapping scene part keeps a gap, measured against the launched fighter through
+    its hitlag. Cost: none.
+  - R-T17j: the KO punch-in also fires on a Final Smash's end-part hit. Cost: none.
+  - R-T17k: one Zero Laser beam over the boxes' envelope, one end blast, from the muzzle. Cost:
+    none.
+  - R-T17l: effects and projectiles are clipped by the stage's solid bodies. Cost: none.
+  - R-T17m: Zero Laser holds a level cannon (a clip of its own). Cost: one bake.
+  - R-T17n: Donkey Kong is never drawn inside a fighter behind him (a 15-unit gap). Cost: none.
+  - R-T17o: a release eases out; the trap step's back-off stays instant. Cost: none.
+  - R-T17p: Donkey Kong's uppercut stays in frame. Cost: none.
+  - R-T17q: a release ends within 8 frames at any refresh rate (it ends 7 after the last hold).
+    Cost: a constructed late fall could jump within a frame.
+  - R-T17r: Samus's clip-driven ECB change is recorded and pinned, not reverted. Cost: her end
+    position by Final Destination's wall moves 0.45 (82.342, was 82.796).
+  - R-T17s: scene hit sparks follow the user's drawn shift. Cost: none.
+  - R-T17t: the beam's near end is softened. Cost: none.
+- *Task 18, CPU defence*:
+  - R-T18a: the CPU techs onto any floor under it, soft platforms included. Cost: none.
+  - R-T18b: the gameplay e2e steps until the player stands before pressing. Cost: none (the
+    review confirmed it proves the same).
+  - R-T18c: the hitstun-cancel press leads by a frame, as the engine reads it. Cost: none.
+  - R-T18d: the parry is timed off the attacker's first active frame from move data, only from a
+    shield that can drop (SmashWiki "Perfect shield"). Cost: parry counts and CPU traces move.
+  - R-T18e: `techSkill` is one chance a landing. Cost: fewer high-level techs; the sweep and the
+    golden move.
+  - R-T18f: the cancel reads hitstun in the engine's order. Cost: none.
+  - R-T18g: `shield` decides once a threat and holds through the swing (landed in Task 19).
+    Cost: CPU shields hold; the sweep moves.
+  - R-T18h: one tech roll a tumble; whether the engine lets a tech follow a bounce stays
+    UNVERIFIED. Cost: fewer hard-landing techs.
+  - R-T18i: `tech` holds the stick once a floor is within 12 frames. Cost: no undecided landing.
+  - R-T18j (stood): the parry's reach is the engine's hit test (the body first, no intangible
+    parry), judging the side from where the swing is now. Cost: carried cross-ups are decided
+    and hit in the drop (0 to 29 per fighter on a grid, 0 in the sweeps).
+  - R-T18k: R-T18h's one roll is per contact kind; a wall is its own. Cost: none.
+  - R-T18l (amended): the stateless one-roll reading stands, with its residual carried to the final
+    review (late re-rolls 5/1/1 and lockout refusals 5/8/2 a sweep). Cost: level-9 hard-landing
+    techs in lockout cases fall below the dial.
+  - R-T18m: the parry places the swing where its own velocity carries it by its hit frame. Cost:
+    none measured.
+  - R-T18n: the parry's read of the swing's current place is accepted and documented. Cost: a
+    level-7 or 9 parry knows the swing's exact position.
+  - R-T18o: the air dodge's press frame stays neutral. Cost: a frame of drift at a platform's edge.
+  - R-T18p: a contact too fast to tech spends no roll. Cost: fast hard landings tech at the dial
+    on their next contact.
+  - R-T18q: the fast-fall hold-off masks only Down. Cost: CPU traces move.
+  - R-T18r: a ceiling stop is never read as a floor bounce (its edge cases UNVERIFIED). Cost: none
+    on the six stages.
+  - R-T18s: no unsourced engine change in a CPU task: a ceiling bounce keeps the gravity from
+    before the collision, as rubendal does. Cost: none in play.
+- *Task 19, CPU specials*:
+  - R-T19a: `BEHAVIOURS` moves to `cpu.ts`, breaking an import cycle. Cost: an import path only.
+  - R-T19b: `mash`, `smashSpecial` and `centre` were the controller's items, not creep. Cost: none.
+  - R-T19c: the shield's decisions over the stage are decided, never fumbled (the dial is the
+    chance). Cost: an on-stage shield never fumbles.
+  - R-T19d: Volt Tackle's strict use stands (a whiff self-destructs on every stage here). Cost:
+    Pikachu rarely uses its Final Smash in CPU play.
+  - R-T19e: the re-staged tests stand, each confirmed to prove its claim. Cost: none.
+  - R-T19f: counter and reflect decide exactly once a threat. Cost: their rates fall to their
+    dials.
+  - R-T19g (extended to the engine's fixed chains): the shield also decides on the CPU's first
+    free frame inside a seen, undecided threat. Cost: about 10% more shield decisions.
+  - R-T19h: Volt Tackle's `room ≥ travel` arm is dropped. Cost: the few Pokémon Stadium 2 tackles.
+  - R-T19i: a sideways recovery rolls once an offstage episode; holding's swallow or spit by
+    facing is a recorded deviation. Cost: low levels side-recover less.
+  - R-T19j: the older per-frame rolls (`recover`, `edgeguard`, `attack`, `survive`'s DI and SDI)
+    are labelled, not changed, and carried. Cost: none.
+  - R-T19k (amended): `attack` reads intangibility and invincibility through the delayed view,
+    hiding only what began inside the frames not yet seen; respawn invincibility, a throw's
+    catch stop, the Smash Ball and the Final Smash glow are live reads. Cost: low levels sometimes
+    swing into a roll.
+  - R-T19l (amended twice): for a fighter with a counter, a swing it can catch is decided at the
+    counter's aim frame, the counter first and then the shield, through one timing helper; a swing
+    first in range after that frame decides on sight, as before. Cost: Marth shields about 8
+    frames before the hit, and parries less.
+  - R-T19m (extended): a decided shield press comes out as judged; in the air, a press that
+    waited or is read on a move's hand-off keeps the shield's stick. Cost: other behaviours lose
+    the stick on that step.
+  - R-T19n: the ghost step's copy clears the buffered action. Cost: none.
+  - R-T19o: the CPU holds its shield through shieldstun. Cost: more shield pressure and breaks.
+  - R-T19p: the shield never presses over the CPU's own buffered special. Cost: a CPU recovering
+    at the edge doesn't dodge a swing it sees.
+- *Task 20*: R-T20a: online, `/controls` edits only this machine's port; a change is kept
+  locally and goes out with the next pick; a running match never changes; the host cannot edit
+  the guest's port. Cost: a small fix item.
+- *Task 21*:
+  - R-T21a (amended): the right stick counts only on a standard-mapping pad, and only once seen at
+    rest, "at rest" meaning below the walk threshold (the first wording, inside the dead zone,
+    left a worn pad's stick dead). Cost: non-standard pads get no right-stick move.
+  - R-T21b: one exported bound for a pad button (`PAD_BUTTON_LIMIT`, 32), for the capture and
+    the storage check; a bad field falls back alone, keeping Stick Jump. Cost: none.
+  - R-T21c: if this machine's first human sat on port 1 offline, leaving online shows port 1's
+    options on port 0 until a reload, accepted and pinned (and an online edit then replaces port
+    0's saved entry). Cost: that rare setup.
+- *Task 22*: R-T22a: the option e2e tests play against an idle human P2, asserted idle, not a
+  CPU that a polish re-tune would change. Cost: `helpers.ts` joins Task 22's files.
+
+**The bake budget (P5-R13).** Not raised. The bake was reported at every regeneration and never
+crossed 2 MiB: 88.0% at Plan 4's end; 88.02% (Task 2); 88.12% (Task 5's Counter clip); 88.14%
+and 87.85% (Task 6 and its fix round); 87.86% and 87.81% (Task 7 and its motion rates); 89.80%
+(Task 8's carry motions) and 88.19% (R-T8c's aliases); 88.38% (Task 9); 88.35% to 88.36% (Task
+13); 88.61% (13b); 88.72% (13d); 91.75% and 91.89% (Task 15 and its fix round); 92.66% (Task 16);
+93.83% (Task 17); 93.89% (Task 16's first fix round, the peak); 93.75% (Task 17's third fix round
+and since). The ~100.2% the plan estimated after Task 16 never came: the carry, the trap and the
+other new states alias existing motions (R-T8c, R-T14c). The budget stays 2 MiB
+(`roster.test.ts`).
+
+**Where the numbers ended up** (each difference has its cause in its task's report):
+
+| Artefact | Plan 4's end (`232645e`) | At Task 23 |
+|---|---|---|
+| `ENGINE_RULES_VERSION` | 4 | 5 (Task 2) |
+| `RULES_PIN` | `{ version: 4, golden: "89571aca" }` | `{ version: 5, golden: "74543839" }` |
+| Golden traces | 6 | 13: the four CPU matches, the script, the tech lab, and the states, Inhale, crawl, projectile, Final Smash, beams and dash labs |
+| `MUST_VISIT` | 48 states | 59 |
+| Bake digest | `1131b09c1efaf89f4763cfa599d3fbdbbdbe8b255381c0c6912073a5149e0107` | `7962fcb6160ee5603b40ace8681cc8c83634702ae1994f498dad5fde69c4d79e` |
+| Bake size, raw / gzipped | 6,366,019 / 1,845,102 (88.0%) | 6,939,779 / 1,966,125 (93.75%) |
+| Script slots on, root / limb | 38 / 50 | 71 / 66 |
+| `limb.hold.json` | Samus's down air | Samus's down air, Mario's and Kirby's forward smashes, Pikachu's up smash (P5-R16) |
+| `reach.allow.json` | 36: 23 `size`, 7 `clip-gain`, 4 `root-exact`, 2 `sweep` | 41: 24, 7, 5 and 5 |
+| `reconcile.allow.json` | 103 | 43 |
+| `DECISION_ROLLS` | 6 | 9 |
+
+**How it stayed safe.** The golden harness plays 13 matches. Task 2 bumped `ENGINE_RULES_VERSION`
+and `RULES_PIN.version` to 5 once, with its first behaviour change; every later regeneration
+rewrote only `RULES_PIN.golden` and the "Measured" comment, each commit saying why, and no pin
+entry was dropped. A lab is extended only by appended steps or by a new lab (R-T8e, R-T11a),
+and only its own task re-times it (R-T13c-f). Measured last at Task 19's second fix round, in
+`MATCHES` order (the four CPU matches, the script, then the tech, states, Inhale, crawl,
+projectile, Final Smash, beams and dash labs): hits 37/29/26/18, 6, 0, 1, 4, 1, 2, 33, 54 and 0;
+shield hits 5/10/0/0, 3 and none in a lab; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2 and 1.
+`MUST_VISIT` names all 59 states, covered as a union. The golden has stayed `74543839` since
+then: Task 18's last fix round and Tasks 20 to 22 moved nothing the sim reads. Every task ran
+the model-less fresh clone's `pnpm test` and the pre-push scan; the engine never imports three.js
+or `render3d/` (`layering.test.ts`).
+
+**D57's Plan 5 carries**, each by name.
+- *The captor's `throw` joint, and Samus's tether*: not done. A held fighter still stands beside
+  its captor (R7's stand-in) and a carried one on Donkey Kong's head (`held.ts`, UNVERIFIED), and
+  Samus's grab and dash grab keep their legacy boxes. Carried to polish.
+- *The shield on a bone*: not done; the shield is still Plan 3's bubble. Carried.
+- *Clips of their own for the six borrowed actions* (`tech`, `techRoll`, `techWall`,
+  `techCeiling`, `tumbleFall`, `ledgeTrumped`): not done. Task 17 authored the crawl, the
+  footstooled bounce, Link's failed throw and Donkey Kong's and Samus's Final Smash clips, but
+  the six still borrow. Carried.
+- *A contact point for shield hits*: not done; a shield hit still reports its box's centre
+  (`events.shieldHits`). Carried.
+- *The CPU's spacing* (P5-R23): measured, not changed. Task 19's sweep at its first commit (seeds
+  1000/5000/9000): hits 1,666/1,644/1,731 → 1,978/2,008/2,096, KOs 40/41/40 → 32/31/26, with the
+  reach Plan 4 placed (P5-R22). Spacing by the target's baked body, which risks D30's whiff
+  deadlock, is carried to polish.
+- *366° and 368°*: not modelled. Volt Tackle's dashes use 367° (P5-R18; its scene never reads the
+  angle), and a box with 363°, 366° or 368° is still refused at load, so Donkey Kong's up special
+  and Samus's up smash still run their legacy tables. Carried.
+- And from D57's polish list, *the keyboard forward tilt*: closed by P5-R27, below.
+
+**The keyboard forward tilt (P5-R27).** D57 found that a keyboard player could not forward-tilt
+from standing: a held direction dashes on its fourth frame, before the tilt window opens, and only
+a pad set `Btn.Soft`. Each keyboard preset now has a **Tilt** key, held for a part-way push:
+Config 1 `V`, Config 2 `C`, Config 3 `N`. While it is held the port's frame carries `Btn.Soft`, the
+bit a gamepad's partial tilt sets, so a held direction walks (at half the fighter's walk speed:
+one bit of magnitude read as half a deflection, D55, UNVERIFIED), Attack is never a smash (a run
+still dash-attacks), DI bends a quarter as far, Up never jumps, and a side special is the
+ordinary one. The keys were chosen because no default binding of any preset holds them, so
+Configs 1 and 2 still share six keys and Config 3 none; the cost is that Config 2's `C` does not
+mirror Config 1's `V` on this one key (the mirror pair, `S` and `↓`, would have added two
+overlaps; it is a two-line swap if wanted). It needed no engine, golden or rules change: `Btn.Soft`
+already crossed the wire and rolled back, and the golden already walked the soft paths;
+`mergeKeyboardAndPad` keeps the keyboard's own Soft beside a key direction. Keyboard bindings,
+the Tilt key's included, are never saved: only Stick Jump and the pad are, per port (P5-R26). Two
+other fixes were weighed and rejected: a delay before a held direction dashes (a sim and feel
+change for every player, against SPEC §6 and Ultimate's instant dash) and a pad-only "Tilt
+Attack" right stick (no help to a keyboard).
+
+**SPEC changes** (§6, reported to David; `git log 232645e..HEAD -- super-smash/SPEC.md`):
+- The controls table gains a **Tilt (held)** row: `V` (Config 1), `C` (Config 2) (Task 21b).
+- "Step vs. dash" adds "With Tilt held, it walks."; "Tilt vs. smash" adds "With Tilt held, never a
+  smash." (Task 21b; its fix round corrected "always a tilt", which a run's dash attack belies).
+- A new row, **Smash side special**: within the move's own window of a fresh direction press, a
+  side special is its smash version (Samus 5 frames, Link 8); otherwise, or with Tilt held, the
+  ordinary one (Task 13d's rule, written down in 21b).
+- "Walking is not reachable, and that is correct rather than missing" became **"Walking takes
+  the Tilt key"**: what Tilt does, Config 3's `N`, and the half walk speed (its fix round).
+- The stale **"Tap jump defaults off"** (D31 had made it on) became **"Stick jump defaults on"**:
+  Up jumps once five frames pass with no attack, special or grab to claim it, the Jump key at
+  once; a per-player option on `/controls`; a soft Up never jumps.
+- At Task 23, the half walk's reading says "no source we used publishes" it, not "no source", as
+  D55 marks it UNVERIFIED.
+
+**Readings recorded, and what is not modelled.** Each is marked `UNVERIFIED:` in the code or named
+there as unmodelled; the task reports give the sources.
+- *Charging*: the rules for a stored charge are SmashWiki's "Charge", "Flinch", "Charge Shot" and
+  "Giant Punch". UNVERIFIED: an aerial charge that lands is lost; Hammer Flip's recoil starting 26
+  frames after the charge fills and stopping at 100%, a flat 1% a burn; the bow firing at its
+  180-frame hold; a second B buffered during the entry frames firing; with the air dodge or the
+  midair jump already spent, the charge still stored and the fighter falling (the fallback no
+  source gives). Read as inferences: the aerial air-dodge store for Ultimate, and the roll and
+  spot-dodge stores each published for one move and modelled for both. Not modelled: the
+  grab-button store cancel (no published outcome in Ultimate), the 4-frame cancel and
+  post-charge lags, and Kirby walking while he charges.
+- *The Reflector*: the reflected projectile's owner is the reflector and its `source` the
+  spawner; the stall is once an airtime (SmashWiki "Reflector (Fox)"), and a grab or a ledge
+  giving it back is UNVERIFIED; an aerial Reflector held into a landing ends (the engine's rule
+  for every special, UNVERIFIED for Ultimate). The wiki's spot-dodge cancel on the arrival frame
+  is modelled as a shield press (UNVERIFIED), and the earliest escape is the frame after the
+  reflection.
+- *The Cape*: its offsets are SmashWiki's; the stop is the first midair use's; the script's
+  `SPECIAL_FALL` flag (set on 12, cleared on 21) is recorded, not modelled; a hit or a ledge
+  giving the stop back is borrowed from Fox (UNVERIFIED); a turn on a parry is UNVERIFIED; and the
+  stall's "moves him forward a bit" (Super Mario Wiki) is not modelled. A backward side special
+  turns the fighter from a standstill (SmashWiki "Side special move"); from a run it is the
+  forward one (published); from `dashStart` and in the air the turn is UNVERIFIED. Golden
+  attribution: Task 4's fix round moved mario-fox through both the Cape's physics and that turn,
+  though its commit credits the Cape alone.
+- *The Counter*: the published bubble replaced the plan's hurtbox reading; its box 2's bone is
+  `colonells` (SmashWiki) or `claviclel` (rubendal); the aerial Counter's gravity, fall and
+  friction apply every use, and its stop and ×0.5 once an airtime through the shared stall
+  (UNVERIFIED: the ×0.5 is published unqualified). A frozen attacker's boxes stay live for other
+  targets (SmashWiki "Hitlag"), but `gatherHitboxes` skips frozen fighters: it matters only with
+  more than two.
+- *Baked motions shorter than their aerial moves* (the Cape's 36–58, the Counter's 65–79, the
+  riposte's 42–51) hold the clip's last pose: one bake carry, an air clip each or a stretched
+  tail.
+- *F.L.U.D.D.*: the water starts at about (6.5, 9.7), UNVERIFIED (SmashWiki's hitbox picture
+  worked back two frames), so it misses a standing Kirby and most of a standing Pikachu. Not
+  modelled: the release recoil (0.02 a charge frame), stick aiming, its aqua jump, pushing items
+  and the Smash Ball, the heavier shoot animation, and helplessness after being blown off a
+  platform in a special landing.
+- *Windboxes*: since a box that is flinchless alone is a windbox, an imported flinchless box with
+  damage (Fox's throw Blasters, 2% each) would lose its damage; split "pushes" from "deals no
+  damage" when one is imported.
+- *Throws*: Link's pre-release kicks can hit bystanders per SmashWiki "Throw", but Ultimate's
+  script makes them catch-only, and the script is followed. Fox's grab and dash-grab
+  motion-adjust reading has no published meaning beyond matching UltimateFrameData. A bystander's
+  hit on the exact release frame frees the victim (UNVERIFIED).
+- *Hitlag* (7b): UNVERIFIED: `KO_FREEZE_FRAMES` 14; Donkey Kong's pummel total (SmashWiki's
+  pummel page gives 22, its table and UltimateFrameData 21); Pikachu's pummel 13 is the
+  published formula with fresh damage. Not modelled (more than two fighters): the player-count
+  hitlag factor, and a grabbed fighter armouring bystanders' hits until 10% (SmashWiki "Grab").
+- *The carry*: the armour window is the whole throw, UNVERIFIED (none published; the scripts set
+  none); the carried fighter rides on Donkey Kong's baked standing top, not his `throw` bone.
+- *Inhale*: ×1.08 acceleration with a mouthful, the held loop's 35–44, the pull re-striking on
+  fixed frames (SmashWiki publishes a per-strike rehit of 10; the pull's one-frame boxes can be up
+  to 9 frames late), the out-star's direction, stop and rider at rest, all UNVERIFIED. A melee
+  windbox leaves no hit record, guarded by a one-frame-windbox schema test. Not modelled: the
+  out-star's hitbox (no published damage), projectile eating.
+- *Wall jumps*: a held jump makes a wall tech jump (SmashWiki "Tech"); tumble can wall-jump; a
+  hit or grab keeps the count, only the ground resets it; a ledge grab resetting it is UNVERIFIED;
+  the engine spends one wall-tech frame before deciding, and takes a press up to the tech's fifth
+  frame, where the game decides on the touch; there is no published no-control period after the
+  kick, so there is none.
+- *Edges*: one edge-rule table per action (R-T12d): on-foot statuses fall, shields, rolls, tech
+  rolls, the spot dodge, wavelands and grounded attacks stop, landing lag otherwise plays out in
+  the air (SmashWiki "Ledge-canceling"), a broken shield falls. UNVERIFIED rows: turnaround,
+  crouch end, getup, floor tech, `downed`, `footstooled`, shield raise and drop, spot dodge. Not
+  modelled: edge slipping and its 24–30-frame lockout (it needs a new action); the attacker's own
+  shield-pushback ledge cancel (no published threshold); the dash's flip off a platform.
+- *Scripts and projectiles*: the exact-9% clank boundary (the page contradicts itself); an
+  age-phased hitbox (clean and late hits, a bomb's explosion phases); Thunder Jolt crawling along
+  walls; the boomerang's turn distance and the smash throw's late hit; the Homing Missile's
+  published flight.
+- *Recovery* (13b): Marth's grounded up special script would place its sword boxes about twice
+  as high as the legacy table (a clip or table fix, carried). Readings: Pikachu's "horizontal
+  speed multiplier on ending 0.6" as a drift cap, and Fox's and Marth's "on startup" as ×speed
+  in; Link's "air speed on ending 0.8" as ×air speed; Kirby's grounded Final Cutter rising 38.4
+  (about 45 would fit "a bit less than Falco's full jump" better). Not modelled: per-move
+  ledge-grab windows during up specials, Fire Fox's ground bounce, Final Cutter's landing
+  shockwave, Spin Attack's back-hit pull, Spinning Kong sliding off an edge on the ground.
+- *Smash-input specials* (13d): Fox Illusion's landing lag is its published 16, now read as
+  `aerialLandingLag` (the old `landingLag` was never read); Link's failed throw while a Boomerang
+  is out is modelled (R-T13d-d).
+- *Presentation* (Task 17): the sim has no state telling a wall jump from a jump, so it cannot
+  play its own animation; a midair footstooled fighter tumbles plainly, not SmashWiki's unique
+  tumble; Pikachu has no tail bone or tail hurtbox, so his tail cannot rise crawling back. The
+  new clips moved hurtboxes the golden never tests (R-T17b): Pikachu's crawl top 9.72 → 8.68,
+  a footstooled Donkey Kong's top 39.74 → 31.38, Link's failed throw 2.2 further forward.
+- *The CPU's B*: Task 2's commit `608c9e2` says the CPUs press B only for up specials; its review
+  said they also side-B. The Task 3 review was right: until Task 19 the CPU pressed Special only
+  with Up, and a buffered up special could come out as a side special until R-T13b-c. Either way,
+  no golden match charged a special before Task 19, which gave the CPU every special.
+- *KOs by a hit*: before Task 4b every KO in the golden's matches was a self-destruct. In the
+  final sweep (48 runs of the 56 baked CPU matches, at `36f1cb3`), 1,503 KOs: 1,063 by a hit and
+  440 self-destructs, none in a Final Smash; the golden's four CPU matches end with one KO, Marth
+  falling past a ledge Kirby holds.
+
+**Carried to the final review.** Parked by Tasks 18 and 19 for the final review to accept or fix
+(`PLAN-FINAL-CANDIDATES.md`); later fixes will amend this entry.
+- *Task 18*: R-T18l's residual (late re-rolls 5/1/1 and lockout refusals 5/8/2 a sweep), with an
+  engine floor-bounce marker and the UNVERIFIED tech after a bounce; R-T18j's carried cross-ups
+  (0 to 29 per fighter on a grid, 0 in the sweeps); the parry's carry ignoring a move's own speed
+  change and friction (Quick Attack, one hit in a drop a sweep; Donkey Kong's forward smash slide,
+  one wasted drop in 4,620 scenes); R-T18r's UNVERIFIED ceiling-stop edges (no ceiling on the six
+  stages).
+- *Task 19*: R-T19l's re-entry re-decision (182 over 48 runs) to name in `behaviours.ts`'s
+  doubles list and count; the report's Marth "no shield decision" row, which counts no-press;
+  `threatBefore`'s one-frame rebuild re-deciding about 2,900 threats over 48 runs; a Special
+  pressed on the frame a held Up's tap jump fires, which leaves the up special 3 to 22 frames late
+  (about 2 in 120, all recovered); the residuals R-T19k (2,086 hidden presses), R-T19i (16 windows
+  never decided, 1 twice), hand-off doubles 50, special-landing doubles 54, and counter decisions
+  126 → 111, untraced; splitting `behaviours.ts` (1,912 lines) by concern, with `cpu.ts` owning
+  `BEHAVIOURS`; and R-T19j's four per-frame rolls.
+- *Tasks 20 to 22*: `recovery.test.ts`'s Stick Jump CPU test back on Task 19's grid with a
+  per-test timeout, and its "every frame" comment; `gamepad.ts`'s redundant early return; a real
+  pad, tested so far only against fake ones; other e2e specs whose accessible names match as
+  substrings.
+- *Earlier tasks*: test pins, citations and comments for Tasks 2 to 17, and these engine items:
+  the Reflector stall's terminal-speed snap; the CPU recovery's "yes" through the stage's wall
+  under the ledge; a trade's rage reading a percent the first hit already added; Grab pressed in
+  the air (an air dodge in Ultimate, a zair for Samus); bounce-frame drift after a footstool; edge
+  slipping; the cliff clamp zeroing a push away from the edge; projectile staling (R-T13d-f);
+  presses during a KO freeze; the first-tick gap in `intangible: [1, x]`; Final Smash end boxes as
+  world boxes and a per-box record for scene boxes; Smashville not carrying a fighter in hitlag;
+  R-T14j's self-destruct after an edge whiff; two whiffs a frame too long (Marth's 118 for 117,
+  Pikachu's 138 for 137); `SLOW_OPPONENT(9, 45)` in every Final Smash start; Fox's end-part exit
+  frame; the windbox hit-record exemption under Zero Laser's pull; a trap catching a fighter
+  behind its user; Volt Tackle's whiff (166.49 units against Final Destination's 160); an aerial
+  Final Smash's height boost (no published size); and an online stall rewinding the paint's sim
+  time. Also `docs/superpowers/plans/README.md`'s Plan 5 lines, which still say a footstool skips
+  hitstun.
+
+**Found and carried** (polish). The four presentation carries from D57 above and the CPU's
+spacing; the six borrowed actions' clips and the carry, Inhale and trapped poses, which borrow the
+walk and grabbed clips; Kirby's hammer fade at frame 45, his flame from 30 charge frames and a
+stored-charge tell; a stored full Charge Shot's 61 frames against its 44-frame motion, and Donkey
+Kong's stored full punch cut at motion frame 55 of 69; a smarter CPU Volt Tackle (R-T19d); the
+dash-off flip, the midair jump sound, and the reflect and counter-catch sounds.

@@ -8,7 +8,7 @@ const run = promisify(execFile);
 /**
  * `scripts/fightsheet.mjs` photographs a move as the match plays it, and the one
  * thing it must never do is photograph a different move under the name asked for.
- * A keyboard throws a tilt only with its Tilt key held (Plan 5, Task 21b):
+ * A keyboard reaches a standing tilt only with its Tilt key held (Plan 5, Task 21b):
  * without it, direction and attack read as a smash or a dash attack. The script
  * throws its tilts the other way, with a fake pad's part-way push (`Btn.Soft`,
  * `input/gamepad.ts`). The script prints

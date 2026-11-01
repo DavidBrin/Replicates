@@ -461,8 +461,8 @@ export function findStage(roster: Roster, id: string): MenuStage | null {
 /**
  * What a player binds, one key each, in the order `/controls` lists them.
  * `tilt` (Plan 5, Task 21b, ruling P5-R27) is held for a part-way push of the
- * stick, so a direction walks and Attack is a tilt (`Btn.Soft`; SPEC §6): it
- * sits with the directions it changes.
+ * stick, so a direction walks and Attack is never a smash (`Btn.Soft`; SPEC §6):
+ * it sits with the directions it changes.
  */
 export const CONTROL_ACTIONS = [
   "left",

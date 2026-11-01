@@ -238,10 +238,10 @@ timing instead:
 stick in the real game dashes and then runs; a walk, like a standing tilt, needs a partial
 tilt. Each preset has a **Tilt** key (Config 3's is `N`), held for a part-way push: it sets
 the same bit as a gamepad's partial tilt (`Btn.Soft`), so a held direction walks, at half
-the fighter's walk speed (one bit of magnitude, read as half deflection; no source publishes
-that reading, DECISIONS D55), Attack is never a smash, DI bends a quarter as far, and Up
-never jumps. Without it a held direction dashes, and micro-spacing comes from tapping, which
-produces a short step before the dash commits.
+the fighter's walk speed (one bit of magnitude, read as half deflection; no source we used
+publishes that reading, DECISIONS D55), Attack is never a smash, DI bends a quarter as far,
+and Up never jumps. Without it a held direction dashes, and micro-spacing comes from tapping,
+which produces a short step before the dash commits.
 
 **Stick jump defaults on** (D31). Up jumps, as pushing the stick up does, once five frames
 pass with no attack, special or grab to claim the press; the Jump key fires at once. As in
