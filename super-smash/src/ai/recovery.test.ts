@@ -683,7 +683,7 @@ describe("recovery strategy (Plan 5, Task 19: the Task 13b carries)", () => {
 
   it("an up special pressed during an offstage aerial comes out on the aerial's first free frame", () => {
     // Mario in a neutral air under Final Destination's left ledge, out of jumps, from
-    // every frame of the aerial and every phase of the press pulse: once the CPU has
+    // every other frame of the aerial and every phase of the press pulse: once the CPU has
     // pressed for its up special in the aerial, it keeps pressing, so the up special
     // comes out on the first frame the aerial lets it. Two things held the press off:
     // a press away from the wall it touched, for a wall jump the engine only tries

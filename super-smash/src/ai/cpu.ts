@@ -71,6 +71,7 @@ import {
   idle,
   platformMove,
   retreat,
+  slidesOff,
 } from "./offence";
 import { counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, storeCharge } from "./specials";
 
@@ -375,6 +376,12 @@ export function decideCpu(
     // neutral while its press waits: ruling R-T19m).
     bestInput &= ~forbid;
   }
+
+  // A let-go that ends a dash or a run where the slide would carry the fighter off the
+  // stage is pressed as a shield instead, whose raise stops at the edge (`GROUND_EXIT`:
+  // `cliffStop`; Plan 5 final wave, fix round 1, ruling R-FW1n: `slidesOff`). Judgement,
+  // not a roll.
+  if (slidesOff(ctx, bestInput)) bestInput = Btn.Shield & ~forbid;
 
   // The fumble: a dropped frame of input. It is what a low-level CPU's hands
   // look like — a jab that does not come out, a direction let go halfway across

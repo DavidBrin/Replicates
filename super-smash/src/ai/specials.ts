@@ -642,7 +642,11 @@ export const holding: Behaviour = (ctx) => {
   }
   if (self.action === "grab" || self.action === "pummel" || self.action === "throw" || (self.action === "grabHold" && self.actionFrame > 0)) return { score: 530, input: 0 };
   const inhale = ctx.fighterDef?.moves.neutralB;
-  if (inhale?.inhale !== undefined && free(self) && opening(ctx)) {
+  // From a standstill or the air, as above: from a dash or a run the Inhale slides on the
+  // dash's speed past an opponent it was aimed at from in reach (Plan 5 final wave, fix
+  // round 1: kirby-marth@pokemonStadium2 off the committed stages, a whiff every 64 frames).
+  const sliding = self.action === "dashStart" || self.action === "run";
+  if (inhale?.inhale !== undefined && free(self) && !sliding && opening(ctx)) {
     const { target, dx, dy, facingTarget } = ctx.view;
     const inReach = target !== null && facingTarget && abs(dy) <= VERTICAL_REACH && abs(dx) <= moveReach(inhale);
     if (inReach && target.intangible === 0 && target.grabbedBy < 0 && skilled(ctx)) return { score: 450, input: Btn.Special };

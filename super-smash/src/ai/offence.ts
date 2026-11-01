@@ -17,6 +17,7 @@ import { fighterHurtboxes } from "@/engine/acmd/hurtboxes";
 
 import { GLANCING_BLOW_DEPTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { abs, fx } from "@/engine/fixed";
+import { LEDGE_GETUP_DISTANCE } from "@/engine/states";
 
 import {
   type Behaviour,
@@ -28,6 +29,7 @@ import {
   fullHopPulse,
   GRAB_RANGE,
   isAttacking,
+  isHelpless,
   isOffstage,
   isShielding,
   pulse,
@@ -58,6 +60,11 @@ export const edgeguard: Behaviour = (ctx) => {
   if (!canAct(self) || !target) return NOTHING;
   if (tuning.edgeguardSkill <= 0) return NOTHING;
   if (!isOffstage(target, stage) || isOffstage(self, stage)) return NOTHING;
+  // Off the stage means in the air, on the ledge or helpless (Plan 5 final wave, fix round
+  // 1, ruling R-FW1l): one standing on a floor past the ledge, as on Town & City's outer
+  // platforms, is past it only in x (`isOffstage`), and guarding the ledge from it was
+  // swinging at nothing (the idle table's fox-pikachu, 3,061 frames).
+  if (target.grounded && target.ledge === null && !isHelpless(target)) return NOTHING;
   // A chance over a window (ruling R-T19j): rolled every frame the opponent is off
   // the stage, so the longer they are off, the likelier it goes to the ledge at all.
   if (ctx.rolls[ROLL_EDGEGUARD] >= tuning.edgeguardSkill) return NOTHING;
@@ -117,7 +124,7 @@ export const attack: Behaviour = (ctx) => {
     // R-FW1a: `pressToward`); and too close for any swing it has, it goes on stepping
     // back, turned away, until one would land (ruling R-FW1b: `stepBack`).
     if (abs(dx) < POINT_BLANK && free(self) && self.action !== "dashStart" && self.action !== "run" && landingSwing(facing(ctx)) === null && stepBack(ctx)) {
-      return { score: 380, input: towardX(dx, 0) };
+      return { score: 380, input: backOff(ctx) };
     }
     return { score: 380, input: pressToward(self, dx) };
   }
@@ -179,20 +186,28 @@ export const attack: Behaviour = (ctx) => {
   // pressed inside the last). Its forward tilt is pressed with a part-way push, which is
   // a tilt whatever was held before: a direction the CPU let go of (a dash it ended)
   // and pressed again with the button was a fresh flick, and so a smash, which slid it
-  // through the target.
-  const waits = self.action === "attack" || self.action === "landingLag" || self.action === "land";
-  if (swinging && self.grounded && (free(self) || waits)) {
+  // through the target. Pressed in a ledge get-up, a swing waits for the get-up too, and
+  // comes out from a standstill where it puts the fighter (fix round 1, ruling R-FW1n:
+  // `gotUp`); pressed in a jab whose next hit it starts, it is that hit, from here and now
+  // (ruling R-FW1o: `continues`).
+  const waits = self.action === "attack" || self.action === "landingLag" || self.action === "land" || self.action === "ledgeGetUp";
+  if (swinging && (self.grounded || self.action === "ledgeGetUp") && (free(self) || waits)) {
     const swing = (stale ? toward | Btn.Soft : 0) | Btn.Attack;
-    if (swingLands(waits ? standing(ctx) : ctx, swing)) return { score: 400, input: swing };
+    if (swingLands(waits ? comesOut(ctx, swing) : ctx, swing)) return { score: 400, input: swing };
     if (waits) return { score: 400, input: 0 };
     if (self.action === "dashStart" || self.action === "run") return { score: 400, input: 0 };
     const pick = landingSwing(ctx);
     if (pick !== null) return { score: 400, input: pick };
-    if (abs(dx) < POINT_BLANK && stepBack(ctx)) return { score: 400, input: towardX(dx, 0) };
+    if (abs(dx) < POINT_BLANK && stepBack(ctx)) return { score: 400, input: backOff(ctx) };
   }
+  // On the ground the stale direction is pressed as `pressToward` presses it: at point
+  // blank a dash or a run lets go (ruling R-FW1a's stop) and a shield is let down, where
+  // the whole stick held through carried a dash past the target and off the ledge (fix
+  // round 1, ruling R-FW1n: the re-review's marth-mario@townAndCity), or turned a shield
+  // into a roll away. Beyond point blank it is the whole stick, as before.
   return {
     score: 400,
-    input: (stale ? toward : 0) | (swinging ? Btn.Attack : 0),
+    input: (stale ? (self.grounded ? pressToward(self, dx) : toward) : 0) | (swinging ? Btn.Attack : 0),
   };
 };
 
@@ -220,9 +235,47 @@ export const POINT_BLANK = fx(6);
  */
 export function pressToward(self: FighterState, dx: number): InputFrame {
   const toward = towardX(0, dx);
+  // In a shield a direction is a roll, not a step (fix round 1, ruling R-FW1n): the shield
+  // is let down first.
+  if (isShielding(self.action)) return 0;
   if (toward === 0 || abs(dx) >= POINT_BLANK) return toward;
   if (self.action === "dashStart" || self.action === "run") return 0;
   return toward | Btn.Soft;
+}
+
+/** UNVERIFIED (CPU judgement): the most frames a let-go's slide is run for (`slidesOff`), past any dash's or run's on the roster. */
+const SLIDE_FRAMES = 30;
+
+/**
+ * Whether `input` lets go of a dash or a run on the main floor whose slide would carry the
+ * fighter past the ledge, off the stage (Plan 5 final wave, fix round 1, ruling R-FW1n).
+ * The point-blank stop lets go of the stick (`pressToward`, `attack`), and the stand or
+ * the run's brake it ends in slides on the dash's speed, off an edge as any other ground
+ * state but a shield, a dodge or a grab does (`GROUND_EXIT`). The re-review's
+ * marth-mario@townAndCity: Mario standing at the right ledge, Marth's stop 3.4 short of him
+ * slid him past and off, on to the ledge, 5,766 frames round. The slide is the fighter's
+ * own copy run by the engine's rules (`ghostStep`), `input` and then nothing. Down, Up and
+ * a part-way push are a let-go too; a direction or a button is not.
+ */
+export function slidesOff(ctx: BehaviourContext, input: InputFrame): boolean {
+  const { self } = ctx.view;
+  const def = ctx.fighterDef;
+  if (def === null || !self.grounded || (self.action !== "dashStart" && self.action !== "run")) return false;
+  if ((input & (Btn.Left | Btn.Right | Btn.Attack | Btn.Special | Btn.Shield | Btn.Jump | Btn.Grab)) !== 0) return false;
+  // On a soft platform a slide off its edge lands on the floor below.
+  if (self.y > ctx.stage.groundY + fx(4)) return false;
+  const f = cloneFighter(self);
+  const g = ghostContext(def, ctx.view.frame, f);
+  let prev: InputFrame = 0;
+  for (let k = 1; k <= SLIDE_FRAMES; k++) {
+    const now = k === 1 ? input : 0;
+    g.frame = ctx.view.frame + k;
+    ghostStep(f, now, prev, g);
+    prev = now;
+    if (f.x < ctx.stage.leftLedge || f.x > ctx.stage.rightLedge) return true;
+    if (f.vx === 0) return false;
+  }
+  return false;
 }
 
 /**
@@ -253,6 +306,46 @@ function standing(ctx: BehaviourContext): BehaviourContext {
   return { ...ctx, view: { ...ctx.view, self } };
 }
 
+/**
+ * The context a swing pressed now comes out from, for one that does not come out at once
+ * (`attack`'s `waits`). In a ledge get-up: a standstill where the get-up puts the fighter,
+ * `LEDGE_GETUP_DISTANCE` in from the ledge on the floor (`finishLedgeOption`), facing as it
+ * faces (ruling R-FW1n). In a move whose follow-up the press starts at once, a jab's next
+ * hit (`MoveDef.followUp`): the fighter as it is, so `swingLands` runs that hit by the
+ * engine's own rule (ruling R-FW1o). Otherwise the press waits in the buffer for the move
+ * or the landing to end: a standstill where it stands (`standing`).
+ */
+function comesOut(ctx: BehaviourContext, swing: InputFrame): BehaviourContext {
+  const { self } = ctx.view;
+  if (self.action === "ledgeGetUp") return gotUp(ctx);
+  if (self.action === "attack" && continues(ctx, swing)) return ctx;
+  return standing(ctx);
+}
+
+/**
+ * Whether `swing`, pressed now in the fighter's move, starts that move's follow-up on this
+ * step (a jab's next hit: the attack status's `followUp`, from its third frame), read off
+ * one step of the fighter's own copy (`ghostStep`), not restated.
+ */
+function continues(ctx: BehaviourContext, swing: InputFrame): boolean {
+  const { self } = ctx.view;
+  const def = ctx.fighterDef;
+  if (def === null || self.move === null || def.moves[self.move]?.followUp === undefined) return false;
+  const f = cloneFighter(self);
+  ghostStep(f, swing, 0, ghostContext(def, ctx.view.frame + 1, f));
+  return f.action === "attack" && f.move !== self.move;
+}
+
+/** The context as if the fighter stood where its ledge get-up puts it (`finishLedgeOption`), as a swing pressed in the get-up comes out (ruling R-FW1n). */
+function gotUp(ctx: BehaviourContext): BehaviourContext {
+  const { self } = ctx.view;
+  const side = self.ledge?.side ?? (self.x > 0 ? 1 : -1);
+  const ledge = side > 0 ? ctx.stage.rightLedge : ctx.stage.leftLedge;
+  const at: FighterState = { ...self, x: ledge - side * LEDGE_GETUP_DISTANCE, y: ctx.stage.groundY, grounded: true, platform: self.ledge?.platform ?? self.platform, ledge: null, action: "stand", actionFrame: 0, move: null, vx: 0, vy: 0, kinetic: emptyKinetic() };
+  const view = { ...ctx.view, self: at, dx: ctx.view.dx + self.x - at.x, dy: ctx.view.dy + self.y - at.y };
+  return { ...ctx, view: { ...view, facingTarget: (view.dx >= 0 ? 1 : -1) === at.facing } };
+}
+
 /** The context as if the fighter faced its target from where it stands: what a turn would swing from (`attack`'s step back). */
 function facing(ctx: BehaviourContext): BehaviourContext {
   const self: FighterState = { ...ctx.view.self, facing: ctx.view.dx >= 0 ? 1 : -1 };
@@ -265,8 +358,19 @@ function facing(ctx: BehaviourContext): BehaviourContext {
  * target would walk it off.
  */
 function stepBack(ctx: BehaviourContext): boolean {
+  const back = backOff(ctx);
+  return back !== 0 && !isOffstage({ ...ctx.view.self, x: ctx.view.self.x + (back === Btn.Right ? POINT_BLANK : -POINT_BLANK) }, ctx.stage);
+}
+
+/**
+ * The press of a step back (ruling R-FW1b): away from the target in x, or toward the
+ * stage's middle when the target is level with it (fix round 1: one hanging on the ledge
+ * right under the fighter, where the press away was no press at all and the fighter stood
+ * over it, its swings passing over, for minutes).
+ */
+function backOff(ctx: BehaviourContext): InputFrame {
   const { self, dx } = ctx.view;
-  return !isOffstage({ ...self, x: self.x + (dx > 0 ? -POINT_BLANK : POINT_BLANK) }, ctx.stage);
+  return dx !== 0 ? towardX(dx, 0) : towardX(self.x, Math.trunc((ctx.stage.leftLedge + ctx.stage.rightLedge) / 2));
 }
 
 /** UNVERIFIED (CPU judgement): the most frames a swing is run for (`swingLands`), past any first hit on the roster. */
@@ -350,19 +454,40 @@ function smashInput(ctx: BehaviourContext, toward: InputFrame): InputFrame {
 }
 
 /**
+ * The ground states whose next step reads a fresh Down as a drop through the soft
+ * platform under the fighter (`handleActionable`: `downPressed && dropThroughPlatform`,
+ * ahead of the crouch). A crouch's start and end only buffer, and in the crouch itself
+ * Down is already held.
+ */
+const DROPS_FROM: readonly ActionState[] = ["stand", "walk", "dashStart", "run", "runBrake"];
+
+/**
  * Change height to match the target: jump to the platform they are on, or drop
  * through the one this fighter is standing on.
+ *
+ * The drop (Plan 5 final wave, fix round 1, ruling R-FW1k): Down in a state that reads
+ * it as one (`DROPS_FROM`), and in no other, so nothing at all in a crouch. It cannot
+ * lock, because it keeps no clock: whether it presses Down is the state's alone, so there
+ * is no phase to fall into step with the crouch's 5 and 5. Its Down is fresh unless Down
+ * was held the frame before, and a hold it begins drops on its first frame, so a held
+ * Down was another behaviour's: holding it on ends in a crouch, and in the crouch nothing
+ * is pressed, so the fighter stands again with Down let go (its start, the crouch and its
+ * end: ten frames at most) and its next Down is fresh. The old pulse, Down 4 frames in
+ * 10, locked against the crouch's 5 and 5: every fresh Down fell on the crouch's last
+ * frame, and the CPU crouched above its target for minutes (nine matchups of the idle
+ * table). Only the main floor is hard, so a grounded fighter above it stands on a soft
+ * platform.
  */
 export const platformMove: Behaviour = (ctx) => {
   const { self, target, dy } = ctx.view;
   if (!canAct(self) || !target) return NOTHING;
-  if (!self.grounded) return NOTHING;
+  if (!self.grounded) return climb(ctx);
 
   const aboveGround = self.y > ctx.stage.groundY + fx(4);
 
   if (dy < -VERTICAL_REACH && aboveGround) {
     // Standing on a soft platform with the target below it: fall through.
-    return { score: 260, input: pulse(ctx.view.frame, self.port, 10, 4) ? Btn.Down : 0 };
+    return { score: 260, input: DROPS_FROM.includes(self.action) ? Btn.Down : 0 };
   }
 
   if (dy > VERTICAL_REACH) {
@@ -376,6 +501,35 @@ export const platformMove: Behaviour = (ctx) => {
 
   return NOTHING;
 };
+
+/**
+ * In the air under a target standing on a soft platform above it (Plan 5 final wave, fix
+ * round 1, ruling R-FW1k widened: the re-review's mario-samus on Battlefield, never a hit
+ * in 120 s): get up on to that platform. Its full hop (`platformMove` on the ground) can
+ * top out below the platform (Mario's at 17.6 under Battlefield's at 24.1), and below its
+ * floor the target is out of every aerial's reach, so the swings `attack` threw there hit
+ * nothing and spent the climb. So until its feet are above the target's floor: the stick
+ * toward the target, no swing, and its midair jump at the top of the hop if it has one
+ * (`jumpsUsed` below `ctx.jumps`): pressed from the top on (`vy` at or below zero) and
+ * held, so one press is one jump. Above the floor it lands there, and the fight is
+ * `attack`'s. Under
+ * the target's own platform only (as `platformMove`'s jump), more than a unit below its
+ * floor, the fighter and the target both over the stage, and a target reeling on the
+ * platform is not standing there.
+ */
+function climb(ctx: BehaviourContext): BehaviourResult {
+  const { self, target } = ctx.view;
+  if (target === null || !target.grounded || REELING_ACTIONS.includes(ctx.view.targetAction)) return NOTHING;
+  if (target.y <= ctx.stage.groundY + fx(4) || self.y >= target.y - fx(1)) return NOTHING;
+  // Over the stage only: past a ledge in x (Town & City's outer platforms), `recover` takes
+  // the air above them for off the stage, and the two would pull against each other.
+  if (isOffstage(self, ctx.stage) || isOffstage(target, ctx.stage)) return NOTHING;
+  // Under the target's own platform, not another at its height (Battlefield's two sides).
+  const its = ctx.stage.platforms.find((p) => abs(p.y - target.y) <= fx(1) && abs(p.x - target.x) <= p.halfWidth);
+  if (its === undefined || abs(its.x - self.x) > its.halfWidth + fx(10)) return NOTHING;
+  const jump = self.vy <= 0 && self.jumpsUsed < ctx.jumps ? Btn.Jump : 0;
+  return { score: 440, input: towardX(self.x, target.x) | jump };
+}
 
 /** Close the distance. The behaviour `aggression` scales directly. */
 export const approach: Behaviour = (ctx) => {

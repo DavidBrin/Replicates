@@ -14,9 +14,13 @@
  *
  * Each must land a hit within 10 s of game time (600 frames), and never turn in
  * place beside the player standing there: no stretch of `TURN_WINDOW` frames with more
- * than `MAX_TURNS` turns while it stands (a dash dance turns every frame). Step and check only, 64 matches of at most 1,800 frames:
- * a few seconds, longer beside the rest of the suite, hence its own timeout. It runs
- * in `pnpm test` like any other.
+ * than `MAX_TURNS` turns while it stands (a dash dance turns every frame). And no loop
+ * may start after the first hit either (fix round 1, ruling R-FW1m): over `FRAMES`
+ * frames, never `MAX_STRETCH` frames (20 s) with the player there to be hit (alive, out
+ * of the respawn platform and the entry, neither intangible nor invincible) and no hit
+ * landed. Step and check only, 64 matches of at most 3,600 frames: a few seconds alone,
+ * longer beside the rest of the suite, hence its own timeout. It runs in `pnpm test`
+ * like any other.
  */
 
 import { describe, expect, it } from "vitest";
@@ -38,8 +42,12 @@ const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: f
 
 /** The ruling's bound: a hit within 10 s of game time. */
 const FIRST_HIT_BY = 600;
-/** How long each match runs: long enough for a dance to begin after the first hit. */
-const FRAMES = 1_800;
+/** How long each match runs: long enough for a loop to begin after the first hit and run past `MAX_STRETCH`. */
+const FRAMES = 3_600;
+/** Ruling R-FW1m: the most frames the player may stand there to be hit without one landing. */
+const MAX_STRETCH = 1_200;
+/** Where nobody can be hit: dead, entering, or on the respawn platform. */
+const ABSENT: ReadonlySet<string> = new Set(["dead", "entering", "respawnPlatform"]);
 /** UNVERIFIED (test judgement): a stretch this long with more turns than `MAX_TURNS` in it is turning in place. */
 const TURN_WINDOW = 30;
 const MAX_TURNS = 10;
@@ -49,6 +57,8 @@ interface Played {
   readonly firstHit: number;
   /** The most turns port 0 made in any `TURN_WINDOW` frames. */
   readonly turns: number;
+  /** The longest run of frames port 1 could be hit and was not. */
+  readonly stretch: number;
 }
 
 /**
@@ -66,6 +76,8 @@ function play(start: GameState, cpus: readonly number[], frames: number, standin
   let firstHit = -1;
   const turnedAt: number[] = [];
   let turns = 0;
+  let run = 0;
+  let stretch = 0;
   for (let frame = 1; frame <= frames && state.outcome === null; frame++) {
     const inputs = state.fighters.map((_, port) => {
       if (!cpus.includes(port)) return 0;
@@ -79,10 +91,62 @@ function play(start: GameState, cpus: readonly number[], frames: number, standin
     while (turnedAt.length > 0 && turnedAt[0] <= frame - TURN_WINDOW) turnedAt.shift();
     turns = Math.max(turns, turnedAt.length);
     if (firstHit < 0 && out.events.hits.length > 0) firstHit = frame;
+    const p1 = out.state.fighters[1];
+    const hittable = p1.stocks > 0 && !ABSENT.has(p1.action) && p1.intangible === 0 && p1.invincible === 0;
+    run = hittable && !out.events.hits.some((h) => h.victim === 1) ? run + 1 : 0;
+    stretch = Math.max(stretch, run);
     state = out.state;
     prev = inputs;
   }
-  return { firstHit, turns };
+  return { firstHit, turns, stretch };
+}
+
+/** The first step on which port 0, a level-9 CPU over an idle port 1, has left the platform it stood on, within `frames`, or -1. */
+function dropsWithin(start: GameState, frames: number): number {
+  let state = start;
+  const view = stageViewFromDef(CTX.stage(state.stageId));
+  const defs = state.fighters.map((f) => CTX.fighter(f.defId));
+  const world: CpuWorld = cpuWorldFromDef(defs[0], view, defs, (id) => CTX.fighter(id), CTX.bake);
+  const platform = start.fighters[0].platform;
+  let prev: readonly InputFrame[] = [0, 0];
+  let seed = 7;
+  for (let frame = 1; frame <= frames; frame++) {
+    const d = decideCpu(state, 0, 9, seed, world);
+    seed = d.seed;
+    state = step(state, [d.input, 0], { prevInputs: prev, ctx: CTX }).state;
+    prev = [d.input, 0];
+    if (state.fighters[0].platform !== platform) return frame;
+  }
+  return -1;
+}
+
+/**
+ * Port 0, a level-9 CPU, from `start` against an idle port 1 for up to `frames` frames: the
+ * step it first hits on (-1 for none), and the frames it spent off the main floor (the
+ * stage's platform 0) after it first stood there.
+ */
+function onTheFloor(start: GameState, frames: number): { readonly firstHit: number; readonly off: number } {
+  let state = start;
+  const view = stageViewFromDef(CTX.stage(state.stageId));
+  const defs = state.fighters.map((f) => CTX.fighter(f.defId));
+  const world: CpuWorld = cpuWorldFromDef(defs[0], view, defs, (id) => CTX.fighter(id), CTX.bake);
+  let prev: readonly InputFrame[] = [0, 0];
+  let seed = 7;
+  let stood = false;
+  let off = 0;
+  for (let frame = 1; frame <= frames; frame++) {
+    const d = decideCpu(state, 0, 9, seed, world);
+    seed = d.seed;
+    const out = step(state, [d.input, 0], { prevInputs: prev, ctx: CTX });
+    state = out.state;
+    prev = [d.input, 0];
+    const f = state.fighters[0];
+    const floor = f.grounded && f.platform === 0;
+    stood ||= floor;
+    if (stood && !floor) off++;
+    if (out.events.hits.some((h) => h.attacker === 0)) return { firstHit: frame, off };
+  }
+  return { firstHit: -1, off };
 }
 
 /** `id` on `stage` as the scene has it: grounded, out of the entry's intangibility. */
@@ -95,18 +159,21 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
     const ids = FIGHTERS.map((f) => f.id);
     const late: string[] = [];
     const dancing: string[] = [];
+    const stuck: string[] = [];
     let n = 0;
     for (const a of ids)
       for (const b of ids) {
         const stageId = STAGES[n % STAGES.length].id;
-        const { firstHit, turns } = play(createInitialState(stageId, [{ defId: a }, { defId: b }], RULES, 1000 + n, CTX), [0], FRAMES, true);
+        const { firstHit, turns, stretch } = play(createInitialState(stageId, [{ defId: a }, { defId: b }], RULES, 1000 + n, CTX), [0], FRAMES, true);
         if (firstHit < 0 || firstHit > FIRST_HIT_BY) late.push(`${a}-${b}@${stageId}: ${firstHit}`);
         if (turns > MAX_TURNS) dancing.push(`${a}-${b}@${stageId}: ${turns} turns in ${TURN_WINDOW} frames`);
+        if (stretch > MAX_STRETCH) stuck.push(`${a}-${b}@${stageId}: ${stretch} frames there to be hit, no hit`);
         n++;
       }
     expect(n).toBe(64);
     expect(late, "no hit within 10 s").toEqual([]);
     expect(dancing, "turning in place").toEqual([]);
+    expect(stuck, "20 s there to be hit with no hit (ruling R-FW1m)").toEqual([]);
   }, 60_000);
 
   it("turns to an idle Fox at point blank and hits it, from a dash or a standstill (I1's Pikachu trace, reduced)", () => {
@@ -120,6 +187,114 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
       expect([firstHit > 0 && firstHit <= 60, turns <= MAX_TURNS], `from ${action}: first hit ${firstHit}, ${turns} turns`).toEqual([true, true]);
     }
   });
+
+  it("drops through a soft platform onto a player standing below it, from a standstill and from every frame of a crouch (ruling R-FW1k)", () => {
+    // The idle table's platform loop: `platformMove` pulsed Down 4 frames in 10, and a
+    // crouch's start and end are 5 and 5, so every fresh Down landed in the crouch's end,
+    // which does not drop through, and the CPU crouched above its target for minutes.
+    // One scene per kind of platform the nine matchups stood on: Battlefield's and Small
+    // Battlefield's side platforms, Pokémon Stadium 2's, Town & City's centre one.
+    const starts: { action: FighterState["action"]; actionFrame: number }[] = [
+      { action: "stand", actionFrame: 30 },
+      ...[0, 1, 2, 3, 4].map((f) => ({ action: "crouchStart" as const, actionFrame: f })),
+      { action: "crouch", actionFrame: 10 },
+      ...[0, 1, 2, 3, 4].map((f) => ({ action: "crouchEnd" as const, actionFrame: f })),
+    ];
+    const failed: string[] = [];
+    for (const [a, b, stageId] of [["fox", "link", "battlefield"], ["kirby", "mario", "smallBattlefield"], ["link", "marth", "pokemonStadium2"], ["marth", "link", "townAndCity"]] as const) {
+      const stage = CTX.stage(stageId);
+      const index = stage.platforms.findIndex((p) => p.soft);
+      const plat = stage.platforms[index];
+      for (const start of starts)
+        for (let phase = 0; phase < 10; phase++) {
+          const s = createInitialState(stageId, [{ defId: a }, { defId: b }], RULES, 5, CTX);
+          placed(s.fighters[0], { x: plat.x, y: plat.y, platform: index, facing: 1, framesSinceDirPress: 30, ...start });
+          placed(s.fighters[1], { x: plat.x + fx(4), y: stage.platforms[0].y, platform: 0, action: "stand" });
+          s.frame = phase;
+          const at = dropsWithin(s, 15);
+          if (at < 0) failed.push(`${a} on ${stageId} from ${start.action}@${start.actionFrame}, phase ${phase}`);
+        }
+    }
+    expect(failed).toEqual([]);
+  });
+
+  it("goes for a player standing on Town & City's platform past the ledge rather than guard the ledge at nothing (ruling R-FW1l)", () => {
+    // The idle table's fox-pikachu@townAndCity: Pikachu idle on the right platform, past
+    // the main stage's right ledge in x; Fox guarded the ledge for 3,061 frames.
+    const stage = CTX.stage("townAndCity");
+    const index = stage.platforms.findIndex((p) => p.soft && p.x > stage.platforms[0].x + stage.platforms[0].halfWidth - fx(30));
+    const s = createInitialState("townAndCity", [{ defId: "fox" }, { defId: "pikachu" }], RULES, 5, CTX);
+    placed(s.fighters[0], { x: fx(40), y: 0, platform: 0, action: "stand", facing: 1 });
+    placed(s.fighters[1], { x: fx(93.77), y: stage.platforms[index].y, platform: index, action: "stand", facing: -1 });
+    const { firstHit } = play(s, [0], 600);
+    expect(firstHit, "Fox's first hit on Pikachu").toBeGreaterThan(0);
+  });
+
+  it("gets up past a player standing at the ledge and hits him, never off the stage: marth-mario@townAndCity (ruling R-FW1n; the re-review's seed 3256, reduced)", () => {
+    // Mario idle at 83.10 by the right ledge (83.22). Marth's get-up put him at 75.22
+    // facing in with Mario behind; the jab buffered in it came out facing away, and the
+    // dash back stopped 3.4 short and slid him past Mario and off, on to the ledge again:
+    // 5,766 frames round.
+    for (const phase of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+      const s = createInitialState("townAndCity", [{ defId: "marth" }, { defId: "mario" }], RULES, 5, CTX);
+      placed(s.fighters[0], { x: fx(83.22), y: 0, grounded: false, action: "ledgeHang", ledge: { platform: 0, side: 1 }, facing: -1, platform: -1 });
+      placed(s.fighters[1], { x: fx(83.1), y: 0, platform: 0, action: "stand", actionFrame: 30, facing: -1 });
+      s.frame = phase;
+      const { firstHit, off } = onTheFloor(s, 300);
+      expect([firstHit > 0 && firstHit <= 120, off], `from the ledge, phase ${phase}: first hit ${firstHit}`).toEqual([true, 0]);
+    }
+  });
+
+  it("stops at point blank by a player at the ledge without running or sliding off: Marth out of his jab, facing away from Mario (ruling R-FW1n)", () => {
+    // The same scene after the get-up: Marth jabbing at 75.22 facing in, Mario behind him at
+    // 83.10, the turn's press held through the jab, so the dash comes out as it ends. Its
+    // stop 3.4 short of Mario slid on past him (the let-go: `slidesOff`), and the stale
+    // direction held through a dash at point blank ran on (`pressToward`): off, either way.
+    for (const jab of [5, 12, 20])
+      for (const phase of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+        const s = createInitialState("townAndCity", [{ defId: "marth" }, { defId: "mario" }], RULES, 5, CTX);
+        placed(s.fighters[0], { x: fx(75.22), y: 0, platform: 0, action: "attack", move: "jab1", actionFrame: jab, facing: -1, framesSinceDirPress: 30 });
+        placed(s.fighters[1], { x: fx(83.1), y: 0, platform: 0, action: "stand", actionFrame: 30, facing: -1 });
+        s.frame = phase;
+        const { firstHit, off } = onTheFloor(s, 300);
+        expect([firstHit > 0 && firstHit <= 120, off], `jab frame ${jab}, phase ${phase}: first hit ${firstHit}`).toEqual([true, 0]);
+      }
+  });
+
+  it("hits a player hanging on the ledge right under it (fix round 1: marth-pikachu off the committed stages)", () => {
+    // Level with it in x, the step back pressed nothing (away from a target at dx 0), so
+    // Marth stood over Pikachu at Final Destination's ledge for minutes, its swings passing over.
+    for (const [a, b] of [["marth", "pikachu"], ["marth", "kirby"], ["mario", "pikachu"]] as const) {
+      const s = createInitialState("finalDestination", [{ defId: a }, { defId: b }], RULES, 5, CTX);
+      const ledge = stageViewFromDef(CTX.stage("finalDestination")).leftLedge;
+      placed(s.fighters[0], { x: ledge, y: 0, platform: 0, action: "stand", actionFrame: 30, facing: -1, framesSinceDirPress: 30 });
+      placed(s.fighters[1], { x: ledge, y: 0, grounded: false, action: "ledgeHang", actionFrame: 200, ledge: { platform: 0, side: -1 }, facing: 1, platform: -1 });
+      const { firstHit, off } = onTheFloor(s, 300);
+      expect([firstHit > 0 && firstHit <= 120, off], `${a} over ${b}: first hit ${firstHit}`).toEqual([true, 0]);
+    }
+  });
+
+  it("climbs to a player standing on a soft platform above and hits him (ruling R-FW1k, widened: the re-review's mario-samus on Battlefield and Small Battlefield)", () => {
+    // The full hop tops out under the platform (Mario's at 17.6 under Battlefield's top at
+    // 24.1, short of it), and the aerials thrown there met nothing: no hit in 120 s. Every
+    // fighter, from under the platform and 30 either side of it, on each platform over the stage.
+    const late: string[] = [];
+    for (const stageId of ["battlefield", "smallBattlefield"]) {
+      const stage = CTX.stage(stageId);
+      stage.platforms.forEach((p, index) => {
+        if (!p.soft) return;
+        for (const a of FIGHTERS.map((f) => f.id))
+          for (const off of [-30, 0, 30]) {
+            const s = createInitialState(stageId, [{ defId: a }, { defId: "samus" }], RULES, 5, CTX);
+            placed(s.fighters[0], { x: p.x + fx(off), y: stage.platforms[0].y, platform: 0, action: "stand", actionFrame: 30, facing: off > 0 ? -1 : 1 });
+            placed(s.fighters[1], { x: p.x, y: p.y, platform: index, action: "stand", actionFrame: 30, facing: -1 });
+            const { firstHit } = onTheFloor(s, 600);
+            if (firstHit < 0 || firstHit > 300) late.push(`${a} on ${stageId}'s platform ${index}, ${off}: ${firstHit}`);
+          }
+      });
+    }
+    expect(late).toEqual([]);
+  }, 60_000);
 
   it("breaks the lock of two level-9 CPUs dashing at point blank: Pikachu and Marth on Small Battlefield (I1's trace, reduced)", () => {
     // Seed 1008's lock, Pikachu on port 0 and Marth on port 1, both at level 9: from

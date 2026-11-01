@@ -774,6 +774,15 @@ describe("carries, mouthfuls and grabs", () => {
     expect(decideCpu(s, 0, 9, 1, world).scores.holding ?? 0).toBe(0);
   });
 
+  it("Kirby inhales from a standstill, not from a dash or a run, whose speed slides the Inhale past (Plan 5 final wave, fix round 1)", () => {
+    // kirby-marth@pokemonStadium2 off the committed stages: from his dash's first frame
+    // 6 from an idle Marth, the Inhale slid past him and missed, every 64 frames.
+    const from = (action: "stand" | "dashStart" | "run") => makeState({ fighters: [makeFighter({ port: 0, defId: "kirby", facing: 1, action, actionFrame: 0, vx: action === "stand" ? 0 : fx(1.8) }), makeFighter({ port: 1, x: fx(8) })] });
+    expect(holding(context(from("stand"), kirby)).input).toBe(Btn.Special);
+    expect(holding(context(from("dashStart"), kirby)).score).toBe(0);
+    expect(holding(context(from("run"), kirby)).score).toBe(0);
+  });
+
   it("Kirby spits his mouthful toward the nearer edge, and swallows it facing in", () => {
     const k = (facing: number) => makeState({ fighters: [makeFighter({ port: 0, action: "inhaleHold", x: fx(40), facing }), makeFighter({ port: 1, action: "swallowed" })] });
     const press = (facing: number) => [0, 1].map((f) => holding(context({ ...k(facing), frame: f }, kirby)).input).reduce((a, b) => a | b, 0);

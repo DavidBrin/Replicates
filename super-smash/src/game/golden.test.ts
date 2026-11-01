@@ -226,8 +226,8 @@ const MATCHES: readonly Match[] = [
   },
   // Plan 5 final wave (ruling R-FW1e; the final review's M5): the one CPU match with the
   // Smash Ball on, so the CPU's own Smash Ball and Final Smash decisions are in the trace.
-  // Both CPUs break a ball and land their Final Smash: Samus (level 9) fires Zero Laser
-  // along Town & City's floor, and Kirby (level 7) traps Samus in Ultra Sword.
+  // Kirby (level 7) breaks the ball three times and traps Samus (level 9) in Ultra Sword
+  // (fix round 1; round 0's match had both land theirs, Samus's Zero Laser too).
   cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 606, BALL_RULES),
 ];
 
@@ -386,6 +386,13 @@ const MATCHES: readonly Match[] = [
  * before: they get up from lying down and are shield-stunned again, and none ledge-rolls
  * or rebounds any more, which the script and the projectile lab reach. The ball-on CPU
  * match (R-FW1e) reaches nothing the four do not. All 59 are visited.
+ * Its fix round 1 (rulings R-FW1k to R-FW1o: the drop through a platform, the climb to
+ * one, the edgeguard's target, the point-blank stop and get-up, the jab's next hit) adds
+ * no action. The four CPU matches reach 44 between them, down from 46: donkeyKong-pikachu
+ * carries Pikachu (`cargoCarry`, `cargoHeld`), and none starts or ends a crouch
+ * (mario-fox's and kirby-marth's were the old drop pulse's Down taps), spot-dodges or
+ * turns out of a run any more, which the script and the labs reach. The ball-on CPU match
+ * reaches `finalTrapped` (Kirby's Ultra Sword), which the four do not. All 59 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1186,6 +1193,23 @@ describe("engine golden trace", () => {
   // Kirby falls on 3546 at 93.3%, a self-destruct out of a jump. 46 hits, no shield hit,
   // one KO. So now: hits 44/47/30/34, 6, 0, 1, 4, 1, 2, 33, 54, 0 and 46; shield hits
   // 2/7/1/2, 3, 0, 0, 0, 0, 0, 0, 0, 0 and 0; KOs 0/0/0/1, 1, 2, 0, 0, 0, 0, 0, 2, 1 and 1.
+  // Its fix round 1 moved all five CPU matches, each from the first frame a CPU presses
+  // otherwise: mario-fox on 41 (the 1-100 sample), Mario in his shield, where the old drop
+  // pulse's Down was a spot dodge and the drop presses nothing now (ruling R-FW1k);
+  // donkeyKong-pikachu on 25, Donkey Kong raising his shield, where the press toward
+  // Pikachu was a roll and is a shield let down now (ruling R-FW1n: `pressToward`);
+  // link-samus on 74 and the ball-on match on 78, Samus in a dash or a run at point blank
+  // as she sees Link and Kirby, where the stale direction held through it is let go now
+  // (R-FW1n); and kirby-marth on 68, Kirby's Inhale from a run's first frame, from a
+  // standstill only now. Hits 51, 52, 38 and 47; shield hits 2, 6, 0 and 2; KOs 0, 0, 1
+  // and 1 (were 44/47/30/34, 2/7/1/2 and 0/0/0/1): Link self-destructs out of a jump at
+  // 142.6% on 2410, and Marth out of his up special's fall at 109.1% on 2204, where he went
+  // by a hit on 3279. The ball-on match: Kirby breaks the ball on 1175, 1835 and 3293 and
+  // fires Ultra Sword on 1892 and 3332, the second trapping Samus on 3348; Samus breaks
+  // none (round 0's had both land theirs). 41 hits, 1 shield hit, no KO. The script and the
+  // eight labs are byte-identical. So now: hits 51/52/38/47, 6, 0, 1, 4, 1, 2, 33, 54, 0 and
+  // 41; shield hits 2/6/0/2, 3, 0, 0, 0, 0, 0, 0, 0, 0 and 1; KOs 0/0/1/1, 1, 2, 0, 0, 0,
+  // 0, 0, 2, 1 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1265,7 +1289,7 @@ describe("engine golden trace", () => {
   // Plan 5 final wave (ruling R-FW1e; the final review's M5): the ball-on CPU match runs
   // the CPU's Smash Ball chase and its Final Smash, so a change to either moves the trace.
   // Pinned by what it plays, not only by its digest: a ball broken, and a Final Smash
-  // started by a CPU (both, as measured: Samus's on 1383 and Kirby's on 2491).
+  // started by a CPU (Kirby's, as measured: on 1892, and on 3332, which traps Samus).
   function expectCpuFinalSmash(): void {
     const m = played.get("samus-kirby-townAndCity-ball")!;
     expect(m.ballsBroken, "Smash Balls broken in the ball-on CPU match").toBeGreaterThan(0);
