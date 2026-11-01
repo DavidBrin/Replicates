@@ -33,6 +33,7 @@ import {
   MELEE_RANGE,
   COUNTER_AIM,
   ROLL_SPECIAL,
+  THREAT_RANGE,
   free,
   isOffstage,
   shield,
@@ -487,6 +488,22 @@ describe("reflect and counter", () => {
       const frozen = [3, 2, 1, 0].map((hitlag) => at(hit - aim, {}, { hitlag }));
       expect(frozen.map((s) => decides(counter, s))).toEqual([false, false, false, true]);
       expect(frozen.map((s) => decides(shield, s))).toEqual([false, false, false, true]);
+    });
+
+    it("a dash attack first in range after its counter frame has passed: the shield decides at range entry, once over the swing (ruling R-T19l amended)", () => {
+      // Link's dash attack (hit on 19) closing at 1.5 a frame from 43 away: seen early,
+      // its counter frame (hit − aim) comes while it is still out of range.
+      const dash = (a: number) => at(a, {}, { move: "dashAttack", x: fx(43 - 1.5 * a), vx: fx(-1.5) });
+      const dashHit = swingHitFrame(link, { move: "dashAttack", actionFrame: 0, combat: makeFighter().combat })!;
+      const entry = [...Array(dashHit + 1).keys()].find((a) => a >= r && observe(dash(a), 0, r).distance <= THREAT_RANGE)!;
+      expect(entry).toBeGreaterThan(dashHit - aim);
+      const shieldOn: number[] = [];
+      const counterOn: number[] = [];
+      for (let a = r; a <= dashHit + 2; a++) {
+        if (decides(shield, dash(a))) shieldOn.push(a);
+        if (decides(counter, dash(a))) counterOn.push(a);
+      }
+      expect([shieldOn, counterOn]).toEqual([[entry], []]);
     });
 
     it("a smash first seen with its charge still to come: the shield decides at first sight and not again once it is let go", () => {

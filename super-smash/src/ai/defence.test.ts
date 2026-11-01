@@ -35,12 +35,14 @@ import { shieldBubble } from "@/engine/shield";
 import { kineticLaunch, kineticSum } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { createInitialState, registerFighters, registerStages, registryContext, step, type SimContext } from "@/engine/simulate";
-import { DOWNED_FRAMES, GETUP_FRAMES } from "@/engine/states";
+import { DOWNED_FRAMES, GETUP_FRAMES, LEDGE_JUMP_FRAMES } from "@/engine/states";
 import { WALL_TECH_JUMP_FRAMES } from "@/engine/wallJump";
 import { platformCentreX } from "@/engine/physics";
 import { Btn, held, type FighterDef, type FighterState, type GameState, type Hitbox, type InputFrame, type MoveSlot, type StageDef } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
+import { bakedContext } from "@/game/bake";
+import { readBakeFromDisk } from "@/game/bakeNode";
 import { makeFighter, makeState } from "@/render/testFixtures";
 import {
   DECISION_ROLLS,
@@ -65,6 +67,7 @@ import {
   framesToWall,
   observe,
   parry,
+  pressReadNextStep,
   recover,
   shield,
   stageViewFromDef,
@@ -2264,6 +2267,132 @@ describe("shield, once a threat (ruling R-T18g)", () => {
     const fall = threat(L9.reactionFrames + 4, { action: "fall", actionFrame: 3, grounded: false, platform: -1, y: fx(20), x: fx(-6) });
     fall.fighters[0].bufferedAction = { kind: "shield", frame: fall.frame };
     for (let seed = 1; seed <= 20; seed++) expect(decideCpu(fall, 0, 9, seed, world).input & STICK, `seed ${seed}`).toBe(0);
+  });
+
+  describe("its press read on its own move's hand-off (ruling R-T19m, the hand-off step)", () => {
+    /** Runs the CPU on port 0 (level 9) from `s` until it air-dodges: the dodge's charge (0 neutral) and the hand-off step's decision. */
+    const dodgeOut = (s0: GameState, world: ReturnType<typeof cpuWorldFromDef>, level = 9, port = 0, seed = 1, ctx?: SimContext) => {
+      let s = s0;
+      let prev: InputFrame[] = [0, 0];
+      let cs = seed;
+      for (let i = 0; i < 12; i++) {
+        const before = s.fighters[port];
+        const d = decideCpu(s, port, level, cs, world);
+        cs = d.seed;
+        const inputs: InputFrame[] = [0, 0];
+        inputs[port] = d.input;
+        s = step(s, inputs, { prevInputs: prev, ...(ctx !== undefined ? { ctx } : {}) }).state;
+        prev = inputs;
+        const f = s.fighters[port];
+        if (f.action === "airDodge" && before.action !== "airDodge") return { charge: f.charge, read: d, from: before.action, s };
+      }
+      return null;
+    };
+
+    it("an aerial's: read on its hand-off to a fall with the stick neutral, though another behaviour steers on that step", () => {
+      const mario = defOf("mario");
+      const world = cpuWorldFromDef(mario, FD, [mario, defOf("fox")]);
+      const end = mario.moves.nair!.totalFrames;
+      for (const back of [1, 2, 4]) {
+        const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 21);
+        Object.assign(s.fighters[0], { action: "attack", move: "nair", actionFrame: end - back, grounded: false, platform: -1, x: 0, y: fx(45), jumpsUsed: 1, airDodged: false, intangible: 0, facing: 1, bufferedAction: { kind: "shield", frame: s.frame } });
+        Object.assign(s.fighters[1], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: fx(45), y: 0, intangible: 0, facing: -1 });
+        const out = dodgeOut(s, world);
+        expect(out, `${back} from the end`).not.toBeNull();
+        // Read on the step the nair hands off to a fall, as the frame's winner steers.
+        expect([out!.from, out!.read.behaviour === "shield", out!.charge], `${back} from the end`).toEqual(["attack", false, 0]);
+      }
+    });
+
+    it("only on the step that reads it: not on the aerial's frames before, nor on a reel's last frame, whose press is read on the step after", () => {
+      const mario = defOf("mario");
+      const end = mario.moves.nair!.totalFrames;
+      const waiting = { kind: "shield" as const, frame: 0 };
+      const nair = (actionFrame: number) =>
+        makeState({ fighters: [makeFighter({ port: 0, action: "attack", move: "nair", actionFrame, grounded: false, platform: -1, y: fx(45), jumpsUsed: 1, bufferedAction: waiting }), makeFighter({ port: 1, x: fx(45) })] });
+      const reel = makeState({ fighters: [makeFighter({ port: 0, action: "hitstun", actionFrame: 20, hitstun: 1, grounded: false, platform: -1, y: fx(45), jumpsUsed: 1, bufferedAction: waiting }), makeFighter({ port: 1, x: fx(45) })] });
+      // The fighter's own copy, one step on: the nair's last frame hands off and reads the
+      // press; four frames out it doesn't; a reel's last frame keeps it for the next step.
+      expect([end - 1, end - 4].map((af) => pressReadNextStep(mario, nair(af).fighters[0], 0))).toEqual([true, false]);
+      expect(pressReadNextStep(mario, reel.fighters[0], 0)).toBe(false);
+      // So the stick is masked only on the step that reads the press.
+      expect([nair(end - 1), nair(end - 4), reel].map((st) => shield(context(st, L9)).forbid ?? 0)).toEqual([Btn.Left | Btn.Right | Btn.Up | Btn.Down, 0, 0]);
+    });
+
+    it("a ledge jump's: read on its hand-off to a jump with the stick neutral", () => {
+      const mario = defOf("mario");
+      const world = cpuWorldFromDef(mario, FD, [mario, defOf("fox")]);
+      for (const back of [1, 3]) {
+        const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 21);
+        Object.assign(s.fighters[0], { action: "ledgeJump", actionFrame: LEDGE_JUMP_FRAMES - back, grounded: false, platform: -1, x: FD.leftLedge, y: 0, ledge: { platform: 0, side: -1 }, jumpsUsed: 0, airDodged: false, intangible: 0, facing: 1, bufferedAction: { kind: "shield", frame: s.frame } });
+        Object.assign(s.fighters[1], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: fx(20), y: 0, intangible: 0, facing: -1 });
+        const out = dodgeOut(s, world);
+        expect(out, `${back} from the end`).not.toBeNull();
+        expect([out!.from, out!.read.behaviour === "shield", out!.charge], `${back} from the end`).toEqual(["ledgeJump", false, 0]);
+      }
+    });
+
+    it("the re-review's seed 7005 Pikachu: the down air's hand-off dodge comes out neutral, under the Smash Ball it chases, and Pikachu lands on the stage", () => {
+      // Pokémon Stadium 2, ball on, frame 2905 (the sweep's world, baked): level-7 Pikachu
+      // on the down air's last frame at x 83.1 (ledge 93.8), 0.6 up and falling 1.55 a
+      // frame, its Shield press (judged neutral against Mario's forward smash) waiting;
+      // the Smash Ball up and to its right, which `smashBall` steers for on this step.
+      // The dodge starts on the hand-off and lands in the same step: neutral, into its
+      // landing lag on the stage; with the stick on Right, it slingshot off the ledge.
+      const GAME = bakedContext({ fighter: (id) => defOf(id), stage: (id) => stageOf(id) }, readBakeFromDisk());
+      const pikachu = GAME.fighter("pikachu");
+      const PS2 = stageViewFromDef(stageOf("pokemonStadium2"));
+      const world = cpuWorldFromDef(pikachu, PS2, [GAME.fighter("mario"), pikachu], (id) => GAME.fighter(id), GAME.bake);
+      const STICK = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
+      for (let seed = 1; seed <= 12; seed++) {
+        const s = createInitialState("pokemonStadium2", [{ defId: "mario" }, { defId: "pikachu" }], { ...RULES, smashBall: true }, 21, GAME);
+        Object.assign(s, { frame: 2905, stageFrame: 2905 });
+        s.smashBall = { ...s.smashBall, active: true, x: 378874, y: 46483, vx: 3051, vy: -4369, driftTimer: 20 };
+        Object.assign(s.fighters[0], { action: "attack", move: "fsmash", actionFrame: 11, grounded: true, platform: 0, x: 370908, y: 0, facing: 1, damage: 100350, intangible: 0 });
+        s.fighters[0].combat.smashLetGo = true;
+        Object.assign(s.fighters[1], {
+          action: "attack", move: "dair", actionFrame: 46, grounded: false, platform: -1, x: 340494, y: 2498, vx: -2728, vy: -6349, facing: 1, jumpsUsed: 1, airDodged: false,
+          damage: 434102, intangible: 0, bufferedAction: { kind: "shield", frame: 2905 }, kinetic: { ...s.fighters[1].kinetic, controlX: -2728, gravityY: -6349, fallFrames: 14 },
+        });
+        const d = decideCpu(s, 1, 7, seed, world);
+        expect(d.input & STICK, `seed ${seed}: the stick on the hand-off step`).toBe(0);
+        const after = step(s, [0, d.input], { prevInputs: [0, Btn.Shield], ctx: GAME }).state.fighters[1];
+        // The press was read (the buffer is empty) and the dodge landed where it began.
+        expect([after.bufferedAction, after.grounded, after.x <= PS2.rightLedge], `seed ${seed}`).toEqual([null, true, true]);
+      }
+    });
+  });
+
+  it("never replaces a buffered up special with its Shield press: the re-review's seed 11018 Link (ruling R-T19p)", () => {
+    // Battlefield, ball on, frame 3198 (the sweep's world, baked): level-9 Link on his
+    // up air's frame 57 at x 80.5, 0.5 past the ledge, with `recover`'s up special
+    // waiting in the buffer since 3193; Fox's up special, starting 7 to his right,
+    // is a swing in range. A Shield press would take the buffer's one place.
+    const GAME = bakedContext({ fighter: (id) => defOf(id), stage: (id) => stageOf(id) }, readBakeFromDisk());
+    const link = GAME.fighter("link");
+    const world = cpuWorldFromDef(link, BF, [link, GAME.fighter("fox")], (id) => GAME.fighter(id), GAME.bake);
+    for (let seed = 1; seed <= 12; seed++) {
+      let s = createInitialState("battlefield", [{ defId: "link" }, { defId: "fox" }], { ...RULES, smashBall: true }, 21, GAME);
+      Object.assign(s, { frame: 3198, stageFrame: 3198 });
+      Object.assign(s.fighters[0], {
+        action: "attack", move: "uair", actionFrame: 57, grounded: false, platform: -1, x: 329748, y: 99274, vx: -1255, vy: -6554, facing: 1, jumpsUsed: 2, airDodged: false,
+        damage: 339147, intangible: 0, bufferedAction: { kind: "special", frame: 3193 }, kinetic: { ...s.fighters[0].kinetic, controlX: -1255, gravityY: -6554, fallFrames: 18 },
+      });
+        Object.assign(s.fighters[1], { action: "special", move: "upB", actionFrame: 4, grounded: false, platform: -1, x: 357080, y: 22195, vx: 1833, vy: 0, facing: 1, jumpsUsed: 2, damage: 331503, intangible: 0 });
+        expect(shield(context(s, L9)).score, `seed ${seed}: the shield presses nothing`).toBe(0);
+        let prev: InputFrame[] = [0, 0];
+        let cs = seed;
+        let upB = false;
+        for (let i = 0; i < 8 && !upB; i++) {
+          const d = decideCpu(s, 0, 9, cs, world);
+          cs = d.seed;
+          expect(held(d.input, Btn.Shield) && !held(prev[0], Btn.Shield), `seed ${seed}, step ${i}: no Shield press`).toBe(false);
+          s = step(s, [d.input, 0], { prevInputs: prev, ctx: GAME }).state;
+          prev = [d.input, 0];
+          upB = s.fighters[0].action === "special" && (s.fighters[0].move === "upBAir" || s.fighters[0].move === "upB");
+        }
+        expect(upB, `seed ${seed}: the up special comes out`).toBe(true);
+      }
   });
 
   it("a last-frame decision in the air comes out as the neutral dodge it judged (ruling R-T19m: the re-review's seed 1011 Fox)", () => {

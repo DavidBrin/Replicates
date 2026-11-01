@@ -1296,6 +1296,12 @@ function shieldWaiting(f: FighterState, frame: number): boolean {
   return b !== null && b.kind === "shield" && frame + 1 - b.frame <= BUFFER_FRAMES;
 }
 
+/** A Special press of its own (only `recover`'s up special waits there) still in the buffer for the next step. */
+function specialWaiting(f: FighterState, frame: number): boolean {
+  const b = f.bufferedAction;
+  return b !== null && b.kind === "special" && frame + 1 - b.frame <= BUFFER_FRAMES;
+}
+
 /**
  * How many steps from now this fighter's fall meets a floor, if it does within
  * `horizon`, or null. The fall is the engine's own: a copy of the fighter run
@@ -1389,6 +1395,22 @@ function landsOn(x: number, prevY: number, y: number, stage: StageView, stageFra
   const crosses = (surface: number) => prevY >= surface && y <= surface;
   if (x >= stage.leftLedge && x <= stage.rightLedge && crosses(stage.groundY)) return true;
   return stage.platforms.some((p) => abs(x - platformCentreX(p, stageFrame)) <= p.halfWidth && crosses(p.y));
+}
+
+/**
+ * Whether the next step reads this airborne fighter's buffered Shield press into an
+ * air dodge (ruling R-T19m, on a move's hand-off): its own copy run one step by the
+ * engine's rules (`ghostStep`), its buffer kept and nothing pressed, comes out in an
+ * air dodge it wasn't in. Exact for the press: `handleActionable` reads a buffered
+ * Shield before any other press, so what is pressed on the real step changes only
+ * the dodge's direction, not whether it starts. A reel's last frame is no such step:
+ * it ends through `endStatus`, which keeps the press for the step after.
+ */
+export function pressReadNextStep(def: FighterDef, self: FighterState, frame0: number): boolean {
+  if (self.hitlag > 0 || self.action === "airDodge") return false;
+  const f = cloneFighter(self);
+  ghostStep(f, 0, 0, ghostContext(def, frame0 + 1, f));
+  return f.action === "airDodge";
 }
 
 /**
@@ -2050,7 +2072,12 @@ export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryM
  * the drop began.
  *
  * A press it decided that waits in the buffer comes out as the press it judged
- * (ruling R-T19m): on the free frame in the air that reads it, the stick is masked off
+ * (ruling R-T19m) on the step that reads it in the air: a free frame (the press made
+ * on the last frame of a reel, a lag or a get-up), or the hand-off step of the
+ * fighter's own move (an aerial handing off to `fall`, a ledge jump to `jump`, a
+ * special's end), where the move's status hands off and `handleActionable` reads the
+ * buffer at once (`pressReadNextStep`: the fighter's own copy run one step, its
+ * buffer kept, comes out in an air dodge). On that step the stick is masked off
  * whatever wins the frame (`forbid`, as `tech` masks a fast fall's Down), so the air
  * dodge is the neutral one `dodgeCarriesOffstage` weighed. A mask, not a decided result: a
  * decided hold here would lose the frame to every decided behaviour before this one
@@ -2067,14 +2094,24 @@ export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryM
 export const shield: Behaviour = (ctx) => {
   const { self, targetAction } = ctx.view;
   const { tuning } = ctx;
-  // Its press waiting in the buffer comes out on this step as the press it judged
-  // (ruling R-T19m): in the air the stick kept neutral whoever wins the frame, so the
-  // air dodge is the neutral one (`dodgeCarriesOffstage` below judged that), not a
-  // directional one another behaviour's stick makes of it; `tech` holds the same
-  // neutral in a tumble's fall, decided, and comes first. On the ground the press is a
-  // shield whatever the stick, so the stick is left alone. A threat seen again on this
-  // frame is decided no more: the press already made is its answer (the hand-off).
-  if (free(self) && shieldWaiting(self, ctx.view.frame)) return { score: 0, input: 0, forbid: self.grounded ? 0 : STICK };
+  // A recovery's up special waiting in the buffer is not replaced (ruling R-T19p): the
+  // buffer keeps one press (`bufferPress`), and a Shield press made now would take its
+  // place with an air dodge. Read off the fighter itself, not a model copy.
+  if (specialWaiting(self, ctx.view.frame)) return NOTHING;
+  if (shieldWaiting(self, ctx.view.frame)) {
+    // Its press waiting in the buffer comes out on this step as the press it judged
+    // (ruling R-T19m): in the air the stick kept neutral whoever wins the frame, so the
+    // air dodge is the neutral one (`dodgeCarriesOffstage` below judged that), not a
+    // directional one another behaviour's stick makes of it; `tech` holds the same
+    // neutral in a tumble's fall, decided, and comes first. On the ground the press is
+    // a shield whatever the stick, so the stick is left alone. A threat seen again on
+    // this frame is decided no more: the press already made is its answer (the
+    // hand-off).
+    if (free(self)) return { score: 0, input: 0, forbid: self.grounded ? 0 : STICK };
+    // Read on its own move's hand-off step (an aerial's, a ledge jump's, a special's):
+    // the same mask on that step.
+    if (!self.grounded && ctx.fighterDef !== null && pressReadNextStep(ctx.fighterDef, self, ctx.view.frame)) return { score: 0, input: 0, forbid: STICK };
+  }
   if (ctx.view.target === null || !threatNow(ctx)) return NOTHING;
 
   const incomingAttack = isAttacking(targetAction);
@@ -2147,7 +2184,9 @@ function rollAway(ctx: BehaviourContext, minded: boolean, decided: boolean): Beh
  * in the buffer, and from a long one runs out before it frees the fighter. Its own
  * move (an attack, a special, a jump's squat, a roll, a shield's drop) is not one of
  * them: it chose that with the threat in view, so the shield decides as it first
- * sees the threat, its press waiting in the buffer for the move's end, as before.
+ * sees the threat, its press waiting in the buffer for the move's hand-off step (an
+ * aerial's into `fall`, a ledge jump's into `jump`, a special's end), which reads it at
+ * once, with the stick masked there (ruling R-T19m), as before.
  * (Task 19 fix round 1's sweep: deciding those at the move's end instead, as
  * `free` alone would have, had the CPU air-dodge after nearly every aerial, and its
  * self-destructs rose from 96 to 124 over twelve sweeps.)
@@ -2161,7 +2200,10 @@ function cannotAct(f: FighterState): boolean {
 /**
  * The one frame a threat is decided on (rulings R-T18g, R-T19g, R-T19l). Where it can
  * act (`cannotAct`), the first frame the threat is seen in range, or, for a swing a
- * counter of its own can catch (`counterTakes`), the counter's frame. Where it
+ * counter of its own can catch (`counterTakes`), the counter's frame while that is
+ * still to come; a swing that first comes into range after it, at range entry (ruling
+ * R-T19l amended), so approaching swings are decided as before the counter came first.
+ * Where it
  * cannot, the last frame of the stretch it is held in, the frame before its first
  * free one (`freeNextStep`, by `free`, the specials' notion, its own buffered press
  * left out: ruling R-T19n), for a threat whose own decision frame came during that
@@ -2182,7 +2224,10 @@ function cannotAct(f: FighterState): boolean {
 function shieldDecides(ctx: BehaviourContext): boolean {
   const { self, targetActionAge } = ctx.view;
   const wait = counterTakes(ctx);
-  if (!cannotAct(self)) return wait === null ? !threatBefore(ctx) : wait === 0;
+  // The counter's frame still ahead (or now): the counter first (ruling R-T19l). Passed,
+  // or none: the shield's own first sight in range (ruling R-T19l amended: a swing that
+  // comes into range after its counter frame decides at range entry, as before).
+  if (!cannotAct(self)) return wait === null || wait < 0 ? !threatBefore(ctx) : wait === 0;
   if (ctx.fighterDef === null || !freeNextStep(ctx.fighterDef, self, ctx.view.frame)) return false;
   // Frames since the threat's own decision frame: its first sight, or the counter's.
   const since = wait === null ? targetActionAge : -wait;
