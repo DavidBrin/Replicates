@@ -389,6 +389,22 @@ describe("a trap behind its user (ruling R-FW2h)", () => {
     expect(ba).toEqual(ab);
   });
 
+  it("judges only the fighters a step traps: one trapped on an earlier step is not judged again (ruling R-FW2o)", () => {
+    // Donkey Kong traps Mario 18 ahead and Fox 3 behind on one step and keeps his facing.
+    // Were Mario to leave the trap (a stand-in: no rule frees one alone), Fox, trapped on
+    // that earlier step and behind him, does not turn him on the next.
+    const states = jungleRush(18, -3);
+    const t = states.findIndex((st) => st.fighters[2].action === "finalTrapped");
+    expect(states[t].fighters[1].action).toBe("finalTrapped");
+    expect(states[t].fighters[0].facing).toBe(1);
+    const s = cloneState(states[t]);
+    Object.assign(s.fighters[1], { action: "stand", actionFrame: 0 });
+    s.fighters[1].combat.trappedBy = -1;
+    const next = step(s, [0, 0, 0], { prevInputs: [0, 0, 0] }).state;
+    expect(next.fighters[2].action).toBe("finalTrapped");
+    expect(next.fighters[0].facing).toBe(1);
+  });
+
   it("Marth, whose dash carries him past Mario 2 ahead, turns and strikes him away, not back through himself", () => {
     // Task 17 re-review 1: the dash moves Marth 6 on its frame 25 before the catch
     // reaches Mario, who ends up 4 behind him.
