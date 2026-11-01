@@ -397,9 +397,10 @@ export class GamepadInput {
    * Ruling R-T21a: only a pad with the W3C standard mapping has its right
    * stick on axes 2 and 3; on another layout they may be triggers, which rest
    * at an end of their travel, so such a pad gets no flick at all. And a
-   * flick starts from rest: until the stick has been seen inside the dead
-   * zone, a deflection (on the first poll, or held since the pad connected)
-   * never fires.
+   * flick starts from rest: until the stick has been seen at rest, below the
+   * walk threshold (the neutral a flick starts from, so a worn stick resting
+   * just outside the dead zone still arms), a deflection (on the first poll,
+   * or held since the pad connected) never fires.
    */
   private rightStickFrame(pad: Gamepad, mapping: GamepadMapping, frame: InputFrame): InputFrame {
     const mode = mapping.rightStick ?? "smash";
@@ -409,7 +410,7 @@ export class GamepadInput {
     const dir: InputFrame =
       r.magnitude < WALK_THRESHOLD ? 0 : Math.abs(r.x) >= Math.abs(r.y) ? (r.x > 0 ? Btn.Right : Btn.Left) : r.y > 0 ? Btn.Up : Btn.Down;
     const previous = this.lastRight.get(pad.index);
-    if (previous === undefined && r.magnitude > 0) return frame;
+    if (previous === undefined && dir !== 0) return frame;
     this.lastRight.set(pad.index, dir);
     const body = frame & ~(DIRECTION_MASK | Btn.Soft);
     const pending = this.pendingRight.get(pad.index);

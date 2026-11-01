@@ -281,14 +281,72 @@ describe("the right stick", () => {
     expect(frames).toEqual([0, 0, 0, 0, Btn.Right | Btn.Attack]);
   });
 
-  it("waits for the stick inside the dead zone: resting short of the walk threshold is not at rest", () => {
+  /**
+   * R-T21a as amended: "at rest" is below the walk threshold, the neutral the
+   * flick rule itself reads. A worn stick resting outside the dead zone (raw
+   * 0.3, short of the threshold's raw ~0.41) arms on its first poll and flicks
+   * as any other; read strictly, it would never arm, and the right stick would
+   * be dead for the match with nothing to say so.
+   */
+  it("arms a worn stick resting short of the walk threshold, outside the dead zone, and flicks from there", () => {
     const { nav, set } = livePad();
     const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
-    const frames = [0.25, 1, 1, 0, 1, 1].map((x) => {
+    const frames = [0.3, 0.3, 1, 1, 0.3, 0.3, 1, 1].map((x) => {
       set(pad({ axes: [0, 0, x, 0] }));
       return pads.poll(1).frames[0];
     });
-    expect(frames).toEqual([0, 0, 0, 0, 0, Btn.Right | Btn.Attack]);
+    expect(frames).toEqual([0, 0, 0, Btn.Right | Btn.Attack, 0, 0, 0, Btn.Right | Btn.Attack]);
+  });
+
+  /**
+   * A flick from one side straight to the other crosses neutral between two
+   * polls, so no poll sees it at rest. The flick rule already reads that as a
+   * change of direction, not a flick (as "needs the stick back at neutral
+   * before another flick"): it never fires, and it never arms an unarmed
+   * stick either. A poll at rest, then a flick, fires as ever.
+   */
+  it("reads a fast flick to the other side, never seen at rest, as no flick, armed or not", () => {
+    expect(run(DEFAULT_PAD_SETTINGS, [RIGHT, RIGHT, [0, 0, -0.9, 0], [0, 0, -0.9, 0], NEUTRAL, [0, 0, -0.9, 0], [0, 0, -0.9, 0]])).toEqual([
+      0,
+      Btn.Right | Btn.Attack,
+      0,
+      0,
+      0,
+      0,
+      Btn.Left | Btn.Attack,
+    ]);
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    const unarmed = [RIGHT, [0, 0, -0.9, 0], [0, 0, -0.9, 0]].map((axes) => {
+      set(pad({ axes }));
+      return pads.poll(1).frames[0];
+    });
+    expect(unarmed).toEqual([0, 0, 0]);
+  });
+
+  /** The `gamepaddisconnected` event forgets the stick's rest, as the poll that misses the pad does. */
+  it("never fires for a stick held through a disconnect event and back", () => {
+    const { nav, set } = livePad();
+    live = new GamepadInput({ window, navigator: nav, mappingForPort: () => mappingFrom(DEFAULT_PAD_SETTINGS) });
+    live.attach();
+    live.poll(1);
+    const gone = new Event("gamepaddisconnected") as GamepadEvent;
+    Object.defineProperty(gone, "gamepad", { value: pad() });
+    window.dispatchEvent(gone);
+    // Back at once, with the stick held, before any poll saw it gone.
+    set(pad({ axes: RIGHT }));
+    expect([live.poll(1).frames[0], live.poll(1).frames[0]]).toEqual([0, 0]);
+  });
+
+  it("never fires for a stick held through a detach and a new attach", () => {
+    const { nav, set } = livePad();
+    live = new GamepadInput({ window, navigator: nav, mappingForPort: () => mappingFrom(DEFAULT_PAD_SETTINGS) });
+    live.attach();
+    live.poll(1);
+    live.detach();
+    live.attach();
+    set(pad({ axes: RIGHT }));
+    expect([live.poll(1).frames[0], live.poll(1).frames[0]]).toEqual([0, 0]);
   });
 
   it("never fires for a stick held through an unplug and back", () => {
