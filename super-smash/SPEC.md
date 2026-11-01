@@ -225,7 +225,7 @@ timing instead:
 | Distinction | Rule |
 |---|---|
 | Step vs. dash | A tap is a small step; a held direction dashes and then runs. With Tilt held, it walks. |
-| Tilt vs. smash | Attack within 5 frames of a *fresh* direction press is a smash; otherwise a tilt. With Tilt held, always a tilt. |
+| Tilt vs. smash | Attack within 5 frames of a *fresh* direction press is a smash; otherwise a tilt. With Tilt held, never a smash. |
 | Smash side special | A side special within the move's own window of a *fresh* direction press is its smash version (Samus 5 frames, Link 8); otherwise, or with Tilt held, the ordinary one. |
 | Dash attack | Attack while already at run speed. |
 | Short vs. full hop | Jump released within the 3-frame jumpsquat is a short hop. |
@@ -237,9 +237,11 @@ timing instead:
 **Walking takes the Tilt key.** A key is *always a full deflection*, and a fully-deflected
 stick in the real game dashes and then runs; a walk, like a standing tilt, needs a partial
 tilt. Each preset has a **Tilt** key (Config 3's is `N`), held for a part-way push: it sets
-the same bit as a gamepad's partial tilt (`Btn.Soft`), so a held direction walks, Attack is
-a tilt, DI bends a quarter as far, and Up never jumps. Without it a held direction dashes,
-and micro-spacing comes from tapping, which produces a short step before the dash commits.
+the same bit as a gamepad's partial tilt (`Btn.Soft`), so a held direction walks, at half
+the fighter's walk speed (one bit of magnitude, read as half deflection; no source publishes
+that reading, DECISIONS D55), Attack is never a smash, DI bends a quarter as far, and Up
+never jumps. Without it a held direction dashes, and micro-spacing comes from tapping, which
+produces a short step before the dash commits.
 
 **Stick jump defaults on** (D31). Up jumps, as pushing the stick up does, once five frames
 pass with no attack, special or grab to claim the press; the Jump key fires at once. As in

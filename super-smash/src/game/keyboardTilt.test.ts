@@ -17,6 +17,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
+import { FIGHTER_PARAMS } from "@/fighters/params";
 import { mergeKeyboardAndPad } from "@/input/gamepad";
 import { KeyboardInput } from "@/input/keyboard";
 import { DEFAULT_BINDINGS } from "@/lib/matchConfig";
@@ -84,6 +85,14 @@ describe("the keyboard's Tilt key, from stand", () => {
     expect(last(play("mario", 13, { 0: [KEYS.right], 12: [KEYS.attack] }))).toEqual(["attack", "dashAttack"]);
   });
 
+  /** Fix round 1 (review Minor 4): Attack inside the smash window of a fresh Up, where only Tilt keeps it from an up smash. */
+  it("Tilt + Up, then Attack a frame later, is an up tilt and never a jump; without Tilt, an up smash", () => {
+    const tilt = play("mario", 12, { 0: [KEYS.tilt, KEYS.up], 1: [KEYS.attack] });
+    expect([tilt[1].action, tilt[1].move]).toEqual(["attack", "utilt"]);
+    expect(tilt.map((f) => f.action).filter((a) => a === "jumpSquat" || a === "jump")).toEqual([]);
+    expect(last(play("mario", 2, { 0: [KEYS.up], 1: [KEYS.attack] }))).toEqual(["attack", "usmash"]);
+  });
+
   it("Tilt + Up never jumps (Task 20: a soft Up never stick-jumps), and Attack is an up tilt; without Tilt, Up jumps", () => {
     const held = play("mario", 12, { 0: [KEYS.tilt, KEYS.up] });
     expect(new Set(held.map((f) => f.action))).toEqual(new Set(["stand"]));
@@ -91,8 +100,11 @@ describe("the keyboard's Tilt key, from stand", () => {
     expect(play("mario", 12, { 0: [KEYS.up] }).map((f) => f.action)).toContain("jumpSquat");
   });
 
-  it("Tilt + Right held walks and never dashes; without Tilt it dashes, then runs", () => {
-    expect(new Set(play("mario", 40, { 0: [KEYS.tilt, KEYS.right] }).map((f) => f.action))).toEqual(new Set(["walk"]));
+  it("Tilt + Right held walks, at half the walk speed, and never dashes; without Tilt it dashes, then runs", () => {
+    const walk = play("mario", 40, { 0: [KEYS.tilt, KEYS.right] });
+    expect(new Set(walk.map((f) => f.action))).toEqual(new Set(["walk"]));
+    // SPEC §6 (fix round 1, review Minor 2): `Btn.Soft` reads as half deflection, so half of Mario's walk speed (DECISIONS D55).
+    expect(walk[walk.length - 1].vx).toBe(FIGHTER_PARAMS.mario.walk_speed_max >> 1);
     // Without it, the first frames are a step (SPEC §6), then the dash commits.
     expect(new Set(play("mario", 40, { 0: [KEYS.right] }).map((f) => f.action))).toEqual(new Set(["walk", "dashStart", "run"]));
   });

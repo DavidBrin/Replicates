@@ -8,9 +8,10 @@ const run = promisify(execFile);
 /**
  * `scripts/fightsheet.mjs` photographs a move as the match plays it, and the one
  * thing it must never do is photograph a different move under the name asked for.
- * A keyboard cannot throw a tilt (direction and attack press on one frame, so it
- * reads as a smash or a dash attack; `Btn.Soft` comes only from an analog stick,
- * `input/gamepad.ts`), so the tilts are driven with a fake pad. The script prints
+ * A keyboard throws a tilt only with its Tilt key held (Plan 5, Task 21b):
+ * without it, direction and attack read as a smash or a dash attack. The script
+ * throws its tilts the other way, with a fake pad's part-way push (`Btn.Soft`,
+ * `input/gamepad.ts`). The script prints
  * the move the match played, and exits 1 when it is not the one asked for.
  *
  * The captures go to Playwright's output folder (`test-results/`, git-ignored): a

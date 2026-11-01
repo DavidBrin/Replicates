@@ -68,12 +68,13 @@ function groundMain(f: FighterState, intent: Intent, ctx: StateContext): void {
    * becomes a dash.
    *
    * This reads oddly against SPEC §6 — if any sustained hold becomes a dash,
-   * when does anybody walk? — and the answer is that they do not, and should
-   * not. **A key is always a full deflection.** In Ultimate a fully deflected
-   * stick dashes and then runs; walking requires a *partial* tilt, which is a
-   * distinction a keyboard has no way to express at all (a gamepad's partial
-   * tilt arrives as `Btn.Soft`, Plan 1, and clears `wantsDash`). So "hold =
-   * dash" is the faithful translation of a held key, not a missing feature.
+   * when does anybody walk? — and the answer is: only with a part-way push.
+   * **A key is always a full deflection.** In Ultimate a fully deflected
+   * stick dashes and then runs; walking requires a *partial* tilt, which
+   * arrives as `Btn.Soft` and clears `wantsDash`: a gamepad's partial tilt
+   * (Plan 1), or the keyboard's Tilt key held (Plan 5, Task 21b). So "hold =
+   * dash" is the faithful translation of a held key on its own, not a missing
+   * feature, and a keyboard walks by holding Tilt.
    *
    * What the window buys is the other half of the analog stick's range. The
    * brief step before the dash commits is what a tap produces, and a tap is
@@ -81,7 +82,7 @@ function groundMain(f: FighterState, intent: Intent, ctx: StateContext): void {
    * exists at full deflection: to be tapped, not held (D24 records the tap
    * distances).
    *
-   * Do not "fix" this by inverting it.
+   * Do not "fix" this by inverting it: the Tilt key is the keyboard's walk.
    */
   if (intent.wantsDash) startAction(f, "dashStart");
   else if (f.action !== "walk") startAction(f, "walk");

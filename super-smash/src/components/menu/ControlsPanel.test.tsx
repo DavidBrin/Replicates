@@ -41,8 +41,10 @@ describe("ControlsPanel", () => {
     expect(container.querySelector('[data-key="KeyV"]')).toHaveAttribute("data-bound", "tilt");
     const panel = screen.getByRole("heading", { name: /hold tilt to walk/i }).parentElement!;
     expect(panel).toHaveTextContent(/hold tilt \(v on config 1\)/i);
-    expect(panel).toHaveTextContent(/walks/i);
-    expect(panel).toHaveTextContent(/never a smash/i);
+    // Fix round 1 (review Minors 1-2): what the code does. A run still dash-attacks, and the walk is half speed.
+    expect(panel).toHaveTextContent(/walks, at half speed/i);
+    expect(panel).toHaveTextContent(/attack with a direction is never a smash \(from a standstill or a walk it is a tilt\)/i);
+    expect(panel).not.toHaveTextContent(/attack is a tilt/i);
     expect(panel).toHaveTextContent(/up never jumps/i);
 
     fireEvent.click(screen.getByRole("tab", { name: "Config 2" }));

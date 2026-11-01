@@ -68,10 +68,11 @@ const out = resolve(flag("out", join("test-results", "anim", `fight-${fighter}-$
  */
 const INPUT = {
   jab: { keys: ["attack"] },
-  // A tilt is a direction held SOFT with attack, and `Btn.Soft` comes only from an analog stick (`input/gamepad.ts`):
-  // a key is always fully deflected, so a keyboard presses direction and attack on one frame and gets a smash (held
-  // 0-4 frames before attack), a dash attack (held longer), or an up-tilt's jump. These moves are driven the way a
-  // player throws them, with a stick pushed to `pad` (0.55: past the walk threshold, short of the dash one).
+  // A tilt is a direction held SOFT with attack. `Btn.Soft` comes from an analog stick's part-way push
+  // (`input/gamepad.ts`) or the keyboard's Tilt key held (Plan 5, Task 21b); without it a key is fully deflected, so
+  // direction and attack give a smash (held 0-4 frames before attack), a dash attack (held longer), or an up-tilt's
+  // jump. These moves are driven with a stick pushed to `pad` (0.55: past the walk threshold, short of the dash one),
+  // one of the two ways a player throws them.
   ftilt: { keys: [], pad: { x: 0.55, y: 0 } },
   utilt: { keys: [], pad: { x: 0, y: -0.55 } },
   dtilt: { keys: [], pad: { x: 0, y: 0.55 } },

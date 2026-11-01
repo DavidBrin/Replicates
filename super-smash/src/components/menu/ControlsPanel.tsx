@@ -245,8 +245,8 @@ export function ControlsPanel() {
             A key is always a full push of the stick, so a held direction dashes, and a fresh one with Attack is a
             smash. Hold <strong className="text-white">Tilt</strong> ({keyLabel(active.tilt)} on{" "}
             {SCHEME_INFO[scheme].name}) for a part-way push, as a gamepad&apos;s stick can give: a held direction
-            walks, Attack is a tilt and never a smash, a side special is never its smash version, and Up never
-            jumps.
+            walks, at half speed, Attack with a direction is never a smash (from a standstill or a walk it is a
+            tilt), a side special is never its smash version, and Up never jumps.
           </p>
         </SkewPanel>
 
