@@ -1104,15 +1104,16 @@ export function step(
   reflectProjectiles(s, defs, (p) => projectileDefOf(ctx, p), candidates, events, destroyed);
   resolveClanks(s, candidates, (p) => projectileDefOf(ctx, p), events, destroyed);
   // Who each fighter's trap held before the step's hits, and how each fighter faced: a
-  // trap's facings are settled once all of them have landed (`faceTrapped`; part 2's fix
-  // round 1, ruling R-FW2o), whatever order the ports take them in.
+  // trap's facings are settled once all of the step's have landed, from everybody the
+  // user holds (`faceTrapped`; part 2's fix rounds 1 and 2, rulings R-FW2o and R-FW2p),
+  // whatever order the ports take them in.
   const trappedBefore = s.fighters.map((f) => (f.action === "finalTrapped" ? f.combat.trappedBy : -1));
   const facingBefore = s.fighters.map((f) => f.facing);
   resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents);
   resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents);
   for (const user of s.fighters) {
-    const caught = s.fighters.filter((v, i) => v.action === "finalTrapped" && v.combat.trappedBy === user.port && trappedBefore[i] !== user.port);
-    faceTrapped(user, caught, facingBefore[user.port]);
+    const held = s.fighters.filter((v) => v.action === "finalTrapped" && v.combat.trappedBy === user.port);
+    if (held.some((v) => trappedBefore[v.port] !== user.port)) faceTrapped(user, held, facingBefore[user.port]);
   }
   if (destroyed.size > 0) {
     // A star a clank ends lets its rider go, as one whose flight ends does (Plan 5,

@@ -22,7 +22,7 @@ import { kineticClear } from "@/engine/kinetic";
 import { STALE_FRESH_BONUS } from "@/engine/knockback";
 import { insideSolidBody } from "@/engine/physics";
 import { findProjectileDef } from "@/engine/projectile";
-import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
+import { cloneState, createInitialState, registerFighters, registerStages, step, type SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { ChargedHitbox, FighterDef, FighterState, GameState, Hitbox, InputFrame, MatchRules, MoveSlot, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
@@ -32,8 +32,12 @@ import { fighterParams } from "@/engine/params";
 import { REFERENCE_SCRIPTS } from "./acmd/index";
 import { barrage, finalBox } from "./finalKit";
 import { FIGHTERS, getFighter } from "./index";
+import { bakedContext } from "@/game/bake";
+import { readBakeFromDisk } from "@/game/bakeNode";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false };
+/** The game's baked context, as play steps (the bake's bodies, scripts and boxes). */
+const GAME: SimContext = bakedContext({ fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((st) => st.id === id)! }, readBakeFromDisk());
 
 beforeAll(() => {
   registerFighters(FIGHTERS);
@@ -349,24 +353,44 @@ describe("a trap behind its user (ruling R-FW2h)", () => {
   // after the step's trap hits, against the user's facing before them (`faceTrapped`), so
   // swapping only the ports of the two fighters it traps changes nothing. Each scene traps
   // one fighter ahead of its user and one behind (Marth's: one his dash carries him past)
-  // on one step. Kirby's catch reaches nobody behind him (`TRAP_REACH_BEHIND`), and no
-  // scene traps one either side of him (a scan of 1 to 30 ahead and 0.25 to 16 behind,
-  // three pairs of victims), so he has none.
+  // on one step. Kirby's catch box reaches nobody behind his origin (`TRAP_REACH_BEHIND`),
+  // so without the bake no scene traps one either side of him; with the bake's bodies, as
+  // in play, a fighter standing just behind him reaches into it (fix round 2, its
+  // re-review's N2), so his scene is played baked.
   const TWO_SIDED = [
-    { user: "donkeyKong", a: ["mario", 18], b: ["fox", -3] },
-    { user: "marth", a: ["mario", 12], b: ["fox", 3] },
-    { user: "fox", a: ["fox", 10], b: ["donkeyKong", -0.5] },
-    { user: "pikachu", a: ["mario", 4], b: ["fox", -2] },
+    { user: "donkeyKong", a: ["mario", 18], b: ["fox", -3], baked: false },
+    { user: "marth", a: ["mario", 12], b: ["fox", 3], baked: false },
+    { user: "fox", a: ["fox", 10], b: ["donkeyKong", -0.5], baked: false },
+    { user: "pikachu", a: ["mario", 4], b: ["fox", -2], baked: false },
+    { user: "kirby", a: ["mario", 6], b: ["donkeyKong", -0.5], baked: true },
   ] as const;
 
-  it.each(TWO_SIDED)("$user, trapping one fighter either side on one step, faces and launches the same with their ports swapped (ruling R-FW2o)", ({ user, a, b }) => {
-    /** `user` at −30 facing right, the two others at −30 + their gaps, facing left, on ports in `order`. */
+  /**
+   * `user` at −30 facing right using its Final Smash, the others at −30 + their gaps
+   * facing left, on the ports `order` gives them, each pressing `inputs` (by fighter) on
+   * each step: the steps, in the game's baked context or not.
+   */
+  function trapScene(user: string, order: readonly (readonly [string, number])[], baked: boolean, frames: number, inputs: (id: string, i: number) => InputFrame = () => 0): GameState[] {
+    const ctx = baked ? GAME : undefined;
+    const s = createInitialState("finalDestination", [{ defId: user }, ...order.map(([id]) => ({ defId: id }))], RULES, 6, ctx);
+    const xs = [fx(-30), ...order.map(([, gap]) => fx(-30 + gap))];
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: xs[i], y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    let st = s;
+    let prev: InputFrame[] = s.fighters.map(() => 0);
+    const states: GameState[] = [];
+    for (let i = 0; i < frames; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, ...order.map(([id]) => inputs(id, i))];
+      st = step(st, now, { prevInputs: prev, ...(ctx !== undefined ? { ctx } : {}) }).state;
+      prev = now;
+      states.push(st);
+    }
+    return states;
+  }
+
+  it.each(TWO_SIDED)("$user, trapping one fighter either side on one step, faces and launches the same with their ports swapped (ruling R-FW2o)", ({ user, a, b, baked }) => {
     const play = (order: readonly (readonly [string, number])[]) => {
-      const s = createInitialState("finalDestination", [{ defId: user }, ...order.map(([id]) => ({ defId: id }))], RULES, 6);
-      const xs = [fx(-30), ...order.map(([, gap]) => fx(-30 + gap))];
-      s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: xs[i], y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
-      s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
-      const { states } = run(s, 400);
+      const states = trapScene(user, order, baked, 400);
       const trappedOn = [1, 2].map((p) => states.findIndex((st) => st.fighters[p].action === "finalTrapped"));
       expect(trappedOn[0]).toBeGreaterThan(0);
       expect(trappedOn[1]).toBe(trappedOn[0]);
@@ -377,32 +401,38 @@ describe("a trap behind its user (ruling R-FW2h)", () => {
         facing: states[t].fighters[0].facing,
         scene: states.filter((st) => st.cinematic === 0).map((st) => st.fighters[0].facing),
         faced: [1, 2].map((p) => states[t].fighters[p].facing === Math.sign(states[t].fighters[0].x - states[t].fighters[p].x)),
+        behind: [1, 2].map((p) => states[t].fighters[p].x < states[t].fighters[0].x),
         launched: Object.fromEntries([1, 2].map((p) => [`${order[p - 1][0]} ${order[p - 1][1]}`, launch(p)])),
       };
     };
     const ab = play([a, b]);
     const ba = play([b, a]);
     expect(ab.facing).toBe(1);
+    expect(ab.behind).toEqual([false, true]);
     expect(ab.scene.length).toBeGreaterThan(0);
     expect(ab.scene.every((f) => f === 1)).toBe(true);
     expect(ab.faced).toEqual([true, true]);
-    expect(ba).toEqual(ab);
+    expect(ba).toEqual({ ...ab, behind: [true, false] });
   });
 
-  it("judges only the fighters a step traps: one trapped on an earlier step is not judged again (ruling R-FW2o)", () => {
-    // Donkey Kong traps Mario 18 ahead and Fox 3 behind on one step and keeps his facing.
-    // Were Mario to leave the trap (a stand-in: no rule frees one alone), Fox, trapped on
-    // that earlier step and behind him, does not turn him on the next.
-    const states = jungleRush(18, -3);
-    const t = states.findIndex((st) => st.fighters[2].action === "finalTrapped");
-    expect(states[t].fighters[1].action).toBe("finalTrapped");
-    expect(states[t].fighters[0].facing).toBe(1);
-    const s = cloneState(states[t]);
-    Object.assign(s.fighters[1], { action: "stand", actionFrame: 0 });
-    s.fighters[1].combat.trappedBy = -1;
-    const next = step(s, [0, 0, 0], { prevInputs: [0, 0, 0] }).state;
-    expect(next.fighters[2].action).toBe("finalTrapped");
-    expect(next.fighters[0].facing).toBe(1);
+  // Part 2's fix round 2, ruling R-FW2p (re-review 2's N1): the turn counts every fighter
+  // the user holds, not only the step's catches. Jungle Rush's catch freezes Donkey Kong on
+  // its catch for about 30 steps with the box live: Mario, 12 ahead, is caught on step 29;
+  // Fox, 2 behind with his shield up, spot-dodges the catch and is caught on step 59. Held
+  // either side, Donkey Kong keeps his facing, in both port orders. Judged from the step's
+  // catches alone, Fox turned him away from Mario.
+  it("keeps facing a fighter caught ahead when one behind is caught 30 steps later, whatever the ports (ruling R-FW2p)", () => {
+    const fox = (id: string, i: number) => (id !== "fox" ? 0 : i < 20 ? Btn.Shield : i === 20 ? Btn.Shield | Btn.Down : 0);
+    for (const order of [[["mario", 12], ["fox", -2]], [["fox", -2], ["mario", 12]]] as const) {
+      const states = trapScene("donkeyKong", order, false, 160, fox);
+      const portOf = (id: string) => 1 + order.findIndex(([o]) => o === id);
+      const caughtOn = (id: string) => 1 + states.findIndex((st) => st.fighters[portOf(id)].action === "finalTrapped");
+      expect([caughtOn("mario"), caughtOn("fox")], order[0][0]).toEqual([29, 59]);
+      expect(states[58].fighters[portOf("fox")].x).toBeLessThan(states[58].fighters[0].x);
+      expect(states.every((st) => st.fighters[0].facing === 1), order[0][0]).toBe(true);
+      expect(states[58].fighters[portOf("fox")].facing).toBe(1);
+      expect(states[58].fighters[portOf("mario")].facing).toBe(-1);
+    }
   });
 
   it("Marth, whose dash carries him past Mario 2 ahead, turns and strikes him away, not back through himself", () => {

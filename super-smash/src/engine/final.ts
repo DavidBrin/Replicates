@@ -220,10 +220,13 @@ export function trapVictim(user: FighterState, victim: FighterState, fighters: r
  * (`holdAtCaptor`); UNVERIFIED too, and the scene's drawing gaps (`FinalPhase.sceneGap`,
  * Task 17) were measured on fighters that do.
  *
- * Decided once, after all of the step's trap hits (`victims`, the fighters `user` trapped
- * this step), against `facing`, the user's facing before them (part 2's fix round 1,
- * ruling R-FW2o): a decision taken victim by victim, in port order, turned the user for
- * the lower-port one alone when it was behind, and the outcome changed with the ports.
+ * Decided once, on a step its trap catches somebody, after all of that step's trap hits,
+ * from every fighter `user` holds (`victims`: those caught on earlier steps too), against
+ * `facing`, the user's facing before them (part 2's fix round 1, ruling R-FW2o; fix round
+ * 2, ruling R-FW2p). Taken victim by victim, in port order, the decision turned the user
+ * for the lower-port one alone, and the outcome changed with the ports; taken from the
+ * step's catches alone, a fighter caught later and behind (Fox spot-dodging Jungle Rush's
+ * catch, caught 30 steps after Mario ahead) turned the user away from one held ahead.
  */
 export function faceTrapped(user: FighterState, victims: readonly FighterState[], facing: number): void {
   if (victims.length === 0) return;
