@@ -295,10 +295,12 @@ each action is a status object with `pre`/`main`/`exec`/`end` under a `FIGHTER_S
 `scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`, and 137 moves run them: 71 that
 hang their hitboxes off the root bone alone (`src/fighters/acmd/active.ts`; a throw's strike and
 a projectile special's spawn need no bone), and 66 whose hitboxes ride limb bones the bake places
-(`src/fighters/acmd/limb.json`; four more that the rule admits stay on their legacy tables until
-their clips are fixed, `limb.hold.json`). Combat follows Ultimate's
-published rules — the balloon speed-up, DI, shields, staling, teching, grabs, air dodges and the
-rest — and where no source settles one, the code says `UNVERIFIED:`
+(`src/fighters/acmd/limb.json`). Four more that the rule admits stay on their legacy tables
+(`limb.hold.json`): Mario's and Kirby's forward smashes and Pikachu's up smash until their clips
+swing the limb the script hangs the boxes on, and Samus's down air because its meteor box would
+need her whole body about 7 units lower in the air, which no published number gives. Combat
+follows Ultimate's published rules — the balloon speed-up, DI, shields, staling, teching, grabs,
+air dodges and the rest — and where no source settles one, the code says `UNVERIFIED:`
 ([D56](DECISIONS.md#d56--combat-follows-ultimates-published-rules)).
 
 ---

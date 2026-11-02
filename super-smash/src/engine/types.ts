@@ -53,7 +53,7 @@ export const enum Btn {
    * wave, ruling R-FW3e). Set by the pad merge (`mergeKeyboardAndPad`) on a flick's
    * fire frame only, never by the keyboard or the CPU. With it, the attack or special
    * the frame starts takes its direction from the directions pressed fresh this frame,
-   * not from a d-pad direction held across the flick (`Intent.attackX`). It rides the
+   * not from a d-pad direction held across the flick (`Intent.rightFlick`). It rides the
    * input bitfield, as `Soft` does: both online peers must run a build that reads it.
    */
   Flick = 1 << 10,

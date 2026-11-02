@@ -603,7 +603,9 @@ function attackDirection(intent: Intent): { readonly x: number; readonly y: numb
 /**
  * Which ground attack a direction means. Smash direction wins over held direction. A
  * crouch's attack is the down tilt, but for a right-stick flick's smash (ruling
- * R-FW3e: the flick's direction over the d-pad's held Down).
+ * R-FW3e: the flick's direction over the d-pad's held Down). UNVERIFIED (a default
+ * no source we used settles): that a crouching fighter's flick comes out as the
+ * flick's smash, a forward smash for a side flick, rather than the crouch's down tilt.
  */
 export function groundAttackSlot(f: FighterState, intent: Intent): MoveSlot {
   if (f.action === "run" || f.action === "dashStart") return "dashAttack";

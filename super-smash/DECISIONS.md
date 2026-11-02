@@ -3477,7 +3477,8 @@ R-T11b, R-T12a and b) are in their task reports.
   - R-T13d-e: a reflected projectile does not re-run its launch wait, and its acceleration never
     clamps it below its speed, UNVERIFIED. Cost: small.
   - R-T13d-f: projectile hits stale like their move, the smash and failed side specials as
-    `sideB`: carried to the final wave. Cost: projectile damage drops on repeats.
+    `sideB`: carried to the final wave (done there, R-FW2b). Cost: projectile damage drops on
+    repeats.
 - *Task 14, the Final Smash engine*:
   - R-T14a: the Final Smash starts where the neutral special does; a same-frame shield wins.
     Cost: none if Ultimate gives the Final Smash priority (one line).
@@ -3735,7 +3736,8 @@ other fixes were weighed and rejected: a delay before a held direction dashes (a
 change for every player, against SPEC §6 and Ultimate's instant dash) and a pad-only "Tilt
 Attack" right stick (no help to a keyboard).
 
-**SPEC changes** (§6, reported to David; `git log 232645e..HEAD -- super-smash/SPEC.md`):
+**SPEC changes** (§6, and one in §10; reported to David;
+`git log 232645e..HEAD -- super-smash/SPEC.md`):
 - The controls table gains a **Tilt (held)** row: `V` (Config 1), `C` (Config 2) (Task 21b).
 - "Step vs. dash" adds "With Tilt held, it walks."; "Tilt vs. smash" adds "With Tilt held, never a
   smash." (Task 21b; its fix round corrected "always a tilt", which a run's dash attack belies).
@@ -3749,6 +3751,16 @@ Attack" right stick (no help to a keyboard).
   once; a per-player option on `/controls`; a soft Up never jumps.
 - At Task 23, the half walk's reading says "no source we used publishes" it, not "no source", as
   D55 marks it UNVERIFIED.
+- In the final wave (part 4's fix round), §10's fighters paragraph takes Plan 5's counts (66 limb
+  slots in `limb.json`; Pikachu's pummel, on `trans`, a fifth `root-exact` entry in
+  `reach.allow.json`). Its sentence was "Each model is posed by the replica's hand-authored clips,
+  retargeted onto its SSBU skeleton in the side plane, and the sim reads the same bones from the
+  bake, so the hitboxes of the 50 limb-bone moves ride the bones the bake places: the limb the
+  player sees, or the root for the four whose boxes hang on `top` or `trans`." It is now "Each
+  model is posed by the replica's hand-authored clips, retargeted onto its SSBU skeleton in the
+  side plane, and the sim reads the same bones from the bake, so the hitboxes of the 66 limb-bone
+  moves ride the bones the bake places: the limb the player sees, or the root for the five whose
+  boxes hang on `top` or `trans`."
 
 **Readings recorded, and what is not modelled.** Each is marked `UNVERIFIED:` in the code or named
 there as unmodelled; the task reports give the sources.
@@ -3872,16 +3884,16 @@ says which were fixed, which were accepted as measured and which went to polish.
   the Reflector stall's terminal-speed snap; the CPU recovery's "yes" through the stage's wall
   under the ledge; a trade's rage reading a percent the first hit already added; Grab pressed in
   the air (an air dodge in Ultimate, a zair for Samus); bounce-frame drift after a footstool; edge
-  slipping; the cliff clamp zeroing a push away from the edge; projectile staling (R-T13d-f);
-  presses during a KO freeze; the first-tick gap in `intangible: [1, x]`; Final Smash end boxes as
-  world boxes and a per-box record for scene boxes; Smashville not carrying a fighter in hitlag;
-  R-T14j's self-destruct after an edge whiff; two whiffs a frame too long (Marth's 118 for 117,
-  Pikachu's 138 for 137); `SLOW_OPPONENT(9, 45)` in every Final Smash start; Fox's end-part exit
-  frame; the windbox hit-record exemption under Zero Laser's pull; a trap catching a fighter
-  behind its user; Volt Tackle's whiff (166.49 units against Final Destination's 160); an aerial
-  Final Smash's height boost (no published size); and an online stall rewinding the paint's sim
-  time. Also `docs/superpowers/plans/README.md`'s Plan 5 lines, which still say a footstool skips
-  hitstun.
+  slipping; the cliff clamp zeroing a push away from the edge; projectile staling (R-T13d-f, which
+  R-FW2b closed); presses during a KO freeze; the first-tick gap in `intangible: [1, x]`; Final
+  Smash end boxes as world boxes and a per-box record for scene boxes; Smashville not carrying a
+  fighter in hitlag; R-T14j's self-destruct after an edge whiff; two whiffs a frame too long
+  (Marth's 118 for 117, Pikachu's 138 for 137); `SLOW_OPPONENT(9, 45)` in every Final Smash
+  start; Fox's end-part exit frame; the windbox hit-record exemption under Zero Laser's pull; a
+  trap catching a fighter behind its user; Volt Tackle's whiff (166.49 units against Final
+  Destination's 160); an aerial Final Smash's height boost (no published size); and an online
+  stall rewinding the paint's sim time. Also `docs/superpowers/plans/README.md`'s Plan 5 lines,
+  which said a footstool skips hitstun.
 
 **Found and carried** (polish). The four presentation carries from D57 above and the CPU's
 spacing; the six borrowed actions' clips and the carry, Inhale and trapped poses, which borrow the
@@ -3891,14 +3903,14 @@ Kong's stored full punch cut at motion frame 55 of 69; a smarter CPU Volt Tackle
 dash-off flip, the midair jump sound, and the reflect and counter-catch sounds. The final wave
 added its own list, at the end of this entry.
 
-**The final wave** (`5926338` to `b8e85bb`, and this entry's update). After Task 23, a whole-branch
-review of `232645e..5926338`, Task 23's own review and a focused codex pass found Plan 5 ready to
-ship with fixes: one Important (I1: a level-9 CPU beside a standing opponent turned every frame
-and never attacked, 31 of 64 matchups dancing for 30 s or more against an idle player; 38 at
-Plan 4's end), six Minors (M1 to M6) and codex's two input findings. The controller's triage made
-three implementer parts, each with a scoped re-review, and a fourth for the docs. Each ruling
-below is given with its cost as the ledger records it, an amended one in its final form; "none
-recorded" means the ruling named no cost.
+**The final wave** (`5926338` to `c3abc64`, and this entry's updates). After Task 23, a
+whole-branch review of `232645e..5926338`, Task 23's own review and a focused codex pass found
+Plan 5 ready to ship with fixes: one Important (I1: a level-9 CPU beside a standing opponent
+turned every frame and never attacked, 31 of 64 matchups dancing for 30 s or more against an
+idle player; 38 at Plan 4's end), six Minors (M1 to M6) and codex's two input findings. The
+controller's triage made three implementer parts, each with a scoped re-review, and a fourth for
+the docs. Each ruling below is given with its cost as the ledger records it, an amended one in
+its final form; "none recorded" means the ruling named no cost.
 
 *The triage.*
 - Three parts in turn, each re-reviewed, then a codex confirm on the final HEAD: part 1 the CPU,
@@ -3926,22 +3938,23 @@ recorded" means the ruling named no cost.
   whose release only pushes (F.L.U.D.D.) is let go only at an opponent off the stage. Cost:
   Mario's CPU never sprays F.L.U.D.D. at an opponent on the stage.
 - R-FW1d: a trapping Final Smash is not fired from off the stage (the user's own `isOffstage`
-  guard, as the other branch has). Cost: none recorded.
+  guard, as the other branch has). Cost: a CPU off the stage never fires a trapping Final Smash.
 - R-FW1e: the golden runs the CPU's Smash Ball and Final Smash decisions: a 14th match,
   `samus-kirby-townAndCity-ball` (seed 606), must break a ball and start a CPU Final Smash
-  (`expectCpuFinalSmash`). Cost: none recorded.
+  (`expectCpuFinalSmash`). Cost: the golden grows by one match.
 - R-FW1f: the recovery model's path stops where it enters the stage's solid body, so a way back
   through the wall under a ledge is no way back; `LEDGE_GRAB_BACK_PENALTY` and the runner's CPU
-  worlds are pinned. Cost: none recorded (the model is now cautious where the engine slid up the
-  wall to the ledge).
+  worlds are pinned. Cost: the model refuses paths through the stage's body that the engine
+  sometimes completes, sliding up the wall to the ledge (612 of 3,642 plans in part 1's first
+  re-review's grid).
 - R-FW1g: `recover` never presses Special on the step a held Up's tap jump fires, but on the
-  next. Cost: none recorded.
+  next. Cost: the up special comes one step after the tap-jump step.
 - R-FW1h: in `threatBefore`, an attacker frozen in hitlag at age 0 counts as already seen. Cost:
-  none recorded; the velocity-edge re-decisions stay a residual.
+  none; the velocity-edge re-decisions stay a residual.
 - R-FW1i: R-T19l's re-entry re-decision is named in the shield's list of doubles and counted.
-  Cost: none recorded.
+  Cost: none.
 - R-FW1j: `behaviours.ts` is split by concern, as a pure move ("New files and the split",
-  below). Cost: none recorded.
+  below). Cost: none (a pure move).
 - R-FW1k (widened): the CPU's drop through a soft platform is a Down pressed only from a state
   whose step drops on it (`stand`, `walk`, `dashStart`, `run`, `runBrake`), not a 4-in-10 pulse
   that phase-locked with the crouch's 5 + 5; and under a target on a soft platform above, it
@@ -3998,10 +4011,10 @@ recorded" means the ruling named no cost.
   knockback and rage, a windbox's push too, so a 1v1 trade is the same in both port orders.
   Cost: trades above 35% change; the golden may move.
 - R-FW2d: the SDI clamp never moves an origin deeper into the stage, also when the ECB already
-  overlapped. Cost: none recorded.
-- R-FW2e: `smashLetGo` is cleared on a KO. Cost: none recorded.
+  overlapped. Cost: SDI can't push an origin deeper into the stage.
+- R-FW2e: `smashLetGo` is cleared on a KO. Cost: none.
 - R-FW2f: the cliff stop stops only the horizontal push toward the edge it reached
-  (`kineticStopToward`). Cost: none recorded.
+  (`kineticStopToward`). Cost: none.
 - R-FW2g (corrected): a whiffed composite Final Smash lasts its end part's CancelFrame − 1, as
   every other row does: Critical Hit 117, Volt Tackle 137 (the ruling first read 118 and 138, the
   code's figures; the implementer followed the Task 15 re-review). Team Star Fox's end exits on
@@ -4010,19 +4023,21 @@ recorded" means the ruling named no cost.
   alternative the code names). Cost: Fox's Final Smash end is 31 frames shorter on the ground, on
   an unverified reading.
 - R-FW2h: a trap box reaches behind its user only where its script puts it (Marth's stand-in
-  moved to 10 ahead); a user whose trap caught only fighters behind it turns to face them, and
-  the trapped face their user (UNVERIFIED: SmashWiki's pages are silent). Cost: none recorded.
+  moved to 10 ahead, UNVERIFIED); a user whose trap caught only fighters behind it turns to face
+  them, and the trapped face their user (UNVERIFIED: SmashWiki's pages are silent). Cost: the
+  user turns on the trap's landing and the victim faces its user, both UNVERIFIED.
 - R-FW2i (amended): Volt Tackle's whole whiff, the tackle and its slide, travels "almost the
   entire length" of Final Destination's 160-unit floor (SmashWiki "Volt Tackle"): the tackle at
   3.2 a frame (UNVERIFIED; Task 15 had 4.5) and the end's slide from its published 3
   (`SET_SPEED_EX`), 150.9 units from a standstill, 94%, which the CPU reads as 154.0. Cost: none
   recorded; 3.3 would now pass the ruling's test too, and 3.2 stays.
 - R-FW2j: the Reflector's stall undoes exactly the step's gravity (SmashWiki's 0.027, with no
-  snap to terminal speed). Cost: none recorded.
+  snap to terminal speed). Cost: the stall holds vy exactly, where no source gives a gradual
+  clamp.
 - R-FW2k: `SLOW_OPPONENT` stays unmodelled, marked UNVERIFIED-simplified in all eight Final
   Smash startups (the ruling named five). Cost: the startups slow nobody nearby.
 - R-FW2l: the bake's `motionOf` guard checks an alias's length again, so a shorter one throws.
-  Cost: none recorded.
+  Cost: none.
 - R-FW2m: no source publishes a time limit on a Smash Ball's standby (SmashWiki "Smash Ball"
   and "Final Smash" time only the Meter's 20 s and the unbroken ball's 1,320 frames), so none is
   modelled (UNVERIFIED; polish). Cost: M2's hold cost ships as measured.
@@ -4037,18 +4052,27 @@ recorded" means the ruling named no cost.
 - Also ruled: Kirby's spit and Marth's counterattack stale as slots of their own (SmashWiki
   "Stale-move negation" is silent on both; UNVERIFIED), and Link's Remote Bomb, an item by that
   page, stales by nothing (cost: none); a baked two-sided Ultra Sword pin, and the positioning
-  keeps `SPOT_EDGE_ROOM` (3) inside each ledge (cost: Volt Tackle's spots shrink slightly); a
-  fighter hit from both sides in one step still flies the way of the higher port's attacker
-  (polish; cost: a rare same-frame two-sided hit breaks port symmetry in direction); Volt Tackle
-  stays rare under R-T19d, and a smarter CPU Volt Tackle is the polish phase's first CPU item
-  (cost: Pikachu CPUs rarely use their Final Smash, 4 in 1,512 ball-on matches); a ball-on
-  stand-off gets a committed guard in part 3 (cost: about 4 s more in `pnpm test`).
+  keeps `SPOT_EDGE_ROOM` (3, UNVERIFIED) inside each ledge (cost: Volt Tackle's spots shrink
+  slightly); a fighter hit from both sides in one step still flies the way of the higher port's
+  attacker (polish; cost: a rare same-frame two-sided hit breaks port symmetry in direction);
+  Volt Tackle stays rare under R-T19d, and a smarter CPU Volt Tackle is the polish phase's first
+  CPU item (cost: Pikachu CPUs rarely use their Final Smash, 4 in 1,512 ball-on matches); a
+  ball-on stand-off gets a committed guard in part 3 (cost: about 4 s more in `pnpm test`).
+- Mutant Q2 (the trap turn re-decided on every step, not only on one whose trap lands) was first
+  accepted as equivalent; part 2's third re-review found it is not. On Smashville's moving
+  platform a trapped fighter skips the platform pass (`simulate.ts`, step 5) while its user rides
+  the platform through the Final Smash's start, so Kirby is carried past Mario (19.4 by the
+  scene's start, Mario held 16.41 behind him), keeps his facing and launches him back through
+  himself; Q2 would turn him. That is a platform-carry gap, not a question for the turn rule, which stays
+  R-FW2p's; the gap goes to polish. Cost: on Smashville's platform a trapping Final Smash can
+  launch its victim back through its user (132 of 304 constructed platform scenes; rare in play).
 
-*Part 3, input, tests and labels* (`1f7d299` to `604d32d`).
+*Part 3, input, tests and labels* (`1f7d299` to `604d32d`; fix round 1 `f1206cf` to `c3abc64`).
 - R-FW3a (amended): a right-stick flick keeps a held d-pad direction off its own axis; on its
   axis the d-pad yields for the flick's two frames, so a d-pad direction opposite the flick
-  comes back as one fresh press (the packed input frame cannot carry both; a flick bit would
-  change the input protocol). Cost: none recorded beyond that press.
+  comes back as one fresh press (the packed input frame cannot carry both: the sim reads a press
+  as held now and not the frame before; R-FW3e's `Btn.Flick`, below, serves only the attack's
+  direction). Cost: none recorded beyond that press.
 - R-FW3b: a flicked smash stays a smash under a held keyboard Tilt key (the flick is carried
   into `mergeKeyboardAndPad`), and a flicked special stays its smash version; the Tilt key still
   softens the left stick. Cost: none beyond the stated.
@@ -4058,21 +4082,28 @@ recorded" means the ruling named no cost.
 - R-FW3e (fix round 1): a right-stick flick's fire frame carries `Btn.Flick` (`1 << 10`), set by
   the pad merge only, never by the keyboard or the CPU; with it, the aerial, the special and the
   crouch's attack take the directions pressed fresh that frame over a d-pad direction held across
-  the flick (flick right over d-pad Up or Down: `fair`, `sideB`, and from a crouch `fsmash`).
-  Without it nothing changes, and the golden is byte-identical. Cost: an input-protocol bit both
-  online peers must share, so both must run the same build (the packet already carried 16 bits).
+  the flick (flick right over d-pad Up or Down: `fair`, `sideB`, and from a crouch `fsmash`; that
+  a crouch's flick is the forward smash, not the down tilt, is a default no source settles,
+  UNVERIFIED). Without it nothing changes, and the golden is byte-identical. Cost: an
+  input-protocol bit both online peers must share, so both must run the same build (the packet
+  already carried 16 bits); the sim reads one more bit.
 - R-FW3f (fix round 1): a flick fired on a tick the rollback session refuses rides on the next
-  tick that runs, as a tapped key does. Cost: none beyond the stated.
+  tick that runs, as a tapped key does. Cost: only the fire frame is carried, so a smash can still
+  be lost when the flick's release frame is the refused tick and the left stick already held its
+  direction (polish).
 - Also: the task reviews' parked test pins, labels and citations (Tasks 2 to 22); every named
-  e2e locator matched exactly; F.L.U.D.D.'s nozzle and hose follow the hands down; a contact lab
-  in the golden (`rebound`, `shieldStun` and `pummel` a second time); and part 1's carries: a
-  ball-on idle guard of 1,800 frames, a Pikachu Town & City scene that failed before R-FW1v, and
-  the stranding test's title. Cost: none beyond the stated; the final clean gate also runs the
-  three e2e mutants the machine's load kept part 3 from running (one more gate step).
+  e2e locator matched exactly (seven more in fix round 1); F.L.U.D.D.'s nozzle and hose follow
+  the hands down; a contact lab in the golden (`rebound`, `shieldStun` and `pummel` a second
+  time); and part 1's carries: a ball-on idle guard of 1,800 frames, a Pikachu Town & City scene
+  that failed before R-FW1v, and the stranding test's title. Cost: none beyond the stated; the
+  final clean gate also runs the three e2e mutants the machine's load kept part 3 from running
+  (one more gate step).
 
 *Part 4, the docs.* This entry, the README's architecture counts, the Plan 5 lines of
 `docs/superpowers/plans/README.md` and `bakeCodec.ts`'s bake size, brought in line with what
-shipped: docs and doc comments only, the golden unchanged.
+shipped; in its fix round, `SPEC.md`'s limb-move counts (below), `game/bake.ts`'s dated bake
+size and the crouch flick's UNVERIFIED label in `states.ts`: docs and doc comments only, the
+golden unchanged.
 
 **What the wave measured** (each figure from its part's report; a commit names where it was taken):
 
@@ -4088,13 +4119,18 @@ shipped: docs and doc comments only, the golden unchanged.
 | Up specials late after a held Up's tap jump, three scenes | 15 | 0 (`bf61355`) |
 | Self-destruct share of KOs, 27 sets of 56 matches (part 1's seeds) | 30.3% (`209a1c5`; 36.0% at `ef17ceb`) | 31.1%, paired t 0.15 (`6c2214c`) |
 | The same, sets 1000 to 27000, the ball on the even / odd matches | 32.7% (`6c2214c`) / 29.69% (`c94fdf7`) | 31.41% / 29.58% (`b8e85bb`) |
-| Final Smash self-destructs, in every 27-set sweep | 0 | 0 |
+| Final Smash self-destructs, in every 27-set sweep | 0 | 0 (but one between: see the note) |
 | Trap scenes whose outcome changes when only the ports are swapped | 30 of 60 (`c94fdf7`) | 0 of 840, and 0 of 1,575 baked two-sided scenes (`2dd9df9`) |
 | Volt Tackle's whiff from a standstill: the engine / the CPU's reading | 236.4 / 240.9 (4.5 a frame) | 150.9 / 154.0 (3.2, and the end's 3) |
 | CPU Volt Tackles in 1,512 ball-on matches | 1 (`c94fdf7`) | 4, none on Smashville or Pokémon Stadium 2 (`2dd9df9`, `b8e85bb`) |
 | The Volt Tackle positioning driven alone, 1,744 runs: departures from the floor | 466 (`604d32d`) | 0 (`b8e85bb`) |
 | Rollback and purity, 112 CPU matches (about 1.13 million frames at the wave's end, the last 8 re-simulated every 5th) | 0 mismatches, 0 impure decisions (`5926338`, the final review's probe) | 0 and 0 (`6c2214c`, `c94fdf7`, `e6ab7cd`) |
-| `pnpm test` / the model-less fresh clone, passed | 8,181 / 8,163 (Task 23) | 8,350 / 8,332 (`b8e85bb`) |
+| `pnpm test` / the model-less fresh clone, passed | 8,181 / 8,163 (Task 23) | 8,356 / 8,338 (`c3abc64`) |
+
+The note: part 1's fix round 2 (`ef17ceb`) had one Final Smash self-destruct, in one of its 27
+sets (seed 97040, fox-pikachu on Town & City: a level-7 Pikachu fired Volt Tackle on its
+rewound view of Fox and the dash carried it off the left ledge). R-FW1t closed it in fix round
+3, and no later sweep had one.
 
 **The golden through the wave.** `74543839` (Task 23) → `3966d060` (`bf61355`: the four CPU
 matches, and the ball-on match added) → `2871e83b` (`209a1c5`: those five) → `9c11eb4f`
@@ -4128,8 +4164,10 @@ was.
 - Also as measured: nobody is slowed by a Final Smash's startup (R-FW2k); an opposite d-pad
   direction held through a right-stick flick comes back as a fresh press (R-FW3a);
   `aerialStrands` withholds more aerials the engine would have survived (3,689 against 2,787 in
-  6,912 forced scenes); and in the ball-on idle table one CPU, Donkey Kong, lost a stock, carried
-  past the ledge by the Smash Ball chase (polish).
+  6,912 forced scenes); in the ball-on idle table one CPU, Donkey Kong, lost a stock, carried
+  past the ledge by the Smash Ball chase (polish); on Smashville's platform a trapping Final Smash
+  can launch its victim back through its user (Q2's case, polish); and a flick's smash can still
+  be lost when its release frame is a refused online tick (R-FW3f, polish).
 
 **New files and the split.** R-FW1j split `src/ai/behaviours.ts` (2,533 lines) as a pure move
 (`3dbc869`): `behaviours.ts` keeps what every behaviour shares (the stage's view, the tuning, the
@@ -4153,12 +4191,13 @@ Smash motions: 6,939,779 → 6,931,363 bytes raw and 1,966,125 → 1,965,143 gzi
 **The carries settled** ("Carried to the final review", above).
 - *Fixed:* the tap-jump Special (R-FW1g), the frozen attacker's re-decision (R-FW1h), R-T19l's
   re-entry named and counted (R-FW1i), the split (R-FW1j), the Stick Jump CPU test's grid and
-  comment (part 1), the redundant early return (R-FW3c), the e2e names (part 3), the recovery's
-  "yes" through the wall (R-FW1f), the Reflector stall's snap (R-FW2j), a trade's rage (R-FW2c),
-  the cliff clamp (R-FW2f), projectile staling (R-FW2b), the first-tick gap (R-FW2a), the two
-  whiffs (R-FW2g), Fox's end-part exit (R-FW2g, UNVERIFIED), the trap behind its user (R-FW2h,
-  R-FW2o, R-FW2p), Volt Tackle's whiff (R-FW2i), the online stall (R-FW3d), the earlier tasks'
-  pins, citations and comments (part 3), and the plans README (part 4).
+  comment (part 1), the redundant early return (R-FW3c), the e2e names (part 3, and the last
+  seven its re-review found in its fix round 1), the recovery's "yes" through the wall (R-FW1f),
+  the Reflector stall's snap (R-FW2j), a trade's rage (R-FW2c), the cliff clamp (R-FW2f),
+  projectile staling (R-FW2b), the first-tick gap (R-FW2a), the two whiffs (R-FW2g), Fox's
+  end-part exit (R-FW2g, UNVERIFIED), the trap behind its user (R-FW2h, R-FW2o, R-FW2p), Volt
+  Tackle's whiff (R-FW2i), the online stall (R-FW3d), the earlier tasks' pins, citations and
+  comments (part 3), and the plans README (part 4).
 - *Accepted as measured* (the triage): R-T18l's residual (late re-rolls 5/1/1 and lockout
   refusals 5/8/2 a sweep), R-T18j's carried cross-ups, the parry's carry, R-T18r's ceiling-stop
   edges, the tech after a floor bounce (UNVERIFIED), R-T19j's four per-frame rolls, Task 19's
@@ -4183,5 +4222,11 @@ with a time-limit fallback for M2; a real-pad check of the remap and the right s
 R-T14j's UNVERIFIED half (a Final Smash pressed just past the edge that whiffs self-destructs for
 Donkey Kong and Pikachu). Added during the wave: modelling `SLOW_OPPONENT` (R-FW2k); the
 unjudged full-stick swing beyond point blank, which never locked; the CPU's Smash Ball chase
-carrying it past a ledge (donkeyKong-samus on Pokémon Stadium 2); and the direction of a fighter
-hit from both sides in one step, which follows the higher port's attacker.
+carrying it past a ledge (donkeyKong-samus on Pokémon Stadium 2); the direction of a fighter
+hit from both sides in one step, which follows the higher port's attacker; a trapped fighter not
+carried by Smashville's moving platform while its user is (Q2's case, 132 of 304 constructed
+platform scenes); port order still deciding some baked catches (Kirby's Ultra Sword takes a
+standing Donkey Kong exactly 3 behind as port 1, not as port 2) and the push of Pikachu's
+startup sparks (0.3 units); a level-9 CPU running at Smashville's ledge with Mario 45 inside,
+which ends on or past the ledge in 12 of 36 runs (the Volt Tackle positioning has no spot there);
+and a flick's release frame on a refused online tick, which R-FW3f does not carry.

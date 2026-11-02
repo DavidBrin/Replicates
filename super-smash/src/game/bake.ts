@@ -47,9 +47,9 @@ export const BAKE_IDLE_TIMEOUT_MS = 15_000;
 /**
  * The longest the whole download may take however it is going, so a trickle
  * that never stalls for `BAKE_IDLE_TIMEOUT_MS` cannot hold the player for
- * ever. The file is about 1.8 MB gzipped (1,845,102 bytes when this was
- * written, 14.8 Mbit), so five minutes lets it through a link of about
- * 50 kbit/s, a tenth of the half a megabit a second the old 30 s deadline
+ * ever. The file is 1.97 MB gzipped at Plan 5's end (1,965,143 bytes,
+ * 15.7 Mbit), so five minutes lets it through a link of about 52 kbit/s,
+ * about a tenth of the half a megabit a second the old 30 s deadline
  * assumed. UNVERIFIED (a judgement): past five minutes a player is better told
  * than kept waiting.
  */

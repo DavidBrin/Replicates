@@ -333,8 +333,8 @@ Load-bearing details, all from the reference screenshots:
   and shakes when hit.
 - **Fighters are SSBU's models, posed by the project's own clips.** Each model is posed by
   the replica's hand-authored clips, retargeted onto its SSBU skeleton in the side plane, and
-  the sim reads the same bones from the bake, so the hitboxes of the 50 limb-bone moves ride
-  the bones the bake places: the limb the player sees, or the root for the four whose boxes
+  the sim reads the same bones from the bake, so the hitboxes of the 66 limb-bone moves ride
+  the bones the bake places: the limb the player sees, or the root for the five whose boxes
   hang on `top` or `trans`.
   Without the models each fighter is a stand-in: its own hurtbox capsules, in its port's
   colour. The 2D rigs still draw the HUD's portraits and stock icons. See DECISIONS D57.
