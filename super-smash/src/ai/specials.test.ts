@@ -1256,9 +1256,10 @@ describe("carries, mouthfuls and grabs", () => {
     // carry's let-go slide ended 0.07 past the platform's end, where the engine still had
     // Donkey Kong on it and the floor model found no floor under him; the next Right walked
     // him off, and he threw in the air.
-    // And, carried to a platform's end as the platform turns (stage frame 325, its left half),
-    // the platform swept away under him where he stood: the engine judges a standing
-    // passenger's edge against the platform's new place before it carries him.
+    // And, carried to a platform's end mid-sweep, where it moves fastest (stage frame 325, its
+    // left half; at its turns its speed is 0), the platform swept away under him where he
+    // stood: the engine judges a standing passenger's edge against the platform's new place
+    // before it carries him.
     const sv = stageViewFromDef(STAGES.find((x) => x.id === "smashville")!);
     const platform = sv.platforms[0];
     for (const [stageFrame, from] of [[0, 0], [325, -platform.halfWidth + fx(13)]] as const) {

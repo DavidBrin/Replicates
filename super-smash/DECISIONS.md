@@ -4165,13 +4165,16 @@ golden unchanged.
   (`CARGO_CARRY_FRAMES`), where he walked off it to the floor below; the sweep's carry frames
   rose from 10,939 to 12,499. Its fix round 1 closed Smashville's moving platform, which the
   sweep never reached: a carry's let-go slide could stop a hair past its end, where the engine
-  still had him and the floor model found no floor (now, for a carry, leaving), and at its
-  turns the platform swept out from under him standing at its end (the engine judges a
-  passenger's edge against the platform's new place before it carries him; a carry's copy there
-  is now followed on past rest). Carries begun every 4 units across every floor of the six
-  stages (Smashville's platform at 12 phases), facing either way, at both throw parities: 52 of
-  1,912 left their floor before the round, all on that platform, and 0 after; the sweep's
-  figures and the golden unchanged.
+  still had him and the floor model found no floor (now, for a carry, leaving), and mid-sweep,
+  where it moves fastest (about 0.40-0.47 a frame; at its turns its speed is 0), the platform
+  swept out from under him standing at its end (the engine judges a passenger's edge against
+  the platform's new place before it carries him; a carry's copy there is now followed on past
+  rest). Carries begun every 4 units across every floor of the six stages (Smashville's
+  platform at 12 phases), facing either way, at both throw parities: 52 of 1,912 left their
+  floor before the round, all on that platform, and 0 after, on that grid of starts: a start
+  within about 0.5 of the trailing end mid-sweep can still be left behind by the platform (the
+  engine's passenger behaviour; carried to polish); the sweep's figures and the golden
+  unchanged.
 
 **What the wave measured** (each figure from its part's report; a commit names where it was taken):
 

@@ -390,7 +390,8 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
     // At rest it stays, but for a carry on a sweeping platform, followed on standing to the
     // run's end: the engine judges a standing passenger's edge against the platform's new place
     // before it carries him, so at an end the platform sweeps away from faster than he stands
-    // inside it he is left behind (part 5, fix round 1: Smashville's at its turns).
+    // inside it he is left behind (part 5, fix round 1: Smashville's, mid-sweep, where it moves
+    // fastest, about 0.40-0.47 a frame; at its turns its speed is 0).
     if (f.vx === 0 && !(carrying && under?.motion !== undefined)) return false;
   }
   return false;
