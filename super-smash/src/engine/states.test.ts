@@ -454,6 +454,7 @@ describe("tilt versus smash", () => {
       sdiX: 0,
       sdiY: 0,
       soft: false,
+      rightFlick: null,
     };
     expect(aerialSlot(f, { ...base, x: 1 })).toBe("fair");
     expect(aerialSlot(f, { ...base, x: -1 })).toBe("bair");

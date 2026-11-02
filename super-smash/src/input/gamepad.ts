@@ -196,11 +196,13 @@ export interface GamepadPoll {
   /** Post-deadzone left stick, indexed by port. */
   readonly sticks: Stick[];
   /**
-   * Plan 5: true on the frame a right-stick flick presses its direction and
-   * button, indexed by port. That direction is a full push whatever the
-   * keyboard's Tilt key says (`mergeKeyboardAndPad`; ruling R-FW3b).
+   * Plan 5: on the frame a right-stick flick presses its direction and button,
+   * those two bits, indexed by port; 0 on any other frame. That direction is a
+   * full push whatever the keyboard's Tilt key says, and the attack it starts
+   * takes its direction (`mergeKeyboardAndPad`, `Btn.Flick`; rulings R-FW3b
+   * and R-FW3e).
    */
-  readonly flicks: boolean[];
+  readonly flicks: InputFrame[];
   readonly connectedPads: readonly number[];
 }
 
@@ -275,7 +277,7 @@ export class GamepadInput {
     const pressed = new Array<InputFrame>(portCount).fill(0);
     const released = new Array<InputFrame>(portCount).fill(0);
     const sticks = new Array<Stick>(portCount).fill(NEUTRAL_STICK);
-    const flicks = new Array<boolean>(portCount).fill(false);
+    const flicks = new Array<InputFrame>(portCount).fill(0);
     const seen: number[] = [];
 
     // Ports follow connection order, not the slot number: a lone pad in slot 1
@@ -301,7 +303,7 @@ export class GamepadInput {
       pressed[port] |= frame & ~previous & buttons;
       released[port] |= previous & ~frame & buttons;
       sticks[port] = stick;
-      flicks[port] ||= right.flicked;
+      flicks[port] |= right.flick;
 
       this.lastFrames.set(pad.index, frame);
       this.connected.add(pad.index);
@@ -416,7 +418,9 @@ export class GamepadInput {
    * fresh. The same direction comes back held, with no new press; the
    * opposite one comes back as a fresh press, which the packed frame cannot
    * avoid (the simulation reads a press as held now and not on the frame
-   * before).
+   * before). The direction kept across the axis does not take the attack:
+   * the merge marks the fire frame `Btn.Flick`, and the simulation chooses the
+   * attack or special by the fresh direction then (ruling R-FW3e).
    *
    * Ruling R-T21a: only a pad with the W3C standard mapping has its right
    * stick on axes 2 and 3; on another layout they may be triggers, which rest
@@ -431,9 +435,9 @@ export class GamepadInput {
     mapping: GamepadMapping,
     frame: InputFrame,
     dpad: InputFrame,
-  ): { frame: InputFrame; flicked: boolean } {
+  ): { frame: InputFrame; flick: InputFrame } {
     const mode = mapping.rightStick ?? "smash";
-    if (mode === "off" || pad.mapping !== "standard") return { frame, flicked: false };
+    if (mode === "off" || pad.mapping !== "standard") return { frame, flick: 0 };
     const r = radialDeadzone(pad.axes[mapping.rightStickX ?? 2] ?? 0, -(pad.axes[mapping.rightStickY ?? 3] ?? 0), this.deadzone);
     // One of four directions, the larger axis: smash attacks and specials are four-way.
     const dir: InputFrame =
@@ -445,13 +449,14 @@ export class GamepadInput {
     const pending = this.pendingRight.get(pad.index);
     if (pending !== undefined) {
       this.pendingRight.delete(pad.index);
-      return { frame: body | offAxis(dpad, pending) | pending | (mode === "smash" ? Btn.Attack : Btn.Special), flicked: true };
+      const flick = pending | (mode === "smash" ? Btn.Attack : Btn.Special);
+      return { frame: body | offAxis(dpad, pending) | flick, flick };
     }
     if (dir !== 0 && previous === 0) {
       this.pendingRight.set(pad.index, dir);
-      return { frame: body | offAxis(dpad, dir), flicked: false };
+      return { frame: body | offAxis(dpad, dir), flick: 0 };
     }
-    return { frame, flicked: false };
+    return { frame, flick: 0 };
   }
 
   private readonly onConnected = (event: Event): void => {
@@ -504,14 +509,17 @@ export const DIRECTION_MASK: InputFrame = Btn.Left | Btn.Right | Btn.Up | Btn.Do
  * dash with the arrow keys. The keyboard's own soft, its Tilt key (Plan 5,
  * Task 21b), is kept: that is the player asking for a part-way push.
  *
- * Except on a right-stick flick's frame (`flick`, `GamepadPoll.flicks`;
- * ruling R-FW3b): the flick is a full push of its own, in either of its
- * modes, so the Tilt key does not soften its direction, and its smash attack
- * stays a smash. It still softens the left stick.
+ * Except on a right-stick flick's frame (`flick`, its direction and button,
+ * `GamepadPoll.flicks`; ruling R-FW3b): the flick is a full push of its own,
+ * in either of its modes, so the Tilt key does not soften its direction, and
+ * its smash attack stays a smash. It still softens the left stick. And the
+ * frame is marked `Btn.Flick` (ruling R-FW3e), so the attack or special it
+ * starts takes the flick's direction over a d-pad direction held across it.
+ * Only here is that bit set: the keyboard and the CPU never set it.
  */
-export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame, flick = false): InputFrame {
-  const merged = keys | pad;
-  if (flick) return merged & ~Btn.Soft;
+export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame, flick: InputFrame = 0): InputFrame {
+  const merged = keys | pad | flick;
+  if (flick !== 0) return (merged & ~Btn.Soft) | Btn.Flick;
   return (keys & DIRECTION_MASK) !== 0 ? (merged & ~Btn.Soft) | (keys & Btn.Soft) : merged;
 }
 

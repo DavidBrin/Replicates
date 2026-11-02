@@ -347,7 +347,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     return players.map((p, port) => {
       if (p.cpuLevel === null) {
         const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
-        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0, pads?.flicks[port] ?? false);
+        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0, pads?.flicks[port] ?? 0);
       }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;

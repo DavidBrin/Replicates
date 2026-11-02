@@ -23,8 +23,9 @@ import type { FighterParams } from "./params";
  * a function call. The directional bits are the raw key states; the *meaning*
  * of a direction (walk vs. dash, tilt vs. smash) is derived inside the
  * simulation from how long the bit has been held, never by the input layer —
- * with one exception, `Btn.Soft`: an analog stick's part-way push, or the
- * keyboard's Tilt key held. See SPEC §6.
+ * with two exceptions, `Btn.Soft`: an analog stick's part-way push, or the
+ * keyboard's Tilt key held; and `Btn.Flick`: a right-stick flick's frame. See
+ * SPEC §6.
  */
 export const enum Btn {
   Left = 1 << 0,
@@ -47,6 +48,15 @@ export const enum Btn {
    * button.
    */
   Soft = 1 << 9,
+  /**
+   * This frame's fresh direction and button are a right-stick flick's (Plan 5 final
+   * wave, ruling R-FW3e). Set by the pad merge (`mergeKeyboardAndPad`) on a flick's
+   * fire frame only, never by the keyboard or the CPU. With it, the attack or special
+   * the frame starts takes its direction from the directions pressed fresh this frame,
+   * not from a d-pad direction held across the flick (`Intent.attackX`). It rides the
+   * input bitfield, as `Soft` does: both online peers must run a build that reads it.
+   */
+  Flick = 1 << 10,
 }
 
 /** A packed input frame. Zero means "no keys held". */

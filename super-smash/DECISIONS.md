@@ -4055,6 +4055,12 @@ recorded" means the ruling named no cost.
 - R-FW3c: `gamepad.ts`'s redundant early return is removed. Cost: none beyond the stated.
 - R-FW3d: the scene-shift ease is monotonic in sim time, so an online stall holds a release in
   place instead of snapping it home. Cost: none beyond the stated.
+- R-FW3e (fix round 1): a right-stick flick's fire frame carries `Btn.Flick` (`1 << 10`), set by
+  the pad merge only, never by the keyboard or the CPU; with it, the aerial, the special and the
+  crouch's attack take the directions pressed fresh that frame over a d-pad direction held across
+  the flick (flick right over d-pad Up or Down: `fair`, `sideB`, and from a crouch `fsmash`).
+  Without it nothing changes, and the golden is byte-identical. Cost: an input-protocol bit both
+  online peers must share, so both must run the same build (the packet already carried 16 bits).
 - Also: the task reviews' parked test pins, labels and citations (Tasks 2 to 22); every named
   e2e locator matched exactly; F.L.U.D.D.'s nozzle and hose follow the hands down; a contact lab
   in the golden (`rebound`, `shieldStun` and `pummel` a second time); and part 1's carries: a

@@ -417,9 +417,9 @@ describe("a gamepad drives a local match", () => {
         gamepad: {
           poll(portCount = 4) {
             const frames = new Array<InputFrame>(portCount).fill(0);
-            const flicks = new Array<boolean>(portCount).fill(false);
+            const flicks = new Array<InputFrame>(portCount).fill(0);
             frames[0] = flick ? Btn.Right | Btn.Attack : 0;
-            flicks[0] = flick;
+            flicks[0] = flick ? Btn.Right | Btn.Attack : 0;
             const none = new Array<InputFrame>(portCount).fill(0);
             return { frames, pressed: none, released: none, sticks: [], flicks, connectedPads: [0] };
           },

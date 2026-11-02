@@ -199,6 +199,13 @@ export interface Intent {
   readonly sdiY: number;
   /** `Btn.Soft`: a partial tilt. No dash, no smash, a quarter of the DI. */
   readonly soft: boolean;
+  /**
+   * On a right-stick flick's frame (`Btn.Flick`; Plan 5 final wave, ruling R-FW3e), the
+   * directions pressed fresh this frame, each −1/0/1, when any were; otherwise null. The
+   * attack or special the frame starts takes its direction from here, over a d-pad
+   * direction held across the flick (`attackDirection`).
+   */
+  readonly rightFlick: { readonly x: number; readonly y: number } | null;
 }
 
 function dirVector(bit: number): { x: number; y: number } {
@@ -299,6 +306,9 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     f.lastDirPressed === Btn.Up &&
     f.framesSinceDirPress === TAP_JUMP_FRAMES &&
     held(input, Btn.Up);
+  // A right-stick flick's fresh direction (ruling R-FW3e). Without `Btn.Flick` nothing
+  // here is read, and every choice is the stick's, as before.
+  const rightFlick = held(input, Btn.Flick) ? freshDirection(input, prev) : null;
 
   return {
     x,
@@ -327,6 +337,7 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     sdiX: canPulse ? dir.x : 0,
     sdiY: canPulse ? dir.y : 0,
     soft,
+    rightFlick,
   };
 }
 
@@ -572,10 +583,32 @@ export function moveIntangibility(f: FighterState, def: FighterDef): readonly [n
 
 /* ------------------------------------------------------- move selection -- */
 
-/** Which ground attack a direction means. Smash direction wins over held direction. */
+/** The directions pressed fresh this frame, each −1/0/1, or null when none was. */
+function freshDirection(input: InputFrame, prev: InputFrame): { x: number; y: number } | null {
+  const x = (pressed(input, prev, Btn.Right) ? 1 : 0) - (pressed(input, prev, Btn.Left) ? 1 : 0);
+  const y = (pressed(input, prev, Btn.Up) ? 1 : 0) - (pressed(input, prev, Btn.Down) ? 1 : 0);
+  return x === 0 && y === 0 ? null : { x, y };
+}
+
+/**
+ * The direction an aerial or a special is chosen by: a right-stick flick's fresh one
+ * on its frame (`Intent.rightFlick`; ruling R-FW3e), so a d-pad direction held across
+ * the flick does not take its move; otherwise the stick's. A diagonal flick keeps the
+ * stick's order, y before x.
+ */
+function attackDirection(intent: Intent): { readonly x: number; readonly y: number } {
+  return intent.rightFlick ?? intent;
+}
+
+/**
+ * Which ground attack a direction means. Smash direction wins over held direction. A
+ * crouch's attack is the down tilt, but for a right-stick flick's smash (ruling
+ * R-FW3e: the flick's direction over the d-pad's held Down).
+ */
 export function groundAttackSlot(f: FighterState, intent: Intent): MoveSlot {
   if (f.action === "run" || f.action === "dashStart") return "dashAttack";
-  if (f.action === "crouch" || f.action === "crouchStart" || f.action === "crawl") return "dtilt";
+  const flickSmash = intent.rightFlick !== null && intent.smash;
+  if (!flickSmash && (f.action === "crouch" || f.action === "crouchStart" || f.action === "crawl")) return "dtilt";
   if (intent.smash) {
     if (intent.smashX !== 0) return "fsmash";
     if (intent.smashY > 0) return "usmash";
@@ -596,16 +629,19 @@ export function groundAttackSlot(f: FighterState, intent: Intent): MoveSlot {
  * differ by nothing but a facing flag.
  */
 export function aerialSlot(f: FighterState, intent: Intent): MoveSlot {
-  if (intent.y < 0) return "dair";
-  if (intent.y > 0) return "uair";
-  if (intent.x === 0) return "nair";
-  return intent.x === f.facing ? "fair" : "bair";
+  const { x, y } = attackDirection(intent);
+  if (y < 0) return "dair";
+  if (y > 0) return "uair";
+  if (x === 0) return "nair";
+  return x === f.facing ? "fair" : "bair";
 }
 
+/** Which special a direction means (`attackDirection`). */
 export function specialSlot(intent: Intent): MoveSlot {
-  if (intent.y > 0) return "upB";
-  if (intent.y < 0) return "downB";
-  if (intent.x !== 0) return "sideB";
+  const { x, y } = attackDirection(intent);
+  if (y > 0) return "upB";
+  if (y < 0) return "downB";
+  if (x !== 0) return "sideB";
   return "neutralB";
 }
 

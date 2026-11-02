@@ -6,11 +6,14 @@
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { fx } from "@/engine/fixed";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
-import { Btn } from "@/engine/types";
-import type { GameState, InputFrame, MatchRules } from "@/engine/types";
+import { Btn, CONTROL_STICK_JUMP_OFF } from "@/engine/types";
+import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
+import { KeyboardInput } from "./keyboard";
+import { CONFIG_ARROWS } from "./schemes";
 import {
   DEFAULT_PAD_SETTINGS,
   GamepadInput,
@@ -23,6 +26,7 @@ import {
   rebind,
   type GamepadMapping,
   type PadSettings,
+  type RightStickMode,
 } from "./gamepad";
 
 function pad(over: { buttons?: number[]; axes?: number[]; index?: number; mapping?: GamepadMappingType } = {}): Gamepad {
@@ -195,7 +199,7 @@ describe("the right stick", () => {
     const DPAD = { up: 12, left: 14, right: 15 } as const;
 
     /** Four polls with d-pad `button` held and the right stick at rest, then flicked right to 0.9 and held. */
-    function overDpad(button: number): { frames: InputFrame[]; presses: InputFrame[]; flicks: boolean[] } {
+    function overDpad(button: number): { frames: InputFrame[]; presses: InputFrame[]; flicks: InputFrame[] } {
       const { nav, set } = livePad();
       const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
       const polls = [0, 0.9, 0.9, 0.9].map((x) => {
@@ -224,8 +228,8 @@ describe("the right stick", () => {
       expect(presses.map((p) => (p & Btn.Left) !== 0)).toEqual([true, false, false, true]);
     });
 
-    it("reports the flick's frame, where its direction and button are pressed (ruling R-FW3b)", () => {
-      expect(overDpad(DPAD.up).flicks).toEqual([false, false, true, false]);
+    it("reports the flick's frame, its direction and button, where they are pressed (ruling R-FW3b)", () => {
+      expect(overDpad(DPAD.up).flicks).toEqual([0, 0, Btn.Right | Btn.Attack, 0]);
     });
   });
 
@@ -453,8 +457,82 @@ describe("what the fighter does with a right-stick flick", () => {
       const p = pads.poll(1);
       return mergeKeyboardAndPad(Btn.Soft, p.frames[0], p.flicks[0]);
     });
-    expect(merged).toEqual([Btn.Soft, Btn.Right | Btn.Attack, Btn.Soft]);
+    expect(merged).toEqual([Btn.Soft, Btn.Right | Btn.Attack | Btn.Flick, Btn.Soft]);
     expect(moveAfter(merged)).toBe("fsmash");
+  });
+
+  /**
+   * Ruling R-FW3e: the flick's direction wins the attack's over a d-pad direction held
+   * across it. The held bit stays held (one press, R-FW3a), and the sim reads y before x,
+   * so without `Btn.Flick` a flick right over d-pad Up started the d-pad's move.
+   * Through the real `GamepadInput`, its merge and `step()`: Mario facing right, the
+   * d-pad held from the first poll, `settle` polls at rest, then a flick right (fired on
+   * the poll after), in `mode`. The fighter on the fire frame.
+   */
+  function flickOver(over: Partial<FighterState>, dpad: number, settle: number, mode: RightStickMode = "smash", controls = 0): FighterState {
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom({ ...DEFAULT_PAD_SETTINGS, rightStick: mode }));
+    let s = standing();
+    Object.assign(s.fighters[0], over);
+    s.fighters[0].combat.controls = controls;
+    let prev: InputFrame = 0;
+    const seen: FighterState[] = [];
+    for (const x of [...Array<number>(settle).fill(0), 0.9, 0.9]) {
+      set(pad({ buttons: [dpad], axes: [0, 0, x, 0] }));
+      const p = pads.poll(1);
+      const frame = mergeKeyboardAndPad(0, p.frames[0], p.flicks[0]);
+      s = step(s, [frame], { prevInputs: [prev] }).state;
+      prev = frame;
+      seen.push(s.fighters[0]);
+    }
+    expect(prev & Btn.Flick, "the last poll is the flick's fire frame").toBe(Btn.Flick);
+    return seen[seen.length - 1];
+  }
+  const UP = 12;
+  const DOWN = 13;
+  const AIR: Partial<FighterState> = { action: "fall", grounded: false, platform: -1, y: fx(60), jumpsUsed: 1 };
+
+  it("takes the flick's direction over a d-pad one held across it, in the air: a forward air with Up or Down held (ruling R-FW3e)", () => {
+    expect(flickOver(AIR, UP, 2).move).toBe("fair");
+    expect(flickOver(AIR, DOWN, 2).move).toBe("fair");
+  });
+
+  it("in special mode, the side special with Up or Down held, on the ground and in the air (ruling R-FW3e)", () => {
+    // Stick Jump off, so a held Up stands rather than jumps.
+    expect(flickOver({}, UP, 2, "special", CONTROL_STICK_JUMP_OFF).move).toBe("sideB");
+    expect(flickOver(AIR, UP, 2, "special").move).toBe("sideB");
+    expect(flickOver(AIR, DOWN, 2, "special").move).toBe("sideB");
+  });
+
+  it("from a crouch on a held d-pad Down, the forward smash, not the down tilt (ruling R-FW3e)", () => {
+    const f = flickOver({}, DOWN, 12);
+    expect([f.action, f.move]).toEqual(["attack", "fsmash"]);
+  });
+
+  it("leaves the keyboard's own presses as they were: Up held, then Right and Attack in the air, is an up air", () => {
+    const kb = new KeyboardInput([{ port: 0, scheme: CONFIG_ARROWS }], { window, overlayHost: null });
+    kb.attach();
+    try {
+      let s = standing();
+      let prev: InputFrame = 0;
+      const key = (code: string) => window.dispatchEvent(new KeyboardEvent("keydown", { code, cancelable: true }));
+      for (let i = 0; i < 16; i++) {
+        // Up on 0 (a tap jump: airborne by 10), Right and Attack together on 14.
+        if (i === 0) key(CONFIG_ARROWS.bindings.up);
+        if (i === 14) {
+          key(CONFIG_ARROWS.bindings.right);
+          key(CONFIG_ARROWS.bindings.attack);
+        }
+        const frame = mergeKeyboardAndPad(kb.drain().frames[0], 0);
+        expect(frame & Btn.Flick, `frame ${i}`).toBe(0);
+        s = step(s, [frame], { prevInputs: [prev] }).state;
+        prev = frame;
+        if (i === 13) expect(s.fighters[0].grounded).toBe(false);
+      }
+      expect(s.fighters[0].move).toBe("uair");
+    } finally {
+      kb.detach();
+    }
   });
 
   it("leaves the Tilt key softening the left stick: its full push and attack are a forward tilt (Task 21b)", () => {

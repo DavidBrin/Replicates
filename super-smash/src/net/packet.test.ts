@@ -204,3 +204,11 @@ describe("the soft-stick bit", () => {
     expect(decodePacket(encodePacket(packet))).toEqual(packet);
   });
 });
+
+describe("the flick bit (Plan 5 final wave, ruling R-FW3e)", () => {
+  it("survives the wire, as the soft bit does: the other peer must choose the flick's attack too", () => {
+    const inputs = [Btn.Up | Btn.Right | Btn.Attack | Btn.Flick, Btn.Up, Btn.Flick | Btn.Soft | Btn.Special];
+    const packet: Packet = { type: PacketType.Input, port: 0, senderFrame: 30, startFrame: 28, ack: 27, inputs };
+    expect(decodePacket(encodePacket(packet))).toEqual(packet);
+  });
+});
