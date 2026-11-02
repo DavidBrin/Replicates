@@ -1406,7 +1406,7 @@ describe("swinging at point blank at a short target (Plan 5 final wave, ruling R
     expect(attack(bakedCtx(m)).input).toBe(Btn.Jump);
   });
 
-  it("does not press an aerial past the ledge from which the stage's underside blocks the way back: fox-donkeyKong@townAndCity (ruling R-FW1w; seed 3541, reduced)", () => {
+  it("judges a down or neutral air past the ledge, the stick held in, as stranding, one over the stage as not, and keeps Fox's stock: fox-donkeyKong@townAndCity (ruling R-FW1w; seed 3541, reduced)", () => {
     // Fox 0.85 past Town & City's right ledge, falling, Donkey Kong standing at the edge
     // below him. Run with its own stick only, the down air drifted out over open air, from
     // where the jump and Fire Fox reach the ledge. The stick held in, as the CPU holds it,

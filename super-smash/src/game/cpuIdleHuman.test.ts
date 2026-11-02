@@ -46,6 +46,8 @@ const FIRST_HIT_BY = 600;
 const FRAMES = 3_600;
 /** Ruling R-FW1m: the most frames the player may stand there to be hit without one landing. */
 const MAX_STRETCH = 1_200;
+/** The same with the Smash Ball on (part 3): its chase and a Final Smash's scene take their time. */
+const BALL_MAX_STRETCH = 1_800;
 /** Where nobody can be hit: dead, entering, or on the respawn platform. */
 const ABSENT: ReadonlySet<string> = new Set(["dead", "entering", "respawnPlatform"]);
 /** UNVERIFIED (test judgement): a stretch this long with more turns than `MAX_TURNS` in it is turning in place. */
@@ -234,6 +236,27 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
     expect(stuck, "20 s there to be hit with no hit (ruling R-FW1m)").toEqual([]);
   }, 60_000);
 
+  // Plan 5 final wave, part 3 (part 2 fix round 1's concern 2): the same rotation with the
+  // Smash Ball on. Part 2's first Volt Tackle positioning (`d016156`) went to its spot for a
+  // free target too, and stood off an idle player for up to 5,469 frames; `e6ab7cd` goes only
+  // for a busy one. UNVERIFIED (test judgement): the bound, 30 s, wider than `MAX_STRETCH`
+  // for the ball's chase and a Final Smash's scene.
+  it("never stands off 30 s from a player there to be hit, the Smash Ball on, in the 64 matchups", () => {
+    const ids = FIGHTERS.map((f) => f.id);
+    const ball: MatchRules = { ...RULES, smashBall: true };
+    const stuck: string[] = [];
+    let n = 0;
+    for (const a of ids)
+      for (const b of ids) {
+        const stageId = STAGES[n % STAGES.length].id;
+        const { stretch } = play(createInitialState(stageId, [{ defId: a }, { defId: b }], ball, 1000 + n, CTX), [0], FRAMES, true);
+        if (stretch > BALL_MAX_STRETCH) stuck.push(`${a}-${b}@${stageId}: ${stretch} frames there to be hit, no hit`);
+        n++;
+      }
+    expect(n).toBe(64);
+    expect(stuck, "30 s there to be hit with no hit, the ball on").toEqual([]);
+  }, 180_000);
+
   it("turns to an idle Fox at point blank and hits it, from a dash or a standstill (I1's Pikachu trace, reduced)", () => {
     // The review's trace: Pikachu at 28.1 and 30.0 in turn, every frame, around an idle
     // Fox at 28.7, for 5,386 frames. Here Pikachu at 28.1 facing away, Fox 0.6 behind it.
@@ -368,14 +391,16 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
     }
   });
 
-  it("keeps its stock chasing a player on Town & City's left outer platform: marth-mario and pikachu-mario (ruling R-FW1v, re-review 3's traces, reduced)", () => {
-    // Mario 94 out on the left outer platform, the CPU 40 in, phase 5. Marth's Dolphin Slash
-    // aimed over a floor that only the stick held in reaches, held neutral, angled out past
-    // the platform's end, and Marth died on 221; Pikachu, with Mario 98 out, through Quick
-    // Attack on 436. The floor read now gives the stick its fall was run with
-    // (`floorStick`), and `recover` holds it.
+  it("keeps its stock chasing a player on Town & City's left outer platform: marth-mario and pikachu-kirby (ruling R-FW1v; re-review 3's trace and the 512 table's, reduced)", () => {
+    // The player 94 out on the left outer platform, the CPU 40 in, phase 5. Marth's Dolphin
+    // Slash aimed over a floor that only the stick held in reaches, held neutral, angled out
+    // past the platform's end, and Marth died on 221. Pikachu, against Kirby, held Quick
+    // Attack neutral over that floor the same way, fell helpless past the platform's end
+    // and died on 497 (at ef17ceb, before the fix: the 512 table's one Pikachu death). The
+    // floor read now gives the stick its fall was run with (`floorStick`), and `recover`
+    // holds it.
     expect(cpuDeathWithin(outerPlatformScene("marth", "mario", -1, 94, 5), 600)).toBe(-1);
-    expect(cpuDeathWithin(outerPlatformScene("pikachu", "mario", -1, 98, 5), 600)).toBe(-1);
+    expect(cpuDeathWithin(outerPlatformScene("pikachu", "kirby", -1, 94, 5), 600)).toBe(-1);
   });
 
   it("loses no stock in 512 reduced Town & City scenes against a player on an outer platform (ruling R-FW1v)", () => {
