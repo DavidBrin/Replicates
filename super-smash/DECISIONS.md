@@ -3671,7 +3671,7 @@ and the other new states alias existing motions (R-T8c, R-T14c). The budget stay
 | Artefact | Plan 4's end (`232645e`) | At Task 23 | After the final wave |
 |---|---|---|---|
 | `ENGINE_RULES_VERSION` | 4 | 5 (Task 2) | 5 |
-| `RULES_PIN` | `{ version: 4, golden: "89571aca" }` | `{ version: 5, golden: "74543839" }` | `{ version: 5, golden: "bf975242" }` |
+| `RULES_PIN` | `{ version: 4, golden: "89571aca" }` | `{ version: 5, golden: "74543839" }` | `{ version: 5, golden: "26d4ec66" }` |
 | Golden traces | 6 | 13: the four CPU matches, the script, the tech lab, and the states, Inhale, crawl, projectile, Final Smash, beams and dash labs | 15: those, the ball-on CPU match and the contact lab |
 | `MUST_VISIT` | 48 states | 59 | 59 |
 | Bake digest | `1131b09c1efaf89f4763cfa599d3fbdbbdbe8b255381c0c6912073a5149e0107` | `7962fcb6160ee5603b40ace8681cc8c83634702ae1994f498dad5fde69c4d79e` | `ba91bfdb7be7d047c95f5ac71c9668bd0a63dbc9158e93f374bd5a3c1551eef4` |
@@ -4026,11 +4026,21 @@ its final form; "none recorded" means the ruling named no cost.
   moved to 10 ahead, UNVERIFIED); a user whose trap caught only fighters behind it turns to face
   them, and the trapped face their user (UNVERIFIED: SmashWiki's pages are silent). Cost: the
   user turns on the trap's landing and the victim faces its user, both UNVERIFIED.
-- R-FW2i (amended): Volt Tackle's whole whiff, the tackle and its slide, travels "almost the
-  entire length" of Final Destination's 160-unit floor (SmashWiki "Volt Tackle"): the tackle at
-  3.2 a frame (UNVERIFIED; Task 15 had 4.5) and the end's slide from its published 3
-  (`SET_SPEED_EX`), 150.9 units from a standstill, 94%, which the CPU reads as 154.0. Cost: none
-  recorded; 3.3 would now pass the ruling's test too, and 3.2 stays.
+- R-FW2i (amended; corrected by R-FW2q): SmashWiki "Volt Tackle" says "The initial tackle
+  travels almost the entire length of [Final Destination]". The amendment read that as the whole
+  whiff, the tackle and its slide, under Final Destination's 160-unit floor: the tackle at 3.2 a
+  frame (UNVERIFIED; Task 15 had 4.5) and the end's slide from its published 3 (`SET_SPEED_EX`),
+  150.9 units from a standstill, 94%, which the CPU read as 154.0. Cost: the tackle alone was
+  118.4, 74% of the floor, short of the page's words; while it stood the CPU fired 4 Volt
+  Tackles in 1,512 ball-on matches (`b8e85bb`).
+  - R-FW2q (part 2's fix round 3): the sentence is about the initial tackle alone, frames
+    47-83. Its UNVERIFIED speed is 4.1 a frame: from a standstill the tackle carries Pikachu
+    151.6, 95% of the floor and under it (4.0 would be 92%), and the end's slide from its
+    published 3 carries him on to 184.2. Cost: a whiff now comes back from nowhere on five of the
+    six stages, so the CPU (R-FW1t, R-FW2n) fires Volt Tackle only on Pokémon Stadium 2, 187.6
+    wide, which keeps a firing band at each end: 1 in 1,512 ball-on matches (`c016424`); the
+    golden moved (the dash lab: Pikachu off the side blast line on 169, and Fox's steps 20 frames
+    earlier, so that his Team Star Fox still starts).
 - R-FW2j: the Reflector's stall undoes exactly the step's gravity (SmashWiki's 0.027, with no
   snap to terminal speed). Cost: the stall holds vy exactly, where no source gives a gradual
   clamp.
@@ -4056,16 +4066,18 @@ its final form; "none recorded" means the ruling named no cost.
   slightly); a fighter hit from both sides in one step still flies the way of the higher port's
   attacker (polish; cost: a rare same-frame two-sided hit breaks port symmetry in direction);
   Volt Tackle stays rare under R-T19d, and a smarter CPU Volt Tackle is the polish phase's first
-  CPU item (cost: Pikachu CPUs rarely use their Final Smash, 4 in 1,512 ball-on matches); a
+  CPU item (cost: Pikachu CPUs rarely use their Final Smash, 1 in 1,512 ball-on matches since
+  R-FW2q, 4 before); a
   ball-on stand-off gets a committed guard in part 3 (cost: about 4 s more in `pnpm test`).
 - Mutant Q2 (the trap turn re-decided on every step, not only on one whose trap lands) was first
   accepted as equivalent; part 2's third re-review found it is not. On Smashville's moving
   platform a trapped fighter skips the platform pass (`simulate.ts`, step 5) while its user rides
   the platform through the Final Smash's start, so Kirby is carried past Mario (19.4 by the
   scene's start, Mario held 16.41 behind him), keeps his facing and launches him back through
-  himself; Q2 would turn him. That is a platform-carry gap, not a question for the turn rule, which stays
-  R-FW2p's; the gap goes to polish. Cost: on Smashville's platform a trapping Final Smash can
-  launch its victim back through its user (132 of 304 constructed platform scenes; rare in play).
+  himself; Q2 would turn him. That is a platform-carry gap, not a question for the turn rule,
+  which stays R-FW2p's; the gap goes to polish. Cost: on Smashville's platform a trapping Final
+  Smash can launch its victim back through its user (132 of 304 constructed platform scenes;
+  rare in play).
 
 *Part 3, input, tests and labels* (`1f7d299` to `604d32d`; fix round 1 `f1206cf` to `c3abc64`).
 - R-FW3a (amended): a right-stick flick keeps a held d-pad direction off its own axis; on its
@@ -4101,7 +4113,7 @@ its final form; "none recorded" means the ruling named no cost.
 
 *Part 4, the docs.* This entry, the README's architecture counts, the Plan 5 lines of
 `docs/superpowers/plans/README.md` and `bakeCodec.ts`'s bake size, brought in line with what
-shipped; in its fix round, `SPEC.md`'s limb-move counts (below), `game/bake.ts`'s dated bake
+shipped; in its fix round, `SPEC.md`'s limb-move counts (above), `game/bake.ts`'s dated bake
 size and the crouch flick's UNVERIFIED label in `states.ts`: docs and doc comments only, the
 golden unchanged.
 
@@ -4121,37 +4133,41 @@ golden unchanged.
 | The same, sets 1000 to 27000, the ball on the even / odd matches | 32.7% (`6c2214c`) / 29.69% (`c94fdf7`) | 31.41% / 29.58% (`b8e85bb`) |
 | Final Smash self-destructs, in every 27-set sweep | 0 | 0 (but one between: see the note) |
 | Trap scenes whose outcome changes when only the ports are swapped | 30 of 60 (`c94fdf7`) | 0 of 840, and 0 of 1,575 baked two-sided scenes (`2dd9df9`) |
-| Volt Tackle's whiff from a standstill: the engine / the CPU's reading | 236.4 / 240.9 (4.5 a frame) | 150.9 / 154.0 (3.2, and the end's 3) |
-| CPU Volt Tackles in 1,512 ball-on matches | 1 (`c94fdf7`) | 4, none on Smashville or Pokémon Stadium 2 (`2dd9df9`, `b8e85bb`) |
+| Volt Tackle's whiff from a standstill: the engine / the CPU's reading | 236.4 / 240.9 (4.5 a frame) | 184.2 / 187.3 (4.1, and the end's 3; the tackle alone 151.6, 95% of Final Destination; `c016424`) |
+| CPU Volt Tackles in 1,512 ball-on matches | 1 (`c94fdf7`) | 1, on Pokémon Stadium 2 (`c016424`; 4 at 3.2 a frame, `b8e85bb`) |
 | The Volt Tackle positioning driven alone, 1,744 runs: departures from the floor | 466 (`604d32d`) | 0 (`b8e85bb`) |
 | Rollback and purity, 112 CPU matches (about 1.13 million frames at the wave's end, the last 8 re-simulated every 5th) | 0 mismatches, 0 impure decisions (`5926338`, the final review's probe) | 0 and 0 (`6c2214c`, `c94fdf7`, `e6ab7cd`) |
 | `pnpm test` / the model-less fresh clone, passed | 8,181 / 8,163 (Task 23) | 8,356 / 8,338 (`c3abc64`) |
 
-The note: part 1's fix round 2 (`ef17ceb`) had one Final Smash self-destruct, in one of its 27
-sets (seed 97040, fox-pikachu on Town & City: a level-7 Pikachu fired Volt Tackle on its
-rewound view of Fox and the dash carried it off the left ledge). R-FW1t closed it in fix round
-3, and no later sweep had one.
+The note: part 1's fix round 2 (`ef17ceb`) had at least two Final Smash self-destructs. In one
+of its own 27 sets: seed 97040, fox-pikachu on Town & City (a level-7 Pikachu fired Volt Tackle
+on its rewound view of Fox and the dash carried it off the left ledge). In part 1's re-review
+4's 24-set sweep: set 20, pikachu-kirby on Battlefield (KO'd inside its own Final Smash).
+R-FW1t closed both in fix round 3 (0 in the re-review's 24 sets at its head), and no later
+sweep had one.
 
 **The golden through the wave.** `74543839` (Task 23) → `3966d060` (`bf61355`: the four CPU
 matches, and the ball-on match added) → `2871e83b` (`209a1c5`: those five) → `9c11eb4f`
 (`ef17ceb`: the same five) → `1499b422` (`6c2214c`: the same five) → `82ac36e0` (`28eb036`: the
 script, the Inhale, projectile, Final Smash and beams labs, and the ball-on match) → `c1ab3496`
 (`c94fdf7`: the dash lab) → `a1accb0f` (`2dae964`: the dash lab, now starting at −140) →
-`bf975242` (`3b031ef`: the contact lab added, every other trace byte-identical). Fifteen traces
+`bf975242` (`3b031ef`: the contact lab added, every other trace byte-identical) → `26d4ec66`
+(`c016424`, R-FW2q: the dash lab, its tackle at 4.1 and Fox's steps earlier). Fifteen traces
 at the end; `ENGINE_RULES_VERSION` and `RULES_PIN.version` stayed 5 and `MUST_VISIT` 59. Every
 move gave its reason trace by trace (`golden.test.ts`'s notes); the split (`3dbc869`), R-FW1t
 (`c8ab21a`), `23571f2`, `92a4cad`, `e072d8d`, `b8e85bb` and part 3's other commits left it as it
 was.
 
 **Costs that ship.**
-- *Pikachu CPUs rarely fire Volt Tackle* (R-T19d, R-FW2n): only at a held target, point blank,
-  from a standstill, and only where the whiff ends on a floor or within a way back; 4 in 1,512
-  ball-on matches, none on Smashville or Pokémon Stadium 2. While one holds the power no Smash
-  Ball spawns for anyone (the final review's M2; SmashWiki "Smash Ball"), and no published
-  standby limit ends it (R-FW2m): the longest holds measured are 2,057 frames CPU against CPU
-  (pikachu-samus on Smashville) and 5,960 against an idle player (pikachu-marth on Final
-  Destination). A hit that deals hitstun drops the power. A smarter CPU Volt Tackle, with a
-  time-limit fallback, is the polish phase's first CPU item.
+- *Pikachu CPUs rarely fire Volt Tackle* (R-T19d, R-FW2n, R-FW2q): only at a held target, point
+  blank, from a standstill, and only where the whiff ends on a floor or within a way back, which
+  since the tackle's 4.1 is on Pokémon Stadium 2 alone; 1 in 1,512 ball-on matches (4 at 3.2).
+  While one holds the power no Smash Ball spawns for anyone (the final review's M2; SmashWiki
+  "Smash Ball"), and no published standby limit ends it (R-FW2m): the longest holds measured
+  are 2,057 frames CPU against CPU (pikachu-samus on Smashville, `b8e85bb`; 1,376 at `c016424`)
+  and 5,960 against an idle player (pikachu-marth on Final Destination). A hit that deals
+  hitstun drops the power. A smarter CPU Volt Tackle, with a time-limit fallback, is the polish
+  phase's first CPU item.
 - *A self-destruct residual* (R-FW1u): over 27 sets, 263 self-destructs against `209a1c5`'s 244
   (+19, paired t 1.08; their share of KOs 31.1% against 30.3%, t 0.15). Its causes are named:
   more knock-offs by the point-blank judged aerials (859 → 1,351) feeding older, unchanged

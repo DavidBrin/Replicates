@@ -257,8 +257,8 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    that ignores the edge (Volt Tackle) whiffed carries on past its window and falls
  *    off the side blast line (SmashWiki "Volt Tackle": "it is fairly easy to
  *    self-destruct off the side blast line if the player misses"; the Task 19 sweep:
- *    a 166-unit dash ended 273 units on, at Task 15's 4.5 a frame; 3.2 since Plan 5
- *    final wave 2, ruling R-FW2i), so it is used only point-blank
+ *    a 166-unit dash ended 273 units on, at Task 15's 4.5 a frame; 4.1 since Plan 5
+ *    final wave 2, fix round 3, ruling R-FW2q), so it is used only point-blank
  *    (`FINAL_SMASH_RANGE`) from a standstill on a target held where it stands, on the
  *    ground and unable to act soon (`CANNOT_ACT_SOON`; ruling R-T19d): never toward
  *    an open blast line on a chance. Not where its dash (`dashTravel`) would end over

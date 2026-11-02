@@ -1428,7 +1428,7 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
   // "In the air, the user will travel at high speed directly forward"; "Volt Tackle",
   // "ignores edges". Whiffed in the air, each dashes on, unheld. UNVERIFIED: the 100
   // units is a floor under both dashes' lengths, which are themselves UNVERIFIED
-  // (`marth.ts`: 6 a frame on 25-70, 276; `pikachu.ts`: 3.2 a frame on 47-83, 118.4).
+  // (`marth.ts`: 6 a frame on 25-70, 276; `pikachu.ts`: 4.1 a frame on 47-83, 151.7).
   it.each([
     ["marth", 100],
     ["pikachu", 100],
