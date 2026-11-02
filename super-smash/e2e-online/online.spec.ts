@@ -59,7 +59,7 @@ async function createRoom(host: Page): Promise<string> {
 async function joinRoom(page: Page, code: string): Promise<void> {
   await page.goto(LOBBY);
   // Typed the way people type a code they were read: in lowercase.
-  await page.getByLabel("Room code").fill(code.toLowerCase());
+  await page.getByLabel("Room code", { exact: true }).fill(code.toLowerCase());
   await page.getByRole("button", { name: /join room/i }).click();
 }
 
@@ -71,7 +71,7 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
 
   // exact: "Small Battlefield" also matches a substring query.
-  await host.getByLabel("Stages").getByRole("button", { name: "Battlefield", exact: true }).click();
+  await host.getByLabel("Stages", { exact: true }).getByRole("button", { name: "Battlefield", exact: true }).click();
   await host.getByRole("button", { name: /choose fighters/i }).click();
   await host.waitForURL(`**${ROUTES.fighters}`);
   await expect(guest.getByText(/stage: battlefield/i)).toBeVisible();
@@ -129,7 +129,7 @@ test("two browsers play a match through a room, and one leaving ends it for the 
   // guest has been silent too long, and nobody is crowned.
   await guest.context().close();
   await host.waitForURL(`**${ROUTES.results}`, { timeout: LINK_LOST_LIMIT_MS });
-  await expect(host.getByText("Connection Lost")).toBeVisible();
+  await expect(host.getByText("Connection Lost", { exact: true })).toBeVisible();
 });
 
 test("two browsers play a match to its result, and both see the same one", async ({ browser }) => {
@@ -150,7 +150,7 @@ test("two browsers play a match to its result, and both see the same one", async
 
   for (const page of [host, guest]) {
     await expect(page.getByText("Game Set")).toBeVisible();
-    await expect(page.getByRole("listitem").filter({ hasText: "1st" })).toContainText("P2");
+    await expect(page.getByRole("listitem").filter({ has: page.getByText("1st", { exact: true }) })).toContainText("P2");
   }
 });
 

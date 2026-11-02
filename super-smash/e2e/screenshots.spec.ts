@@ -80,7 +80,7 @@ async function waitForBothOnStage(page: Page, timeoutMs = 8000): Promise<void> {
 
 test("title", async ({ page }) => {
   await page.goto(ROUTES.title);
-  await page.getByLabel("Press any button to continue").waitFor();
+  await page.getByLabel("Press any button to continue", { exact: true }).waitFor();
   // The prompt pulses; capturing mid-fade photographs a half-transparent word.
   await page.waitForTimeout(700);
   await page.screenshot({ path: shot("title") });

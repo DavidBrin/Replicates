@@ -79,7 +79,7 @@ async function framesAdvance(page: Page): Promise<void> {
 }
 
 /** The page's own error screen (`play/page.tsx`); Next's route announcer is a `role="alert"` too, so this asks by its words. */
-const matchFailed = (page: Page) => page.getByText("THE MATCH COULD NOT START");
+const matchFailed = (page: Page) => page.getByText("THE MATCH COULD NOT START", { exact: true });
 
 /** A fighter as it is drawn: a stand-in, or a glb with the primitives its file holds. */
 type DrawnFighter = { id: string; kind: "standIn" } | { id: string; kind: "glb"; primitives: number };
@@ -301,7 +301,7 @@ test.describe("a lost WebGL context", () => {
 
     // Leaving the match frees everything the presenter drew: against the context it has now, not the one it lost.
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "QUIT MATCH" }).click();
+    await page.getByRole("button", { name: "QUIT MATCH", exact: true }).click();
     await page.waitForURL(`**${ROUTES.menu}`);
     // The next match, on a page that has seen a context lost and restored, draws as the first did.
     await startMatchFromMenu(page);
@@ -484,7 +484,7 @@ async function startFourFighterMatch(page: Page, names: readonly string[]): Prom
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.fighters}`);
-  const add = page.getByRole("button", { name: "Add a player" });
+  const add = page.getByRole("button", { name: "Add a player", exact: true });
   await add.click();
   await add.click();
   // Each pick hands the cursor to the next empty panel, so four picks fill four ports in order.

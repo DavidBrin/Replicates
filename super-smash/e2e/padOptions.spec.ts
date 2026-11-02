@@ -3,6 +3,7 @@ import {
   P1,
   ROUTES,
   readFighters,
+  readInputs,
   startFromTitle,
   startMatch,
   startMatchFromMenu,
@@ -33,7 +34,9 @@ import {
  * not milliseconds, and the fighter is read after every frame, so a jumpsquat
  * three frames long cannot fall between two samples. And P2 is a human nobody
  * plays (`idleP2`), not the CPU, so nothing races the test: it is checked to
- * stand still on every frame read. A fighter that should do nothing is
+ * stand still, and to have been given no input at all, on every frame read (a
+ * Tilt or a stick short of the walk threshold would leave it standing). A
+ * fighter that should do nothing is
  * checked to have only stood, so a wrong action cannot hide a jump.
  */
 
@@ -86,8 +89,8 @@ async function setPadAxes(page: Page, axes: readonly number[]): Promise<void> {
 
 /**
  * Port 0 after each of `frames` simulation frames, run one at a time, with
- * whatever is held. P2 is checked on every one of them: it stands still, or
- * something other than the test is playing the match.
+ * whatever is held. P2 is checked on every one of them: it stands still, and
+ * its input frame is 0, or something other than the test is playing the match.
  */
 async function eachFrame(page: Page, frames: number): Promise<DebugFighter[]> {
   const seen: DebugFighter[] = [];
@@ -95,6 +98,8 @@ async function eachFrame(page: Page, frames: number): Promise<DebugFighter[]> {
     await stepFrames(page, 1);
     const [p1, p2] = await readFighters(page);
     expect(p2.action, `P2 is not idle: ${p2.action}`).toBe("stand");
+    const [, p2Input] = await readInputs(page);
+    expect(p2Input, `P2 was given input ${p2Input}`).toBe(0);
     seen.push(p1);
   }
   return seen;

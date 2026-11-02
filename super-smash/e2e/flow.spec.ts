@@ -13,7 +13,7 @@ test.describe.configure({ mode: "serial" });
 
 test("the title screen waits for a keypress", async ({ page }) => {
   await page.goto(ROUTES.title);
-  await expect(page.getByLabel("Press any button to continue")).toBeVisible();
+  await expect(page.getByLabel("Press any button to continue", { exact: true })).toBeVisible();
   await titleReady(page);
   await page.keyboard.press("Enter");
   await page.waitForURL(`**${ROUTES.menu}`);
@@ -99,9 +99,9 @@ test("plays two matches in a row, each drawing its world in 3D", async ({ page }
     expect(info.calls, `match ${round}`).toBeGreaterThan(0);
     expect(info.fighters, `match ${round}`).not.toContain("loading");
     // The page's own error overlay; Next's route announcer is a `role="alert"` too.
-    await expect(page.getByText("THE MATCH COULD NOT START")).toHaveCount(0);
+    await expect(page.getByText("THE MATCH COULD NOT START", { exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "QUIT MATCH" }).click();
+    await page.getByRole("button", { name: "QUIT MATCH", exact: true }).click();
     await page.waitForURL(`**${ROUTES.menu}`);
   }
   expect(errors).toEqual([]);
@@ -112,6 +112,6 @@ test("a stock match ends and reaches the results screen", async ({ page }) => {
   await page.goto(ROUTES.play);
   // A cold load of /play with no configuration should refuse rather than crash.
   const alert = page.getByRole("alert");
-  const canvas = page.getByLabel("Match");
+  const canvas = page.getByLabel("Match", { exact: true });
   await expect(alert.or(canvas).first()).toBeVisible();
 });

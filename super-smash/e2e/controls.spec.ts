@@ -15,7 +15,7 @@ test("both control schemes are documented on the controls screen", async ({ page
 
   // Every action in Config 1, by the key a player would actually press, bound
   // on the keyboard diagram itself: the gamepad options name buttons "A" too.
-  const diagram = page.getByLabel("Keyboard diagram");
+  const diagram = page.getByLabel("Keyboard diagram", { exact: true });
   await expect(diagram).toBeVisible();
   for (const key of ["A", "D", "Q", "E", "W", "V"]) {
     await expect(diagram.locator(`[data-key="Key${key}"][data-bound]`).getByText(key, { exact: true })).toBeVisible();

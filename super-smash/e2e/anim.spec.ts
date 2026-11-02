@@ -28,7 +28,7 @@ test("every action draws a contact sheet without throwing", async ({ page }) => 
   page.on("pageerror", (e) => errors.push(String(e)));
 
   await page.goto("/anim");
-  await expect(page.getByLabel("Contact sheet")).toBeVisible();
+  await expect(page.getByLabel("Contact sheet", { exact: true })).toBeVisible();
 
   for (const action of ACTIONS) {
     await page.getByLabel("Action").selectOption(action);
@@ -54,7 +54,7 @@ test("every fighter's rig survives the same clip", async ({ page }) => {
   await page.getByLabel("Action").selectOption("roll");
   for (const id of fighters) {
     await page.getByLabel("Fighter").selectOption(id);
-    await expect(page.getByLabel("Contact sheet")).toBeVisible();
+    await expect(page.getByLabel("Contact sheet", { exact: true })).toBeVisible();
     // The sheet says what it drew this fighter with once it is built: until then a throw would not have happened yet.
     await expect(page.getByText(/contact sheet — (model|stand-in)/), id).toBeVisible({ timeout: 30_000 });
   }
@@ -71,7 +71,7 @@ test("every fighter's rig survives the same clip", async ({ page }) => {
 
 /** Per cell of the sheet: how many pixels of its GL canvas differ from its background, and how many of the overlay are the hitboxes' red. */
 async function cellPixels(page: import("@playwright/test").Page): Promise<{ model: number[]; red: number[] }> {
-  return page.getByLabel("Contact sheet").evaluate((sheet) => {
+  return page.getByLabel("Contact sheet", { exact: true }).evaluate((sheet) => {
     const [gl, over] = Array.from(sheet.querySelectorAll("canvas"));
     const cell = 150;
     const cols = gl.width / cell;

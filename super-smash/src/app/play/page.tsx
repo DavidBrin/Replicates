@@ -324,6 +324,9 @@ function mountMatch(args: MountArgs): Mounted {
     pause: () => hold("debug", true),
     resume: () => hold("debug", false),
     step: (n = 1) => runner.advance(n),
+    // Each port's input frame on the last step (`MatchRunner.lastInputs`): what a port
+    // nobody plays gave the simulation (Plan 5 final wave, part 3).
+    inputs: () => [...runner.lastInputs],
     screenPositions: () =>
       runner.state.fighters.map((f) => {
         const p = worldToScreen(runner.camera, toFloat(f.x), toFloat(f.y));

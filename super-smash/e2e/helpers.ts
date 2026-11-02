@@ -88,6 +88,17 @@ export async function readFighters(page: Page): Promise<DebugFighter[]> {
   });
 }
 
+/**
+ * Each port's input frame on the last simulation step (`MatchRunner.lastInputs`): a
+ * bitfield, `Btn`'s bits, 0 for a port given nothing. Empty before a match runs.
+ */
+export async function readInputs(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __smashDebug?: { inputs?(): number[] } };
+    return w.__smashDebug?.inputs?.() ?? [];
+  });
+}
+
 /** The id of the stage the match is on ("" before one is running). */
 export async function simStageId(page: Page): Promise<string> {
   return page.evaluate(() => (window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.stageId ?? "");
@@ -179,7 +190,8 @@ export const READY_FRAME = 72;
 /**
  * Walk the real menu path into a running match: one human on port 0 and a CPU
  * on port 1, which is the default configuration and the one a player meets
- * first. Deliberately not a deep link — the match configuration lives in a
+ * first, or with `idleP2` a human nobody plays on port 1 (`MatchOptions`).
+ * Deliberately not a deep link — the match configuration lives in a
  * client-side store, so `/play` loaded cold has nothing to run.
  */
 export async function startMatch(page: Page, options: MatchOptions = {}): Promise<void> {
