@@ -1277,3 +1277,21 @@ describe("Zero Laser's cannon, as the bake draws it (Task 17 fix round 3, ruling
     expect(last!).toBeCloseTo(to, 3);
   });
 });
+
+/*
+ * The Morph Ball bomb's timer (the Task 6 re-review's X19): SmashWiki "Samus
+ * (SSBU)/Down special", "Maximum duration before exploding 72 frames", so the
+ * lens blinks fastest, and its glow is fullest, at age 72.
+ */
+describe("the Morph Ball bomb's timer", () => {
+  it("runs out at age 72: its glow at its least at the start and at its fullest there", () => {
+    const glow = (age: number) => {
+      const ctx = createMockContext();
+      projectiles.bomb({ ctx: ctx as unknown as CanvasRenderingContext2D, u: 10, age, dir: 1, heading: 0, charge: 0, fraction: 0, returning: false, frame: age });
+      return ctx.calls.filter((c) => c.method === "addColorStop" && c.args[0] === 0).map((c) => String(c.args[1]));
+    };
+    // FIRE (#FF8A2A) at 0.35 + 0.3 × the part of the 72 frames run.
+    expect(glow(0)).toEqual(["rgba(255, 138, 42, 0.35)"]);
+    expect(glow(72)).toEqual([`rgba(255, 138, 42, ${0.35 + 0.3})`]);
+  });
+});

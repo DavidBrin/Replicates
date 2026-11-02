@@ -1127,3 +1127,25 @@ describe("the projectiles are his own", () => {
     expect(radius).toBeLessThan(6);
   });
 });
+
+/*
+ * The Remote Bomb's warning (the Task 6 re-review's X18): SmashWiki "Link
+ * (SSBU)/Down special", "Maximum time before exploding 1800 frames" and
+ * "Flashing time before automatic explosion 45 frames", so a bomb of ages 0 to
+ * 1799 flashes from age 1755.
+ */
+describe("the Remote Bomb's warning", () => {
+  it("flashes over the last 45 frames of its 1800, from age 1755: its glow grows", () => {
+    const life = link.moves.downB!.projectiles!.find((p) => p.id === "remoteBomb")!.lifetime;
+    expect(life).toBe(1800);
+    const glowAt = (age: number, frame: number) => {
+      const ctx = createMockContext();
+      projectiles.remoteBomb({ ctx, u: 10, age, dir: 1, heading: 0, charge: 0, fraction: 0, returning: false, frame } as unknown as ProjectileContext);
+      const g = ctx.calls.find((c) => c.method === "createRadialGradient")!;
+      return Number(g.args[5]);
+    };
+    expect(glowAt(life - 46, 0)).toBeCloseTo(10 * 1.25 * 2.2, 6);
+    expect(glowAt(life - 45, 0)).toBeCloseTo(10 * 1.25 * 3.2, 6);
+    expect(glowAt(life - 1, 0)).toBeCloseTo(10 * 1.25 * 3.2, 6);
+  });
+});

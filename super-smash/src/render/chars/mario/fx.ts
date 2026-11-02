@@ -20,10 +20,14 @@ import {
   glow,
   type FxFn,
 } from "../../fxKit";
+import { samplePose } from "../../poses/clip";
 import { withAlpha } from "../../rigKit";
+import { resolve } from "../../skeleton";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, MoveSlot } from "@/engine/types";
 import type { ProjectilePainter } from "../../fxKit";
+import { poses } from "./poses";
+import { rig } from "./rig";
 
 /** F.L.U.D.D.'s nozzle, grip to muzzle, in world units. */
 const NOZZLE = 3.8;
@@ -54,8 +58,32 @@ function muzzleOf(def: FighterDef): { x: number; y: number; angle: number; first
  */
 const NOZZLE_DOWN = 6;
 
+/**
+ * How far both gloves have moved since `from`, at `frame` of a `total`-frame
+ * down special, in world units from the drawn feet (+x forward, +y up): the
+ * brace's clip (`poses.ts`'s `downB`) resolved on the rig as it is drawn, at
+ * its own scale, squash and turn (the clip's root offset is already in the feet
+ * the painter is given). What the nozzle and the hose's end move by as the arms
+ * come down off them (the Task 6 re-review: they stayed at the grip while the
+ * hands left it).
+ */
+function handsMoved(from: number, frame: number, total: number): { x: number; y: number } {
+  const clip = poses.downB;
+  if (clip === undefined) return { x: 0, y: 0 };
+  const hands = (at: number) => {
+    const pose = samplePose(clip, at / total);
+    const s = resolve(rig.bones, pose.angles, { x: 0, y: 0, scale: rig.scale, scaleX: pose.scaleX, scaleY: pose.scaleY, rotation: pose.rotation, facing: 1 });
+    return { x: (s.handR.x1 + s.handL.x1) / 2, y: -(s.handR.y1 + s.handL.y1) / 2 };
+  };
+  const a = hands(from);
+  const b = hands(frame);
+  return { x: b.x - a.x, y: b.y - a.y };
+}
+
 /** A pump's life (SmashWiki "Mario (SSBU)/Down special": "Lifetime 12 frames"). */
 const WATER_LIFETIME = 12;
+/** Its last age: a projectile lives ages 0 to `lifetime` − 1 (`projectile.ts`). */
+const WATER_LAST_AGE = WATER_LIFETIME - 1;
 
 /**
  * A lobed blob, for fire.
@@ -538,9 +566,10 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     const alpha = Math.min(appear, leave);
 
     // The muzzle: the pumps' spawn offset, and the nozzle's length back along
-    // the aim to the grip.
-    const ox = x + u * muzzle.x * dir;
-    const oy = y - u * muzzle.y;
+    // the aim to the grip. After the last pump, wherever the hands have taken it.
+    const down = frame > muzzle.last ? handsMoved(muzzle.last, Math.min(frame, muzzle.last + NOZZLE_DOWN), total) : { x: 0, y: 0 };
+    const ox = x + u * (muzzle.x + down.x) * dir;
+    const oy = y - u * (muzzle.y + down.y);
     const gx = ox - dir * u * NOZZLE * Math.cos(muzzle.angle);
     const gy = oy + u * NOZZLE * Math.sin(muzzle.angle);
 
@@ -584,7 +613,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     tank();
 
     // Up into his hands as the brace forms, and down with them once the last
-    // pump has left.
+    // pump has left, fading as it goes.
     const raise = Math.min(1, Math.max(0, (frame - 16) / 5));
     const lower = Math.min(1, Math.max(0, (muzzle.last + NOZZLE_DOWN - frame) / NOZZLE_DOWN));
     if (raise > 0 && lower > 0) over(() => {
@@ -652,8 +681,9 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
    */
   water: ({ ctx, u, age, dir, heading, fraction }) => {
     const size = 0.8 + 0.4 * Math.min(1, Math.max(0, fraction));
-    // Fading over its last four frames.
-    const fade = Math.max(0, Math.min(1, (WATER_LIFETIME - age) / 4));
+    // Fading over its last four frames, to nothing on its last (the Task 6
+    // re-review: it faded toward an age it never reaches, and popped out at a quarter).
+    const fade = Math.max(0, Math.min(1, (WATER_LAST_AGE - age) / 4));
     const r = u * 2.8 * size;
     ctx.save();
     ctx.globalAlpha = 0.5 * fade;

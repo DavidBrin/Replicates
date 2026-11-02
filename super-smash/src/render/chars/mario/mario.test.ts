@@ -662,11 +662,13 @@ describe("F.L.U.D.D. is water, on the frame the brace happens", () => {
     expect(def.charged!.hitbox.radius! / def.hitbox.radius).toBeCloseTo(1.2 / 0.8, 3);
   });
 
-  it("fades out over the last four of its twelve frames", () => {
+  it("fades out over the last four of its twelve frames, to nothing on its last, age 11", () => {
     const alphas = (age: number) => assignmentsTo(pump(0, age), "globalAlpha").map(Number);
-    expect(Math.max(...alphas(8))).toBeCloseTo(0.82, 6);
-    expect(Math.max(...alphas(10))).toBeCloseTo(0.82 * 0.5, 6);
-    expect(Math.max(...alphas(12))).toBe(0);
+    expect(Math.max(...alphas(7))).toBeCloseTo(0.82, 6);
+    expect(Math.max(...alphas(9))).toBeCloseTo(0.82 * 0.5, 6);
+    // A pump lives ages 0 to 11 (`projectile.ts`), so it is gone before age 12:
+    // its last drawn frame is the fade's end, and nothing pops out after it.
+    expect(Math.max(...alphas(11))).toBe(0);
   });
 
   it("spatters at the muzzle only while it pumps, frames 21 to 51", () => {
@@ -744,6 +746,35 @@ describe("F.L.U.D.D.'s hands stay on the nozzle while it pumps (Plan 5, Task 6 f
     expect(nozzle(last + 3).shapes).toBe(4);
     expect(nozzle(last + 3).alpha).toBeLessThan(nozzle(last).alpha);
     expect(nozzle(last + 6).shapes).toBe(0);
+  });
+
+  // The Task 6 re-review: the nozzle faded where it was while the hands went down,
+  // and the hose still ran to the empty grip.
+  it("takes the nozzle and the hose's end down with the hands: the grip moves as both gloves do", () => {
+    const U = 12;
+    /** The nozzle's grip, and the hose's end, in screen pixels. */
+    const drawn = (frame: number) => {
+      const p = paint("downB", frame);
+      const grip = p.ctx.calls.find((c, i) => i >= p.drainedAt && c.method === "translate")!;
+      const hose = p.ctx.calls.find((c, i) => i < p.drainedAt && c.method === "quadraticCurveTo")!;
+      return { x: Number(grip.args[0]), y: Number(grip.args[1]), hoseX: Number(hose.args[2]), hoseY: Number(hose.args[3]) };
+    };
+    /** Both gloves' midpoint as drawn, in world units from the feet, +y up. */
+    const hands = (frame: number) => {
+      const pose = samplePose(clip, frame / move.totalFrames);
+      const [r, l] = [tipOf(pose.angles, ARM_R), tipOf(pose.angles, ARM_L)];
+      return { x: ((r.x + l.x) / 2) * pose.scaleX * rig.scale, y: ((r.y + l.y) / 2) * pose.scaleY * rig.scale };
+    };
+    const from = drawn(last);
+    for (const frame of [last + 1, last + 3, last + 5]) {
+      const now = drawn(frame);
+      const moved = { x: hands(frame).x - hands(last).x, y: hands(frame).y - hands(last).y };
+      expect(now.x - from.x, `frame ${frame}`).toBeCloseTo(U * moved.x, 6);
+      expect(now.y - from.y, `frame ${frame}`).toBeCloseTo(-U * moved.y, 6);
+      expect([now.hoseX, now.hoseY], `frame ${frame}`).toEqual([now.x, now.y]);
+    }
+    // Down, and by more than the nozzle is thick.
+    expect(hands(last + 3).y - hands(last).y).toBeLessThan(-1.64);
   });
 });
 
