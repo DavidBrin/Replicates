@@ -276,10 +276,10 @@ SSBU models, their shields, hit sparks and KO blasts), and a transparent 2D over
 magnifying glass). All three are framed by the same camera value, and three.js loads in its own
 chunk after `/play` mounts. The models are posed by the replica's own 2D clips, retargeted onto
 each SSBU skeleton in the side plane; the simulation reads those same bones from integer tables
-baked at build time (`public/bake/roster.bin.gz`), so the hitboxes of the 50 limb-bone moves ride
-the bones the bake places (the limb the player sees, or the root for the four whose boxes hang on
-`top` or `trans`: Mario's jab 3, Samus's and Marth's down tilts, Pikachu's back air), and the sim
-never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
+baked at build time (`public/bake/roster.bin.gz`), so the hitboxes of the 66 limb-bone moves ride
+the bones the bake places (the limb the player sees, or the root for the five whose boxes hang on
+`top` or `trans`: Mario's jab 3, Samus's and Marth's down tilts, Pikachu's back air and pummel),
+and the sim never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
 (`UPDATE_BAKE=1`) and re-run `reach.test.ts`. The models themselves are built locally by
 `pnpm models` and never committed; without them every fighter is a capsule stand-in of its own
 hurtboxes, and one that fails to load is a stand-in for that match only
@@ -292,9 +292,11 @@ velocity is a sum of KineticModule energies — control, stop, gravity, motion, 
 each action is a status object with `pre`/`main`/`exec`/`end` under a `FIGHTER_STATUS_KIND_*` name
 (`status/`); and every move runs as an ACMD `game_` script whose hitboxes hang off bones through a
 `BoneTable` (`acmd/`). The published scripts for all eight fighters are imported by
-`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`, and 88 moves run them: 38 whose
-hitboxes all hang off the root bone (`src/fighters/acmd/active.ts`), and 50 whose hitboxes ride
-limb bones the bake places (`src/fighters/acmd/limb.json`). Combat follows Ultimate's
+`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`, and 137 moves run them: 71 that
+hang their hitboxes off the root bone alone (`src/fighters/acmd/active.ts`; a throw's strike and
+a projectile special's spawn need no bone), and 66 whose hitboxes ride limb bones the bake places
+(`src/fighters/acmd/limb.json`; four more that the rule admits stay on their legacy tables until
+their clips are fixed, `limb.hold.json`). Combat follows Ultimate's
 published rules — the balloon speed-up, DI, shields, staling, teching, grabs, air dodges and the
 rest — and where no source settles one, the code says `UNVERIFIED:`
 ([D56](DECISIONS.md#d56--combat-follows-ultimates-published-rules)).

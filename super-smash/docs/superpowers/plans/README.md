@@ -48,12 +48,12 @@ Plans 2 and 3 do not deploy. Their changes go live with the next deploy David ap
 - Blender is portable, inside `.model-cache/tools/`. Skeletons are read without Blender, so only the glb export needs it.
 - No bloom and no facial-expression swaps. Fighter `scale` scales limbs and hurtboxes, not ATTACK sizes.
 - The screenshots in `docs/` are regenerated in 3D.
-- Plan 5 rules (marked UNVERIFIED):
-  - A footstool skips anyone grabbed, carried, trapped, respawning, on a ledge or in hitstun.
-  - Counters ignore Final Smashes and windboxes.
-  - Landing during an aerial cargo throw lets the throw finish.
-  - The online engine-version bump goes in Plan 5's first gameplay task.
-- Gamepad remaps and Stick Jump are saved per port in the browser and carried into online matches.
+- Plan 5 rules, as landed (D58; UNVERIFIED where marked):
+  - A footstool can be made off a fighter in hitstun (SmashWiki "Footstool Jump", ruling R-T11c), but not off one frozen in hitlag (UNVERIFIED), held, carried or inside Kirby, holding someone, trapped, intangible or invincible, or respawning. A fighter hanging on a ledge can be stood on and does not fall.
+  - A counter lets every Final Smash through (SmashWiki "Unblockable attack"), and a windbox too (UNVERIFIED).
+  - Landing during an aerial cargo throw lets the throw finish (UNVERIFIED).
+  - The online engine-version bump went in Plan 5's first gameplay task (Task 2).
+- Stick Jump is saved per port in the browser and travels in the online start config. The gamepad remap is saved per port too, but it is local only: only the packed input frame crosses the wire.
 
 ## Open questions for David
 
