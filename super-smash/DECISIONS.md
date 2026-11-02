@@ -4106,6 +4106,14 @@ its final form; "none recorded" means the ruling named no cost.
   tick that runs, as a tapped key does. Cost: only the fire frame is carried, so a smash can still
   be lost when the flick's release frame is the refused tick and the left stick already held its
   direction (polish).
+  - Refined in part 5 (the substitute confirm's P3-1): the fire frame's bits alone landed on a
+    poll that already had back the direction the flick lets go of, fresh again beside the flick's
+    (drifting with the d-pad held, a neutral air for a forward or back one; dashing, with the
+    let-go refused too, a dash attack for a forward smash). Now both of the flick's pad frames,
+    its let-go and its fire, go out whole and in order on the ticks that run, each in place of
+    that tick's poll, so the session runs the frames the unstalled flick runs; the release frame
+    is carried too. Cost: a poll an owed frame replaces is not sent (a pad press held for that one
+    poll alone is lost; a held one is read on the next).
 - Also: the task reviews' parked test pins, labels and citations (Tasks 2 to 22); every named
   e2e locator matched exactly (seven more in fix round 1); F.L.U.D.D.'s nozzle and hose follow
   the hands down; a contact lab in the golden (`rebound`, `shieldStun` and `pummel` a second
@@ -4185,9 +4193,8 @@ was.
   direction held through a right-stick flick comes back as a fresh press (R-FW3a);
   `aerialStrands` withholds more aerials the engine would have survived (3,689 against 2,787 in
   6,912 forced scenes); in the ball-on idle table one CPU, Donkey Kong, lost a stock, carried
-  past the ledge by the Smash Ball chase (polish); on Smashville's platform a trapping Final Smash
-  can launch its victim back through its user (Q2's case, polish); and a flick's smash can still
-  be lost when its release frame is a refused online tick (R-FW3f, polish).
+  past the ledge by the Smash Ball chase (polish); and on Smashville's platform a trapping Final
+  Smash can launch its victim back through its user (Q2's case, polish).
 
 **New files and the split.** R-FW1j split `src/ai/behaviours.ts` (2,533 lines) as a pure move
 (`3dbc869`): `behaviours.ts` keeps what every behaviour shares (the stage's view, the tuning, the
@@ -4248,5 +4255,6 @@ carried by Smashville's moving platform while its user is (Q2's case, 132 of 304
 platform scenes); port order still deciding some baked catches (Kirby's Ultra Sword takes a
 standing Donkey Kong exactly 3 behind as port 1, not as port 2) and the push of Pikachu's
 startup sparks (0.3 units); a level-9 CPU running at Smashville's ledge with Mario 45 inside,
-which ends on or past the ledge in 12 of 36 runs (the Volt Tackle positioning has no spot there);
-and a flick's release frame on a refused online tick, which R-FW3f does not carry.
+which ends on or past the ledge in 12 of 36 runs (the Volt Tackle positioning has no spot
+there). A flick's release frame on a refused online tick, added in part 3, is carried since part 5
+(R-FW3f, refined).

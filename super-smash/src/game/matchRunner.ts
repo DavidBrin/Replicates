@@ -247,6 +247,14 @@ export function matchCpuWorlds(
   return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs, getFighter, bake) : { stage: view, jumps: 2, matchDefs: defs }));
 }
 
+/** One port's pad frame as a poll gave it: the packed frame, and on a flick's fire its direction and button (`GamepadPoll.flicks`). */
+interface PadFrame {
+  readonly frame: InputFrame;
+  readonly flick: InputFrame;
+}
+
+const NO_PAD: PadFrame = { frame: 0, flick: 0 };
+
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   const {
     stage,
@@ -336,11 +344,23 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let carriedPresses = noPresses;
   // This tick's presses plus the carried ones, kept in case it is refused too.
   let tickPresses = noPresses;
-  // The same for a pad's right-stick flick (ruling R-FW3f): its poll reports the
-  // fire frame's direction and button on one tick only (`GamepadPoll.flicks`), so
-  // a flick fired on a refused tick rides on the next one, `Btn.Flick` and all.
-  let carriedFlicks = noPresses;
-  let tickFlicks = noPresses;
+  // A pad's right-stick flick (ruling R-FW3f, refined in Plan 5 final wave 5) is two
+  // polls: its let-go of the left stick's direction, then its fire (`GamepadPoll.flicks`,
+  // its direction and button). Each pad frame of it goes out whole and in order on a tick
+  // that runs, in place of that tick's poll, so the frames scheduled are the ones the
+  // unstalled flick schedules: one polled on a refused tick is owed (`owedPads`). Carried as
+  // bits alone, the fire landed on a poll that already had back the direction the flick lets
+  // go of, fresh again beside its own (a neutral air for a forward one), and a let-go lost
+  // with it never ended a dash (a dash attack for a forward smash). The let-go is known on
+  // the fire's tick: the poll before, owed if it never went out.
+  const noPads: readonly (readonly PadFrame[])[] = players.map(() => []);
+  let owedPads = noPads;
+  // This tick's owed pad frames, its own flick's among them, kept in case it is refused.
+  let tickPads = noPads;
+  // Each port's poll on the last tick and this one, and whether the last went out as polled.
+  let lastPolls: readonly PadFrame[] = players.map(() => NO_PAD);
+  let tickPolls = lastPolls;
+  let lastPollsSent: readonly boolean[] = players.map(() => true);
   /** What `gatherInputs` gave each port on the last tick (`MatchRunner.lastInputs`). */
   let lastInputs: readonly InputFrame[] = noPresses;
 
@@ -349,11 +369,18 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // Exactly once per tick: a pad's press edges are the diff against the last poll.
     const pads = gamepad ? gamepad.poll(players.length) : null;
     tickPresses = players.map((_, port) => carriedPresses[port] | (drained?.pressed[port] ?? 0));
-    tickFlicks = players.map((_, port) => carriedFlicks[port] | (pads?.flicks[port] ?? 0));
+    tickPolls = players.map((_, port) => (pads === null ? NO_PAD : { frame: pads.frames[port] ?? 0, flick: pads.flicks[port] ?? 0 }));
+    tickPads = players.map((_, port) => {
+      const poll = tickPolls[port];
+      if (poll.flick === 0) return owedPads[port];
+      // A fire: after anything already owed, its let-go if that never went out, then itself.
+      return [...owedPads[port], ...(lastPollsSent[port] ? [] : [lastPolls[port]]), poll];
+    });
     return players.map((p, port) => {
       if (p.cpuLevel === null) {
         const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
-        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0, tickFlicks[port]);
+        const pad = tickPads[port][0] ?? tickPolls[port];
+        return mergeKeyboardAndPad(keys, pad.frame, pad.flick);
       }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
@@ -391,14 +418,19 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       if (!result.advanced) {
         // A refused frame ran nothing new: nothing to age, sound or report. The
         // picture holds still instead of re-blending the last step, and this
-        // tick's presses, and a flick, wait for the next one.
+        // tick's presses, and a flick's pad frames, wait for the next one.
         previous = state;
         carriedPresses = tickPresses;
-        carriedFlicks = tickFlicks;
+        owedPads = tickPads;
+        lastPolls = tickPolls;
+        lastPollsSent = players.map(() => false);
         return;
       }
       carriedPresses = noPresses;
-      carriedFlicks = noPresses;
+      // The first owed pad frame went out; this tick's poll did if it was that one or none was owed.
+      owedPads = tickPads.map((owed) => owed.slice(1));
+      lastPollsSent = tickPads.map((owed, port) => owed.length === 0 || owed[0] === tickPolls[port]);
+      lastPolls = tickPolls;
       previous = state;
       state = result.state;
       events = result.events;

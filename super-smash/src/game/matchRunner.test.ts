@@ -32,6 +32,7 @@ import { cpuDef, cpuInput, cpuWorldFromDef } from "@/ai/cpu";
 import { hashState } from "@/engine/hash";
 import { KO_FREEZE_FRAMES, createInitialState } from "@/engine/simulate";
 import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engine/types";
+import { GamepadInput } from "@/input/gamepad";
 import { KeyboardInput } from "@/input/keyboard";
 import { CONFIG_ARROWS } from "@/input/schemes";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
@@ -858,81 +859,6 @@ describe("a tick the rollback session refuses", () => {
     }
   });
 
-  /**
-   * Ruling R-FW3f: a pad's poll reports a right-stick flick's fire frame on one
-   * tick only, so a refused tick lost it, as it would have lost a tapped key; it
-   * rides on the next frame that runs, its direction, button and `Btn.Flick`.
-   */
-  it("keeps a right-stick flick fired during the stall for the next frame that runs", () => {
-    const network = new LoopbackNetwork({ latencyMs: 0 });
-    const sent: InputFrame[] = [];
-    const transport = network.connect("host");
-    let fire = false;
-    const host = createMatchRunner({
-      stage: getStageOrThrow("battlefield"),
-      players: HUMANS,
-      rules: RULES,
-      seed: 0x5eed1e55,
-      getFighter: getFighterOrThrow,
-      gamepad: {
-        poll(portCount = 4) {
-          const frames = new Array<InputFrame>(portCount).fill(0);
-          const flicks = new Array<InputFrame>(portCount).fill(0);
-          // The fire frame, with d-pad Up held across it; Up stays held after.
-          frames[0] = Btn.Up | (fire ? Btn.Right | Btn.Attack : 0);
-          flicks[0] = fire ? Btn.Right | Btn.Attack : 0;
-          fire = false;
-          const none = new Array<InputFrame>(portCount).fill(0);
-          return { frames, pressed: none, released: none, sticks: [], flicks, connectedPads: [0] };
-        },
-      },
-      net: {
-        transport: {
-          ...transport,
-          send(bytes) {
-            const packet = decodePacket(bytes);
-            if (packet?.type === PacketType.Input) packet.inputs.forEach((input, i) => (sent[packet.startFrame + i] = input));
-            transport.send(bytes);
-          },
-        },
-        localPorts: [0],
-        inputDelay: INPUT_DELAY_FOR_STALLS,
-        autoInputDelay: false,
-        now: () => network.now(),
-      },
-    });
-    const guest = createMatchRunner({
-      stage: getStageOrThrow("battlefield"),
-      players: HUMANS,
-      rules: RULES,
-      seed: 0x5eed1e55,
-      getFighter: getFighterOrThrow,
-      net: { transport: network.connect("guest"), localPorts: [1], now: () => network.now() },
-    });
-    // The guest says nothing, so the host runs to the prediction cap and stops.
-    for (let i = 0; i < 20; i++) {
-      host.advance(1);
-      network.advance(FRAME_MS);
-    }
-    expect(host.stalled).toBe(true);
-    const stalledAt = host.frame;
-    // The flick fires on a refused tick.
-    fire = true;
-    host.advance(1);
-    expect(host.stalled).toBe(true);
-    // The guest catches up; the host's next frame runs, with the flick in it.
-    for (let i = 0; i < 30; i++) {
-      guest.advance(1);
-      host.advance(1);
-      network.advance(FRAME_MS);
-    }
-    expect(host.frame).toBeGreaterThan(stalledAt);
-    expect(sent[stalledAt + INPUT_DELAY_FOR_STALLS] ?? 0).toBe(Btn.Up | Btn.Right | Btn.Attack | Btn.Flick);
-    expect(sent.filter((input) => input & Btn.Flick)).toHaveLength(1);
-    host.dispose();
-    guest.dispose();
-  });
-
   it("holds the picture still instead of re-blending the last step", () => {
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => {});
@@ -955,6 +881,195 @@ describe("a tick the rollback session refuses", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+/** Buttons on a pad with the W3C standard mapping (`STANDARD_MAPPING`): a jump and the d-pad. */
+const PAD = { jump: 2, up: 12, left: 14, right: 15 } as const;
+
+/** What the scripted pad holds on each of the host's ticks, from 1: its buttons, and the right stick's x. */
+type PadScript = (tick: number) => { readonly buttons: readonly number[]; readonly rightX: number };
+
+/** A flick match as `flickMatch` played it. */
+interface FlickRun {
+  readonly host: MatchRunner;
+  readonly guest: MatchRunner;
+  /** Every input the host put on the wire for its own port, by frame. */
+  readonly sent: readonly InputFrame[];
+  /** The host's ticks the session refused. */
+  readonly refused: readonly number[];
+  /** The first move Mario began, as the host ran him. */
+  readonly move: string | null;
+  /** The host's state's hash on each frame it reached, the last it had there. */
+  readonly hashes: ReadonlyMap<number, number>;
+}
+
+/**
+ * Mario (the host, port 0) on a real `GamepadInput` over one standard-mapping pad that `script`
+ * sets before each tick, against Donkey Kong (the guest, port 1, nobody playing) on Final
+ * Destination, online over a loopback link with no latency, the host's input 2 frames late. The
+ * guest says nothing until the host's tick `answerFrom`, so the host refuses ticks at the
+ * prediction cap until then. After `ticks` ticks, whichever peer is behind is advanced alone
+ * until both stand on the same frame.
+ */
+function flickMatch(script: PadScript, answerFrom: number, ticks = 60): FlickRun {
+  let held: readonly number[] = [];
+  let rightX = 0;
+  const pad = (): Gamepad =>
+    ({
+      id: "scripted",
+      index: 0,
+      connected: true,
+      mapping: "standard",
+      timestamp: 0,
+      axes: [0, 0, rightX, 0],
+      buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.includes(i), touched: held.includes(i), value: held.includes(i) ? 1 : 0 })),
+      vibrationActuator: null,
+    }) as unknown as Gamepad;
+  const gamepad = new GamepadInput({ navigator: { getGamepads: () => [pad()] } as unknown as Navigator });
+  const network = new LoopbackNetwork({ latencyMs: 0 });
+  const sent: InputFrame[] = [];
+  const transport = network.connect("host");
+  const stage = getStageOrThrow("finalDestination");
+  const host = createMatchRunner({
+    stage,
+    players: HUMANS,
+    rules: RULES,
+    seed: 0x5eed1e55,
+    getFighter: getFighterOrThrow,
+    gamepad,
+    net: {
+      transport: {
+        ...transport,
+        send(bytes) {
+          const packet = decodePacket(bytes);
+          if (packet?.type === PacketType.Input) packet.inputs.forEach((input, i) => (sent[packet.startFrame + i] = input));
+          transport.send(bytes);
+        },
+      },
+      localPorts: [0],
+      inputDelay: 2,
+      autoInputDelay: false,
+      now: () => network.now(),
+    },
+  });
+  const guest = createMatchRunner({
+    stage,
+    players: HUMANS,
+    rules: RULES,
+    seed: 0x5eed1e55,
+    getFighter: getFighterOrThrow,
+    net: { transport: network.connect("guest"), localPorts: [1], now: () => network.now() },
+  });
+  const refused: number[] = [];
+  const hashes = new Map<number, number>();
+  let move: string | null = null;
+  for (let tick = 1; tick <= ticks; tick++) {
+    ({ buttons: held, rightX } = script(tick));
+    if (tick >= answerFrom) guest.advance(1);
+    host.advance(1);
+    network.advance(FRAME_MS);
+    if (host.stalled) refused.push(tick);
+    hashes.set(host.frame, hashState(host.state));
+    move ??= host.state.fighters[0].move;
+  }
+  for (let i = 0; i < 60 && host.frame !== guest.frame; i++) {
+    (guest.frame < host.frame ? guest : host).advance(1);
+    network.advance(FRAME_MS);
+  }
+  hashes.set(host.frame, hashState(host.state));
+  return { host, guest, sent, refused, move, hashes };
+}
+
+/**
+ * Ruling R-FW3f, refined (Plan 5 final wave, part 5; the substitute confirm's P3-1): a pad's poll
+ * reports a right-stick flick on two ticks, its let-go and its fire, and a tick the rollback
+ * session refuses schedules nothing. Carrying only the fire frame's bits put them on the next
+ * tick's poll, which already had back the held direction the flick lets go of, so that direction
+ * was fresh again beside the flick's: a neutral air for a forward or back one, and with the
+ * let-go lost too, a dash never ended, so a dash attack for a forward smash. Now each of the
+ * flick's frames goes on the wire whole, in order, on the ticks that run next: the match is the
+ * one the unstalled flick plays, on both peers. Through the real `GamepadInput`, the runner and
+ * the session; the host refuses its tenth tick on, until the guest answers on its thirtieth.
+ */
+describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", () => {
+  /** The host's first refused tick, at the prediction cap, and the tick the guest first answers on. */
+  const STALL = 10;
+  const ANSWER = 30;
+
+  /** The flick's let-go and fire frames as they went on the wire, and the frame after. */
+  const aroundFlick = (sent: readonly InputFrame[]) => {
+    const fire = sent.findIndex((input) => (input & Btn.Flick) !== 0);
+    return sent.slice(fire - 1, fire + 2);
+  };
+
+  /** Both peers on the same frame, with the same state, the one the unstalled match reached there. */
+  const agrees = (stalled: FlickRun, live: FlickRun) => {
+    expect(stalled.guest.frame).toBe(stalled.host.frame);
+    expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
+    expect(stalled.host.netStats?.desyncs).toBe(0);
+    expect(stalled.guest.netStats?.desyncs).toBe(0);
+    expect(live.hashes.get(stalled.host.frame)).toBe(hashState(stalled.host.state));
+  };
+
+  it("drifting with d-pad Left or Right held, its fire tick refused after its let-go ran: the forward or back air the unstalled flick makes", () => {
+    for (const [hold, rightX, aerial] of [[PAD.left, 0.9, "fair"], [PAD.right, -0.9, "bair"]] as const) {
+      // A jump on tick 1, the d-pad held from tick 6, in the air; the flick lets go on the
+      // host's last tick that runs and fires on its first refused one. Mario faces right.
+      const script: PadScript = (t) => ({ buttons: t === 1 ? [PAD.jump] : t >= 6 ? [hold] : [], rightX: t >= STALL - 1 ? rightX : 0 });
+      const live = flickMatch(script, 1);
+      const stalled = flickMatch(script, ANSWER);
+      expect(stalled.refused).not.toContain(STALL - 1);
+      expect(stalled.refused).toContain(STALL);
+      expect(live.move).toBe(aerial);
+      expect(stalled.move, "carrying only the flick's bits made a neutral air").toBe(aerial);
+      const back = hold === PAD.left ? Btn.Left : Btn.Right;
+      const flick = (hold === PAD.left ? Btn.Right : Btn.Left) | Btn.Attack | Btn.Flick;
+      expect(aroundFlick(live.sent)).toEqual([0, flick, back]);
+      expect(aroundFlick(stalled.sent)).toEqual([0, flick, back]);
+      agrees(stalled, live);
+    }
+  });
+
+  it("dashing with d-pad Left held, both of its ticks refused: the forward smash the unstalled flick makes, not a dash attack", () => {
+    // D-pad Left from tick 1, Mario dashing left; the flick right lets go on the host's first
+    // refused tick and fires on the next.
+    const script: PadScript = (t) => ({ buttons: [PAD.left], rightX: t >= STALL ? 0.9 : 0 });
+    const live = flickMatch(script, 1);
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).toEqual(expect.arrayContaining([STALL, STALL + 1]));
+    expect(live.move).toBe("fsmash");
+    expect(stalled.move, "the dash was never ended without the let-go: a dash attack").toBe("fsmash");
+    expect(aroundFlick(live.sent)).toEqual([0, Btn.Right | Btn.Attack | Btn.Flick, Btn.Left]);
+    expect(aroundFlick(stalled.sent)).toEqual([0, Btn.Right | Btn.Attack | Btn.Flick, Btn.Left]);
+    agrees(stalled, live);
+  });
+
+  it("dashing, its let-go refused on the stall's last tick and its fire on the first that runs: still that forward smash", () => {
+    // The stall's last refused tick, the stick at rest throughout.
+    const rest = flickMatch(() => ({ buttons: [PAD.left], rightX: 0 }), ANSWER).refused;
+    const last = rest[rest.findIndex((tick, i) => rest[i + 1] !== tick + 1)];
+    const stalled = flickMatch((t) => ({ buttons: [PAD.left], rightX: t >= last ? 0.9 : 0 }), ANSWER);
+    expect(stalled.refused).toContain(last);
+    expect(stalled.refused).not.toContain(last + 1);
+    // The frames the session ran are the unstalled flick's that lets go on the host's tenth
+    // tick, the stall's first: the same match.
+    const live = flickMatch((t) => ({ buttons: [PAD.left], rightX: t >= STALL ? 0.9 : 0 }), 1);
+    expect(stalled.move).toBe("fsmash");
+    expect(aroundFlick(stalled.sent)).toEqual(aroundFlick(live.sent));
+    agrees(stalled, live);
+  });
+
+  it("fired deep in the stall over a held d-pad Up: its let-go and its fire reach the wire once each, in order, as a tapped key does", () => {
+    // Codex's P2-1 scene, stalled: Up held throughout, the flick right begun on the host's
+    // fifth refused tick. Up stays held across it (ruling R-FW3a).
+    const script: PadScript = (t) => ({ buttons: [PAD.up], rightX: t >= STALL + 4 ? 0.9 : 0 });
+    const live = flickMatch(script, 1);
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).toEqual(expect.arrayContaining([STALL + 4, STALL + 5]));
+    expect(aroundFlick(stalled.sent)).toEqual([Btn.Up, Btn.Up | Btn.Right | Btn.Attack | Btn.Flick, Btn.Up]);
+    expect(stalled.sent.filter((input) => input & Btn.Flick)).toHaveLength(1);
+    expect(live.sent.filter((input) => input & Btn.Flick)).toHaveLength(1);
   });
 });
 
