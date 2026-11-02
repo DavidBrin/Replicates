@@ -21,6 +21,7 @@ import { fx } from "@/engine/fixed";
 import { actionFrameOf } from "@/engine/hitbox";
 import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
+import { platformCentreX } from "@/engine/physics";
 import { smashHoldFrame } from "@/engine/acmd/run";
 import { Btn, held, type FighterDef, type FighterState, type GameState, type InputFrame, type MoveSlot, type ProjectileState } from "@/engine/types";
 import { FIGHTERS, donkeyKong, fox, kirby, link, mario, marth, pikachu, samus } from "@/fighters";
@@ -1203,10 +1204,11 @@ describe("carries, mouthfuls and grabs", () => {
    */
   const where = (f: FighterState) => `${f.action} at (${(f.x / 4096).toFixed(2)}, ${(f.y / 4096).toFixed(2)})${f.grounded ? "" : " in the air"}`;
 
-  function carryFrom(stageId: string, at: Partial<FighterState>, frame: number): { carried: FighterState[]; end: FighterState } {
+  function carryFrom(stageId: string, at: Partial<FighterState>, frame: number, stageFrame = 0): { carried: FighterState[]; end: FighterState } {
     const view = stageViewFromDef(STAGES.find((x) => x.id === stageId)!);
     let s = createInitialState(stageId, [{ defId: "donkeyKong" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
     s.frame = frame;
+    s.stageFrame = stageFrame;
     Object.assign(s.fighters[0], { action: "cargoCarry", actionFrame: 0, grounded: true, vx: 0, grabbing: 1, intangible: 0, invincible: 0, ...at });
     Object.assign(s.fighters[1], { action: "cargoHeld", actionFrame: 0, grabbedBy: 0, grabTimer: 200, x: s.fighters[0].x, y: s.fighters[0].y, grounded: false, intangible: 0, invincible: 0 });
     const world = cpuWorldFromDef(donkeyKong, view, [donkeyKong, kirby], (id) => FIGHTERS.find((f) => f.id === id)!);
@@ -1246,6 +1248,28 @@ describe("carries, mouthfuls and grabs", () => {
       expect(carried.some((f) => f.x < carried[0].x - fx(5)), "it walked toward the ledge").toBe(true);
       expect(carried.filter((f) => !f.grounded || f.y !== platform.y || f.x < platform.x - platform.halfWidth).map(where), `from frame ${frame}`).toEqual([]);
       expect([end.action, end.move?.startsWith("cargo"), end.grounded, end.y], `from frame ${frame}`).toEqual(["throw", true, true, platform.y]);
+    }
+  });
+
+  it("carries its cargo on Smashville's moving platform without leaving it, and throws it from there (part 5, fix round 1)", () => {
+    // The re-review's Minor: from the platform's centre at stage frame 0, facing right, the
+    // carry's let-go slide ended 0.07 past the platform's end, where the engine still had
+    // Donkey Kong on it and the floor model found no floor under him; the next Right walked
+    // him off, and he threw in the air.
+    // And, carried to a platform's end as the platform turns (stage frame 325, its left half),
+    // the platform swept away under him where he stood: the engine judges a standing
+    // passenger's edge against the platform's new place before it carries him.
+    const sv = stageViewFromDef(STAGES.find((x) => x.id === "smashville")!);
+    const platform = sv.platforms[0];
+    for (const [stageFrame, from] of [[0, 0], [325, -platform.halfWidth + fx(13)]] as const) {
+      const centre = platformCentreX(platform, stageFrame);
+      for (const frame of [0, 1]) {
+        const at = `from frame ${frame}, stage frame ${stageFrame}`;
+        const { carried, end } = carryFrom("smashville", { x: centre + from, y: platform.y, platform: 1, facing: 1 }, frame, stageFrame);
+        expect(carried.some((f) => f.x > centre + from + fx(5)), "it walked toward the ledge").toBe(true);
+        expect(carried.filter((f) => !f.grounded || f.y !== platform.y).map(where), at).toEqual([]);
+        expect([end.action, end.move?.startsWith("cargo"), end.grounded, end.y], at).toEqual(["throw", true, true, platform.y]);
+      }
     }
   });
 

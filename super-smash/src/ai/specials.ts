@@ -1030,8 +1030,9 @@ export const PUMMEL_CHANCE = 0.5;
  *  - **a carry** (Donkey Kong's Kong Karry, Plan 5, Task 8): walk toward the
  *    nearer edge, and throw toward it once there (`CARGO_EDGE`) or once the
  *    carry has lasted `CARGO_CARRY_FRAMES`; never off the floor it walks on, a
- *    platform's end included (`carriesOff`, whoever presses the direction: Plan 5
- *    final wave, part 5), so short of a platform's end it stands until it throws;
+ *    platform's end included, a sweeping one's too (`carriesOff`, whoever presses the
+ *    direction: Plan 5 final wave, part 5, and its fix round 1), so short of a
+ *    platform's end it stands until it throws;
  *  - **a mouthful** (Kirby's Inhale, Task 9): one is taken from a standstill or
  *    the air at an opponent in front inside the move's own reach (`MoveDef.inhale`,
  *    its boxes' `moveReach`), one roll an opening; with them in his mouth, Kirby

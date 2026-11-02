@@ -362,12 +362,16 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
   // ruling R-FW1p: `overFloor`; past the main ledge, off Town & City's outer platforms,
   // nothing is), but for a carry, which any fall takes off its floor.
   const stageFrame = ctx.state.stageFrame;
+  const carrying = self.action === "cargoCarry" && self.grabbing >= 0;
   const onMain = self.y <= ctx.stage.groundY + fx(4);
   const under = onMain ? null : (ctx.stage.platforms.find((p) => abs(p.y - self.y) <= fx(1) && abs(platformCentreX(p, stageFrame) - self.x) <= p.halfWidth) ?? null);
-  if (!onMain && under === null) return false;
+  // Standing where no floor of the model's is under it: a hair past a platform's end, where the
+  // engine's body still has it (its fix round 1: a carry's slide stopped 0.07 past the end of
+  // Smashville's moving platform). Nothing is judged then, but a carry, which presses nothing
+  // that could take it further.
+  if (!onMain && under === null) return carrying;
   const f = cloneFighter(self);
   const g = ghostContext(def, ctx.view.frame, f);
-  const carrying = self.action === "cargoCarry" && self.grabbing >= 0;
   if (carrying) g.fighters = withCargo(f);
   let prev: InputFrame = 0;
   for (let k = 1; k <= SLIDE_FRAMES; k++) {
@@ -383,7 +387,11 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
     // re-review 3's Minor 1: Smashville's platform swept the fighter off where the copy,
     // standing still on it, stayed on).
     if (under?.motion !== undefined) f.x += platformCentreX(under, stageFrame + k) - platformCentreX(under, stageFrame + k - 1);
-    if (f.vx === 0) return false;
+    // At rest it stays, but for a carry on a sweeping platform, followed on standing to the
+    // run's end: the engine judges a standing passenger's edge against the platform's new place
+    // before it carries him, so at an end the platform sweeps away from faster than he stands
+    // inside it he is left behind (part 5, fix round 1: Smashville's at its turns).
+    if (f.vx === 0 && !(carrying && under?.motion !== undefined)) return false;
   }
   return false;
 }

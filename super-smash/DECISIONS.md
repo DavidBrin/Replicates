@@ -4163,7 +4163,15 @@ golden unchanged.
   after one 9 → 0; at level 7, 400 → 401, 47 → 0 and 1 → 0; the stocks he took, 3,235 → 3,233.
   The golden unchanged. Cost: short of a platform's end he stands with his cargo until he throws it
   (`CARGO_CARRY_FRAMES`), where he walked off it to the floor below; the sweep's carry frames
-  rose from 10,939 to 12,499.
+  rose from 10,939 to 12,499. Its fix round 1 closed Smashville's moving platform, which the
+  sweep never reached: a carry's let-go slide could stop a hair past its end, where the engine
+  still had him and the floor model found no floor (now, for a carry, leaving), and at its
+  turns the platform swept out from under him standing at its end (the engine judges a
+  passenger's edge against the platform's new place before it carries him; a carry's copy there
+  is now followed on past rest). Carries begun every 4 units across every floor of the six
+  stages (Smashville's platform at 12 phases), facing either way, at both throw parities: 52 of
+  1,912 left their floor before the round, all on that platform, and 0 after; the sweep's
+  figures and the golden unchanged.
 
 **What the wave measured** (each figure from its part's report; a commit names where it was taken):
 
