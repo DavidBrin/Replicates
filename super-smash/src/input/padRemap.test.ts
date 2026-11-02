@@ -509,6 +509,33 @@ describe("what the fighter does with a right-stick flick", () => {
     expect([f.action, f.move]).toEqual(["attack", "fsmash"]);
   });
 
+  /**
+   * Ruling R-FW3e: a diagonal flick, two directions fresh on the fire frame, keeps the
+   * stick's order, y before x (`attackDirection`). The right stick is four-way, so the
+   * second direction comes from the d-pad: Mario in the air facing right, the right stick
+   * flicked up, and d-pad Right pressed on the poll the flick fires on. Through the real
+   * `GamepadInput`, its merge and `step()`: an up air, not a forward air (part 2's fix
+   * round 3, part 3's re-review: a diagonal flick that preferred x survived every test).
+   */
+  it("takes a diagonal flick y before x: up and Right fresh together in the air are an up air (ruling R-FW3e)", () => {
+    const RIGHT = 15;
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    let s = standing();
+    Object.assign(s.fighters[0], AIR);
+    let prev: InputFrame = 0;
+    for (const [buttons, y] of [[[], 0], [[], 0], [[], -0.9], [[RIGHT], -0.9]] as const) {
+      set(pad({ buttons: [...buttons], axes: [0, 0, 0, y] }));
+      const p = pads.poll(1);
+      const frame = mergeKeyboardAndPad(0, p.frames[0], p.flicks[0]);
+      s = step(s, [frame], { prevInputs: [prev] }).state;
+      prev = frame;
+    }
+    const fresh = Btn.Flick | Btn.Up | Btn.Right | Btn.Attack;
+    expect(prev & fresh, "the fire frame: the flick up, d-pad Right and the attack").toBe(fresh);
+    expect([s.fighters[0].action, s.fighters[0].move]).toEqual(["attack", "uair"]);
+  });
+
   it("leaves the keyboard's own presses as they were: Up held, then Right and Attack in the air, is an up air", () => {
     const kb = new KeyboardInput([{ port: 0, scheme: CONFIG_ARROWS }], { window, overlayHost: null });
     kb.attach();
