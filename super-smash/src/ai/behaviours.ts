@@ -418,8 +418,26 @@ export interface BehaviourContext {
    * Absent: Plan 2's single capsule, as the engine runs without one.
    */
   readonly bake?: BakeTables;
+  /**
+   * Where on its stage's main floor this fighter's travelling Final Smash that ignores the
+   * edge (Volt Tackle) is fired from (`firingBands`, `specials.ts`), for the spot it goes
+   * to while it holds one: worked out with its world at match start (`cpuWorldFromDef`),
+   * never inside a decision (Plan 5 final wave, part 5). Absent: no such Final Smash, and
+   * no spot to go to.
+   */
+  readonly firingBands?: FiringBands;
   /** Pre-drawn randoms in [0,1), one per `ROLL_*` slot. */
   readonly rolls: readonly number[];
+}
+
+/**
+ * Where on its stage's main floor a travelling Final Smash, whiffed from a standstill facing
+ * right or left, ends somewhere its user comes back from: whole-unit intervals of x
+ * (`firingBands`, `specials.ts`).
+ */
+export interface FiringBands {
+  readonly right: readonly (readonly [number, number])[];
+  readonly left: readonly (readonly [number, number])[];
 }
 
 export interface BehaviourResult {

@@ -44,6 +44,7 @@ import {
   type Behaviour,
   type BehaviourContext,
   type BehaviourName,
+  type FiringBands,
   type LevelTuning,
   type RecoveryMove,
   type StageView,
@@ -73,7 +74,7 @@ import {
   retreat,
   slidesOff,
 } from "./offence";
-import { counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, storeCharge } from "./specials";
+import { counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, spotBands, storeCharge } from "./specials";
 
 /** Ultimate's CPU levels. Anything outside is clamped. */
 export const MIN_LEVEL = 1;
@@ -130,6 +131,13 @@ export interface CpuWorld {
    * none: Plan 2's single capsule, as the engine runs without one.
    */
   readonly bake?: BakeTables;
+  /**
+   * Where on the stage's main floor this fighter's travelling Final Smash that ignores the
+   * edge (Volt Tackle) is fired from, for the spot it goes to while it holds one
+   * (`spotBands`): worked out as the world is built, so no decision does it (Plan 5 final
+   * wave, part 5). Defaults to none: it goes to no spot.
+   */
+  readonly firingBands?: FiringBands;
 }
 
 /**
@@ -160,6 +168,7 @@ export function cpuWorldFromDef(
   fighter?: (defId: string) => FighterDef | undefined,
   bake?: BakeTables,
 ): CpuWorld {
+  const bands = spotBands(def, stage);
   return {
     stage,
     jumps: def.attributes.jumps,
@@ -177,6 +186,8 @@ export function cpuWorldFromDef(
     ...(fighter !== undefined ? { fighter } : {}),
     // The match's bake, for the body a parry's swing must reach (Task 18, ruling R-T18j).
     ...(bake !== undefined ? { bake } : {}),
+    // Where its Volt Tackle is fired from, worked out now, at match start (final wave, part 5).
+    ...(bands !== null ? { firingBands: bands } : {}),
   };
 }
 
@@ -323,6 +334,8 @@ export function decideCpu(
     fighterDef: cpuDef(self, world) ?? null,
     matchDefs: world.matchDefs ?? [],
     ...(world.bake !== undefined ? { bake: world.bake } : {}),
+    // Read, never built here: the world's, from match start (`spotBands`).
+    ...(world.firingBands !== undefined ? { firingBands: world.firingBands } : {}),
     rolls,
   };
 

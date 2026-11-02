@@ -40,6 +40,7 @@ import {
   stageViewFromDef,
   towardX,
   type BehaviourContext,
+  type FiringBands,
   type StageView,
 } from "./behaviours";
 import { sideRecoveryFromDef, upBInReach, recoveryFromDef } from "./recovery";
@@ -67,6 +68,7 @@ import {
   sideRecover,
   smashBall,
   smashSpecial,
+  spotBands,
   storeCharge,
 } from "./specials";
 
@@ -82,6 +84,7 @@ const PS2 = stageViewFromDef(STAGES.find((x) => x.id === "pokemonStadium2")!);
 function context(state: GameState, def: FighterDef, level = 9, rolls: number[] = new Array(DECISION_ROLLS).fill(0), stage: StageView = DEFAULT_STAGE_VIEW): BehaviourContext {
   const tuning = tuningForLevel(level);
   const defs = state.fighters.map((f, i) => (i === 0 ? def : defOf(f.defId)));
+  const bands = spotBands(def, stage);
   return {
     state,
     view: observe(state, 0, tuning.reactionFrames),
@@ -94,6 +97,8 @@ function context(state: GameState, def: FighterDef, level = 9, rolls: number[] =
     recovery: recoveryFromDef(def),
     fighterDef: def,
     matchDefs: defs,
+    // Its Volt Tackle's bands, as its world brings them from match start (`cpuWorldFromDef`).
+    ...(bands !== null ? { firingBands: bands } : {}),
     rolls,
   };
 }
@@ -345,24 +350,47 @@ describe("the Final Smash", () => {
     // A target at -62 on Pokémon Stadium 2: from 0 the nearest spot is past it, at -74,
     // facing it, in a stretch that keeps `SPOT_EDGE_ROOM` from the ledge; a target in the
     // stage's middle has none, nor any on Final Destination.
-    expect(finalSmashSpotFor(pikachu, PS2, 0, fx(-62))).toEqual({ x: fx(-74), dir: 1, from: PS2.leftLedge + SPOT_EDGE_ROOM, to: fx(-74) });
-    expect(finalSmashSpotFor(pikachu, PS2, 0, 0)).toBeNull();
-    expect(finalSmashSpotFor(pikachu, FD, 0, fx(-45))).toBeNull();
+    expect(finalSmashSpotFor(firingBands(pikachu, PS2), PS2, 0, fx(-62))).toEqual({ x: fx(-74), dir: 1, from: PS2.leftLedge + SPOT_EDGE_ROOM, to: fx(-74) });
+    expect(finalSmashSpotFor(firingBands(pikachu, PS2), PS2, 0, 0)).toBeNull();
+    expect(finalSmashSpotFor(firingBands(pikachu, FD), FD, 0, fx(-45))).toBeNull();
     // Never at the very ledge (fix round 2, re-review 2's N3): a target 4 inside the left
     // ledge has its whole window past the ledge's room, so no spot; and on every stage, for a
     // target anywhere, the spot is `SPOT_EDGE_ROOM` inside both ledges.
-    expect(finalSmashSpotFor(pikachu, PS2, 0, PS2.leftLedge + fx(4))).toBeNull();
+    expect(finalSmashSpotFor(firingBands(pikachu, PS2), PS2, 0, PS2.leftLedge + fx(4))).toBeNull();
     for (const st of STAGES) {
       const v = stageViewFromDef(st);
       for (let t = v.leftLedge; t <= v.rightLedge; t += fx(1)) {
-        const spot = finalSmashSpotFor(pikachu, v, 0, t);
+        const spot = finalSmashSpotFor(firingBands(pikachu, v), v, 0, t);
         if (spot === null) continue;
         expect(spot.from, st.id).toBeGreaterThanOrEqual(v.leftLedge + SPOT_EDGE_ROOM);
         expect(spot.to, st.id).toBeLessThanOrEqual(v.rightLedge - SPOT_EDGE_ROOM);
       }
     }
-    // Memoised: the same object for the same fighter and stage view.
+    // Kept: the same object for the same fighter and stage, a view of it built again included.
     expect(firingBands(pikachu, FD)).toBe(firingBands(pikachu, FD));
+    expect(firingBands(pikachu, stageViewFromDef(STAGES.find((x) => x.id === "finalDestination")!))).toBe(firingBands(pikachu, FD));
+  });
+
+  // Plan 5 final wave, part 5 (the substitute confirm's P3-2): worked out on the first decision
+  // that needed them, a Pikachu CPU holding the power with a busy target, the bands took 45 to
+  // 105 ms of that one frame, once a match. They are worked out with the CPU's world at match
+  // start (`cpuWorldFromDef`, `spotBands`), and every decision reads the world's.
+  it("brings Volt Tackle's bands in its world from match start, and decides by the world's (Plan 5 final wave, part 5)", () => {
+    const world = cpuWorldFromDef(pikachu, PS2, [pikachu, mario]);
+    expect(world.firingBands).toBe(firingBands(pikachu, PS2));
+    // A Final Smash not fired from a spot brings none.
+    for (const def of FIGHTERS.filter((f) => f.id !== "pikachu")) expect(cpuWorldFromDef(def, PS2).firingBands, def.id).toBeUndefined();
+    // On Final Destination Pikachu's own bands are empty, so for a busy target at -40 there is
+    // no spot. A world given a band at -60 to -50 facing right is gone by: to its spot at -50,
+    // the decision's table the world's and none it works out.
+    const fdWorld = cpuWorldFromDef(pikachu, FD, [pikachu, mario]);
+    expect(fdWorld.firingBands).toEqual({ right: [], left: [] });
+    const given: FiringBands = { right: [[fx(-60), fx(-50)]], left: [] };
+    const busy = makeState({ fighters: [makeFighter({ port: 0, x: 0, finalSmashReady: FINAL_SMASH_READY, facing: 1, defId: "pikachu", actionFrame: 30 }), makeFighter({ port: 1, x: fx(-40), action: "attack", actionFrame: 20 })] });
+    expect(finalSmash(context(busy, pikachu, 9, undefined, FD)).score).toBe(0);
+    expect(finalSmash({ ...context(busy, pikachu, 9, undefined, FD), firingBands: given })).toMatchObject({ score: 450, input: Btn.Left });
+    expect(decideCpu(busy, 0, 9, 1, fdWorld).scores.finalSmash).toBeUndefined();
+    expect(decideCpu(busy, 0, 9, 1, { ...fdWorld, firingBands: given }).scores.finalSmash).toBeGreaterThan(0);
   });
 
   it("goes to its spot for a busy target, turns to face it there and waits, still; a target free to act it leaves to the other behaviours (ruling R-FW2n)", () => {
@@ -379,7 +407,7 @@ describe("the Final Smash", () => {
     expect(finalSmash(context(at(1, "stand"), pikachu, 9, undefined, PS2)).score).toBe(0);
     const away = at(1, "stand");
     away.fighters[0].x = fx(-20);
-    expect(finalSmashSpotFor(pikachu, PS2, fx(-20), fx(-62))).not.toBeNull();
+    expect(finalSmashSpotFor(firingBands(pikachu, PS2), PS2, fx(-20), fx(-62))).not.toBeNull();
     expect(finalSmash(context(away, pikachu, 9, undefined, PS2)).score).toBe(0);
     away.fighters[1] = { ...away.fighters[1], action: "attack" };
     expect(finalSmash(context(away, pikachu, 9, undefined, PS2))).toMatchObject({ score: 450, input: Btn.Left });
@@ -465,7 +493,7 @@ describe("the Final Smash", () => {
     const band = firingBands(pikachu, view).right.at(-1);
     const inner = band === undefined ? null : band[1];
     const marioX = inner === null ? view.leftLedge + fx(20) : inner + fx(12);
-    const spot = finalSmashSpotFor(pikachu, view, 0, marioX);
+    const spot = finalSmashSpotFor(firingBands(pikachu, view), view, 0, marioX);
     if (inner === null) expect(spot).toBeNull();
     else expect(spot).toMatchObject({ x: inner, dir: 1, to: inner });
     const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);

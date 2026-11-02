@@ -4128,6 +4128,23 @@ shipped; in its fix round, `SPEC.md`'s limb-move counts (above), `game/bake.ts`'
 size and the crouch flick's UNVERIFIED label in `states.ts`: docs and doc comments only, the
 golden unchanged.
 
+*Part 5, the last batch* (`d0353b1` on), from the substitute confirm pass and two reviews' Minors.
+- Volt Tackle's firing places as measured (R-FW2q's cost, above, and "Costs that ship": Town &
+  City's side platforms too), and the tackle's air distance, 151.696: the record and comments
+  only.
+- R-FW3f, refined (above): a flick's let-go and fire go out whole and in order across refused
+  ticks.
+- Volt Tackle's firing bands are worked out with the CPU's world at match start (`spotBands`, in
+  `cpuWorldFromDef`, which `matchCpuWorlds` runs as the runner is created), kept by fighter
+  definition and stage geometry, and only read by a decision (`BehaviourContext.firingBands`): a
+  pure function of the definition and the stage, built before the first tick and never changed,
+  so the same on both machines and in every re-simulation. Before, the first decision that
+  needed them worked them out. Over a match a stage, a level-9 Pikachu CPU holding the power
+  against a level-7 Mario and then Fox: the decision's longest 44 to 113 ms before (each the
+  frame the bands were worked out), 0.30 to 1.92 ms after; the world's build takes the 43 to 110
+  ms instead, once a match (machine load 5 to 10). Decisions, the golden and `cpuRollback`
+  unchanged. Cost: they are worked out for a human Pikachu's port too, where nothing reads them.
+
 **What the wave measured** (each figure from its part's report; a commit names where it was taken):
 
 | Measure | Before | After |

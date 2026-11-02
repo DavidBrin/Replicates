@@ -69,6 +69,7 @@ import {
   type Behaviour,
   type BehaviourContext,
   type BehaviourResult,
+  type FiringBands,
   type RecoveryMove,
   type StageView,
 } from "./behaviours";
@@ -341,32 +342,36 @@ export const SPOT_EDGE_ROOM = fx(3);
 /** UNVERIFIED (CPU judgement): the most steps a let-go's slide is followed for (`slideStop`). */
 const SPOT_SLIDE_FRAMES = 60;
 
-/** Where on its stage's main floor a travelling Final Smash, whiffed from a standstill facing each way, ends somewhere its user comes back from: whole-unit intervals of x. */
-export interface FiringBands {
-  readonly right: readonly (readonly [number, number])[];
-  readonly left: readonly (readonly [number, number])[];
-}
+/**
+ * One table a fighter and a stage's geometry (`stageKey`): the bands depend on nothing else
+ * (`firingBands`). A cache of a pure function, so whether it already holds a pair changes no
+ * answer; it is filled where a CPU's world is built (`spotBands`), so a match's worlds, and the
+ * next match's over the same stage and fighter, share one table.
+ */
+const BANDS = new WeakMap<FighterDef, Map<string, FiringBands>>();
 
-/** One memo a fighter and a stage view: the bands depend on nothing else (`firingBands`). */
-const BANDS = new WeakMap<FighterDef, WeakMap<StageView, FiringBands>>();
+/** A stage view's geometry as a key: two views of one stage are one key. */
+function stageKey(stage: StageView): string {
+  return JSON.stringify(stage);
+}
 
 /**
  * The spots on the main floor from which `def`'s travelling Final Smash, pressed from a
  * standstill facing right or left, would be fired by `whiffComesBack`'s own reading (Plan 5
  * final wave 2, fix round 1, ruling R-FW2n): every whole unit between the ledges, its whiff
  * run (`whiffEnd`) and judged (on a floor, or `recoversFrom`). They read nothing but the
- * fighter's definition and the stage, so they are worked out once a pair and kept; the
- * stage's clock is taken at 0 (a moving soft platform where it starts), and the live check
- * at the moment of firing (`whiffComesBack`) has the last word. A memo of a pure function:
- * the CPU's answers are the same with it or without.
+ * fighter's definition and the stage's geometry, so they are worked out once a pair and kept
+ * (`BANDS`); the stage's clock is taken at 0 (a moving soft platform where it starts), and the
+ * live check at the moment of firing (`whiffComesBack`) has the last word.
  */
 export function firingBands(def: FighterDef, stage: StageView): FiringBands {
   let byStage = BANDS.get(def);
   if (byStage === undefined) {
-    byStage = new WeakMap();
+    byStage = new Map();
     BANDS.set(def, byStage);
   }
-  const known = byStage.get(stage);
+  const key = stageKey(stage);
+  const known = byStage.get(key);
   if (known !== undefined) return known;
   const r = recoveryFromDef(def);
   const runs = (dir: number): [number, number][] => {
@@ -383,8 +388,28 @@ export function firingBands(def: FighterDef, stage: StageView): FiringBands {
     return out;
   };
   const bands = { right: runs(1), left: runs(-1) };
-  byStage.set(stage, bands);
+  byStage.set(key, bands);
   return bands;
+}
+
+/** A Final Smash its CPU goes to a spot to fire (`finalSmashSpot`): one that travels and does not stop at the edge on the ground (Volt Tackle). */
+function firedFromSpot(fs: MoveDef): boolean {
+  return dashTravel(fs) > 0 && fs.dashEnd?.edge !== true;
+}
+
+/**
+ * The firing bands `def`'s CPU goes to its spot by on `stage` (`goToSpot`): its Final Smash's
+ * where that is one fired from a spot (`firedFromSpot`, Volt Tackle), null for any other.
+ * Worked out with the CPU's world at match start (`cpuWorldFromDef`, which `matchCpuWorlds`
+ * builds as the match is created), and only read after (`BehaviourContext.firingBands`): a
+ * pure function of the fighter's definition and the stage, built before the first tick and
+ * never changed, so the same on both machines and in every rolled-back re-simulation (Plan 5
+ * final wave, part 5: worked out on the first decision that needed them, they took 45 to 105
+ * ms of one frame for Pikachu, once a match, and came out empty on five stages of six).
+ */
+export function spotBands(def: FighterDef, stage: StageView): FiringBands | null {
+  const fs = def.moves.finalSmash;
+  return fs !== undefined && firedFromSpot(fs) ? firingBands(def, stage) : null;
 }
 
 /** A fighter standing still on the main floor at `x`, facing `dir`, with the power: what `firingBands` runs its whiff from. */
@@ -448,13 +473,12 @@ export interface FinalSmashSpot {
 
 /**
  * The nearest spot on the main floor the CPU would fire its travelling Final Smash from
- * with its target ahead (Plan 5 final wave 2, fix round 1, ruling R-FW2n): in a firing band
- * (`firingBands`) facing the target, and with the target `SPOT_MIN_AHEAD` to
- * `FINAL_SMASH_RANGE` ahead, as the point-blank use wants it, and `SPOT_EDGE_ROOM` inside
- * the ledges. Null where there is none.
+ * with its target ahead (Plan 5 final wave 2, fix round 1, ruling R-FW2n): in one of its
+ * stage's firing bands (`bands`, `firingBands`) facing the target, and with the target
+ * `SPOT_MIN_AHEAD` to `FINAL_SMASH_RANGE` ahead, as the point-blank use wants it, and
+ * `SPOT_EDGE_ROOM` inside the ledges. Null where there is none.
  */
-export function finalSmashSpotFor(def: FighterDef, stage: StageView, selfX: number, targetX: number): FinalSmashSpot | null {
-  const bands = firingBands(def, stage);
+export function finalSmashSpotFor(bands: FiringBands, stage: StageView, selfX: number, targetX: number): FinalSmashSpot | null {
   let best: FinalSmashSpot | null = null;
   for (const dir of [1, -1]) {
     const lo = dir > 0 ? targetX - FINAL_SMASH_RANGE : targetX + SPOT_MIN_AHEAD;
@@ -519,10 +543,12 @@ function goToSpot(ctx: BehaviourContext): BehaviourResult {
   const { self, target, dx, dy } = ctx.view;
   const def = ctx.fighterDef;
   const fs = def?.moves.finalSmash;
-  if (def === null || fs === undefined || self.finalSmashReady <= 0 || target === null || !free(self) || !self.grounded) return NOTHING;
-  if (dashTravel(fs) === 0 || fs.dashEnd?.edge === true || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
+  // Its stage's bands, from its world (`spotBands`, built at match start): none, no spot.
+  const bands = ctx.firingBands;
+  if (def === null || fs === undefined || bands === undefined || self.finalSmashReady <= 0 || target === null || !free(self) || !self.grounded) return NOTHING;
+  if (!firedFromSpot(fs) || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
   if (!COMMITTED.includes(ctx.view.targetAction)) return NOTHING;
-  const spot = finalSmashSpotFor(def, ctx.stage, self.x, self.x + dx);
+  const spot = finalSmashSpotFor(bands, ctx.stage, self.x, self.x + dx);
   if (spot === null) return NOTHING;
   // The part of the stretch it stops in: all of it facing the target, short of the target's
   // side by the turn's room facing away.
