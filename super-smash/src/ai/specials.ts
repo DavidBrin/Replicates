@@ -74,7 +74,7 @@ import {
 } from "./behaviours";
 import { ghostContext, ghostStep, overFloor, recoveryFromDef, sideRecoveryFromDef, upBInReach, upBPlan } from "./recovery";
 import { counterWait, specialWith } from "./defence";
-import { pressToward } from "./offence";
+import { leavesFloor, pressToward } from "./offence";
 
 const NOTHING: BehaviourResult = { score: 0, input: 0 };
 
@@ -330,6 +330,14 @@ export const SPOT_WALK = fx(16);
  */
 export const SPOT_TURN_ROOM = fx(0.5);
 
+/**
+ * UNVERIFIED (CPU judgement): how far inside each ledge a spot is (`finalSmashSpotFor`):
+ * more than a frame of Pikachu's run (2.04), the most it can stop past a stretch's end by
+ * letting go a frame late, so that it stops on its floor (Plan 5 final wave 2, fix round 2,
+ * re-review 2's N3: a stretch at the very ledge walked it off).
+ */
+export const SPOT_EDGE_ROOM = fx(3);
+
 /** UNVERIFIED (CPU judgement): the most steps a let-go's slide is followed for (`slideStop`). */
 const SPOT_SLIDE_FRAMES = 60;
 
@@ -442,7 +450,8 @@ export interface FinalSmashSpot {
  * The nearest spot on the main floor the CPU would fire its travelling Final Smash from
  * with its target ahead (Plan 5 final wave 2, fix round 1, ruling R-FW2n): in a firing band
  * (`firingBands`) facing the target, and with the target `SPOT_MIN_AHEAD` to
- * `FINAL_SMASH_RANGE` ahead, as the point-blank use wants it. Null where there is none.
+ * `FINAL_SMASH_RANGE` ahead, as the point-blank use wants it, and `SPOT_EDGE_ROOM` inside
+ * the ledges. Null where there is none.
  */
 export function finalSmashSpotFor(def: FighterDef, stage: StageView, selfX: number, targetX: number): FinalSmashSpot | null {
   const bands = firingBands(def, stage);
@@ -451,8 +460,8 @@ export function finalSmashSpotFor(def: FighterDef, stage: StageView, selfX: numb
     const lo = dir > 0 ? targetX - FINAL_SMASH_RANGE : targetX + SPOT_MIN_AHEAD;
     const hi = dir > 0 ? targetX - SPOT_MIN_AHEAD : targetX + FINAL_SMASH_RANGE;
     for (const [a, b] of dir > 0 ? bands.right : bands.left) {
-      const from = Math.max(a, lo);
-      const to = Math.min(b, hi);
+      const from = Math.max(a, lo, stage.leftLedge + SPOT_EDGE_ROOM);
+      const to = Math.min(b, hi, stage.rightLedge - SPOT_EDGE_ROOM);
       if (from > to) continue;
       const x = Math.min(Math.max(selfX, from), to);
       if (best === null || abs(x - selfX) < abs(best.x - selfX)) best = { x, dir, from, to };
@@ -493,9 +502,20 @@ function slideStop(ctx: BehaviourContext, def: FighterDef): number | null {
  * Getting there: Smashville's stretch is 5 units wide, so it lets go where its slide stops
  * in the stretch (`slideStop`), runs from `SPOT_WALK` away and walks nearer, and, arriving
  * facing away, stops `SPOT_TURN_ROOM` short of the stretch's target-side end, then turns
- * with a walk's first step.
+ * with a walk's first step. No press it makes takes it off its floor (`leavesFloor`,
+ * `slidesOff`'s floor model; fix round 2, re-review 2's N3): one that would is not made,
+ * and a let-go that would slide it off is a shield, which stops at the edge, as the CPU's
+ * own let-go guard does (`cpuInput`).
  */
 function finalSmashSpot(ctx: BehaviourContext): BehaviourResult {
+  const go = goToSpot(ctx);
+  if (go.score === 0) return go;
+  if (!leavesFloor(ctx, go.input)) return go;
+  return { score: go.score, input: go.input !== 0 && !leavesFloor(ctx, 0) ? 0 : Btn.Shield };
+}
+
+/** `finalSmashSpot`'s way to its spot, before the floor is checked. */
+function goToSpot(ctx: BehaviourContext): BehaviourResult {
   const { self, target, dx, dy } = ctx.view;
   const def = ctx.fighterDef;
   const fs = def?.moves.finalSmash;

@@ -53,6 +53,7 @@ import {
   finalSmashSpotFor,
   firingBands,
   recoversFrom,
+  SPOT_EDGE_ROOM,
   SPOT_TURN_ROOM,
   whiffEnd,
   finalSmash,
@@ -335,6 +336,19 @@ describe("the Final Smash", () => {
     // facing it; a target in the stage's middle has none.
     expect(finalSmashSpotFor(pikachu, FD, 0, fx(-45))).toEqual({ x: fx(-54), dir: 1, from: fx(-75), to: fx(-54) });
     expect(finalSmashSpotFor(pikachu, FD, 0, 0)).toBeNull();
+    // Never at the very ledge (fix round 2, re-review 2's N3): a target 4 inside the left
+    // ledge has its whole window past the ledge's room, so no spot; and on every stage, for a
+    // target anywhere, the spot is `SPOT_EDGE_ROOM` inside both ledges.
+    expect(finalSmashSpotFor(pikachu, FD, 0, FD.leftLedge + fx(4))).toBeNull();
+    for (const st of STAGES) {
+      const v = stageViewFromDef(st);
+      for (let t = v.leftLedge; t <= v.rightLedge; t += fx(1)) {
+        const spot = finalSmashSpotFor(pikachu, v, 0, t);
+        if (spot === null) continue;
+        expect(spot.from, st.id).toBeGreaterThanOrEqual(v.leftLedge + SPOT_EDGE_ROOM);
+        expect(spot.to, st.id).toBeLessThanOrEqual(v.rightLedge - SPOT_EDGE_ROOM);
+      }
+    }
     // Memoised: the same object for the same fighter and stage view.
     expect(firingBands(pikachu, FD)).toBe(firingBands(pikachu, FD));
   });
@@ -369,6 +383,9 @@ describe("the Final Smash", () => {
     };
     expect(running(-36)).toMatchObject({ score: 450, input: Btn.Left });
     expect(running(-44)).toMatchObject({ score: 450, input: 0 });
+    // Running at the ledge when the target turns busy, a let-go would slide it off: it
+    // shields, which stops at the edge (fix round 2, re-review 2's N3: `leavesFloor`).
+    expect(running(-72)).toMatchObject({ score: 450, input: Btn.Shield });
   });
 
   it("takes no helpless end for one it comes back from, even over the stage (ruling R-FW2n)", () => {
@@ -378,6 +395,49 @@ describe("the Final Smash", () => {
     helpless.combat.helplessMove = "upB";
     expect(recoversFrom(pikachu, { ...helpless, action: "fall" }, FD, recoveryFromDef(pikachu), pikachu.attributes.jumps, 0, 0)).toBe(true);
     expect(recoversFrom(pikachu, helpless, FD, recoveryFromDef(pikachu), pikachu.attributes.jumps, 0, 0)).toBe(false);
+  });
+
+  // Part 2's fix round 2 (re-review 2's N3): driven by the Final Smash behaviour alone, with
+  // nothing else to stop it, the positioning walked Pikachu off his floor in 535 of 2,680
+  // runs (a stretch at the very ledge, and the slide or the turn past it). Against a target
+  // holding its shield 4 to 7 inside either ledge, from all over the floor, facing either
+  // way: Pikachu never leaves the main floor (doing nothing, he never would).
+  it.each(STAGES.map((x) => x.id))("on %s, driven by the Final Smash behaviour alone, never leaves the floor going to its spot (ruling R-FW2n, re-review 2's N3)", (id) => {
+    const def = STAGES.find((x) => x.id === id)!;
+    const view = stageViewFromDef(def);
+    const left: string[] = [];
+    let runs = 0;
+    let moved = 0;
+    for (const side of [-1, 1]) {
+      for (const inside of [4, 5, 6, 7]) {
+        const targetX = side < 0 ? view.leftLedge + fx(inside) : view.rightLedge - fx(inside);
+        for (let x = view.leftLedge + fx(2); x <= view.rightLedge - fx(2); x += fx(9)) {
+          for (const facing of [-1, 1]) {
+            runs++;
+            const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+            Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x, y: view.groundY, facing, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
+            Object.assign(s.fighters[1], { action: "shield", actionFrame: 30, grounded: true, platform: 0, x: targetX, y: view.groundY, facing: -side, intangible: 0, invincible: 0 });
+            let st = s;
+            let prev: InputFrame[] = [0, 0];
+            for (let i = 0; i < 150; i++) {
+              const input = finalSmash(context(st, pikachu, 9, undefined, view)).input;
+              const now: InputFrame[] = [input, Btn.Shield];
+              st = step(st, now, { prevInputs: prev }).state;
+              prev = now;
+              const f = st.fighters[0];
+              if (!f.grounded || f.ledge !== null) {
+                left.push(`${side < 0 ? "L" : "R"}${inside} from ${(x / 4096).toFixed(0)} facing ${facing}: ${f.action} at ${(f.x / 4096).toFixed(1)} on ${i}`);
+                break;
+              }
+            }
+            if (st.fighters[0].x !== x) moved++;
+          }
+        }
+      }
+    }
+    expect(runs).toBeGreaterThan(100);
+    expect(moved).toBeGreaterThan(0);
+    expect(left).toEqual([]);
   });
 
   it.each(STAGES.map((x) => x.id))("goes past a dizzy Mario to its spot on %s, turns, and fires Volt Tackle from there, trapping him (ruling R-FW2n)", (id) => {

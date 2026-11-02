@@ -331,9 +331,23 @@ const SLIDE_FRAMES = 30;
  */
 export function slidesOff(ctx: BehaviourContext, input: InputFrame): boolean {
   const { self } = ctx.view;
-  const def = ctx.fighterDef;
-  if (def === null || !self.grounded || (self.action !== "dashStart" && self.action !== "run")) return false;
+  if (!self.grounded || (self.action !== "dashStart" && self.action !== "run")) return false;
   if ((input & (Btn.Left | Btn.Right | Btn.Attack | Btn.Special | Btn.Shield | Btn.Jump | Btn.Grab)) !== 0) return false;
+  return leavesFloor(ctx, input);
+}
+
+/**
+ * Whether `input` now, then nothing, carries the grounded fighter off the floor it stands
+ * on with no floor under its fall: its own copy run by the engine's rules (`ghostStep`)
+ * until it comes to rest, on `slidesOff`'s floor model (the stage between its ledges, or
+ * the soft platform under it, which may sweep it). `slidesOff` asks it of a let-go out of a
+ * dash or a run; the Volt Tackle positioning asks it of every press it makes (Plan 5 final
+ * wave 2, fix round 2, re-review 2's N3).
+ */
+export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
+  const { self } = ctx.view;
+  const def = ctx.fighterDef;
+  if (def === null || !self.grounded) return false;
   // The floor it slides on: the stage between its ledges, or the soft platform under it.
   // Off a platform's edge it falls, and lands if a floor is under that fall (fix round 2,
   // ruling R-FW1p: `overFloor`; past the main ledge, off Town & City's outer platforms,
