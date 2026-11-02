@@ -1062,17 +1062,16 @@ const legacy: FighterDef = {
     //   (84, `momentum`'s second window; fix round 1 of the final wave's part 2, the
     //   re-review's M3).
     //   It ignores edges, and takes no ledge (Task 14 fix round 1, ruling R-T14j).
-    // UNVERIFIED: the tackle's speed, 3.2 a frame on frames 47-83: SSBU moves Pikachu
-    // by status, unpublished. Tuned to SmashWiki "Volt Tackle": "The initial tackle travels
-    // almost the entire length of [Final Destination]", whose floor is 160 (Plan 5 final
-    // wave 2, ruling R-FW2i, amended), as the fastest tenth whose whiff stayed under the
-    // floor in the CPU's own reading of it too (its dash windows and the last one's speed
-    // braked by `ground_brake`), when the slide started from the tackle's own speed: 152.4
-    // whiffed, 155.6 read (3.3 read 161.7). With the end's published 3 (fix round 1), the
-    // tackle (118.4) and the slide after it travel 150.9 from a standstill, 94% of the
-    // floor, and the CPU reads 154.0; by the same rule 3.3 would now pass (154.6 whiffed,
-    // 157.7 read) and 3.4 would not (161.4 read). The speed is left at the ruled 3.2.
-    // Task 15's 4.5 carried the tackle alone 166.5 and the whiff 236.4, more than any stage.
+    // UNVERIFIED: the tackle's speed, 4.1 a frame on frames 47-83: SSBU moves Pikachu by
+    // status, unpublished. Tuned to SmashWiki "Volt Tackle" (https://www.ssbwiki.com/Volt_Tackle):
+    // "The initial tackle travels almost the entire length of [Final Destination]", whose
+    // floor is 160: the initial tackle, frames 47-83, alone (Plan 5 final wave 2, fix round 3,
+    // ruling R-FW2q). From a standstill it carries Pikachu 151.6, 95% of the floor and under
+    // it (4.0 would carry him 147.9, 92%; the ruling asks about 94%), and the end's slide from
+    // its published 3 carries him on to 184.2 in all. Part 2's ruling R-FW2i (amended) read
+    // the sentence as the whole whiff, the tackle and its slide, and tuned 3.2 to it (the
+    // tackle alone 118.4, 74%; the whiff 150.9). Task 15's 4.5 carried the tackle alone
+    // 166.5, more than the floor.
     // UNVERIFIED: the six sparks' frames (the page counts six; `Rehit=6` from 10 allows
     // a seventh on 46), and that the 47-49 box and the dash's both trap: the scripts
     // mark neither as the catch.
@@ -1099,7 +1098,7 @@ const legacy: FighterDef = {
       totalFrames: 137,
       intangible: [1, 137],
       momentum: [
-        { frame: 47, x: fx(3.2), y: fx(0), hold: 36 },
+        { frame: 47, x: fx(4.1), y: fx(0), hold: 36 },
         // The end's first frame: game_finaldashend (and game_finalairdashend) open with
         // SET_SPEED_EX(3, 0, KINETIC_ENERGY_RESERVE_ATTRIBUTE_MAIN) (rubendal Data Viewer
         // 13.0.1), so the slide starts from 3, not from the tackle's speed (Plan 5 final wave

@@ -77,6 +77,7 @@ beforeAll(() => {
 
 const defOf = (id: string): FighterDef => FIGHTERS.find((f) => f.id === id)!;
 const FD = stageViewFromDef(STAGES.find((x) => x.id === "finalDestination")!);
+const PS2 = stageViewFromDef(STAGES.find((x) => x.id === "pokemonStadium2")!);
 
 function context(state: GameState, def: FighterDef, level = 9, rolls: number[] = new Array(DECISION_ROLLS).fill(0), stage: StageView = DEFAULT_STAGE_VIEW): BehaviourContext {
   const tuning = tuningForLevel(level);
@@ -198,9 +199,9 @@ describe("the Final Smash", () => {
   });
 
   it("never whiffs Volt Tackle toward an open blast line: point-blank on a committed target only", () => {
-    // A whiff carries on past its dash and slides: 154.0 in the CPU's reading of it since
-    // the end's own slide speed (fix round 1, the re-review's M3; 155.6 from part 2 of the
-    // final wave's ruling R-FW2i; it was 240.9). Fix round 3 (ruling R-FW1t):
+    // A whiff carries on past its dash and slides: 187.3 in the CPU's reading of it since
+    // the tackle's 4.1 (part 2's fix round 3, ruling R-FW2q; 154.0 at 3.2; 240.9 at Task
+    // 15's 4.5). Part 1's fix round 3 (ruling R-FW1t):
     // it is fired only where that whiff stays on the floor ahead, so not from the middle
     // of a stage at all (`tackle`, below, is a shorter one).
     const B = DEFAULT_STAGE_VIEW;
@@ -221,9 +222,9 @@ describe("the Final Smash", () => {
     expect(ps2.rightLedge - at).toBeGreaterThan(dashTravel(pikachu.moves.finalSmash!));
     expect(fire(s, pikachu, ps2)).toBe(false);
     // Point-blank on a target that cannot act soon, from a standstill, it still is: its
-    // whiff (154.0 since the re-review's M3) keeps on the floor ahead, 172.6 (fix round 3,
-    // ruling R-FW1t). The whiff of Task 15's tuning (240.9) did not, nor does 2.5 times
-    // that speed's.
+    // whiff (184.2 from a standstill since ruling R-FW2q) runs past the 172.6 of floor
+    // ahead, and ends where its recovery brings Pikachu back (ruling R-FW2n). Task 15's 4.5
+    // does not fire there; a short tackle (1.5 a frame) does.
     s.fighters[1] = makeFighter({ port: 1, x: at + fx(20), action: "landingLag", actionFrame: 20 });
     expect(fire(s, pikachu, ps2)).toBe(true);
     expect(fire(s, tackle(4.5), ps2)).toBe(false);
@@ -261,23 +262,25 @@ describe("the Final Smash", () => {
   // floors), not by its path: on a floor, or where the CPU's own recovery model gets it
   // back from (`recoversFrom`: its fall onto a floor, its up special, or its midair jump
   // then its up special). Part 1's R-FW1t, the whole travel on the floor, left a strip of
-  // 4 to 32 units a stage, none on Smashville, and Volt Tackle unused in play.
+  // 4 to 32 units a stage, none on Smashville, and Volt Tackle unused in play. Since the
+  // tackle's 4.1 (part 2's fix round 3, ruling R-FW2q) only Pokémon Stadium 2, 187.6 wide,
+  // has anywhere a whiff comes back from (the bands, below).
   it("fires a Volt Tackle whose whiff ends off the stage where its recovery gets it back, and the engine brings Pikachu back (ruling R-FW2n)", () => {
-    // At -66 on Final Destination, facing right: the tackle and its slide carry Pikachu off
-    // the right ledge, and the move ends 40 past it and 50 below.
-    const at = fd(-66);
-    const end = whiffEnd(pikachu, at.fighters[0], FD, 0, 0)!;
+    // At -86 on Pokémon Stadium 2, facing right: the tackle and its slide carry Pikachu off
+    // the right ledge, and the move ends 35 past it and 49 below.
+    const at = fd(-86);
+    const end = whiffEnd(pikachu, at.fighters[0], PS2, 0, 0)!;
     expect(end.fighter.grounded).toBe(false);
-    expect(end.fighter.x).toBeGreaterThan(FD.rightLedge);
-    expect(end.fighter.y).toBeLessThan(FD.groundY);
+    expect(end.fighter.x).toBeGreaterThan(PS2.rightLedge);
+    expect(end.fighter.y).toBeLessThan(PS2.groundY);
     expect(isHelpless(end.fighter)).toBe(false);
-    expect(recoversFrom(pikachu, end.fighter, FD, recoveryFromDef(pikachu), pikachu.attributes.jumps, end.steps, end.steps)).toBe(true);
-    expect(fire(at, pikachu)).toBe(true);
+    expect(recoversFrom(pikachu, end.fighter, PS2, recoveryFromDef(pikachu), pikachu.attributes.jumps, end.steps, end.steps)).toBe(true);
+    expect(fire(at, pikachu, PS2)).toBe(true);
     // The engine: the same whiff, nobody in its way, then the level-9 CPU on its own.
-    const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
-    Object.assign(s.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-66), y: 0, facing: 1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
+    const s = createInitialState("pokemonStadium2", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+    Object.assign(s.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(-86), y: 0, facing: 1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
     Object.assign(s.fighters[1], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: 0, y: 0, invincible: 0, intangible: 100_000 });
-    const world = cpuWorldFromDef(pikachu, FD, [pikachu, mario], (id) => FIGHTERS.find((f) => f.id === id)!);
+    const world = cpuWorldFromDef(pikachu, PS2, [pikachu, mario], (id) => FIGHTERS.find((f) => f.id === id)!);
     let st = s;
     let prev: InputFrame[] = [0, 0];
     let seed = 11;
@@ -298,48 +301,52 @@ describe("the Final Smash", () => {
       lost = out.events.kos.some((k) => k.port === 0);
     }
     expect(ended).not.toBeNull();
-    expect([ended!.fighters[0].grounded, ended!.fighters[0].x > FD.rightLedge]).toEqual([false, true]);
+    expect([ended!.fighters[0].grounded, ended!.fighters[0].x > PS2.rightLedge]).toEqual([false, true]);
     expect(lost).toBe(false);
     expect([st.fighters[0].grounded, st.fighters[0].platform, st.fighters[0].stocks]).toEqual([true, 0, 3]);
   });
 
   it("does not fire one whose whiff ends where the model has no way back, nor one that would end helpless (ruling R-FW2n)", () => {
-    // 51 inside the left ledge: the whiff ends too far out and too low for the up
+    // At -70 on Pokémon Stadium 2: the whiff ends too far out and too low for the up
     // special, from where it is or from the top of the midair jump. The engine agrees: a
-    // whiff from there is a stock lost (the scan in the report: of 486 places on the six
-    // stages, none where the model says yes and the engine loses the stock).
-    const far = fd(-51);
-    const end = whiffEnd(pikachu, far.fighters[0], FD, 0, 0)!;
-    expect([end.fighter.grounded, end.fighter.x > FD.rightLedge]).toEqual([false, true]);
-    expect(recoversFrom(pikachu, end.fighter, FD, recoveryFromDef(pikachu), pikachu.attributes.jumps, end.steps, end.steps)).toBe(false);
-    expect(fire(far, pikachu)).toBe(false);
+    // whiff from there is a stock lost (the scans in the report: none of their places where
+    // the model says yes and the engine loses the stock).
+    const far = fd(-70);
+    const end = whiffEnd(pikachu, far.fighters[0], PS2, 0, 0)!;
+    expect([end.fighter.grounded, end.fighter.x > PS2.rightLedge]).toEqual([false, true]);
+    expect(recoversFrom(pikachu, end.fighter, PS2, recoveryFromDef(pikachu), pikachu.attributes.jumps, end.steps, end.steps)).toBe(false);
+    expect(fire(far, pikachu, PS2)).toBe(false);
     // Where it would come back, but the move left it helpless (a stand-in that does): no.
     const fs = pikachu.moves.finalSmash!;
     const helpless: FighterDef = { ...pikachu, moves: { ...pikachu.moves, finalSmash: { ...fs, helpless: { landingLag: 10, airSpeed: fx(1) } } } };
-    const h = whiffEnd(helpless, fd(-66).fighters[0], FD, 0, 0)!;
+    const h = whiffEnd(helpless, fd(-86).fighters[0], PS2, 0, 0)!;
     expect(h.fighter.action).toBe("specialFall");
-    expect(fire(fd(-66), helpless)).toBe(false);
-    expect(fire(fd(-66), pikachu)).toBe(true);
+    expect(fire(fd(-86), helpless, PS2)).toBe(false);
+    expect(fire(fd(-86), pikachu, PS2)).toBe(true);
   });
 
   // Ruling R-FW2n's second half: judged by where the whiff ends, the CPU's Volt Tackles were
   // still 0 on Battlefield and Small Battlefield over the sweep (its Smash Ball appears on
   // those and Town and City only), so a CPU holding one goes to a spot it would fire from,
   // with its target ahead (`finalSmashSpotFor`, from its stage's firing bands,
-  // `firingBands`), and the pin below runs on every stage.
-  it("knows where on each stage Volt Tackle can be fired from: bands at the back of the stage, Smashville's 5 units wide (ruling R-FW2n)", () => {
+  // `firingBands`). Since the tackle alone runs almost Final Destination's length (part 2's
+  // fix round 3, ruling R-FW2q), its whiff comes back from nowhere on the five stages of
+  // 160 or so: Pokémon Stadium 2, 187.6 wide, keeps a band at each end.
+  it("knows where on each stage Volt Tackle can be fired from: a band at each end of Pokémon Stadium 2 alone (rulings R-FW2n, R-FW2q)", () => {
     const band = (id: string) => firingBands(pikachu, stageViewFromDef(STAGES.find((x) => x.id === id)!));
     const units = (b: ReturnType<typeof band>) => [b.right, b.left].map((rs) => rs.map(([a, c]) => [a / 4096, c / 4096]));
-    expect(units(band("finalDestination"))).toEqual([[[-80, -54]], [[54, 79]]]);
-    expect(units(band("smashville"))).toEqual([[[-69, -64]], [[65, 70]]]);
-    // A target at -45 on Final Destination: from 0 the nearest spot is past it, at -54,
-    // facing it; a target in the stage's middle has none.
-    expect(finalSmashSpotFor(pikachu, FD, 0, fx(-45))).toEqual({ x: fx(-54), dir: 1, from: fx(-75), to: fx(-54) });
-    expect(finalSmashSpotFor(pikachu, FD, 0, 0)).toBeNull();
+    for (const id of ["battlefield", "finalDestination", "smallBattlefield", "smashville", "townAndCity"]) expect(units(band(id)), id).toEqual([[], []]);
+    expect(units(band("pokemonStadium2"))).toEqual([[[-93, -74]], [[74, 93]]]);
+    // A target at -62 on Pokémon Stadium 2: from 0 the nearest spot is past it, at -74,
+    // facing it, in a stretch that keeps `SPOT_EDGE_ROOM` from the ledge; a target in the
+    // stage's middle has none, nor any on Final Destination.
+    expect(finalSmashSpotFor(pikachu, PS2, 0, fx(-62))).toEqual({ x: fx(-74), dir: 1, from: PS2.leftLedge + SPOT_EDGE_ROOM, to: fx(-74) });
+    expect(finalSmashSpotFor(pikachu, PS2, 0, 0)).toBeNull();
+    expect(finalSmashSpotFor(pikachu, FD, 0, fx(-45))).toBeNull();
     // Never at the very ledge (fix round 2, re-review 2's N3): a target 4 inside the left
     // ledge has its whole window past the ledge's room, so no spot; and on every stage, for a
     // target anywhere, the spot is `SPOT_EDGE_ROOM` inside both ledges.
-    expect(finalSmashSpotFor(pikachu, FD, 0, FD.leftLedge + fx(4))).toBeNull();
+    expect(finalSmashSpotFor(pikachu, PS2, 0, PS2.leftLedge + fx(4))).toBeNull();
     for (const st of STAGES) {
       const v = stageViewFromDef(st);
       for (let t = v.leftLedge; t <= v.rightLedge; t += fx(1)) {
@@ -354,38 +361,39 @@ describe("the Final Smash", () => {
   });
 
   it("goes to its spot for a busy target, turns to face it there and waits, still; a target free to act it leaves to the other behaviours (ruling R-FW2n)", () => {
+    // On Pokémon Stadium 2, the target at -62: the stretch is -90.78 to -74.
     const at = (facing: number, action: GameState["fighters"][number]["action"]) =>
-      makeState({ fighters: [makeFighter({ port: 0, x: fx(-60), finalSmashReady: FINAL_SMASH_READY, facing, defId: "pikachu", actionFrame: 30 }), makeFighter({ port: 1, x: fx(-45), action, actionFrame: 20 })] });
+      makeState({ fighters: [makeFighter({ port: 0, x: fx(-80), finalSmashReady: FINAL_SMASH_READY, facing, defId: "pikachu", actionFrame: 30 }), makeFighter({ port: 1, x: fx(-62), action, actionFrame: 20 })] });
     // A target in a move of its own: busy, not held. Facing away, it turns (a soft press).
-    expect(finalSmash(context(at(-1, "attack"), pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: Btn.Right | Btn.Soft });
+    expect(finalSmash(context(at(-1, "attack"), pikachu, 9, undefined, PS2))).toMatchObject({ score: 450, input: Btn.Right | Btn.Soft });
     // Facing it, it stands still.
-    expect(finalSmash(context(at(1, "attack"), pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: 0 });
+    expect(finalSmash(context(at(1, "attack"), pikachu, 9, undefined, PS2))).toMatchObject({ score: 450, input: 0 });
     // A target standing free: no wait, the fight goes on, and from away from the spot it
     // is not gone to either: going to it then stood the CPU off an idle player for up to
     // 5,469 frames (the idle-human probe, ball on).
-    expect(finalSmash(context(at(1, "stand"), pikachu, 9, undefined, FD)).score).toBe(0);
+    expect(finalSmash(context(at(1, "stand"), pikachu, 9, undefined, PS2)).score).toBe(0);
     const away = at(1, "stand");
     away.fighters[0].x = fx(-20);
-    expect(finalSmashSpotFor(pikachu, FD, fx(-20), fx(-45))).not.toBeNull();
-    expect(finalSmash(context(away, pikachu, 9, undefined, FD)).score).toBe(0);
+    expect(finalSmashSpotFor(pikachu, PS2, fx(-20), fx(-62))).not.toBeNull();
+    expect(finalSmash(context(away, pikachu, 9, undefined, PS2)).score).toBe(0);
     away.fighters[1] = { ...away.fighters[1], action: "attack" };
-    expect(finalSmash(context(away, pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: Btn.Left });
-    // Facing away within the turn's room of the stretch's target-side end (-54), it steps
+    expect(finalSmash(context(away, pikachu, 9, undefined, PS2))).toMatchObject({ score: 450, input: Btn.Left });
+    // Facing away within the turn's room of the stretch's target-side end (-74), it steps
     // out of it before it turns.
     const near = at(-1, "attack");
-    near.fighters[0].x = fx(-54) - SPOT_TURN_ROOM / 2;
-    expect(finalSmash(context(near, pikachu, 9, undefined, FD))).toMatchObject({ score: 450, input: Btn.Left | Btn.Soft });
+    near.fighters[0].x = fx(-74) - SPOT_TURN_ROOM / 2;
+    expect(finalSmash(context(near, pikachu, 9, undefined, PS2))).toMatchObject({ score: 450, input: Btn.Left | Btn.Soft });
     // Running to it, it lets go where its slide stops in the stretch (about 15 units on), not before.
     const running = (x: number) => {
       const st = at(-1, "attack");
       Object.assign(st.fighters[0], { x: fx(x), action: "run", vx: -pikachu.attributes.runSpeed });
-      return finalSmash(context(st, pikachu, 9, undefined, FD));
+      return finalSmash(context(st, pikachu, 9, undefined, PS2));
     };
-    expect(running(-36)).toMatchObject({ score: 450, input: Btn.Left });
-    expect(running(-44)).toMatchObject({ score: 450, input: 0 });
+    expect(running(-56)).toMatchObject({ score: 450, input: Btn.Left });
+    expect(running(-61)).toMatchObject({ score: 450, input: 0 });
     // Running at the ledge when the target turns busy, a let-go would slide it off: it
     // shields, which stops at the edge (fix round 2, re-review 2's N3: `leavesFloor`).
-    expect(running(-72)).toMatchObject({ score: 450, input: Btn.Shield });
+    expect(running(-86)).toMatchObject({ score: 450, input: Btn.Shield });
   });
 
   it("takes no helpless end for one it comes back from, even over the stage (ruling R-FW2n)", () => {
@@ -436,18 +444,25 @@ describe("the Final Smash", () => {
       }
     }
     expect(runs).toBeGreaterThan(100);
-    expect(moved).toBeGreaterThan(0);
+    // It goes to a spot only where its stage has a band (Pokémon Stadium 2 alone, since
+    // ruling R-FW2q); elsewhere the behaviour never moves it.
+    const banded = firingBands(pikachu, view).right.length > 0;
+    expect(moved > 0).toBe(banded);
     expect(left).toEqual([]);
   });
 
-  it.each(STAGES.map((x) => x.id))("goes past a dizzy Mario to its spot on %s, turns, and fires Volt Tackle from there, trapping him (ruling R-FW2n)", (id) => {
+  it.each(STAGES.map((x) => x.id))("goes past a dizzy Mario to its spot on %s, turns, and fires Volt Tackle from there, trapping him; with no spot, never fires it (rulings R-FW2n, R-FW2q)", (id) => {
     const view = stageViewFromDef(STAGES.find((x) => x.id === id)!);
     // Mario 12 in front of the inner end of the stage's left band, dizzy for 400 frames;
-    // Pikachu in the middle, facing away from him.
-    const inner = firingBands(pikachu, view).right.at(-1)![1];
-    const marioX = inner + fx(12);
+    // Pikachu in the middle, facing away from him. On a stage with no band (all but
+    // Pokémon Stadium 2 since ruling R-FW2q), Mario 20 inside its left ledge: no spot, and
+    // the whiff comes back from nowhere, so Pikachu never fires.
+    const band = firingBands(pikachu, view).right.at(-1);
+    const inner = band === undefined ? null : band[1];
+    const marioX = inner === null ? view.leftLedge + fx(20) : inner + fx(12);
     const spot = finalSmashSpotFor(pikachu, view, 0, marioX);
-    expect(spot).toMatchObject({ x: inner, dir: 1, to: inner });
+    if (inner === null) expect(spot).toBeNull();
+    else expect(spot).toMatchObject({ x: inner, dir: 1, to: inner });
     const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
     Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: view.groundY, facing: -1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
     Object.assign(s.fighters[1], { action: "shieldBroken", actionFrame: 0, grounded: true, platform: 0, x: marioX, y: view.groundY, facing: 1, hitstun: 400, shieldHealth: 0, intangible: 0, invincible: 0 });
@@ -465,6 +480,10 @@ describe("the Final Smash", () => {
       before = st;
       st = out.state;
       prev = [d.input, 0];
+    }
+    if (inner === null) {
+      expect(fired).toBeNull();
+      return;
     }
     expect(fired).not.toBeNull();
     const at = before.fighters[0];

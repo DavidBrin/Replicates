@@ -26,9 +26,7 @@ import { cloneState, createInitialState, registerFighters, registerStages, step,
 import { Btn } from "@/engine/types";
 import type { ChargedHitbox, FighterDef, FighterState, GameState, Hitbox, InputFrame, MatchRules, MoveSlot, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
-import { dodgeDrift } from "@/ai/behaviours";
 import { dashTravel } from "@/ai/specials";
-import { fighterParams } from "@/engine/params";
 import { REFERENCE_SCRIPTS } from "./acmd/index";
 import { barrage, finalBox } from "./finalKit";
 import { FIGHTERS, getFighter } from "./index";
@@ -254,20 +252,20 @@ describe("each finishing blow", () => {
 });
 
 /**
- * Plan 5 final wave 2, ruling R-FW2i (Task 16 re-review 3, and the controller's amendment
- * after part 1's fix round 3): Volt Tackle's whiff, its tackle and the slide after it,
- * "travels almost the entire length of Final Destination" (SmashWiki "Volt Tackle",
- * https://www.ssbwiki.com/Volt_Tackle), whose floor is 160 units (79.995 either side of
- * its centre). Its speed is UNVERIFIED (`pikachu.ts`), re-tuned to that: the whiff stays
- * under the floor's length, in the engine and in the CPU's own reading of it (its dash
- * windows, `dashTravel`, and the last window's speed braked by `ground_brake`), and it is
- * almost all of it (90% or more).
+ * Plan 5 final wave 2, fix round 3, ruling R-FW2q (correcting R-FW2i's amendment): Volt
+ * Tackle's initial tackle, frames 47-83, alone "travels almost the entire length of [Final
+ * Destination]" (SmashWiki "Volt Tackle", https://www.ssbwiki.com/Volt_Tackle), whose floor
+ * is 160 units (79.995 either side of its centre). Its speed is UNVERIFIED (`pikachu.ts`),
+ * tuned to that: the tackle stays under the floor's length and is about 94% of it, in the
+ * engine and in the CPU's own reading of it (its window, as `dashTravel` reads them). The
+ * end's slide, from its published 3, carries Pikachu on past the floor's length; R-FW2i's
+ * amendment had read the sentence as the whole whiff, and put that under it.
  */
-describe("Volt Tackle's whiffed travel (ruling R-FW2i)", () => {
+describe("Volt Tackle's initial tackle (ruling R-FW2q)", () => {
   /** Final Destination's floor, end to end. */
   const floor = () => toFloat(2 * FD_FLOOR.halfWidth);
 
-  it("whiffed from a standstill, carries Pikachu almost the length of Final Destination's floor, and not past it", () => {
+  it("from a standstill, the tackle alone carries Pikachu almost the length of Final Destination's floor, and not past it; its end's slide carries him on", () => {
     // On a floor as long as it needs, so nothing but the move stops it.
     const wide = { ...FD_STAGE, id: "wideFD", platforms: [{ ...FD_FLOOR, halfWidth: fx(2000) }], blastZone: { ...FD_STAGE.blastZone, left: -fx(3000), right: fx(3000) } };
     registerStages([...STAGES, wide]);
@@ -277,25 +275,33 @@ describe("Volt Tackle's whiffed travel (ruling R-FW2i)", () => {
       Object.assign(s.fighters[1], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: -fx(500), y: 0, facing: 1 });
       let st = s;
       let prev: InputFrame[] = [0, 0];
+      let tackle = -1;
       for (let i = 0; i < 300 && !(i > 140 && st.fighters[0].vx === 0); i++) {
         const now: InputFrame[] = [i === 0 ? Btn.Special : 0, 0];
         st = step(st, now, { prevInputs: prev }).state;
         prev = now;
+        if (st.fighters[0].move === "finalSmash" && moveFrameOf(st.fighters[0].actionFrame) === 83) tackle = toFloat(st.fighters[0].x);
       }
       expect(st.fighters[0].action).not.toBe("special");
-      const travel = toFloat(st.fighters[0].x);
-      expect(travel).toBeLessThan(floor());
-      expect(travel).toBeGreaterThanOrEqual(0.9 * floor());
+      expect(tackle).toBeLessThan(floor());
+      expect(tackle).toBeGreaterThanOrEqual(0.93 * floor());
+      expect(tackle).toBeLessThanOrEqual(0.96 * floor());
+      // The whole whiff, the tackle and the slide from 3, runs past the floor's length.
+      expect(toFloat(st.fighters[0].x)).toBeGreaterThan(floor());
     } finally {
       registerStages(STAGES);
     }
   });
 
-  it("whiffs under the floor's length in the CPU's reading of it too, its dash windows and their slide", () => {
+  it("is almost the floor's length, and under it, in the CPU's reading of it too (its window)", () => {
     const fs = def("pikachu").moves.finalSmash!;
-    const last = fs.momentum!.at(-1)!.x;
-    const slide = Math.abs(dodgeDrift(last, fighterParams(def("pikachu")).ground_brake, Number.MAX_SAFE_INTEGER));
-    expect(toFloat(dashTravel(fs) + slide)).toBeLessThan(floor());
+    const tackle = fs.momentum![0];
+    expect([tackle.frame, tackle.hold]).toEqual([47, 36]);
+    const read = toFloat(Math.abs(tackle.x) * ((tackle.hold ?? 0) + 1));
+    expect(read).toBeLessThan(floor());
+    expect(read).toBeGreaterThanOrEqual(0.93 * floor());
+    // Every window together, the end's first frame at its published 3 included.
+    expect(toFloat(dashTravel(fs))).toBeCloseTo(read + 3, 2);
   });
 });
 
@@ -1477,15 +1483,15 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
    *   sparks on 10-46 (…/character/Pikachu/data.json), so 46. Their ends (70, 83) and
    *   speeds are UNVERIFIED (`marth.ts`, `pikachu.ts`): SSBU moves both by status or
    *   animation, unpublished.
-   * - The distances: every window frame but the last moves the window's speed (6, 3.2
-   *   since ruling R-FW2i), and on the last the speed is handed to drift, which loses
-   *   that frame's air brake (`applyMoveMomentum`): Marth 275.996 (fx(276) − 15),
-   *   Pikachu 118.392 (37 × fx(3.2) − 31). UNVERIFIED, as the speeds are.
+   * - The distances: every window frame but the last moves the window's speed (6, 4.1
+   *   since part 2's fix round 3, ruling R-FW2q), and on the last the speed is handed to
+   *   drift, which loses that frame's air brake (`applyMoveMomentum`): Marth 275.996
+   *   (fx(276) − 15), Pikachu 151.693 (37 × fx(4.1) − 31). UNVERIFIED, as the speeds are.
    * - UNVERIFIED: the kinetics after the window (no page gives them).
    */
   const DASHES = [
     { id: "marth", from: 25, to: 70, speed: fx(6), distance: fx(276) - 15 },
-    { id: "pikachu", from: 47, to: 83, speed: fx(3.2), distance: 37 * fx(3.2) - 31 },
+    { id: "pikachu", from: 47, to: 83, speed: fx(4.1), distance: 37 * fx(4.1) - 31 },
   ] as const;
 
   /** `id` in the air at (x, 40), facing right, using its Final Smash; Mario and Fox far behind on the floor. */
@@ -1549,7 +1555,7 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
   it("pikachu: used in the air at x 60 facing the near blast line, carries on past his dash's end and is KO'd off it", () => {
     const { states, events } = aerialDash("pikachu", fx(60), 160);
     const end = states.find((st) => st.fighters[0].move === "finalSmash" && frameOf(st) === 83)!;
-    expect(end.fighters[0].x).toBe(fx(60) + 37 * fx(3.2) - 31);
+    expect(end.fighters[0].x).toBe(fx(60) + 37 * fx(4.1) - 31);
     const ko = koOf(states, events);
     expect(ko.at).toBeGreaterThan(0);
     expect(ko.before.fighters[0].move).toBe("finalSmash");

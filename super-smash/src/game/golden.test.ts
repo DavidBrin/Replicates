@@ -63,7 +63,7 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * the air, which holds him there, strike Samus again at theirs, and the Ancient Arrow,
  * in the air too, flies and strikes Mario; and a 300-frame dash lab (`goldenDashLab.ts`,
  * Task 16 fix round 4): Pikachu whiffs Volt Tackle in the air, held through its
- * startup, then tackles, carries on and falls off the bottom blast line, and Fox whiffs
+ * startup, then tackles, carries on and falls off the side blast line, and Fox whiffs
  * Team Star Fox in the air, held through its start; and a 200-frame contact lab
  * (`goldenContactLab.ts`, Plan 5 final wave, part 3), last in `MATCHES`: Mario's and
  * Donkey Kong's jabs clank and both rebound, Donkey Kong's jab stuns Mario's shield,
@@ -424,7 +424,8 @@ const MATCHES: readonly Match[] = [
  * reaches `finalTrapped` again (Kirby's Ultra Sword traps Samus) and `roll`, which the four
  * do not. All 59 are visited. Its second (rulings R-FW2g to R-FW2i, the Final Smashes')
  * adds none either; the dash lab no longer reaches `land` (Fox is still falling when it
- * ends), which every other match does. All 59 are visited.
+ * ends), which every other match does. All 59 are visited. Part 2's fix round 3 (ruling
+ * R-FW2q) brings `land` back to it (Fox lands on 284). All 59 are visited.
  * Part 3 adds the contact lab, a second match for `rebound`, `shieldStun` and `pummel`
  * (`expectContacts`), which the script and the projectile lab reach as before. All 59
  * are visited.
@@ -1319,6 +1320,13 @@ describe("engine golden trace", () => {
   // Part 3 appends the contact lab (`goldenContactLab.ts`): the pummel's 2% and the down
   // throw, one hit on Mario's shield, no KO. The fourteen other traces are
   // byte-identical; the pin moves (a1accb0f to bf975242) by the new trace alone.
+  // Part 2's fix round 3 (ruling R-FW2q: Volt Tackle's initial tackle alone almost Final
+  // Destination's length, 4.1 a frame) moves the dash lab alone, from 47 (1-100): the
+  // tackle carries Pikachu 151.7 to 11.7, he passes the right edge on 107 and is KO'd off
+  // the side blast line on 169. Fox's steps come 20 frames earlier (jump 140, midair jump
+  // 152, Team Star Fox 158): at 160-178 they fell in the KO's freeze and Team Star Fox
+  // never started. Held to 256 through the freeze, Fox lands on 284. No hit and one KO,
+  // two Final Smashes, as before; every other trace is byte-identical.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1386,8 +1394,8 @@ describe("engine golden trace", () => {
   // Plan 5, Task 16 fix round 4: the dash lab whiffs a Final Smash dash and a cinematic
   // Final Smash in the air (`goldenDashLab.ts`); no other golden match uses one in the
   // air. Held through its startup only, Volt Tackle carries Pikachu on past the stage's
-  // edge, and he falls off the bottom blast line (ruling R-T16l, amended; its tackle
-  // re-tuned to 3.2 a frame, Plan 5 final wave 2, ruling R-FW2i): the match's one KO.
+  // edge, and he falls off the side blast line (ruling R-T16l, amended; its tackle at 4.1
+  // a frame since part 2's fix round 3, ruling R-FW2q): the match's one KO.
   // Held to its end, he would have fallen onto the stage.
   function expectDashes(): void {
     const lab = played.get(DASH_LAB.name)!;
