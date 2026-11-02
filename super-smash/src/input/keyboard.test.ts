@@ -252,6 +252,19 @@ describe("focus", () => {
     makeInput([{ port: 0, scheme: CONFIG_ARROWS }], { overlayHost: null });
     expect(document.getElementById(FOCUS_OVERLAY_ID)).toBeNull();
   });
+
+  it("asks the window for focus without a jsdom not-implemented report (Plan 6, Task 2)", () => {
+    // vitest's jsdom environment keeps its JSDOM on `globalThis.jsdom`, and jsdom reports a
+    // missing feature on that JSDOM's virtual console, not on the console a spy can see.
+    type Report = (err: Error) => void;
+    const { virtualConsole } = (globalThis as unknown as { jsdom: { virtualConsole: { on(e: "jsdomError", f: Report): void; off(e: "jsdomError", f: Report): void } } }).jsdom;
+    const seen: string[] = [];
+    const listen: Report = (err) => seen.push(err.message);
+    virtualConsole.on("jsdomError", listen);
+    makeInput([{ port: 0, scheme: CONFIG_ARROWS }]).requestFocus();
+    virtualConsole.off("jsdomError", listen);
+    expect(seen).toEqual([]);
+  });
 });
 
 describe("the UI-facing surface", () => {

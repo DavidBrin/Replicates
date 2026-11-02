@@ -27,6 +27,7 @@ import {
   AIR_DODGE_TECH_FRAMES,
   ASDI_DISTANCE,
   BOUNCE_FLOOR_LAUNCH_RATIO,
+  BUFFER_FRAMES,
   DIRECTIONAL_AIR_DODGE_LANDING_LAG_MAX,
   DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN,
   FURAFURA_END_FRAMES,
@@ -6038,6 +6039,41 @@ describe("a press made while a status is not yet free to act is kept (Plan 3 fin
     expect(a[1]).toBe("throw");
     expect(a[20]).toBe("throw");
     expect(a[21]).toBe("jumpSquat");
+  });
+
+  // Plan 6, Task 2 (Plan 3 FW-4 re-review): the other half of the buffer, per status. A press
+  // more than `BUFFER_FRAMES` old when the status ends is dropped: pinnable where the status is
+  // longer than the buffer (the turnaround, the throw). And a kept jump acts once: one not
+  // cleared as it fires would fire again from the air, a midair jump, inside its 9 frames. (A
+  // kept attack or pummel cannot fire twice: the move it starts outlasts the buffer.)
+  /** The most jumps the fighter has used on any frame. */
+  const jumpsUsed = (frames: Frame[]): number => Math.max(...frames.map((r) => r.state.fighters[0].jumpsUsed));
+
+  it("drops a jump pressed on turnaround frame 1, ten frames before the turnaround ends", () => {
+    expect(BUFFER_FRAMES).toBe(9);
+    const s = alone();
+    Object.assign(s.fighters[0], { action: "run", actionFrame: 20 });
+    const a = actions4(play(s, 24, (i) => [i === 0 ? Btn.Left : i === 1 ? Btn.Jump : 0, 0]));
+    expect(a[10]).toBe("turnaround");
+    expect(a.slice(11)).not.toContain("jumpSquat");
+  });
+
+  it("drops a jump pressed on index 10 of a throw that frees the thrower on 21", () => {
+    const thrower: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, fthrow: move("fthrow", { totalFrames: 20, hitboxes: [] }) } };
+    const ctx = ctxFor(thrower);
+    const a = actions4(play(holding(ctx), 30, (i) => [i === 1 ? Btn.Right : i === 10 ? Btn.Jump : 0, 0], ctx));
+    expect(a[20]).toBe("throw");
+    expect(a.slice(21)).not.toContain("jumpSquat");
+  });
+
+  it("jumps once on a kept jump: out of the turnaround, the crouch's end and the throw", () => {
+    const turn = alone();
+    Object.assign(turn.fighters[0], { action: "run", actionFrame: 20 });
+    expect(jumpsUsed(play(turn, 30, (i) => [i === 0 ? Btn.Left : i === 6 ? Btn.Jump : 0, 0])), "turnaround").toBe(1);
+    expect(jumpsUsed(play(alone(), 30, (i) => [i < 7 ? Btn.Down : i === 10 ? Btn.Jump : 0, 0])), "crouch end").toBe(1);
+    const thrower: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, fthrow: move("fthrow", { totalFrames: 20, hitboxes: [] }) } };
+    const ctx = ctxFor(thrower);
+    expect(jumpsUsed(play(holding(ctx), 40, (i) => [i === 1 ? Btn.Right : i === 17 ? Btn.Jump : 0, 0], ctx)), "throw").toBe(1);
   });
 });
 

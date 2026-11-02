@@ -58,6 +58,11 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   })) as unknown as typeof window.matchMedia;
 }
 
+// jsdom defines window.focus but only reports "Not implemented: Window's focus() method" on its
+// virtual console (Plan 6, Task 2): the keyboard asks for focus on every refocus. A no-op
+// keeps the suite's output clean. Guarded as the shim above is.
+if (typeof window !== "undefined") window.focus = () => {};
+
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = class {
     observe() {}

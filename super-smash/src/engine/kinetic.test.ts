@@ -986,9 +986,23 @@ describe("kineticTurnLaunch", () => {
     );
   });
 
-  it("treats a vector too short to square as a zero vector", () => {
-    const f = flying();
-    kineticTurnLaunch(f, 40, 40);
-    expect([f.kinetic.damageX, f.kinetic.damageY]).toEqual([0, fx(5)]);
+  // Plan 6, Task 2 (Plan 3 FW-4 re-review): the pin here held a Q12 truncation (a vector
+  // under 1/64 long left as zero) as behaviour. What holds for every vector, however short:
+  // the launch is left as it was, or turned toward the vector, never onto the other side of
+  // either axis. Its speed is not part of it below a vector of 1 (the length is a truncated
+  // Q12 square root: up to 72% short at (63, 90) units); the property above holds the speed
+  // for the vectors a hit makes, 1 or more.
+  it("never turns the launch away from the vector, however short the vector", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: -2 * ONE, max: 2 * ONE }), fc.integer({ min: -2 * ONE, max: 2 * ONE }), (dx, dy) => {
+        const f = flying();
+        const before = [f.kinetic.damageX, f.kinetic.damageY];
+        kineticTurnLaunch(f, dx, dy);
+        const after = [f.kinetic.damageX, f.kinetic.damageY];
+        if (after[0] === before[0] && after[1] === before[1]) return true;
+        return Math.sign(after[0]) * Math.sign(dx) >= 0 && Math.sign(after[1]) * Math.sign(dy) >= 0;
+      }),
+      { examples: [[40, 40], [0, 0], [64, 0], [-1, 1], [63, 90], [0, -65]] },
+    );
   });
 });
