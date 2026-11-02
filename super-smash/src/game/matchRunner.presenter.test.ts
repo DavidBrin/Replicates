@@ -273,6 +273,81 @@ describe("the camera a Final Smash's scene gets (Plan 5, Task 17 fix round 2)", 
     }
   });
 
+  /**
+   * Ruling R-FW3d (the Task 17 re-review 4): online, a tick the session refuses
+   * steps nothing, but the loop still takes its frame off the accumulator, so
+   * the next paint's sim time, `state.frame - 1 + alpha`, is earlier than the
+   * last paint's. The ease read that as a rollback and snapped a release home.
+   */
+  it("eases a release on through an online stall: a paint that steps nothing is drawn no earlier than the last (R-FW3d)", () => {
+    const queued: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queued.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      installBake(readBakeFromDisk());
+      const options = (presenter: WorldPresenter): MatchRunnerOptions => ({
+        presenter,
+        stage: getStageOrThrow("finalDestination"),
+        players: [
+          { selection: { defId: "donkeyKong" }, cpuLevel: null },
+          { selection: { defId: "mario" }, cpuLevel: null },
+        ],
+        rules: RULES,
+        getFighter: (id) => GAME_SIM_CONTEXT.fighter(id),
+        background: canvasWith(createMockContext()),
+        // Alone: the other side's input never comes, so the session stalls at its prediction cap.
+        net: { transport: createNullTransport("alone"), localPorts: [0] },
+      });
+      // How many steps it runs before it stalls.
+      const probe = createMatchRunner(options({ paint: vi.fn(), dispose: vi.fn() }));
+      let steps = 0;
+      for (; steps < 100; steps++) {
+        probe.advance(1);
+        if (probe.stalled) break;
+      }
+      probe.dispose();
+      expect(steps).toBeGreaterThan(2);
+      expect(steps).toBeLessThan(100);
+
+      const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
+      const runner = createMatchRunner(options(presenter));
+      runner.start(canvasWith(createMockContext()));
+      // Two steps short of the stall, then the scene: Donkey Kong backed off Mario, 8 ahead.
+      runner.advance(steps - 2);
+      const [dk, mario] = runner.state.fighters;
+      Object.assign(dk, { action: "special", move: "finalAttack", actionFrame: 20, x: -30 * 4096, y: 0, grounded: true, platform: 0, facing: 1, intangible: 60 });
+      Object.assign(mario, { action: "finalTrapped", actionFrame: 40, x: -22 * 4096, y: 0, grounded: true, platform: 0, facing: -1, hitstun: 0, hitlag: 0 });
+      mario.combat.trappedBy = 0;
+      runner.state.cinematic = 0;
+      const paint = (ms: number) => {
+        queued.at(-1)!(ms);
+        const [rs, , alpha] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+        return { shift: rs.sceneShift[0] as number, alpha: alpha as number };
+      };
+      expect(paint(FRAME_MS).shift).toBe(-4);
+      // Let him go: the release sets out on the next step, and goes on 0.9 of a frame into it.
+      Object.assign(runner.state.fighters[1], { action: "stand", x: 60 * 4096 });
+      runner.state.fighters[1].combat.trappedBy = -1;
+      expect(paint(2 * FRAME_MS).shift).toBeCloseTo(-4 + 4 / 7, 9);
+      const late = paint(2.9 * FRAME_MS);
+      expect(late.alpha).toBeCloseTo(0.9, 9);
+      expect(late.shift).toBeCloseTo(-4 + (1.9 * 4) / 7, 9);
+      expect(runner.stalled).toBe(false);
+      // The next tick is refused, and the paint after it is 0.1 into the same step.
+      const stalled = paint(3.1 * FRAME_MS);
+      expect(runner.stalled).toBe(true);
+      expect(stalled.alpha).toBeCloseTo(0.1, 9);
+      // Not snapped home (0): drawn as at the last paint's time, where the release had got to.
+      expect(stalled.shift).toBeCloseTo(late.shift, 9);
+      expect(paint(3.5 * FRAME_MS).shift).toBeCloseTo(late.shift, 9);
+      runner.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+      now.mockRestore();
+    }
+  });
+
   it("sparks the uppercut's hit where Donkey Kong is drawn: the contact point plus the shift it hands the drawing (fix round 4, ruling R-T17s)", () => {
     const presenter: WorldPresenter = { paint: vi.fn(), dispose: vi.fn() };
     const hits: StepEvents["hits"] = [];

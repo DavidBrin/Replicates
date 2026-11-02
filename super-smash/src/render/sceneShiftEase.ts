@@ -26,6 +26,13 @@
  * Cosmetic state, outside `GameState`, as the camera's is: the match runner keeps
  * one per match, eases once a paint, and hands the result to both drawers
  * (`RenderState.sceneShift`), so the overlay and the 3D model agree.
+ *
+ * Monotonic in sim time (ruling R-FW3d; the Task 17 re-review 4): online, a tick
+ * the session refuses steps nothing, but the loop still takes its frame off the
+ * accumulator, so the next paint's time, `state.frame - 1 + alpha`, can be earlier
+ * than the last one's. Such a paint is drawn as at the last one's time. Nothing
+ * else takes the time back: a rollback hands the runner the newest frame again,
+ * and a new match has an ease of its own.
  */
 
 /** Frames a release takes. Presentation choice (the re-review 2's 6 to 8). */
@@ -53,17 +60,19 @@ export function createSceneShiftEase(): SceneShiftEase {
 
 /**
  * The shift to draw at sim time `time` (frames, fractional between steps), eased
- * from the last one drawn toward `target` (`sceneShiftAt`'s). Time going back, a
- * rollback or a new match, or a different number of fighters starts over.
+ * from the last one drawn toward `target` (`sceneShiftAt`'s). A time earlier than
+ * the last one drawn is read as that one; the first paint, or a different number
+ * of fighters, starts over.
  */
-export function easeSceneShift(ease: SceneShiftEase, target: readonly number[], time: number): number[] {
-  const dt = time - ease.time;
-  if (!(dt >= 0) || ease.shift.length !== target.length) {
+export function easeSceneShift(ease: SceneShiftEase, target: readonly number[], at: number): number[] {
+  if (Number.isNaN(ease.time) || ease.shift.length !== target.length) {
     ease.shift = [...target];
     ease.since = target.map(() => Number.NaN);
-    ease.time = time;
+    ease.time = at;
     return [...target];
   }
+  const time = Math.max(at, ease.time);
+  const dt = time - ease.time;
   for (let i = 0; i < target.length; i++) {
     const was = ease.shift[i];
     const to = target[i];

@@ -118,11 +118,13 @@ describe("easing a scene's draw shift (rulings R-T17o and R-T17q)", () => {
     expect(easeSceneShift(e, [0, 0], 102)[0]).toBeCloseTo(-14 + 2 * step, 9);
   });
 
-  it("starts over when time goes back or the fighters change: a rollback or a new match", () => {
+  it("starts over when the fighters change, and reads a time gone back as the last one: an online stall (R-FW3d)", () => {
     const e = createSceneShiftEase();
     easeSceneShift(e, [-14, 0], 50);
-    expect(easeSceneShift(e, [0, 0], 40)).toEqual([0, 0]);
-    easeSceneShift(e, [-14, 0], 41);
-    expect(easeSceneShift(e, [0, 0, 0], 42)).toEqual([0, 0, 0]);
+    // As at 50: the release sets out from there, and has not moved yet.
+    expect(easeSceneShift(e, [0, 0], 49.5)).toEqual([-14, 0]);
+    // A frame past 50, a seventh of the way.
+    expect(easeSceneShift(e, [0, 0], 51)[0]).toBeCloseTo(-12, 9);
+    expect(easeSceneShift(e, [0, 0, 0], 52)).toEqual([0, 0, 0]);
   });
 });
