@@ -29,12 +29,13 @@ import { PROJECTILE_LAB } from "./goldenProjectileLab";
 import { FINAL_LAB } from "./goldenFinalLab";
 import { BEAM_LAB } from "./goldenBeamLab";
 import { DASH_LAB } from "./goldenDashLab";
+import { CONTACT_LAB } from "./goldenContactLab";
 import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./projectilePaths";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Fourteen matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Fifteen matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, a fifth with the Smash Ball on
  * (Plan 5 final wave, ruling R-FW1e: the CPU's Smash Ball and Final Smash decisions,
  * last in `MATCHES`), one scripted timed match
@@ -63,7 +64,10 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * in the air too, flies and strikes Mario; and a 300-frame dash lab (`goldenDashLab.ts`,
  * Task 16 fix round 4): Pikachu whiffs Volt Tackle in the air, held through its
  * startup, then tackles, carries on and falls off the bottom blast line, and Fox whiffs
- * Team Star Fox in the air, held through its start.
+ * Team Star Fox in the air, held through its start; and a 200-frame contact lab
+ * (`goldenContactLab.ts`, Plan 5 final wave, part 3), last in `MATCHES`: Mario's and
+ * Donkey Kong's jabs clank and both rebound, Donkey Kong's jab stuns Mario's shield,
+ * and he grabs Mario out of it, pummels him and throws him.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -229,10 +233,20 @@ const MATCHES: readonly Match[] = [
   // Kirby (level 7) traps Samus in Ultra Sword (part 2; fix rounds 2 and 3 had Samus fire
   // Zero Laser along Town & City's floor, round 1's Kirby's Ultra Sword, round 0's both).
   cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 606, BALL_RULES),
+  // Plan 5 final wave, part 3 (the Task 13b re-review 1's carry): `rebound`, `shieldStun`
+  // and `pummel` each rested on one non-CPU match, so a lab of their own reaches them
+  // again; appended, so every other trace stays as it was.
+  {
+    ...CONTACT_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => CONTACT_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the fourteen matches must visit between them: all 59. A `Record`
+ * Every `ActionState` the fifteen matches must visit between them: all 59. A `Record`
  * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
@@ -411,6 +425,9 @@ const MATCHES: readonly Match[] = [
  * do not. All 59 are visited. Its second (rulings R-FW2g to R-FW2i, the Final Smashes')
  * adds none either; the dash lab no longer reaches `land` (Fox is still falling when it
  * ends), which every other match does. All 59 are visited.
+ * Part 3 adds the contact lab, a second match for `rebound`, `shieldStun` and `pummel`
+ * (`expectContacts`), which the script and the projectile lab reach as before. All 59
+ * are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -609,7 +626,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all thirteen matches.
+ * on every frame of every match.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -1299,6 +1316,9 @@ describe("engine golden trace", () => {
   // frame: the tackle carries him to -21.6 on 83, he reaches the right edge on 123 and
   // falls off the bottom blast line on 221; Fox is held to 276 as before. No hit and one
   // KO, as before; every other trace is byte-identical, and every count is as above.
+  // Part 3 appends the contact lab (`goldenContactLab.ts`): the pummel's 2% and the down
+  // throw, one hit on Mario's shield, no KO. The fourteen other traces are
+  // byte-identical; the pin moves (a1accb0f to bf975242) by the new trace alone.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
@@ -1387,6 +1407,14 @@ describe("engine golden trace", () => {
     expect([...m.moves].some((x) => x.endsWith(" finalSmash")), "a CPU in its Final Smash").toBe(true);
   }
 
+  // Plan 5 final wave, part 3: the contact lab is there to reach these three a second
+  // time (`goldenContactLab.ts`); a re-tuned step that stops one shows here.
+  function expectContacts(): void {
+    const lab = played.get(CONTACT_LAB.name)!;
+    expect((["rebound", "shieldStun", "pummel"] as const).filter((a) => !lab.actions.has(a)), "actions the contact lab no longer reaches").toEqual([]);
+    expect([lab.hits, lab.shieldHits, lab.kos], "the pummel and the down throw, the jab on the shield, no KO").toEqual([2, 1, 0]);
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -1400,6 +1428,7 @@ describe("engine golden trace", () => {
   it("plays the beams and the arrow in the beams lab", expectBeams);
   it("whiffs a dash and a cinematic Final Smash in the air in the dash lab", expectDashes);
   it("breaks the Smash Ball and uses a Final Smash in the ball-on CPU match", expectCpuFinalSmash);
+  it("clanks, stuns a shield and pummels in the contact lab", expectContacts);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -1413,6 +1442,7 @@ describe("engine golden trace", () => {
       expectBeams();
       expectDashes();
       expectCpuFinalSmash();
+      expectContacts();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;
