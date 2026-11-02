@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { expect, test } from "@playwright/test";
@@ -14,17 +17,24 @@ const run = promisify(execFile);
  * `input/gamepad.ts`). The script prints
  * the move the match played, and exits 1 when it is not the one asked for.
  *
- * The captures go to Playwright's output folder (`test-results/`, git-ignored): a
- * picture of a model is never committed.
+ * The captures go to a temporary directory outside the repo and are deleted after the
+ * run, even on a failure: with the models built locally they are real-model frames, and
+ * a picture of a model is never kept in the repo (R-P6-6, R-P6-21). The spec asserts
+ * only on the script's output.
  */
-test("fightsheet captures each tilt as that tilt, not as a smash or a dash attack", async ({ baseURL }, testInfo) => {
+test("fightsheet captures each tilt as that tilt, not as a smash or a dash attack", async ({ baseURL }) => {
   test.setTimeout(180_000);
-  for (const move of ["ftilt", "utilt", "dtilt"]) {
-    const out = testInfo.outputPath(`fight-mario-${move}.png`);
-    const { stdout } = await run(process.execPath, ["scripts/fightsheet.mjs", "--fighter", "mario", "--move", move, "--base", baseURL!, "--out", out], {
-      cwd: process.cwd(),
-      timeout: 120_000,
-    });
-    expect(stdout, move).toContain(`mario ${move} (performed ${move})`);
+  const dir = mkdtempSync(join(tmpdir(), "fightsheet-"));
+  try {
+    for (const move of ["ftilt", "utilt", "dtilt"]) {
+      const out = join(dir, `fight-mario-${move}.png`);
+      const { stdout } = await run(process.execPath, ["scripts/fightsheet.mjs", "--fighter", "mario", "--move", move, "--base", baseURL!, "--out", out], {
+        cwd: process.cwd(),
+        timeout: 120_000,
+      });
+      expect(stdout, move).toContain(`mario ${move} (performed ${move})`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
