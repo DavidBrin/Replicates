@@ -133,6 +133,15 @@ describe("Charge Shot stores its charge (store mode)", () => {
     expect(actsOn(trace)).toBe(45);
   });
 
+  it("a partial shot acts again 32 frames from its release too: only a stored full charge has its own end", () => {
+    // The same page's "Interruptible (grounded) 45 (32)" is for a shot "not fully
+    // charged": B again on frame 44, 30 frames into the 112.
+    const { trace, shots } = play(standing("samus"), [...press(Btn.Special, 0, 43), Btn.Special, ...Array<InputFrame>(40).fill(0)]);
+    expect(shots[0].charge).toBeGreaterThan(0);
+    expect(shots[0].charge).toBeLessThan(ONE);
+    expect(actsOn(trace) - 44 + 1).toBe(32);
+  });
+
   it("fires on a second B press, with the charge built so far", () => {
     const { shots } = play(standing("samus"), [...press(Btn.Special, 0, 69), Btn.Special, 0, 0, 0, 0]);
     expect(shots).toHaveLength(1);
@@ -151,11 +160,26 @@ describe("Charge Shot stores its charge (store mode)", () => {
     expect(roll.combat.storedCharge).toBe(20);
   });
 
+  it("rolls the way the side held says, for that roll's whole length: back 39 frames, forward 34 (facing right)", () => {
+    // UltimateFrameData (https://ultimateframedata.com/samus), "Dodges / Rolls":
+    // forward roll 34 frames, back roll 39 (`samus.ts`'s `groundDodge`).
+    const rolled = (side: InputFrame) => {
+      const s = standing("samus");
+      const x0 = s.fighters[0].x;
+      const { trace } = play(s, [...press(Btn.Special, 0, 33), Btn.Shield | side, ...Array<InputFrame>(45).fill(0)]);
+      const rolling = trace.slice(33).filter((f) => f.action === "roll");
+      return { frames: rolling.length, travel: Math.sign(rolling[rolling.length - 1].x - x0) };
+    };
+    expect(rolled(Btn.Left)).toEqual({ frames: 39, travel: -1 });
+    expect(rolled(Btn.Right)).toEqual({ frames: 34, travel: 1 });
+  });
+
   it("in the air, puts it away on a midair jump and on an air dodge", () => {
     // SmashWiki "Charge Shot": Ultimate is the first game where it is charged
-    // in midair, and it cancels "with a jump"; "Charge storage cancel"
-    // (https://www.ssbwiki.com/Charge_storage_cancel): from Brawl on, a shield
-    // press in the air is an air dodge.
+    // in midair, and it cancels "with a jump". The air dodge is UNVERIFIED for
+    // Ultimate: "Charge storage cancel"
+    // (https://www.ssbwiki.com/Charge_storage_cancel) gives it for Brawl and
+    // Smash 4 (`storeInto`).
     const jumped = play(airborne("samus"), [...press(Btn.Special, 0, 33), Btn.Jump]).state.fighters[0];
     expect(jumped.action).toBe("jump");
     expect(jumped.jumpsUsed).toBe(2);
@@ -222,6 +246,25 @@ describe("Giant Punch stores its charge too", () => {
     const armoured = framesWhere(storedFullPunch(true).trace, (f) => hasSuperArmour(f, donkeyKong));
     expect(armoured).toEqual(Array.from({ length: 12 }, (_, i) => 9 + i));
     expect(armoured).toContain(framesWhere(storedFullPunch(false).foe, (f) => f.damage > 0)[0]);
+  });
+
+  it("is super armoured on frames 15-20 of a stored full punch in the air: the aerial window", () => {
+    // SmashWiki "Donkey Kong (SSBU)/Neutral special", fully charged: "(aerial) 15-20".
+    const s = airborne("donkeyKong");
+    s.fighters[0].combat.storedCharge = 110;
+    const { trace } = play(s, press(Btn.Special, 0, 30));
+    expect(trace.slice(0, 20).every((f) => !f.grounded && f.move === "neutralB")).toBe(true);
+    expect(framesWhere(trace, (f) => hasSuperArmour(f, donkeyKong))).toEqual([15, 16, 17, 18, 19, 20]);
+  });
+
+  it("a punch not fully charged acts again 63 frames from its release, the page's 70 less its 7 entry frames", () => {
+    // SmashWiki "Donkey Kong (SSBU)/Neutral special": "Interruptible 70", from a
+    // press that punches at once; the charge loop starts on frame 7. B again on
+    // frame 63, 56 frames into the 110, into the air (frame data count no hitlag).
+    const { trace } = play(standing("donkeyKong"), [...press(Btn.Special, 0, 62), Btn.Special, ...Array<InputFrame>(70).fill(0)]);
+    expect(trace[62].charge).toBeGreaterThan(0);
+    expect(trace[62].charge).toBeLessThan(110);
+    expect(actsOn(trace) - 63 + 1).toBe(63);
   });
 
   it("has no super armour uncharged or partly charged (SmashWiki lists it for the full charge only)", () => {

@@ -145,16 +145,20 @@ function storeMain(f: FighterState, intent: Intent, ctx: StateContext, sc: Store
  * Put the charge away, into whatever the shield or jump press asks for.
  *
  * On the ground: a shield press is a shield, a spot dodge with down held, a
- * roll with a side held (SmashWiki "Charge Shot": in Ultimate "she can cancel
- * the charge with a jump or spotdodge", and the move list's "Can keep the
- * charge after dodging or shielding"; "Giant Punch": "shielding, rolling or
- * jumping"). A jump press is a jump. In the air: a shield press is an air dodge
- * (SmashWiki "Charge storage cancel",
- * https://www.ssbwiki.com/Charge_storage_cancel: from Brawl on, a shield press
- * in the air buffers an air dodge), a jump press a midair jump ("Giant Punch":
- * "It can also be cancelled through jumping in the air"). UNVERIFIED: with
- * the air dodge or the midair jump already spent, the charge is still put away
- * and the fighter falls.
+ * roll with a side held. Each move's page publishes one of the two dodges:
+ * SmashWiki "Charge Shot": in Ultimate "she can cancel the charge with a jump or
+ * spotdodge", and the move list's "Can keep the charge after dodging or
+ * shielding"; "Giant Punch": "shielding, rolling or jumping". That both moves
+ * take both is the replica's inference, from the one shield press. A jump
+ * press is a jump. In the air: a jump press is a midair jump ("Giant Punch":
+ * "It can also be cancelled through jumping in the air"), and a shield press is
+ * an air dodge, UNVERIFIED for Ultimate: SmashWiki "Charge storage cancel"
+ * (https://www.ssbwiki.com/Charge_storage_cancel) has the shield press in the
+ * air buffer an air dodge in Brawl and Smash 4, and for Ultimate says only that
+ * the cancel "can still be performed in the air ... by landing before the
+ * charge cancel animation can be completed". UNVERIFIED: with the air dodge or
+ * the midair jump already spent, the charge is still put away and the fighter
+ * falls.
  */
 function storeInto(f: FighterState, intent: Intent, ctx: StateContext): void {
   f.combat.storedCharge = f.charge;

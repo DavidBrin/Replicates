@@ -11,9 +11,11 @@
  * height"; "each jump resulting in approximately half the rebound"; in Ultimate
  * "characters must wait for 16 frames after attacking before they can
  * footstool"; and "if this results in a Fall, it will count as a KO for the
- * footstooling player". The game's own check, as WuBor Patch reimplements it
- * (a mod, not first-party; `footstool.ts` cites the lines): after a special, an
- * air dodge and an attack, before a wall jump; never out of a tumble.
+ * footstooling player". UNVERIFIED, from WuBor Patch's reimplementation of the
+ * game's check alone (a mod, not first-party; `footstool.ts` cites the lines):
+ * the order, after a special, an air dodge and an attack and before a wall jump,
+ * and never out of a tumble. A DECISION, UNVERIFIED: never on a fighter frozen in
+ * hitlag.
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -61,9 +63,9 @@ beforeAll(() => {
   registerStages(STAGES);
 });
 
-/** Mario falling onto Fox's head; Fox standing, or in the air with him. */
-function overHead(foxInAir = false): GameState {
-  const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 4);
+/** Mario (or `jumper`) falling onto Fox's head; Fox standing, or in the air with him. */
+function overHead(foxInAir = false, jumper = "mario"): GameState {
+  const s = createInitialState("finalDestination", [{ defId: jumper }, { defId: "fox" }], RULES, 4);
   const foxY = foxInAir ? fx(40) : 0;
   Object.assign(s.fighters[1], { action: foxInAir ? "fall" : "stand", grounded: !foxInAir, platform: foxInAir ? -1 : 0, x: 0, y: foxY, vy: 0, intangible: 0 });
   const head = foxY + fox.attributes.height;
@@ -270,7 +272,7 @@ describe("footstool jumps", () => {
     expect(after.fighters[0].jumpsUsed).toBe(2);
   });
 
-  it("gives way to a special, an air dodge or an aerial pressed on the same frame (the game's order)", () => {
+  it("gives way to a special, an air dodge or an aerial pressed on the same frame (WuBor's reimplementation of the game's order, UNVERIFIED)", () => {
     const pressed = (keys: InputFrame, airDodged = false): GameState => {
       const s = overHead();
       s.fighters[0].airDodged = airDodged;
@@ -732,6 +734,19 @@ describe("the one stood on", () => {
     expect(victim.vy).toBe(-fighterParams(fox).air_speed_y_stable);
   });
 
+  // The Task 11 re-review's G1: standing still is the freeze whatever the victim
+  // was doing, so a runner stops dead too, not only a reel.
+  it("running, is footstooled and stops dead: no slide on its run's speed", () => {
+    const s = overHead();
+    Object.assign(s.fighters[1], { action: "run", facing: 1 });
+    kineticSetX(s.fighters[1], fx(1.5));
+    const states = run(s, [Btn.Jump, 0, 0, 0, 0]);
+    const victim = states[0].fighters[1];
+    expect(victim.action).toBe("footstooled");
+    expect(victim.vx).toBe(0);
+    for (const st of states) expect(st.fighters[1].x).toBe(victim.x);
+  });
+
   it("in hitstun on the ground, is footstooled and stops: the reel ends, no slide on its launch (ruling R-T11c)", () => {
     const s = overHead();
     Object.assign(s.fighters[1], { action: "hitstun", hitstun: 11 });
@@ -830,6 +845,29 @@ describe("the footstooler's bounce (ruling R-T11f; SmashWiki \"Piranha Plant (SS
   it("is intangible on frames 9 to 12, and not on 8 or 13", () => {
     expect([FOOTSTOOL_INTANGIBLE_FIRST, FOOTSTOOL_INTANGIBLE_LAST]).toEqual([9, 12]);
     const states = run(overHead(), [Btn.Jump, ...Array<InputFrame>(14).fill(0)]).map((st) => st.fighters[0]);
+    const intangible = states.map((f, i) => (f.intangible > 0 ? i + 1 : 0)).filter((n) => n > 0);
+    expect(intangible).toEqual([9, 10, 11, 12]);
+  });
+
+  // The Task 11 re-review's H1: the bounce counts on while its jumper falls, so a
+  // chain's last, weakest bounce, its rise over before frame 12, keeps all four.
+  // Kirby's fifth, about 9 frames up.
+  it("counts on into the fall after the rise: a chain's last bounce, falling by frame 12, is intangible on 9 to 12", () => {
+    const s = overHead(false, "kirby");
+    const kirby = FIGHTERS.find((f) => f.id === "kirby")!;
+    s.fighters[0].combat.footstools = footstoolChain(kirby) - 1;
+    const states = run(s, [Btn.Jump, ...Array<InputFrame>(14).fill(0)]).map((st) => st.fighters[0]);
+    expect(states[0].combat.footstools).toBe(footstoolChain(kirby));
+    expect(states.findIndex((f) => f.action === "fall") + 1).toBeLessThan(12);
+    const intangible = states.map((f, i) => (f.intangible > 0 ? i + 1 : 0)).filter((n) => n > 0);
+    expect(intangible).toEqual([9, 10, 11, 12]);
+  });
+
+  // UNVERIFIED (`footstoolBounceHolds`): a midair jump on frame 8 stays in the
+  // bounce, as the page's cancel names only an aerial or a special.
+  it("keeps 9 to 12 intangible through a midair jump on frame 8 (UNVERIFIED)", () => {
+    const states = run(overHead(), [Btn.Jump, 0, 0, 0, 0, 0, 0, Btn.Jump, ...Array<InputFrame>(6).fill(0)]).map((st) => st.fighters[0]);
+    expect(states[7]).toMatchObject({ action: "jump", jumpsUsed: 2 });
     const intangible = states.map((f, i) => (f.intangible > 0 ? i + 1 : 0)).filter((n) => n > 0);
     expect(intangible).toEqual([9, 10, 11, 12]);
   });

@@ -4,8 +4,8 @@
  * (https://www.ssbwiki.com/Side_special_move): "any character can quickly turn
  * around on the spot and immediately perform their side special move", but
  * "when running, the player cannot use their side special backward without
- * having to stop or turn around first". UNVERIFIED: the turn in the air (the
- * page does not say).
+ * having to stop or turn around first". UNVERIFIED: the turn in the air, and
+ * out of `dashStart` and `runBrake` (the page names none of them; `beginSpecial`).
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -74,6 +74,48 @@ describe("a side special pressed backward", () => {
       expect(s.fighters[0].action).toBe("run");
       const f = step(s, [Btn.Left | Btn.Special, 0], { prevInputs: [prev, 0] }).state.fighters[0];
       expect([f.action, f.move, f.facing]).toEqual(["special", "sideB", 1]);
+      expect(f.vx).toBeGreaterThan(0);
+    });
+  }
+
+  // The Task 4 re-review 2's T9: a turn toward the right, from facing left.
+  it("turns a left-facing fighter round to the right too", () => {
+    for (const id of ["mario", "fox"]) {
+      const s = alone(id, false);
+      s.fighters[0].facing = -1;
+      const f = step(s, [Btn.Right | Btn.Special, 0], { prevInputs: [0, 0] }).state.fighters[0];
+      expect([f.action, f.move, f.facing]).toEqual(["special", "sideB", 1]);
+    }
+  });
+
+  // The Task 4 re-review 2's T11: the run rule is the run's alone.
+  it("turns a walking fighter round: Left+B walking right is the side special facing left", () => {
+    let s = alone("mario", false);
+    let prev: InputFrame = 0;
+    for (let i = 0; i < 6; i++) {
+      s = step(s, [Btn.Right | Btn.Soft, 0], { prevInputs: [prev, 0] }).state;
+      prev = Btn.Right | Btn.Soft;
+    }
+    expect(s.fighters[0].action).toBe("walk");
+    const f = step(s, [Btn.Left | Btn.Special, 0], { prevInputs: [prev, 0] }).state.fighters[0];
+    expect([f.action, f.move, f.facing]).toEqual(["special", "sideB", -1]);
+  });
+
+  // The Task 4 re-review 2's T6. UNVERIFIED: out of a run's brake it turns, the
+  // page's "stop ... first" read as done once the brake begins; its momentum is
+  // still forward.
+  for (const id of ["fox", "mario", "donkeyKong"]) {
+    it(`turns ${id} out of a run's brake (UNVERIFIED): Left+B on the brake's first frame faces left, still sliding right`, () => {
+      let s = alone(id, false);
+      let prev: InputFrame = 0;
+      for (let i = 0; i < 40 && s.fighters[0].action !== "run"; i++) {
+        s = step(s, [Btn.Right, 0], { prevInputs: [prev, 0] }).state;
+        prev = Btn.Right;
+      }
+      s = step(s, [0, 0], { prevInputs: [prev, 0] }).state;
+      expect([s.fighters[0].action, s.fighters[0].actionFrame]).toEqual(["runBrake", 0]);
+      const f = step(s, [Btn.Left | Btn.Special, 0], { prevInputs: [0, 0] }).state.fighters[0];
+      expect([f.action, f.move, f.facing]).toEqual(["special", "sideB", -1]);
       expect(f.vx).toBeGreaterThan(0);
     });
   }

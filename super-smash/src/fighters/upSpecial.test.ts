@@ -479,7 +479,8 @@ describe("dropping through a soft platform", () => {
   // exceptions such as ... the up special moves of Fox, Falco, and Wolf when used in
   // the air, which will pass down through soft platforms when directed at a downward
   // angle"; "tumbling and reeling characters ... will land in a lying position upon a
-  // soft platform if they contact it from above" (ruling R-T13b-d).
+  // soft platform if they contact it from above" (ruling R-T13b-d, amended by R-T13b-g:
+  // a tumble's fall out of hitstun lands on it too).
   const top = battlefield.platforms.find((p) => p.soft && p.x === 0)!.y;
   /** `id` over Battlefield's top platform as `over` puts it, `input(i)` held each frame; every frame. */
   const over = (id: string, over: Partial<FighterState>, input: (i: number) => InputFrame, frames = 40): FighterState[] => {
@@ -575,8 +576,18 @@ describe("dropping through a soft platform", () => {
   it("a tumble's fall, out of hitstun, does not: Down held, it lands on it (ruling R-T13b-g)", () => {
     // "tumbling and reeling characters [...] will land in a lying position upon a
     // soft platform if they contact it from above"; a plain fall beside it still drops.
-    expect(landedOnTop(over("mario", { action: "tumbleFall", hitstun: 0 }, () => Btn.Down))).toBe(true);
+    const tumbled = over("mario", { action: "tumbleFall", hitstun: 0 }, () => Btn.Down);
+    expect(landedOnTop(tumbled)).toBe(true);
     expect(passed(over("mario", { action: "fall", hitstun: 0 }, () => Btn.Down))).toBe(true);
+    // In "a lying position" (the Task 13b re-review 2): downed on the frame it lands.
+    const landed = tumbled.findIndex((f) => f.grounded);
+    expect(tumbled[landed].action).toBe("downed");
+    // And Down+Shield techs on it: the press, out of hitstun, air-dodges down onto
+    // it, and lands inside the tech's window (the re-review's probe: on frame 7).
+    const teched = over("mario", { action: "tumbleFall", hitstun: 0 }, () => Btn.Down | Btn.Shield);
+    expect(teched[0].action).toBe("airDodge");
+    expect(landedOnTop(teched)).toBe(true);
+    expect(teched.find((f) => f.grounded)).toMatchObject({ action: "tech", y: top });
   });
 
   it("rolls back across a tumble's fall landing on it: a snapshot before the landing replays to the same hash", () => {

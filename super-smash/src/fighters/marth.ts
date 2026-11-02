@@ -953,10 +953,12 @@ const legacy: FighterDef = {
       // (`airTotalFrames`, as the Cape's 58). The grounded 71 needs nothing: its
       // frames 65-71 are interruptible, which plays as standing does.
       // UNVERIFIED: that the startup also stops the fall dead (the stall's stop,
-      // vertical speed 0, as the Reflector's and the Cape's), and that the stop,
-      // with the ×0.5, is the airtime's first aerial stall only while the rest of
-      // the physics run on every aerial use (`everyUse`); the page gives the
-      // numbers, not when they apply. UNVERIFIED too: landing during it, or
+      // vertical speed 0, as the Reflector's and the Cape's; the page has no such
+      // row). The ×0.5 is published with no qualifier; tying it to that stop, so
+      // that both are the airtime's first aerial stall only while the rest of the
+      // physics run on every aerial use (`everyUse`), is the replica's inference
+      // from the Reflector's and the Cape's once per airtime, which no Counter page
+      // says. UNVERIFIED too: landing during it, or
       // during the counterattack, ends the move into `land`, the engine's rule
       // for any aerial special (`onLanded`); no source says what a Counter does
       // on landing. The bake holds the guard's last drawn frame through 65-79.
@@ -1003,8 +1005,8 @@ const legacy: FighterDef = {
       // - The boxes cannot clank: the page's table gives each `clang=f` and
       //   `rebound=f` (its template files them under "Attacks with hitboxes that
       //   cannot clang"), the script `Clang_Rebound=ATTACK_SETOFF_KIND_OFF`.
-      //   `transcendent`, which the legacy compile writes as that same `OFF`
-      //   (Plan 5, Task 13: `cannotClank`).
+      //   Here they are `transcendent`, which the legacy compile writes as that
+      //   same `OFF` (Plan 5, Task 13: `cannotClank`).
       // - They "ignore most kinds of armor, except Yoshi's double jump" (the
       //   page; the script's `AttackModule::set_force_reaction(0..3, true,
       //   false)`): `forceReaction`.

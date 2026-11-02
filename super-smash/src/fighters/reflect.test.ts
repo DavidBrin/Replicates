@@ -127,7 +127,7 @@ describe("whose a reflected projectile is", () => {
     const reflected = events.findIndex((e) => e.reflects.length > 0);
     const after = states[reflected].projectiles[0];
     expect(after.owner).toBe(1);
-    // SmashWiki "Reflect": "Reflected projectiles also change ownership from the
+    // SmashWiki "Reflection": "Reflected projectiles also change ownership from the
     // original user to the reflector". The definition is still Mario's, and the
     // roster context knows "mario", so step() goes on finding it.
     expect(after.source).toBe("mario");
@@ -398,11 +398,15 @@ describe("reflection comes before clanks (Plan 5: `reflectProjectiles` is phase 
   const ZONER: FighterDef = { ...mario, id: "zoner", moves: { neutralB: { slot: "neutralB", name: "Pellet", totalFrames: 20, hitboxes: [], projectiles: [PELLET] } } };
   const CTX: SimContext = { ...registryContext, fighter: (id) => (id === "zoner" ? ZONER : registryContext.fighter(id)) };
 
-  /** Mario's pellet and one of Fox's side by side, about to reach Fox's bubble; Fox reflecting or standing. */
-  function scene(reflecting: boolean) {
+  /**
+   * Mario's pellet and one of Fox's side by side, about to reach Fox's bubble;
+   * Fox reflecting or standing. Mario's is spawned first unless `foxFirst`.
+   */
+  function scene(reflecting: boolean, foxFirst = false) {
     const s = duel("mario", "fox");
     if (reflecting) Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 5 });
-    for (const [id, owner] of [[1, 0], [2, 1]]) {
+    const owners = foxFirst ? [1, 0] : [0, 1];
+    for (const [id, owner] of [[1, owners[0]], [2, owners[1]]]) {
       const p = spawnProjectile(PELLET, s.fighters[owner], id, "zoner");
       Object.assign(p, { x: fx(9), y: fx(6.5), vx: fx(2), facing: 1, age: 5 });
       s.projectiles.push(p);
@@ -427,6 +431,18 @@ describe("reflection comes before clanks (Plan 5: `reflectProjectiles` is phase 
       [2, 1],
     ]);
   });
+
+  // The Task 3 re-review's N13: the reflected pellet as the second of the pair.
+  it("the same with Fox's pellet spawned first, so the reflected one is the second of the clanking pair", () => {
+    const { state, events } = scene(true, true);
+    expect(events.reflects).toHaveLength(1);
+    expect(events.clanks).toHaveLength(0);
+    expect(state.projectiles.map((p) => [p.instanceId, p.owner])).toEqual([
+      [1, 1],
+      [2, 1],
+    ]);
+    expect(scene(false, true).events.clanks).toHaveLength(1);
+  });
 });
 
 describe("the escape out of a reflection (SmashWiki: 'canceled by a roll, spot dodge, or jump during this period')", () => {
@@ -443,6 +459,13 @@ describe("the escape out of a reflection (SmashWiki: 'canceled by a roll, spot d
     expect(after(Btn.Shield | Btn.Down)).toBe("spotDodge");
     expect(after(Btn.Shield | Btn.Right)).toBe("roll");
     expect(after(Btn.Shield | Btn.Left)).toBe("roll");
+    // Each the way its side says (the re-review's N17): Fox, at 20 facing left, rolls right on Right.
+    const travel = (b: InputFrame) => {
+      const { states } = play((i) => (i === at ? b : 0));
+      return Math.sign(states[at + 10].fighters[1].x - states[at - 1].fighters[1].x);
+    };
+    expect(travel(Btn.Shield | Btn.Right)).toBe(1);
+    expect(travel(Btn.Shield | Btn.Left)).toBe(-1);
     // UNVERIFIED input mapping: a shield press with the stick at rest is no escape.
     expect(after(Btn.Shield)).toBe("special");
   });
@@ -551,6 +574,26 @@ describe("what the Reflector reflects", () => {
     expect(end.fighters[1].damage).toBe(0);
     // Back at Link: the replica's 7% box (UNVERIFIED: see link.ts) × 1.4 × 1.2 one-on-one.
     expect(toFloat(end.fighters[0].damage)).toBeCloseTo(7 * 1.4 * 1.2, 2);
+  });
+
+  // The Task 13d re-review's N3. UNVERIFIED reading (`projectilesOut`): a reflection
+  // makes the Boomerang the reflector's, so it is out of Link's one.
+  it("frees Link's Boomerang count once a reflector takes it: he throws another while it flies (UNVERIFIED)", () => {
+    const second = (reflecting: boolean) => {
+      const s = duel("link", "fox");
+      // Intangible through it all, so the Boomerang sent back passes through him.
+      Object.assign(s.fighters[0], { x: fx(30), intangible: 200 });
+      s.fighters[1].x = fx(70);
+      const { events, states } = run(s, 90, (i) => [i === 0 || i === 60 ? Btn.Soft | Btn.Right | Btn.Special : 0, reflecting && i >= 10 && i < 80 ? Btn.Down | Btn.Special : 0]);
+      return { reflected: events.findIndex((e) => e.reflects.length > 0), states };
+    };
+    const { reflected, states } = second(true);
+    expect(reflected).toBeGreaterThan(0);
+    expect(reflected).toBeLessThan(60);
+    expect(states[60].fighters[0]).toMatchObject({ action: "special", move: "sideB" });
+    expect(states[89].projectiles.filter((p) => p.defId === "boomerang").map((p) => p.owner).sort()).toEqual([0, 1]);
+    // The control: not reflected, the first is still Link's, and the second press is the failed throw.
+    expect(second(false).states[60].fighters[0]).toMatchObject({ action: "special", move: "sideBFailed" });
   });
 
   it("starts a boomerang's flight over: it slows from its reflected speed, turns, and its new owner catches it (UNVERIFIED)", () => {

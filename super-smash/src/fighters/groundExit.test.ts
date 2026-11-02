@@ -258,11 +258,27 @@ describe("a roll and a tech roll at the edge (ruling R-T12e)", () => {
         expect(f.grounded).toBe(true);
         expect(toFloat(f.x)).toBeLessThanOrEqual(EDGE + 1e-3);
       }
-      // Its whole animation (`actionFrame` 0 on the frame it was set, then 1.. on the next).
-      if (action === "roll") expect(end).toBe(frames - 1);
+      // Its whole animation (`actionFrame` 0 on the frame it was set, then 1.. on the
+      // next): the tech roll's 40 too, ending on step 39 (the Task 12 re-review 2).
+      expect(end).toBe(frames - 1);
       expect(me[end].grounded).toBe(true);
     });
   }
+
+  it("techRoll: plays the same 40 frames unobstructed, in the open", () => {
+    const s = createInitialState("battlefield", [{ defId: "mario" }], RULES, 2);
+    Object.assign(s.fighters[0], { action: "techRoll", actionFrame: 0, charge: ROLL_FORWARD, grounded: true, platform: 0, x: fx(-20), y: 0, vx: Math.trunc(TECH_ROLL_DISTANCE / TECH_ROLL_FRAMES), facing: 1, intangible: 0, invincible: 0 });
+    let st = s;
+    const me: FighterState[] = [];
+    for (let i = 0; i < 60; i++) {
+      st = step(st, [0], { prevInputs: [0] }).state;
+      me.push(st.fighters[0]);
+    }
+    const end = me.findIndex((f) => f.action !== "techRoll");
+    expect(end).toBe(TECH_ROLL_FRAMES - 1);
+    // It travelled the whole way, never stopped.
+    expect(me[end - 1].x).toBeGreaterThan(s.fighters[0].x + fx(10));
+  });
 });
 
 describe("a waveland at the edge (ruling R-T12f)", () => {

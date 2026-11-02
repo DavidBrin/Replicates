@@ -83,6 +83,9 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   // the page's Smash 4 section, and its Ultimate section does not restate it).
   // The full hold is 60 frames of charge and `SMASH_FULL_CHARGE_HOLD` more at full
   // power (R-T13o; `chargeMultiplier` stops at 60), then it goes on its own.
+  // UNVERIFIED: that the step reaching the hold frame is the first of the published
+  // 60 ("up to 60 frames"; UltimateFrameData's "Charge hold is frame X" says no more).
+  // Counted so, a full charge holds the frame 59 steps longer than a tap.
   if (f.action === "attack" && move.chargeable) {
     const holdFrame = smashHoldFrame(ctx.def, f);
     if (f.actionFrame >= holdFrame && !intent.attackHeld) f.combat.smashLetGo = true;

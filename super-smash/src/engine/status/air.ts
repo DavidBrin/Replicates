@@ -69,13 +69,14 @@ export function airMain(f: FighterState, intent: Intent, ctx: StateContext): voi
     if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");
     return;
   }
-  // A jump over somebody's head (Plan 5, Task 11: `footstool.ts`), which the game
-  // tries before a wall jump, and after a special, an air dodge or an aerial
-  // pressed with it (`airActionFirst`).
+  // A jump over somebody's head (Plan 5, Task 11: `footstool.ts`), tried before a
+  // wall jump, and after a special, an air dodge or an aerial pressed with it
+  // (`airActionFirst`). UNVERIFIED: that order is WuBor Patch's reimplementation of
+  // the game's check alone.
   if (tryFootstool(f, intent, ctx)) return;
   // A fresh press away from a wall just touched (Plan 5, Task 10: `wallJump.ts`),
   // after a footstool, and after a special, an air dodge or an aerial pressed with
-  // it (`airActionFirst`; fix round 1, ruling R-T10e).
+  // it (`airActionFirst`; fix round 1, ruling R-T10e; the same UNVERIFIED order).
   if (tryWallJump(f, intent, ctx)) return;
   if (handleActionable(f, intent, ctx)) return;
   fastFallOnPress(f, intent, ctx);

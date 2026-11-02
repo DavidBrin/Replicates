@@ -375,6 +375,24 @@ describe("a meeting of several boxes is resolved once (R-T13c-g)", () => {
     }
   });
 
+  // The Task 13c re-review 2: the last tie-break, the lowest id. On a full tie the
+  // box weighed places the clank (the midpoint of the two sides' boxes).
+  it("weighs a side by its lowest id on a full tie, whichever is listed first: the clank sits by Mario's box 0 (UNVERIFIED tie-break)", () => {
+    for (const reversed of [false, true]) {
+      // Mario's two 10% boxes, alike but where they sit: id 0 at 6.4 ahead, id 1 at 8.4.
+      const far = { ...box(1, 10), x: fx(8.4) };
+      const defs = new Map([
+        ["mario", withTilt("mario", reversed ? [far, box(0, 10)] : [box(0, 10), far])],
+        ["fox", withTilt("fox", [box(0, 4)])],
+      ]);
+      const ctx: SimContext = { fighter: (id) => defs.get(id) ?? BY_ID.get(id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+      const { clank, states, events } = firstClank(() => facing("mario", "fox", 0, 12.8, ctx), tilt(Btn.Right), 3, tilt(Btn.Left), 90, ctx);
+      const [mario, fox] = states[clank].fighters;
+      // Fox's box at 6.4 in front of him (x 12.8 − 6.4), Mario's box 0 at 6.4 in front of Mario.
+      expect(events[clank].clanks.map((c) => c.x), `reversed ${reversed}`).toEqual([Math.trunc((mario.x + fx(6.4) + fox.x - fx(6.4)) / 2)]);
+    }
+  });
+
   it("spends every box that met for the frame, the winner's too: Fox's 20% + 4% tilt beats Mario's 3%, and no box hits on the clank's frame", () => {
     // 21 against 3.15: more than 9%, Fox's tilt goes on. His 4% box met Mario's too,
     // and lies on Mario as well (the boxes at x 3, Mario at 0, Fox at 6), but a clank is

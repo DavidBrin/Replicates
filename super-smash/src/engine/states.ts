@@ -650,8 +650,9 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
  * without having to stop or turn around first": out of `run` it is the forward
  * side special, on the run's momentum.
  *
- * UNVERIFIED: the turn in the air and out of `dashStart`; the page names
- * neither. Not modelled: reversing one "in the first few frames" (same page).
+ * UNVERIFIED: the turn in the air, and out of `dashStart` and `runBrake` (a
+ * run's brake, read as the page's "stop" already begun); the page names none of
+ * them. Not modelled: reversing one "in the first few frames" (same page).
  * Only a side special turns: the up, down and neutral specials keep the facing.
  *
  * `flick` is how many frames before this B press its smash flick was

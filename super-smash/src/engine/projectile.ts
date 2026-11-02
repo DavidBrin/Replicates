@@ -637,7 +637,7 @@ export function articleOf(def: ProjectileDef): string {
  * Plan 5, Task 13d), from its moveset (`source`), each projectile's article read off
  * its definition (`defOf`; fix round 1, ruling R-T13d-d: Link's two Boomerang throws
  * are one article). UNVERIFIED: that one a reflector sent back is out of the count, a
- * reflection making it the reflector's (SmashWiki "Reflect": reflected projectiles
+ * reflection making it the reflector's (SmashWiki "Reflection": reflected projectiles
  * "change ownership from the original user to the reflector").
  */
 export function projectilesOut(

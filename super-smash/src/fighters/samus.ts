@@ -723,7 +723,8 @@ const legacy: FighterDef = {
       // modelled (Task 13d): its "Initial speed 1.15" and deceleration (the 1.5
       // below is the legacy table's), its row's radius 2.4 (the 3.0 below is the
       // legacy table's), "Interruptible (aerial) 60", "Missile X offset 1u" (the
-      // offsets below are the legacy table's), and both missiles' aerial
+      // offsets below are the legacy table's), its row's shield damage 1.0 and its
+      // angle, 0° but 32° at 120 knockback or more, and both missiles' aerial
       // "Horizontal speed divisor 2", "Air friction 0.0025" and movement "enabled
       // starting on frame 35".
       //

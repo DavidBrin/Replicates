@@ -175,6 +175,35 @@ describe("wall jumps", () => {
     });
   }
 
+  // The Task 10 re-review's RG1: the same off a wall on the fighter's right, Final
+  // Destination's left side, where away is Left.
+  it("kicks off a wall on its right too, on a fresh Left; holding Left, a fresh Down or Up does not", () => {
+    const leftSide = (over: Partial<FighterState> = {}) => {
+      const s = besideTheWall("mario", over);
+      Object.assign(s.fighters[0], { x: -s.fighters[0].x, vx: -s.fighters[0].vx, facing: 1 });
+      return s;
+    };
+    const kicked = run(leftSide(), [...Array<InputFrame>(8).fill(Btn.Right), Btn.Left, ...idle(3)]);
+    expect(kicked[7].fighters[0].combat.wallSide).toBe(1);
+    expect(kicked[8].fighters[0]).toMatchObject({ action: "jump", facing: -1 });
+    expect(kicked[8].fighters[0].vx).toBeLessThan(0);
+    for (const other of [Btn.Down, Btn.Up]) {
+      const states = run(leftSide({ x: fx(82.5), vx: -fx(2) }), [Btn.Left, Btn.Left, Btn.Left | other, Btn.Left | other, Btn.Left | other]);
+      expect(states[0].fighters[0].combat.wallSide).toBe(1);
+      expect(states.every((st) => st.fighters[0].combat.wallJumps === 0), `fresh ${other}`).toBe(true);
+    }
+  });
+
+  // The Task 10 re-review's RF: the wall jump comes before the midair jump
+  // (R-T10e's order), so Jump with the flick away is a wall jump, and the air
+  // jump is kept.
+  it("takes a wall jump before an air jump: Jump pressed with the flick away kicks off, and the air jump is kept", () => {
+    const states = run(besideTheWall("mario", { jumpsUsed: 1 }), [...Array<InputFrame>(8).fill(Btn.Left), Btn.Right | Btn.Jump, ...idle(3)]);
+    expect(states[7].fighters[0].combat.wallSide).toBe(-1);
+    expect(states[8].fighters[0]).toMatchObject({ action: "jump", jumpsUsed: 1 });
+    expect(states[8].fighters[0].combat.wallJumps).toBe(1);
+  });
+
   // Fix round 1, ruling R-T10e: the game's airborne checks run special, air dodge,
   // attack, footstool, wall jump, midair jump (WuBor Patch's reimplementation,
   // `sub_air_check_fall_common`; `airActionFirst`). A press of one of the first

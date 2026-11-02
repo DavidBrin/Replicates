@@ -47,6 +47,21 @@ describe("kill credit", () => {
     expect(t).toMatchObject({ kos: [1, 0], falls: [0, 2], sds: [0, 1] });
   });
 
+  // The Task 6 re-review's X11: a fighter's own hit or push (a bomb jump's) is no
+  // one else's, and does not wipe out the opponent who last touched it.
+  it("never credits a fighter with its own KO: its own hit or push leaves the last opponent's touch", () => {
+    const t = createTracker(2);
+    const self = { attacker: 1, victim: 1, damage: 0, x: 0, y: 0, contactX: 0, contactY: 0, knockback: 0, angle: 0, hitboxId: 0 };
+    trackFrame(t, 10, events({ hits: [{ ...self, attacker: 0 }] }));
+    trackFrame(t, 20, events({ hits: [self], pushes: [{ attacker: 1, victim: 1 }] }));
+    trackFrame(t, 30, events({ kos: [ko(1)] }));
+    expect(t).toMatchObject({ kos: [1, 0], falls: [0, 1], sds: [0, 0] });
+    // With nobody else's touch, its own makes it a self-destruct.
+    trackFrame(t, 40, events({ hits: [self], pushes: [{ attacker: 1, victim: 1 }] }));
+    trackFrame(t, 50, events({ kos: [ko(1)] }));
+    expect(t).toMatchObject({ kos: [1, 0], falls: [0, 2], sds: [0, 1] });
+  });
+
   it("counts a footstool as a hit (SmashWiki \"Footstool Jump\": \"it will count as a KO for the footstooling player\")", () => {
     const t = createTracker(2);
     trackFrame(t, 50, events({ footstools: [{ jumper: 0, victim: 1 }] }));

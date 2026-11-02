@@ -779,6 +779,29 @@ describe("the scene holds the match still, its user and the stage included (Task
     expect(Math.abs(after.fighters[2].x - at(after))).toBeLessThan(moving.halfWidth);
   });
 
+  // The Task 14 re-review's N2 (mutant F13: the user runs phase 5 on a paused step,
+  // and the rider carry slides it a stage step every step while the stage stands still).
+  it("holds the scene's user where it stands on Smashville's moving platform: no collision moves it while the stage is still", () => {
+    const ctx: SimContext = { fighter: () => DEF, stage: () => smashville };
+    const s = createInitialState("smashville", [{ defId: "t" }, { defId: "t" }, { defId: "t" }], RULES, 1, ctx);
+    const moving = smashville.platforms[1];
+    const centre = platformCentreX(moving, s.stageFrame);
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: i < 2 ? 1 : 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    // The user and its victim on the platform, the victim 8 in front; the bystander on the deck.
+    Object.assign(s.fighters[0], { x: centre - fx(4), y: moving.y, finalSmashReady: FINAL_SMASH_READY });
+    Object.assign(s.fighters[1], { x: centre + fx(4), y: moving.y });
+    Object.assign(s.fighters[2], { x: fx(-40), y: smashville.platforms[0].y });
+    const { states } = run(s, 120, USE, ctx);
+    const paused = pausedSteps(s, states);
+    expect(paused.filter(Boolean).length).toBeGreaterThan(20);
+    const scene = states.filter((_, i) => paused[i]);
+    expect(new Set(scene.map((st) => platformCentreX(moving, st.stageFrame))).size).toBe(1);
+    expect(new Set(scene.map((st) => `${st.fighters[0].x},${st.fighters[0].y}`)).size).toBe(1);
+    // Still standing on the platform once the scene is over.
+    const after = states[paused.lastIndexOf(true) + 1];
+    expect([after.fighters[0].grounded, after.fighters[0].platform]).toEqual([true, 1]);
+  });
+
   it("carries a projectile resting on the moving platform by the stage's clock, which a pause has put behind the match's", () => {
     const ctx: SimContext = { fighter: () => DEF, stage: () => smashville };
     const s = createInitialState("smashville", [{ defId: "t" }, { defId: "t" }, { defId: "t" }], RULES, 1, ctx);
@@ -902,10 +925,11 @@ describe("the scene holds the match still, its user and the stage included (Task
     const straight = run(s0, 60, (i) => [i === 0 ? Btn.Special : 0, 0, 0, 0]).states;
     const entry = straight.findIndex((st) => st.cinematic === 0);
     expect(entry).toBeGreaterThan(0);
-    // As the scene starts: port 2 falls and drifts just above port 3's jab, whose box
-    // (8 ahead of it, 6 up, radius 6) is out on its held frame.
+    // As the scene starts: port 2 falls and drifts into port 3's jab, whose box (8
+    // ahead of it, 6 up, radius 6: up to 12) is out on its held frame; port 2's feet
+    // at 9, inside it (the Task 14 re-review's N1: at 14 it could not reach).
     const s = cloneState(straight[entry]);
-    Object.assign(s.fighters[2], { action: "fall", grounded: false, platform: -1, x: fx(92), y: fx(14) });
+    Object.assign(s.fighters[2], { action: "fall", grounded: false, platform: -1, x: fx(92), y: fx(9) });
     kineticSet(s.fighters[2], fx(0.5), fx(-1));
     Object.assign(s.fighters[3], { action: "attack", move: "jab1", actionFrame: 1, x: fx(100), facing: -1 });
     s.fighters[3].hitThisMove.length = 0;

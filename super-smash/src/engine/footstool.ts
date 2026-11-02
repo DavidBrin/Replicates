@@ -373,6 +373,8 @@ export function ageFootstool(f: FighterState): void {
  */
 export function footstoolBounceHolds(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   const frame = f.combat.footstoolFrame;
+  // Carried, unpublished: on frames 2 to 7 only presses wait; the stick's air drift
+  // is not locked (the page says only when the jumper "can act").
   if (frame > 1 && frame < FOOTSTOOL_ACT_FRAME) {
     bufferPress(f, intent, ctx.frame);
     return true;

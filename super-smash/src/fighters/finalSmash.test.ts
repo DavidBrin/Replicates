@@ -500,6 +500,26 @@ describe("each part's length", () => {
     expect(user[last + 1]).toBeNull();
   });
 
+  // The Task 15 re-review's Minor 4 asked for an end begun in the air that lands part
+  // way through (it played on to the ground's 61). Since fix round 3 (ruling R-T16k) an
+  // aerial end holds its user aloft until the move is over, so from any height it
+  // never lands part way: it plays the air's 46 where it began, and then he falls.
+  it("plays Jungle Rush's end begun low in the air where it began, never landing part way: the air's 46, then a fall", () => {
+    for (const y of [65, 90]) {
+      const s = ready("donkeyKong", 18);
+      Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, y: fx(y) });
+      Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(y) });
+      const { states } = runHeld(s, 400, inFront);
+      const user = slots(states, 0);
+      const first = user.indexOf("finalEnd");
+      const last = user.lastIndexOf("finalEnd");
+      expect(first, `from ${y}`).toBeGreaterThan(0);
+      for (let i = first; i <= last; i++) expect([states[i].fighters[0].grounded, states[i].fighters[0].y], `from ${y}, step ${i}`).toEqual([false, fx(y)]);
+      expect(moveFrameOf(states[last].fighters[0].actionFrame), `from ${y}`).toBe(LENGTHS.donkeyKong.airEnd);
+      expect(states[last + 1].fighters[0]).toMatchObject({ action: "fall", grounded: false });
+    }
+  });
+
   for (const { id, gap } of CINEMATIC) {
     it(`${id}: plays its end to its frame ${LENGTHS[id].end}, and is done`, () => {
       const { states } = run(ready(id, gap), 520);
@@ -567,9 +587,12 @@ describe("a cinematic Final Smash that traps nobody", () => {
     const last = user.lastIndexOf("finalSmash");
     expect(states[last].fighters[0]).toMatchObject({ x: EDGE, grounded: true });
     expect(moveFrameOf(states[last].fighters[0].actionFrame)).toBe(LENGTHS.marth.start);
-    // The dash ended at the edge: what is left is final_dash_end's 48 frames.
+    // The dash ended at the edge, on the step it got there: the move goes on from the
+    // frame after the dash's window, 71, through final_dash_end's 47 frames (its
+    // CancelFrame 48 less one, ruling R-FW2g). The Task 15 re-review's R1: exactly.
     const atEdge = states.findIndex((st) => st.fighters[0].x === EDGE);
-    expect(last - atEdge + 1).toBeLessThanOrEqual(48);
+    expect(moveFrameOf(states[atEdge].fighters[0].actionFrame)).toBe(71);
+    expect(last - atEdge + 1).toBe(LENGTHS.marth.start - 70);
     expect(user.filter((u) => u === "finalSmash").length).toBeLessThan(LENGTHS.marth.start);
   });
 
@@ -614,6 +637,37 @@ describe("Critical Hit's dash (ruling R-T15f)", () => {
     expect(stopX).toBeLessThan(EDGE);
     for (const [i, st] of states.entries()) if (i >= 34 && user[i] === "finalSmash") expect(st.fighters[0].x).toBe(stopX);
     expect(moveFrameOf(states[user.lastIndexOf("finalSmash")].fighters[0].actionFrame)).toBe(LENGTHS.marth.start);
+  });
+
+  // The Task 15 re-review's R3: the page's sentence has no ground in it.
+  it("stops mid-dash in the air too, where the special button is pressed again", () => {
+    const s = ready("marth", 0);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(-60), y: fx(60) });
+    Object.assign(s.fighters[1], { x: fx(-70) });
+    Object.assign(s.fighters[2], { x: fx(-80) });
+    let st = s;
+    let prev: InputFrame[] = [0, 0, 0];
+    const states: GameState[] = [];
+    for (let i = 0; i < 130; i++) {
+      const now: InputFrame[] = [i === 0 || i === 34 ? Btn.Special : 0, 0, 0];
+      st = step(st, now, { prevInputs: prev }).state;
+      prev = now;
+      states.push(st);
+    }
+    const user = slots(states, 0);
+    expect(states[34].fighters[0].grounded).toBe(false);
+    expect(moveFrameOf(states[34].fighters[0].actionFrame)).toBe(71);
+    const stopX = states[34].fighters[0].x;
+    for (const [i, st] of states.entries()) if (i >= 34 && user[i] === "finalSmash") expect(st.fighters[0].x, `step ${i}`).toBe(stopX);
+  });
+
+  // The Task 15 re-review's R5: the press stops a dash under way, and does nothing
+  // once it is over: the end part plays on, never back to the dash's end.
+  it("takes no press after the dash: the end plays on to its last frame", () => {
+    const plain = whiff("marth", 200, (i) => i === 34);
+    const pressed = whiff("marth", 200, (i) => i === 34 || i === 60);
+    expect(moveFrameOf(pressed.states[60].fighters[0].actionFrame)).toBeGreaterThan(71);
+    expect(pressed.states.map((st) => st.fighters[0].actionFrame)).toEqual(plain.states.map((st) => st.fighters[0].actionFrame));
   });
 
   // The edge rule is the dash's: a Marth running into his Final Smash slides off the
@@ -1550,12 +1604,13 @@ describe("Zero Laser's start, clears and fringe beams (rulings R-T16c to R-T16e)
     expect(framesOf(hits, 11)).toEqual([]);
     // On the laser's 140, the beam on the muzzle's axis (fix round 4, ruling R-T16o), the
     // end and the lower blast land on a standing Mario, 5.5 + 2.5 = 8, SmashWiki "Samus
-    // (SSBU)"'s "8% (fringe blast)"; the upper blast (29 up) passes over him.
+    // (SSBU)" (https://www.ssbwiki.com/Samus_(SSBU))'s "8% (fringe blast)"; the upper
+    // blast (29 up) passes over him.
     const blasts = (hs: Map<number, [number, number][]>) => [...hs.entries()].flatMap(([id, l]) => l.filter(([f]) => f === 209).map(([, d]) => [id, d] as const));
     expect(blasts(hits).map(([id]) => id).sort((a, b) => a - b)).toEqual([10, 14]);
     expect(blasts(hits).reduce((a, [, d]) => a + d, 0)).toBeCloseTo(8 * FRESH, 1);
-    // Held 6 up, he is inside all three: 5.5 + 2.5 + 2.5 = 10.5, SmashWiki's "10.5% (main
-    // blast)", each a fresh move's.
+    // Held 6 up, he is inside all three: 5.5 + 2.5 + 2.5 = 10.5, SmashWiki "Samus (SSBU)"
+    // (https://www.ssbwiki.com/Samus_(SSBU))'s "10.5% (main blast)", each a fresh move's.
     const held = runHeld(ready("samus", 90), 400, (s) => hold(s.fighters[1], s.fighters[0].x + fx(90), fx(6)));
     const up = byBox(held.states, held.events);
     expect(blasts(up).map(([id]) => id).sort((a, b) => a - b)).toEqual([10, 13, 14]);
@@ -1564,13 +1619,15 @@ describe("Zero Laser's start, clears and fringe beams (rulings R-T16c to R-T16e)
 
   /**
    * Fix round 4 (ruling R-T16o): with the beam on the muzzle's axis (15 up, radius 5: 10
-   * to 20), a fighter standing in front of it is struck by the beam if it stands taller
-   * than 10, and by the lower fringe beam (1 up, radius 6: down to the floor) whatever
-   * its height. On the roster's own (unbaked) hurtboxes Kirby and Pikachu stand under the
-   * beam; UNVERIFIED: those hurtboxes' heights (the baked bodies are taller: Pikachu's is
-   * struck by the beam there, Kirby's is not). All are struck by the end on 140.
+   * to 20), a fighter held standing in front of it, put back on the floor every frame,
+   * is struck by the beam if it stands taller than 10, and by the lower fringe beam (1
+   * up, radius 6: down to the floor) whatever its height. On the roster's own (unbaked)
+   * hurtboxes Kirby and Pikachu, so held, stand under the beam; UNVERIFIED: those
+   * hurtboxes' heights (the baked bodies are taller: Pikachu's is struck by the beam
+   * there, Kirby's is not). All are struck by the end on 140. Held, not left free: free,
+   * the lower fringe lifts the two shortest into the beam (the next test).
    */
-  it("strikes every fighter standing in front of it: the lower fringe 16 times, the beam 13 times but for the two shortest, the end once", () => {
+  it("strikes every fighter held standing in front of it: the lower fringe 16 times, the beam 13 times but for the two shortest, the end once", () => {
     const struck: Record<string, [number, number, number]> = {};
     for (const victim of FIGHTERS.map((f) => f.id)) {
       const s = createInitialState("finalDestination", [{ defId: "samus" }, { defId: victim }, { defId: "fox" }], RULES, 6);
@@ -1588,6 +1645,28 @@ describe("Zero Laser's start, clears and fringe beams (rulings R-T16c to R-T16e)
     const tall: [number, number, number] = [13, 16, 1];
     const short: [number, number, number] = [0, 16, 1];
     expect(struck).toEqual({ mario: tall, donkeyKong: tall, link: tall, samus: tall, kirby: short, fox: tall, pikachu: short, marth: tall });
+  });
+
+  // The Task 16 re-review 3's N1: the fringe's 45° lifts a short fighter left free
+  // into the beam, which then strikes it: what draws the caught "to the center".
+  it.each([
+    ["kirby", 11, 95],
+    ["pikachu", 10, 97],
+  ] as const)("lifts %s, left free 90 ahead, off the floor into the beam with the lower fringe: struck %i times from move frame %i", (victim, times, from) => {
+    const s = createInitialState("finalDestination", [{ defId: "samus" }, { defId: victim }, { defId: "fox" }], RULES, 6);
+    const xs = [fx(-30), fx(60), fx(-75)];
+    s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: xs[i], y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
+    s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    const { states, events } = run(s, 400);
+    const hits = byBox(states, events);
+    const beam = framesOf(hits, 9);
+    // The fringe first (its 86), then the beam, every 10 frames from `from`.
+    expect(framesOf(hits, 12)[0]).toBe(86);
+    expect(beam).toEqual(Array.from({ length: times }, (_, k) => from + 10 * k));
+    // Off the floor when the beam first strikes: lifted, not standing into it.
+    const first = events.findIndex((e) => e.hits.some((h) => h.victim === 1 && h.hitboxId === 9));
+    expect(states[first].fighters[1].grounded).toBe(false);
+    expect(states[first].fighters[1].y).toBeGreaterThan(fx(3));
   });
 });
 

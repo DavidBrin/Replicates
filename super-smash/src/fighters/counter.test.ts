@@ -802,6 +802,42 @@ describe("fix round 1: the aerial Counter (SmashWiki Marth (SSBU)/Down special, 
     expect(m[64]).toMatchObject({ action: "attack", move: "nair" });
   });
 
+  // The Task 5 re-review's N1. UNVERIFIED: the stop and the ×0.5 are the airtime's
+  // first aerial stall's (`specialStallExec`); the rest of the physics run on every use.
+  it("on a second Counter in one airtime, keeps its speed and its fall: no second ×0.5, no second stop", () => {
+    const m = aerial(70, (i) => (i === 0 || i === 64 ? COUNTER : 0));
+    expect(m[63]).toMatchObject({ action: "special", move: "downB", actionFrame: 63, vy: -fx(1.2) });
+    expect(m[64]).toMatchObject({ action: "special", move: "downB", actionFrame: 0 });
+    expect(m[64].vx).toBe(m[63].vx - fx(0.0025));
+    expect(m[64].vy).toBe(-fx(1.2));
+    expect(m[64].combat.specialStall).toBe(true);
+  });
+
+  // The Task 5 re-review's N2: the counterattack reached by a real aerial catch, so
+  // with the flags that path leaves (the stall spent, the stop's own flag cleared).
+  it("plays the counterattack after an aerial catch with the same physics: frozen 21 frames, then 0.04 to 1.2, 51 frames in all", () => {
+    const s = duel("mario", 60);
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, x: 0, y: fx(110), vx: fx(1), vy: -fx(1.5) });
+    s.fighters[1].kinetic.controlX = fx(1);
+    // Caught on the guard's eighth frame, at the bubble's top.
+    pelletAt(s, 1, fx(-24), fx(119));
+    const { states, events } = run(s, 80, (i) => [0, i === 0 ? COUNTER : 0], withZoner());
+    const m = states.map((t) => t.fighters[1]);
+    const at = caughtAt(events);
+    expect(at).toBe(7);
+    expect(m[at]).toMatchObject({ move: "counterAttack", actionFrame: 0 });
+    expect([m[at].combat.specialStall, m[at].combat.stalling]).toEqual([true, false]);
+    // The freeze: still in the air, speeds held.
+    for (let k = at + 1; k <= at + 20; k++) expect([m[k].y, m[k].vx, m[k].vy], `step ${k}`).toEqual([m[at].y, m[at].vx, m[at].vy]);
+    // Then "Air friction 0.0025", "Gravity 0.04" to "Fall speed 1.2", no stop.
+    for (let k = at + 21; k < at + 71; k++) {
+      expect(m[k].vx, `step ${k}`).toBe(m[k - 1].vx - fx(0.0025));
+      expect(m[k].vy, `step ${k}`).toBe(Math.max(-fx(1.2), m[k - 1].vy - fx(0.04)));
+    }
+    expect(m[at + 70]).toMatchObject({ action: "special", move: "counterAttack", actionFrame: 50 });
+    expect(m[at + 71].action).toBe("fall");
+  });
+
   it("gives the counterattack the same physics and its 51 frames in the air (UNVERIFIED that the Parameters govern it)", () => {
     const s = duel("mario", 60);
     Object.assign(s.fighters[1], { action: "special", move: "counterAttack", actionFrame: 40, grounded: false, platform: -1, x: 0, y: fx(100), vx: 0, vy: -fx(0.5) });

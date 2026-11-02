@@ -210,8 +210,8 @@ export interface CollisionOptions {
    * (`GROUND_CORRECT_KIND_GROUND_CLIFF_STOP` for the catch statuses, CATCH,
    * CATCH_WAIT, CATCH_ATTACK and THROW; Plan 3, Task 14, fix round 2); the replica
    * reads its own per-status table instead (`GROUND_EXIT`, `stopsAtEdge`; Plan 5,
-   * Task 12 fix rounds 2 and 3): the catch statuses, the shield, the rolls, a
-   * waveland and a grounded attack's own movement.
+   * Task 12 fix rounds 2 and 3): the catch statuses, the shield, the spot dodge
+   * and the rolls, a waveland and a grounded attack's own movement.
    */
   readonly cliffStop?: boolean;
   /** This frame's ECB from the bake (Plan 4); `ecbOf` when absent. */

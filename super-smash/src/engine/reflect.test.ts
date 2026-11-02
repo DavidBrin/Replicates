@@ -116,7 +116,7 @@ describe("reflectProjectile", () => {
     expect(p.reflected).toBe(1);
   });
 
-  it("keeps the spawner as its source, so its definition is still found (SmashWiki \"Reflect\": only ownership changes)", () => {
+  it("keeps the spawner as its source, so its definition is still found (SmashWiki \"Reflection\": only ownership changes)", () => {
     const p = shotAt(fx(15), { source: "mario" });
     const s = createInitialState("s", [{ defId: "t" }, { defId: "t" }], RULES, 1, CTX);
     reflectProjectile(p, SHOT, s.fighters[1], REFLECTOR);

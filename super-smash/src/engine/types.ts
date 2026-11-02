@@ -1620,7 +1620,7 @@ export interface ProjectileState {
   source: string;
   /** The fraction of a full charge it was launched with, Q12 (`ONE` = full). Plan 5. */
   charge: number;
-  /** How many times it has been reflected. SmashWiki "Reflect": seven at most. Plan 5. */
+  /** How many times it has been reflected. SmashWiki "Reflection": seven at most. Plan 5. */
   reflected: number;
   /**
    * Its damage multiplier from the move that launched it, Q12: Kirby's Copy

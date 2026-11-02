@@ -991,8 +991,9 @@ export function step(
       defs[i].attributes,
       s.stageFrame,
       // The statuses that stop at the edge instead of sliding off it: the catch
-      // statuses, the shield, the rolls, a waveland, a grounded attack's own movement
-      // (`GROUND_EXIT`, `stopsAtEdge`; Plan 5, Task 12 fix rounds 2 and 3).
+      // statuses, the shield, the spot dodge and the rolls, a waveland, a grounded
+      // attack's own movement (`GROUND_EXIT`, `stopsAtEdge`; Plan 5, Task 12 fix
+      // rounds 2 and 3).
       // Holding down in the air falls through a soft platform, in the statuses that
       // do (`SOFT_DROP`, `dropsThroughSoft`; ruling R-T13b-d).
       {
@@ -1561,6 +1562,11 @@ function appendProjectileCandidates(
  * R-T13c-a), a box that cannot rebound (`noRebound`, the script's THRU; Plan 5,
  * Task 13 fix round 1, ruling R-T13g), and a projectile's end or knock (Task 13c).
  */
+/** A projectile `reflectProjectiles` suppressed this frame, as `resolveClanks` begins. */
+function reflectedThisFrame(c: Candidate): boolean {
+  return c.projectile !== null && c.suppressed;
+}
+
 function resolveClanks(
   s: GameState,
   candidates: Candidate[],
@@ -1570,8 +1576,9 @@ function resolveClanks(
 ): void {
   // A projectile already suppressed when this pass starts was reflected this
   // frame (`reflectProjectiles`, phase 6a): it neither clanks nor hits until the
-  // next (Plan 5). Nothing else suppresses a candidate before the clanks.
-  const reflected = new Set(candidates.filter((c) => c.projectile !== null && c.suppressed));
+  // next (Plan 5). Nothing else suppresses a candidate before the clanks, and
+  // nothing below does until every meeting is found, so the flag is read as it
+  // is, with no list of them to build on the frames nothing was reflected.
   // The meetings: every pair of sides with boxes that clank against each other,
   // found on this frame's boxes before any is resolved (Plan 5, Task 13c fix round
   // 2, ruling R-T13c-g).
@@ -1581,7 +1588,7 @@ function resolveClanks(
       const ca = candidates[a];
       const cb = candidates[b];
       if (ca.attacker === cb.attacker) continue;
-      if (reflected.has(ca) || reflected.has(cb)) continue;
+      if (reflectedThisFrame(ca) || reflectedThisFrame(cb)) continue;
       // A catch-only box (`set_catch_only_all`: a pummel's, a throw's hits on the
       // fighter held) is not a hitbox in the world: nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
@@ -1787,8 +1794,9 @@ function clankSide(
  */
 function startRebound(f: FighterState, frames: number): void {
   // A second meeting this frame that rebounds it too: the longer stands, as with
-  // the freeze, so the meetings' order does not matter (ruling R-T13c-g). No
-  // fighter already rebounding has a box to meet with.
+  // the freeze, so the meetings' order does not matter (ruling R-T13c-g). UNVERIFIED:
+  // "Priority" names no merge; any that ignored the order would do, and the longer
+  // is the replica's choice. No fighter already rebounding has a box to meet with.
   const already = f.action === "rebound" ? f.combat.rebound : 0;
   kineticSetX(f, -f.facing * fx(0.5));
   clearHitRecord(f);
