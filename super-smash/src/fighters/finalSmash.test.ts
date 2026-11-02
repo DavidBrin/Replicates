@@ -1486,7 +1486,7 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
    * - The distances: every window frame but the last moves the window's speed (6, 4.1
    *   since part 2's fix round 3, ruling R-FW2q), and on the last the speed is handed to
    *   drift, which loses that frame's air brake (`applyMoveMomentum`): Marth 275.996
-   *   (fx(276) − 15), Pikachu 151.693 (37 × fx(4.1) − 31). UNVERIFIED, as the speeds are.
+   *   (fx(276) − 15), Pikachu 151.696 (37 × fx(4.1) − 31). UNVERIFIED, as the speeds are.
    * - UNVERIFIED: the kinetics after the window (no page gives them).
    */
   const DASHES = [

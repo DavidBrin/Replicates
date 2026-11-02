@@ -263,8 +263,11 @@ describe("the Final Smash", () => {
   // back from (`recoversFrom`: its fall onto a floor, its up special, or its midair jump
   // then its up special). Part 1's R-FW1t, the whole travel on the floor, left a strip of
   // 4 to 32 units a stage, none on Smashville, and Volt Tackle unused in play. Since the
-  // tackle's 4.1 (part 2's fix round 3, ruling R-FW2q) only Pokémon Stadium 2, 187.6 wide,
-  // has anywhere a whiff comes back from (the bands, below).
+  // tackle's 4.1 (part 2's fix round 3, ruling R-FW2q) a whiff comes back from nowhere on the
+  // main floor of five stages: Pokémon Stadium 2, 187.6 wide, keeps a band at each end of
+  // its main floor (the bands, below), and Town & City's side platforms are the one other
+  // place it is fired from (`roomAhead` reads a soft platform's ends; the positioning never
+  // goes there).
   it("fires a Volt Tackle whose whiff ends off the stage where its recovery gets it back, and the engine brings Pikachu back (ruling R-FW2n)", () => {
     // At -86 on Pokémon Stadium 2, facing right: the tackle and its slide carry Pikachu off
     // the right ledge, and the move ends 35 past it and 49 below.
@@ -330,9 +333,11 @@ describe("the Final Smash", () => {
   // those and Town and City only), so a CPU holding one goes to a spot it would fire from,
   // with its target ahead (`finalSmashSpotFor`, from its stage's firing bands,
   // `firingBands`). Since the tackle alone runs almost Final Destination's length (part 2's
-  // fix round 3, ruling R-FW2q), its whiff comes back from nowhere on the five stages of
-  // 160 or so: Pokémon Stadium 2, 187.6 wide, keeps a band at each end.
-  it("knows where on each stage Volt Tackle can be fired from: a band at each end of Pokémon Stadium 2 alone (rulings R-FW2n, R-FW2q)", () => {
+  // fix round 3, ruling R-FW2q), its whiff comes back from nowhere on the main floors of the
+  // five stages of 160 or so: Pokémon Stadium 2, 187.6 wide, keeps a band at each end. The
+  // bands are the main floor's; off it, Town & City's side platforms are the one other place
+  // a whiff comes back from, and the positioning never goes there.
+  it("knows where on each stage's main floor Volt Tackle can be fired from: a band at each end of Pokémon Stadium 2 alone (rulings R-FW2n, R-FW2q)", () => {
     const band = (id: string) => firingBands(pikachu, stageViewFromDef(STAGES.find((x) => x.id === id)!));
     const units = (b: ReturnType<typeof band>) => [b.right, b.left].map((rs) => rs.map(([a, c]) => [a / 4096, c / 4096]));
     for (const id of ["battlefield", "finalDestination", "smallBattlefield", "smashville", "townAndCity"]) expect(units(band(id)), id).toEqual([[], []]);
@@ -456,7 +461,7 @@ describe("the Final Smash", () => {
     // Mario 12 in front of the inner end of the stage's left band, dizzy for 400 frames;
     // Pikachu in the middle, facing away from him. On a stage with no band (all but
     // Pokémon Stadium 2 since ruling R-FW2q), Mario 20 inside its left ledge: no spot, and
-    // the whiff comes back from nowhere, so Pikachu never fires.
+    // the whiff comes back from nowhere on the main floor, so Pikachu never fires.
     const band = firingBands(pikachu, view).right.at(-1);
     const inner = band === undefined ? null : band[1];
     const marioX = inner === null ? view.leftLedge + fx(20) : inner + fx(12);

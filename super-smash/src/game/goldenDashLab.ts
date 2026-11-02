@@ -19,9 +19,9 @@
  * facing it; Fox stands on the floor at 40, facing right. Nobody is ever in reach of
  * either Final Smash:
  * - Volt Tackle, in the air: Pikachu presses it on 1. It holds him at (-140, 30) through
- *   its startup (to 46); the tackle carries him 151.693 to 11.70 on 47-83 (4.1 a frame
+ *   its startup (to 46); the tackle carries him 151.696 to 11.70 on 47-83 (4.1 a frame
  *   since part 2's fix round 3, ruling R-FW2q, the initial tackle alone almost Final
- *   Destination's length; 118.392 at 3.2, ruling R-FW2i; 166.492 at Task 15's 4.5), short
+ *   Destination's length; 118.391 at 3.2, ruling R-FW2i; 166.492 at Task 15's 4.5), short
  *   of Fox, and from there on nothing holds him: his end sets him going at 3 on 84
  *   (`game_finalairdashend`'s SET_SPEED_EX(3, 0), part 2's fix round 1, the re-review's
  *   M3), and he carries on to the right and falls, passing the stage's right edge on 107,

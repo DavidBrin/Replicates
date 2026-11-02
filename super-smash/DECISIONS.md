@@ -4036,11 +4036,14 @@ its final form; "none recorded" means the ruling named no cost.
   - R-FW2q (part 2's fix round 3): the sentence is about the initial tackle alone, frames
     47-83. Its UNVERIFIED speed is 4.1 a frame: from a standstill the tackle carries Pikachu
     151.6, 95% of the floor and under it (4.0 would be 92%), and the end's slide from its
-    published 3 carries him on to 184.2. Cost: a whiff now comes back from nowhere on five of the
-    six stages, so the CPU (R-FW1t, R-FW2n) fires Volt Tackle only on Pokémon Stadium 2, 187.6
-    wide, which keeps a firing band at each end: 1 in 1,512 ball-on matches (`c016424`); the
-    golden moved (the dash lab: Pikachu off the side blast line on 169, and Fox's steps 20 frames
-    earlier, so that his Team Star Fox still starts).
+    published 3 carries him on to 184.2. Cost: from the main floor of five of the six stages a
+    whiff now comes back from nowhere; Pokémon Stadium 2, 187.6 wide, keeps a firing band at each
+    end of its main floor, and Town & City's side platforms are the one other place the CPU
+    (R-FW1t, R-FW2n) fires Volt Tackle from (its model fires from 46 starts there, and the engine
+    brings Pikachu back from all 46; a level-9 CPU on the left one fired at a dizzy Mario in 6 of
+    6 scenes; only by chance, as its positioning never goes there): 1 in 1,512 ball-on matches
+    (`c016424`), on Pokémon Stadium 2; the golden moved (the dash lab: Pikachu off the side blast
+    line on 169, and Fox's steps 20 frames earlier, so that his Team Star Fox still starts).
 - R-FW2j: the Reflector's stall undoes exactly the step's gravity (SmashWiki's 0.027, with no
   snap to terminal speed). Cost: the stall holds vy exactly, where no source gives a gradual
   clamp.
@@ -4161,7 +4164,8 @@ was.
 **Costs that ship.**
 - *Pikachu CPUs rarely fire Volt Tackle* (R-T19d, R-FW2n, R-FW2q): only at a held target, point
   blank, from a standstill, and only where the whiff ends on a floor or within a way back, which
-  since the tackle's 4.1 is on Pokémon Stadium 2 alone; 1 in 1,512 ball-on matches (4 at 3.2).
+  since the tackle's 4.1 is at either end of Pokémon Stadium 2's main floor and on Town & City's
+  side platforms (where the positioning never takes it); 1 in 1,512 ball-on matches (4 at 3.2).
   While one holds the power no Smash Ball spawns for anyone (the final review's M2; SmashWiki
   "Smash Ball"), and no published standby limit ends it (R-FW2m): the longest holds measured
   are 2,057 frames CPU against CPU (pikachu-samus on Smashville, `b8e85bb`; 1,376 at `c016424`)
