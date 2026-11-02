@@ -74,7 +74,7 @@ import {
   retreat,
   slidesOff,
 } from "./offence";
-import { counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, spotBands, storeCharge } from "./specials";
+import { carriesOff, counter, finalSmash, holding, mash, reflect, sideRecover, smashBall, smashSpecial, spotBands, storeCharge } from "./specials";
 
 /** Ultimate's CPU levels. Anything outside is clamped. */
 export const MIN_LEVEL = 1;
@@ -395,6 +395,10 @@ export function decideCpu(
   // `cliffStop`; Plan 5 final wave, fix round 1, ruling R-FW1n: `slidesOff`). Judgement,
   // not a roll.
   if (slidesOff(ctx, bestInput)) bestInput = Btn.Shield & ~forbid;
+
+  // A carry's direction that would walk it off the floor it stands on is not pressed, whoever
+  // asks for it (Plan 5 final wave, part 5: `carriesOff`). Judgement, not a roll.
+  if (carriesOff(ctx, bestInput)) bestInput &= ~(Btn.Left | Btn.Right);
 
   // The fumble: a dropped frame of input. It is what a low-level CPU's hands
   // look like — a jab that does not come out, a direction let go halfway across

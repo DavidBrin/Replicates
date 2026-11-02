@@ -22,7 +22,7 @@ import { actionFrameOf } from "@/engine/hitbox";
 import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { smashHoldFrame } from "@/engine/acmd/run";
-import { Btn, held, type FighterDef, type GameState, type InputFrame, type MoveSlot, type ProjectileState } from "@/engine/types";
+import { Btn, held, type FighterDef, type FighterState, type GameState, type InputFrame, type MoveSlot, type ProjectileState } from "@/engine/types";
 import { FIGHTERS, donkeyKong, fox, kirby, link, mario, marth, pikachu, samus } from "@/fighters";
 import { STAGES } from "@/stages";
 import { makeFighter, makeState } from "@/render/testFixtures";
@@ -1189,6 +1189,64 @@ describe("carries, mouthfuls and grabs", () => {
       if (s.fighters[0].action === "throw") thrown = true;
     }
     expect(thrown).toBe(true);
+  });
+
+  /**
+   * Plan 5 final wave, part 5 (the substitute confirm's out-of-range item 2): the carry pressed
+   * toward the nearer ledge on every frame and walked off its floor, in 123 of 711 carries over
+   * the sweep against passive players (122 of them off a soft platform's end, onto nothing that
+   * stopped the walk's speed), and Donkey Kong was KO'd after 9. A carry's direction that would
+   * take him off the floor he stands on is not pressed, whoever asks for it (`carriesOff`). The
+   * level-9 CPU from a carry's first frame, on `frame` (its throw's press pulses every other
+   * frame), Kirby on his shoulders doing nothing: each frame of the carry, and Donkey Kong as it
+   * ends.
+   */
+  const where = (f: FighterState) => `${f.action} at (${(f.x / 4096).toFixed(2)}, ${(f.y / 4096).toFixed(2)})${f.grounded ? "" : " in the air"}`;
+
+  function carryFrom(stageId: string, at: Partial<FighterState>, frame: number): { carried: FighterState[]; end: FighterState } {
+    const view = stageViewFromDef(STAGES.find((x) => x.id === stageId)!);
+    let s = createInitialState(stageId, [{ defId: "donkeyKong" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+    s.frame = frame;
+    Object.assign(s.fighters[0], { action: "cargoCarry", actionFrame: 0, grounded: true, vx: 0, grabbing: 1, intangible: 0, invincible: 0, ...at });
+    Object.assign(s.fighters[1], { action: "cargoHeld", actionFrame: 0, grabbedBy: 0, grabTimer: 200, x: s.fighters[0].x, y: s.fighters[0].y, grounded: false, intangible: 0, invincible: 0 });
+    const world = cpuWorldFromDef(donkeyKong, view, [donkeyKong, kirby], (id) => FIGHTERS.find((f) => f.id === id)!);
+    let prev: InputFrame[] = [0, 0];
+    let seed = 4;
+    const carried: FighterState[] = [];
+    for (let i = 0; i < 200 && s.fighters[0].action === "cargoCarry"; i++) {
+      carried.push(s.fighters[0]);
+      const d = decideCpu(s, 0, 9, seed, world);
+      seed = d.seed;
+      s = step(s, [d.input, 0], { prevInputs: prev }).state;
+      prev = [d.input, 0];
+    }
+    return { carried, end: s.fighters[0] };
+  }
+
+  it("carries its cargo at the very ledge without walking off it, and throws it from there (Plan 5 final wave, part 5)", () => {
+    // The sweep's one walk-off past a main ledge: Battlefield, the carry begun 0.17 inside the
+    // right ledge facing out, and its first frame walked Donkey Kong off it.
+    const bf = stageViewFromDef(STAGES.find((x) => x.id === "battlefield")!);
+    for (const frame of [0, 1]) {
+      const { carried, end } = carryFrom("battlefield", { x: bf.rightLedge - fx(0.17), y: bf.groundY, facing: 1 }, frame);
+      expect(carried.filter((f) => !f.grounded || f.x > bf.rightLedge).map(where), `from frame ${frame}`).toEqual([]);
+      expect([end.action, end.move?.startsWith("cargo"), end.grounded], `from frame ${frame}`).toEqual(["throw", true, true]);
+    }
+  });
+
+  it("carries its cargo to a soft platform's end without walking off it, and throws it from there (Plan 5 final wave, part 5)", () => {
+    // The sweep's walk-offs, 8 of its 9 KOs: Pokémon Stadium 2's side platform, the carry walking
+    // toward the ledge 37 past its end, off it, on through the air with the walk's speed, and a
+    // throw in the air past the ledge. Donkey Kong's spawn, on the left platform.
+    const ps2 = stageViewFromDef(STAGES.find((x) => x.id === "pokemonStadium2")!);
+    const platform = ps2.platforms.find((p) => p.x < 0)!;
+    for (const frame of [0, 1]) {
+      const { carried, end } = carryFrom("pokemonStadium2", { facing: -1 }, frame);
+      expect(carried[0].y).toBe(platform.y);
+      expect(carried.some((f) => f.x < carried[0].x - fx(5)), "it walked toward the ledge").toBe(true);
+      expect(carried.filter((f) => !f.grounded || f.y !== platform.y || f.x < platform.x - platform.halfWidth).map(where), `from frame ${frame}`).toEqual([]);
+      expect([end.action, end.move?.startsWith("cargo"), end.grounded, end.y], `from frame ${frame}`).toEqual(["throw", true, true, platform.y]);
+    }
   });
 
   it("a level-9 Donkey Kong that grabs facing the nearer edge carries the fighter there and throws them from his shoulders", () => {

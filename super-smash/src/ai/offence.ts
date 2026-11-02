@@ -342,7 +342,16 @@ export function slidesOff(ctx: BehaviourContext, input: InputFrame): boolean {
  * until it comes to rest, on `slidesOff`'s floor model (the stage between its ledges, or
  * the soft platform under it, which may sweep it). `slidesOff` asks it of a let-go out of a
  * dash or a run; the Volt Tackle positioning asks it of every press it makes (Plan 5 final
- * wave 2, fix round 2, re-review 2's N3).
+ * wave 2, fix round 2, re-review 2's N3); a carry asks it of every direction it presses
+ * (`carriesOff`, Plan 5 final wave, part 5).
+ *
+ * A carry (Donkey Kong's cargo, `cargoCarry`) is run with its cargo on its shoulders (a
+ * stand-in, the copy's own: the carry's status ends when nobody rides there, and the copy then
+ * set its load down and stood, never taking the carry's walk), and its floor is the one it
+ * stands on: in a carry Donkey Kong takes no ledge and has no jump in the air (`cargo.ts`,
+ * "having only one jump"), and his fall carries the walk's speed on, so a fall onto a floor
+ * below is leaving too (the part 5 sweep: of 122 carries off a side platform's end, 8 went on
+ * through the air past Pokémon Stadium 2's main ledge, and he was KO'd).
  */
 export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
   const { self } = ctx.view;
@@ -351,13 +360,15 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
   // The floor it slides on: the stage between its ledges, or the soft platform under it.
   // Off a platform's edge it falls, and lands if a floor is under that fall (fix round 2,
   // ruling R-FW1p: `overFloor`; past the main ledge, off Town & City's outer platforms,
-  // nothing is).
+  // nothing is), but for a carry, which any fall takes off its floor.
   const stageFrame = ctx.state.stageFrame;
   const onMain = self.y <= ctx.stage.groundY + fx(4);
   const under = onMain ? null : (ctx.stage.platforms.find((p) => abs(p.y - self.y) <= fx(1) && abs(platformCentreX(p, stageFrame) - self.x) <= p.halfWidth) ?? null);
   if (!onMain && under === null) return false;
   const f = cloneFighter(self);
   const g = ghostContext(def, ctx.view.frame, f);
+  const carrying = self.action === "cargoCarry" && self.grabbing >= 0;
+  if (carrying) g.fighters = withCargo(f);
   let prev: InputFrame = 0;
   for (let k = 1; k <= SLIDE_FRAMES; k++) {
     const now = k === 1 ? input : 0;
@@ -366,7 +377,7 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
     prev = now;
     const left = under === null ? ctx.stage.leftLedge : platformCentreX(under, stageFrame + k) - under.halfWidth;
     const right = under === null ? ctx.stage.rightLedge : platformCentreX(under, stageFrame + k) + under.halfWidth;
-    if (f.x < left || f.x > right) return !overFloor(def, { ...f, grounded: false, platform: -1 }, ctx.stage, ctx.view.frame + k, stageFrame + k);
+    if (f.x < left || f.x > right) return carrying || !overFloor(def, { ...f, grounded: false, platform: -1 }, ctx.stage, ctx.view.frame + k, stageFrame + k);
     // Still on it: a sweeping platform carries it, as the engine carries a fighter
     // standing there after the step's own movement (`resolveCollision`; fix round 3,
     // re-review 3's Minor 1: Smashville's platform swept the fighter off where the copy,
@@ -375,6 +386,18 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
     if (f.vx === 0) return false;
   }
   return false;
+}
+
+/**
+ * The fighters a carrier's copy is run with (`leavesFloor`): the copy, `f`, at its port, and at
+ * the port it holds a stand-in on its shoulders made from the copy itself, for the carry's
+ * status to find there (`STATUS_CARGO_CARRY`), so the CPU reads nothing of the one it carries.
+ */
+function withCargo(f: FighterState): FighterState[] {
+  const fighters: FighterState[] = [];
+  fighters[f.port] = f;
+  fighters[f.grabbing] = { ...cloneFighter(f), port: f.grabbing, action: "cargoHeld", grabbedBy: f.port, grabbing: -1 };
+  return fighters;
 }
 
 /**

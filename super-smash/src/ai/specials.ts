@@ -1029,7 +1029,9 @@ export const PUMMEL_CHANCE = 0.5;
  *
  *  - **a carry** (Donkey Kong's Kong Karry, Plan 5, Task 8): walk toward the
  *    nearer edge, and throw toward it once there (`CARGO_EDGE`) or once the
- *    carry has lasted `CARGO_CARRY_FRAMES`;
+ *    carry has lasted `CARGO_CARRY_FRAMES`; never off the floor it walks on, a
+ *    platform's end included (`carriesOff`, whoever presses the direction: Plan 5
+ *    final wave, part 5), so short of a platform's end it stands until it throws;
  *  - **a mouthful** (Kirby's Inhale, Task 9): one is taken from a standstill or
  *    the air at an opponent in front inside the move's own reach (`MoveDef.inhale`,
  *    its boxes' `moveReach`), one roll an opening; with them in his mouth, Kirby
@@ -1082,6 +1084,22 @@ export const holding: Behaviour = (ctx) => {
   }
   return NOTHING;
 };
+
+/**
+ * Whether `input`, pressed in a carry on the ground, walks Donkey Kong off the floor he stands
+ * on (`leavesFloor`, whose copy carries the cargo, and for which any fall in a carry is leaving):
+ * then its direction is not pressed, whoever asks for it (`decideCpu`; Plan 5 final wave, part 5,
+ * the substitute confirm's out-of-range item 2). `holding` pressed toward the nearer ledge on
+ * every frame of a carry, its throw only on its pulse's frames: in the part 5 sweep against
+ * passive players, 123 of 711 carries walked off (one past Battlefield's ledge on the carry's
+ * first frame, 122 off a side platform's end and on through the air with the walk's speed), and
+ * Donkey Kong was KO'd after 9 of them; with this, none of 709.
+ */
+export function carriesOff(ctx: BehaviourContext, input: InputFrame): boolean {
+  const { self } = ctx.view;
+  if (self.action !== "cargoCarry" || !self.grounded || (input & (Btn.Left | Btn.Right)) === 0) return false;
+  return leavesFloor(ctx, input);
+}
 
 /** Held, carried, in a mouth, on a star (`HELD_ACTIONS`, where `survive` is silent), or stunned with the shield broken: what a mash shortens. */
 const MASHED: readonly ActionState[] = [...HELD_ACTIONS, "shieldBroken"];

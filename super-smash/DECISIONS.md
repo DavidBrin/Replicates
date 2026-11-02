@@ -4144,6 +4144,21 @@ golden unchanged.
   frame the bands were worked out), 0.30 to 1.92 ms after; the world's build takes the 43 to 110
   ms instead, once a match (machine load 5 to 10). Decisions, the golden and `cpuRollback`
   unchanged. Cost: they are worked out for a human Pikachu's port too, where nothing reads them.
+- Donkey Kong's carry never walks off its floor: a direction that would take a carry off the
+  floor it stands on is not pressed, whoever asks for it (`carriesOff`, in `decideCpu`, on
+  `leavesFloor`). `leavesFloor`'s copy now carries the cargo (a stand-in made from the copy;
+  without it the copy set its load down and stood, and never took the carry's walk), and for a
+  carry any fall is leaving, a drop onto a floor below included: in a carry he takes no ledge and
+  has no jump in the air, and the fall carries the walk's speed on. Of the sweep's walk-offs, 122
+  of 123 were off a side platform's end, and 8 of the 9 KOs after them followed one off Pokémon
+  Stadium 2's, the carry going on through the air past the main ledge; with the floor-below
+  exemption, the copy carrying its cargo, 122 walk-offs and 8 such KOs stayed. Over 1,152 matches
+  against passive players (idle, shield held, shield pulsed; the ball off and on; the level-9 CPU
+  against each fighter on each stage, four seeds): carries 711 → 709, walk-offs 123 → 0, his KOs
+  after one 9 → 0; at level 7, 400 → 401, 47 → 0 and 1 → 0; the stocks he took, 3,235 → 3,233.
+  The golden unchanged. Cost: short of a platform's end he stands with his cargo until he throws it
+  (`CARGO_CARRY_FRAMES`), where he walked off it to the floor below; the sweep's carry frames
+  rose from 10,939 to 12,499.
 
 **What the wave measured** (each figure from its part's report; a commit names where it was taken):
 
@@ -4165,6 +4180,8 @@ golden unchanged.
 | CPU Volt Tackles in 1,512 ball-on matches | 1 (`c94fdf7`) | 1, on Pokémon Stadium 2 (`c016424`; 4 at 3.2 a frame, `b8e85bb`) |
 | The Volt Tackle positioning driven alone, 1,744 runs: departures from the floor | 466 (`604d32d`) | 0 (`b8e85bb`) |
 | Rollback and purity, 112 CPU matches (about 1.13 million frames at the wave's end, the last 8 re-simulated every 5th) | 0 mismatches, 0 impure decisions (`5926338`, the final review's probe) | 0 and 0 (`6c2214c`, `c94fdf7`, `e6ab7cd`) |
+| A level-9 Pikachu CPU holding the power, a match a stage against Mario and against Fox: the CPU decision's longest | 44 to 113 ms (`739dcf2`) | 0.30 to 1.92 ms (`8d066a5`) |
+| Donkey Kong's carries against passive players, 1,152 matches at level 9: walk-offs / his KOs after one | 123 / 9 of 711 (`739dcf2`) | 0 / 0 of 709 (part 5) |
 | `pnpm test` / the model-less fresh clone, passed | 8,181 / 8,163 (Task 23) | 8,356 / 8,338 (`c3abc64`) |
 
 The note: part 1's fix round 2 (`ef17ceb`) had at least two Final Smash self-destructs. In one
