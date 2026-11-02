@@ -902,6 +902,8 @@ interface FlickRun {
   readonly move: string | null;
   /** The host's state's hash on each frame it reached, the last it had there. */
   readonly hashes: ReadonlyMap<number, number>;
+  /** What the host gathered for its own port on each tick, by tick (`MatchRunner.lastInputs`). */
+  readonly inputs: readonly InputFrame[];
 }
 
 /**
@@ -963,12 +965,14 @@ function flickMatch(script: PadScript, answerFrom: number, ticks = 60): FlickRun
   });
   const refused: number[] = [];
   const hashes = new Map<number, number>();
+  const inputs: InputFrame[] = [];
   let move: string | null = null;
   for (let tick = 1; tick <= ticks; tick++) {
     ({ buttons: held, rightX } = script(tick));
     if (tick >= answerFrom) guest.advance(1);
     host.advance(1);
     network.advance(FRAME_MS);
+    inputs[tick] = host.lastInputs[0];
     if (host.stalled) refused.push(tick);
     hashes.set(host.frame, hashState(host.state));
     move ??= host.state.fighters[0].move;
@@ -978,7 +982,7 @@ function flickMatch(script: PadScript, answerFrom: number, ticks = 60): FlickRun
     network.advance(FRAME_MS);
   }
   hashes.set(host.frame, hashState(host.state));
-  return { host, guest, sent, refused, move, hashes };
+  return { host, guest, sent, refused, move, hashes, inputs };
 }
 
 /**
@@ -1058,6 +1062,38 @@ describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", ()
     expect(stalled.move).toBe("fsmash");
     expect(aroundFlick(stalled.sent)).toEqual(aroundFlick(live.sent));
     agrees(stalled, live);
+  });
+
+  it("flicked all through a 10-second stall, owes one flick at most: a shield held after it reaches the wire within 2 ticks (part 5, fix round 1)", () => {
+    // The link monitor gives a stall 10 s (`STALL_LOST_MS`). Each flick fired in it owed two
+    // frames and each tick that ran after sent one, so flicking 5 times a second through it put
+    // a shield held 60 ticks after the host ran again 50 ticks late on the wire, behind stale
+    // smashes. A fire now replaces whatever is still owed (two taps of one key in a stall make
+    // one press).
+    const answer = 610;
+    const rest = flickMatch(() => ({ buttons: [], rightX: 0 }), answer, answer + 40).refused;
+    const last = rest[rest.findIndex((tick, i) => rest[i + 1] !== tick + 1)];
+    expect(last - STALL).toBeGreaterThanOrEqual(599);
+    const SHIELD = 4;
+    const shieldFrom = last + 60;
+    // Five flicks a second through the stall, each 3 ticks out and 9 at rest, then the shield.
+    const stalled = flickMatch(
+      (t) => ({ buttons: t >= shieldFrom ? [SHIELD] : [], rightX: t >= STALL && t <= last && (t - STALL) % 12 < 3 ? 0.9 : 0 }),
+      answer,
+      shieldFrom + 120,
+    );
+    expect(stalled.refused).toContain(last);
+    expect(stalled.refused).not.toContain(last + 1);
+    expect(stalled.sent.filter((input) => input & Btn.Flick).length).toBeGreaterThanOrEqual(1);
+    const shieldAt = stalled.inputs.findIndex((input, tick) => tick >= shieldFrom && (input & Btn.Shield) !== 0);
+    expect(shieldAt).toBeGreaterThanOrEqual(shieldFrom);
+    expect(shieldAt - shieldFrom, "ticks the held shield waited behind owed flick frames").toBeLessThanOrEqual(2);
+    expect(stalled.inputs.slice(shieldAt).every((input) => (input & Btn.Shield) !== 0)).toBe(true);
+    expect(stalled.sent.some((input) => (input & Btn.Shield) !== 0)).toBe(true);
+    expect(stalled.guest.frame).toBe(stalled.host.frame);
+    expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
+    expect(stalled.host.netStats?.desyncs).toBe(0);
+    expect(stalled.guest.netStats?.desyncs).toBe(0);
   });
 
   it("fired deep in the stall over a held d-pad Up: its let-go and its fire reach the wire once each, in order, as a tapped key does", () => {

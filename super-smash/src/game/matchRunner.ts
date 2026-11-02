@@ -348,11 +348,12 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   // polls: its let-go of the left stick's direction, then its fire (`GamepadPoll.flicks`,
   // its direction and button). Each pad frame of it goes out whole and in order on a tick
   // that runs, in place of that tick's poll, so the frames scheduled are the ones the
-  // unstalled flick schedules: one polled on a refused tick is owed (`owedPads`). Carried as
-  // bits alone, the fire landed on a poll that already had back the direction the flick lets
-  // go of, fresh again beside its own (a neutral air for a forward one), and a let-go lost
-  // with it never ended a dash (a dash attack for a forward smash). The let-go is known on
-  // the fire's tick: the poll before, owed if it never went out.
+  // unstalled flick schedules: one polled on a refused tick is owed (`owedPads`), the last
+  // flick's only, so at most its two frames. Carried as bits alone, the fire landed on a poll
+  // that already had back the direction the flick lets go of, fresh again beside its own (a
+  // neutral air for a forward one), and a let-go lost with it never ended a dash (a dash
+  // attack for a forward smash). The let-go is known on the fire's tick: the poll before,
+  // owed if it never went out.
   const noPads: readonly (readonly PadFrame[])[] = players.map(() => []);
   let owedPads = noPads;
   // This tick's owed pad frames, its own flick's among them, kept in case it is refused.
@@ -373,8 +374,12 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     tickPads = players.map((_, port) => {
       const poll = tickPolls[port];
       if (poll.flick === 0) return owedPads[port];
-      // A fire: after anything already owed, its let-go if that never went out, then itself.
-      return [...owedPads[port], ...(lastPollsSent[port] ? [] : [lastPolls[port]]), poll];
+      // A fire: its let-go if that never went out, then itself, in place of anything still
+      // owed, as two taps of one key in a stall make one press. So one flick's two frames are
+      // all that is ever owed (part 5, fix round 1: appended, they piled up two a flick over a
+      // long stall and drained one a tick, and a shield held after a 10 s stall flicked through
+      // at 5 a second went out 50 ticks late, behind stale smashes).
+      return [...(lastPollsSent[port] ? [] : [lastPolls[port]]), poll];
     });
     return players.map((p, port) => {
       if (p.cpuLevel === null) {

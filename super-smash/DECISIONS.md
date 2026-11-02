@@ -4112,8 +4112,13 @@ its final form; "none recorded" means the ruling named no cost.
     let-go refused too, a dash attack for a forward smash). Now both of the flick's pad frames,
     its let-go and its fire, go out whole and in order on the ticks that run, each in place of
     that tick's poll, so the session runs the frames the unstalled flick runs; the release frame
-    is carried too. Cost: a poll an owed frame replaces is not sent (a pad press held for that one
-    poll alone is lost; a held one is read on the next).
+    is carried too. A fire replaces whatever is still owed (its fix round 1: appended, the frames
+    piled up two a flick over a long stall and drained one a tick, so a shield held after a 10 s
+    stall flicked through at 5 a second went out 50 ticks late, behind stale smashes; now within
+    2). Cost: at most one flick's two frames are owed, so through a long stall only the last flick
+    survives, as two taps of one key in a stall make one press; and a poll an owed frame replaces
+    is not sent (a pad press held for that one poll alone is lost; a held one is read a tick
+    later).
 - Also: the task reviews' parked test pins, labels and citations (Tasks 2 to 22); every named
   e2e locator matched exactly (seven more in fix round 1); F.L.U.D.D.'s nozzle and hose follow
   the hands down; a contact lab in the golden (`rebound`, `shieldStun` and `pummel` a second
