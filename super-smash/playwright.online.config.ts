@@ -4,8 +4,9 @@ import { defineConfig, devices } from "@playwright/test";
  * The online suite: two (or three) browser contexts in one room.
  *
  * It needs the Worker, not `next dev` — rooms and /api/ice live there — so it
- * builds the static export and serves it with `wrangler dev`, or, with
- * SMASH_URL set, runs against the deployed site.
+ * builds the static export and serves it with wrangler's dev server
+ * (`scripts/e2e/wrangler-e2e.mjs`), or, with SMASH_URL set, runs against the
+ * deployed site.
  *
  * Chromium hides host ICE candidates behind mDNS names by default; two
  * contexts on one machine connect faster and more reliably with real ones.
@@ -39,8 +40,13 @@ export default defineConfig({
   webServer: PUBLIC_URL
     ? undefined
     : {
-        command: `pnpm run build && WRANGLER_SEND_METRICS=false pnpm exec wrangler dev --port ${PORT}`,
-        url: BASE_URL,
+        // Builds, then serves out/ and the Worker with every watcher off, and says E2E-READY
+        // once it serves (Plan 6, Task 1: `wrangler dev` reloaded on out/'s file events and
+        // dropped the room mid-test). No `url`: Playwright races a url against `wait`, and
+        // the url would win as soon as wrangler first answered.
+        command: `node scripts/e2e/wrangler-e2e.mjs ${PORT}`,
+        wait: { stdout: /E2E-READY/ },
+        gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
         reuseExistingServer: false,
         timeout: 300_000,
       },
