@@ -50,7 +50,7 @@ test("rules, stage and fighters lead to a running match", async ({ page }) => {
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.stage}`);
-  await page.getByLabel("Stages").getByRole("button").first().click();
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.fighters}`);

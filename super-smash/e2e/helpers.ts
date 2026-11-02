@@ -212,7 +212,7 @@ export async function startMatchFromMenu(page: Page, options: MatchOptions = {})
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.stage}`);
-  await page.getByLabel("Stages").getByRole("button").first().click();
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.fighters}`);
@@ -251,7 +251,7 @@ export async function startMatchFromMenu(page: Page, options: MatchOptions = {})
  * standing on the stage when the test presses anything.
  */
 export async function waitForMatch(page: Page): Promise<void> {
-  await page.getByLabel("Match").waitFor();
+  await page.getByLabel("Match", { exact: true }).waitFor();
   await page.waitForFunction(() => ((window as unknown as { __smashDebug?: { frame: number } }).__smashDebug?.frame ?? 0) >= 70, undefined, {
     timeout: 30_000,
   });

@@ -106,7 +106,7 @@ test("stage select", async ({ page }) => {
   await page.waitForURL(`**${ROUTES.rules}`);
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
   await page.waitForURL(`**${ROUTES.stage}`);
-  await page.getByLabel("Stages").getByRole("button").first().hover();
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().hover();
   await page.waitForTimeout(500);
   await page.screenshot({ path: shot("stage-select") });
 });
@@ -117,7 +117,7 @@ test("character select", async ({ page }) => {
   await page.waitForURL(`**${ROUTES.rules}`);
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
   await page.waitForURL(`**${ROUTES.stage}`);
-  await page.getByLabel("Stages").getByRole("button").first().click();
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
   await page.waitForURL(`**${ROUTES.fighters}`);
 
@@ -134,7 +134,7 @@ test("the match, and the HUD", async ({ page }) => {
   await startFromTitle(page);
   await page.getByRole("button", { name: /smash/i }).first().click();
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
-  await page.getByLabel("Stages").getByRole("button").first().click();
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
   const roster = page.getByLabel("Fighters").getByRole("button");
   await roster.nth(0).click();

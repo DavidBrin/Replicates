@@ -480,7 +480,7 @@ async function startFourFighterMatch(page: Page, names: readonly string[]): Prom
 
   await page.waitForURL(`**${ROUTES.stage}`);
   // The first stage is Battlefield: the most platforms of the six, and a platform is a draw call.
-  await page.getByLabel("Stages").getByRole("button").first().click();
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.fighters}`);
