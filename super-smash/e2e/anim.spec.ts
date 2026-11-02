@@ -31,7 +31,7 @@ test("every action draws a contact sheet without throwing", async ({ page }) => 
   await expect(page.getByLabel("Contact sheet", { exact: true })).toBeVisible();
 
   for (const action of ACTIONS) {
-    await page.getByLabel("Action").selectOption(action);
+    await page.getByLabel("Action", { exact: true }).selectOption(action);
     // The heading names the clip and its length, so a clip with no frames — a
     // period of zero, an empty key list — shows up here rather than silently
     // drawing one cell.
@@ -48,12 +48,12 @@ test("every fighter's rig survives the same clip", async ({ page }) => {
   page.on("pageerror", (e) => errors.push(String(e)));
 
   await page.goto("/anim");
-  const fighters = await page.getByLabel("Fighter").locator("option").allTextContents();
+  const fighters = await page.getByLabel("Fighter", { exact: true }).locator("option").allTextContents();
   expect(fighters.length).toBeGreaterThanOrEqual(8);
 
-  await page.getByLabel("Action").selectOption("roll");
+  await page.getByLabel("Action", { exact: true }).selectOption("roll");
   for (const id of fighters) {
-    await page.getByLabel("Fighter").selectOption(id);
+    await page.getByLabel("Fighter", { exact: true }).selectOption(id);
     await expect(page.getByLabel("Contact sheet", { exact: true })).toBeVisible();
     // The sheet says what it drew this fighter with once it is built: until then a throw would not have happened yet.
     await expect(page.getByText(/contact sheet — (model|stand-in)/), id).toBeVisible({ timeout: 30_000 });
@@ -108,8 +108,8 @@ test("the contact sheet draws a forward tilt: the model in every cell, the hitbo
   page.on("pageerror", (e) => errors.push(String(e)));
 
   await page.goto("/anim");
-  await page.getByLabel("Action").selectOption("attack");
-  await page.getByLabel("Move").selectOption("ftilt");
+  await page.getByLabel("Action", { exact: true }).selectOption("attack");
+  await page.getByLabel("Move", { exact: true }).selectOption("ftilt");
   await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]')).toBeVisible({ timeout: 30_000 });
 
   // 25 frames, in cells of 150 px.
@@ -143,10 +143,10 @@ test("every fighter's contact sheet draws, one renderer at a time", async ({ pag
   });
 
   await page.goto("/anim");
-  const fighters = await page.getByLabel("Fighter").locator("option").allTextContents();
-  await page.getByLabel("Action").selectOption("land");
+  const fighters = await page.getByLabel("Fighter", { exact: true }).locator("option").allTextContents();
+  await page.getByLabel("Action", { exact: true }).selectOption("land");
   for (const id of fighters) {
-    await page.getByLabel("Fighter").selectOption(id);
+    await page.getByLabel("Fighter", { exact: true }).selectOption(id);
     await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]'), id).toBeVisible({ timeout: 30_000 });
     const { model } = await cellPixels(page);
     expect(model.every((n) => n > 200), `${id}: a cell is blank: ${model.join(",")}`).toBe(true);

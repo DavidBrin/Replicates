@@ -76,8 +76,8 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   await host.waitForURL(`**${ROUTES.fighters}`);
   await expect(guest.getByText(/stage: battlefield/i)).toBeVisible();
 
-  await host.getByLabel("Fighters").getByRole("button").nth(0).click();
-  await guest.getByLabel("Fighters").getByRole("button").nth(5).click();
+  await host.getByLabel("Fighters", { exact: true }).getByRole("button").nth(0).click();
+  await guest.getByLabel("Fighters", { exact: true }).getByRole("button").nth(5).click();
   await expect(guest.getByRole("button", { name: /waiting for host/i })).toBeDisabled();
   await host.getByRole("button", { name: /ready to fight/i }).click();
 
@@ -149,7 +149,7 @@ test("two browsers play a match to its result, and both see the same one", async
   await host.keyboard.up("ArrowLeft");
 
   for (const page of [host, guest]) {
-    await expect(page.getByText("Game Set")).toBeVisible();
+    await expect(page.getByText("Game Set", { exact: true })).toBeVisible();
     await expect(page.getByRole("listitem").filter({ has: page.getByText("1st", { exact: true }) })).toContainText("P2");
   }
 });

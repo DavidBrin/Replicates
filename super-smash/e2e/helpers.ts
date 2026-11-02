@@ -216,7 +216,7 @@ export async function startMatchFromMenu(page: Page, options: MatchOptions = {})
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
 
   await page.waitForURL(`**${ROUTES.fighters}`);
-  const roster = page.getByLabel("Fighters").getByRole("button");
+  const roster = page.getByLabel("Fighters", { exact: true }).getByRole("button");
   await roster.nth(0).click();
   await roster.nth(1).click();
   if (options.idleP2) {

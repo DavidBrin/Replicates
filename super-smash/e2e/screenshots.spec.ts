@@ -123,7 +123,7 @@ test("character select", async ({ page }) => {
 
   // With one port filled and a portrait hovered, the screen shows everything at
   // once: the grid, a locked panel, and the splash art for the hovered fighter.
-  const roster = page.getByLabel("Fighters").getByRole("button");
+  const roster = page.getByLabel("Fighters", { exact: true }).getByRole("button");
   await roster.nth(0).click();
   await roster.nth(6).hover();
   await page.waitForTimeout(600);
@@ -136,7 +136,7 @@ test("the match, and the HUD", async ({ page }) => {
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
   await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
-  const roster = page.getByLabel("Fighters").getByRole("button");
+  const roster = page.getByLabel("Fighters", { exact: true }).getByRole("button");
   await roster.nth(0).click();
   await roster.nth(1).click();
   await page.getByRole("button", { name: /ready|fight/i }).first().click();

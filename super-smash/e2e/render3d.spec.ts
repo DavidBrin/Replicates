@@ -488,7 +488,7 @@ async function startFourFighterMatch(page: Page, names: readonly string[]): Prom
   await add.click();
   await add.click();
   // Each pick hands the cursor to the next empty panel, so four picks fill four ports in order.
-  for (const name of names) await page.getByLabel("Fighters").getByRole("button", { name: new RegExp(`^${name},`) }).click();
+  for (const name of names) await page.getByLabel("Fighters", { exact: true }).getByRole("button", { name: new RegExp(`^${name},`) }).click();
 
   await page.getByRole("button", { name: /ready|fight/i }).first().click();
   await page.waitForURL(`**${ROUTES.play}`);
