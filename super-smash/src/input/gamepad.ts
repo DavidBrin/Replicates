@@ -195,6 +195,12 @@ export interface GamepadPoll {
   readonly released: InputFrame[];
   /** Post-deadzone left stick, indexed by port. */
   readonly sticks: Stick[];
+  /**
+   * Plan 5: true on the frame a right-stick flick presses its direction and
+   * button, indexed by port. That direction is a full push whatever the
+   * keyboard's Tilt key says (`mergeKeyboardAndPad`; ruling R-FW3b).
+   */
+  readonly flicks: boolean[];
   readonly connectedPads: readonly number[];
 }
 
@@ -210,8 +216,8 @@ export class GamepadInput {
   /** Last poll's packed frame per pad index, for edge detection. */
   private readonly lastFrames = new Map<number, InputFrame>();
   /**
-   * Plan 5: last poll's right-stick direction per pad index, absent until the
-   * stick has been seen at rest (R-T21a), and a flick waiting for its second frame.
+   * Plan 5: last poll's right-stick direction per pad index, absent before the
+   * pad's first poll (R-T21a), and a flick waiting for its second frame.
    */
   private readonly lastRight = new Map<number, InputFrame>();
   private readonly pendingRight = new Map<number, InputFrame>();
@@ -269,6 +275,7 @@ export class GamepadInput {
     const pressed = new Array<InputFrame>(portCount).fill(0);
     const released = new Array<InputFrame>(portCount).fill(0);
     const sticks = new Array<Stick>(portCount).fill(NEUTRAL_STICK);
+    const flicks = new Array<boolean>(portCount).fill(false);
     const seen: number[] = [];
 
     // Ports follow connection order, not the slot number: a lone pad in slot 1
@@ -282,7 +289,9 @@ export class GamepadInput {
 
       const mapping = this.mappingForPort(port);
       const stick = this.readStick(pad, mapping);
-      const frame = this.rightStickFrame(pad, mapping, this.packFrame(pad, stick, mapping));
+      const held = this.packButtons(pad, mapping);
+      const right = this.rightStickFrame(pad, mapping, this.withStick(held, stick), held & DIRECTION_MASK);
+      const frame = right.frame;
       const previous = this.lastFrames.get(pad.index) ?? 0;
 
       // `Btn.Soft` is a modifier on a direction, not a button: its coming and
@@ -292,6 +301,7 @@ export class GamepadInput {
       pressed[port] |= frame & ~previous & buttons;
       released[port] |= previous & ~frame & buttons;
       sticks[port] = stick;
+      flicks[port] ||= right.flicked;
 
       this.lastFrames.set(pad.index, frame);
       this.connected.add(pad.index);
@@ -310,7 +320,7 @@ export class GamepadInput {
       }
     }
 
-    return { frames, pressed, released, sticks, connectedPads: seen };
+    return { frames, pressed, released, sticks, flicks, connectedPads: seen };
   }
 
   /** An unplugged pad gives up its port, for a pad without one to take. */
@@ -348,7 +358,8 @@ export class GamepadInput {
     return radialDeadzone(rawX, rawY, this.deadzone);
   }
 
-  private packFrame(pad: Gamepad, stick: Stick, mapping: GamepadMapping): InputFrame {
+  /** The buttons held, the d-pad's directions among them. */
+  private packButtons(pad: Gamepad, mapping: GamepadMapping): InputFrame {
     let frame: InputFrame = 0;
 
     for (const [name, bit] of BUTTON_ORDER) {
@@ -360,16 +371,20 @@ export class GamepadInput {
         }
       }
     }
+    return frame;
+  }
 
+  /** `buttons` with the left stick's directions. */
+  private withStick(buttons: InputFrame, stick: Stick): InputFrame {
     // The stick contributes the same direction bits as the d-pad, OR'd, so a
     // player may use either without a mode switch.
-    const fromPad = frame & DIRECTION_MASK;
+    const fromPad = buttons & DIRECTION_MASK;
     let fromStick: InputFrame = 0;
     if (stick.x >= WALK_THRESHOLD) fromStick |= Btn.Right;
     else if (stick.x <= -WALK_THRESHOLD) fromStick |= Btn.Left;
     if (stick.y >= WALK_THRESHOLD) fromStick |= Btn.Up;
     else if (stick.y <= -WALK_THRESHOLD) fromStick |= Btn.Down;
-    frame |= fromStick;
+    let frame = buttons | fromStick;
 
     // The one thing the magnitude can carry over the wire: "not all the way".
     // A d-pad is digital, so a held d-pad direction is never soft.
@@ -394,6 +409,15 @@ export class GamepadInput {
    * and holding the stick does not charge the smash, as Ultimate's does
    * (same page): the button is pressed for the one frame.
    *
+   * Ruling R-FW3a: the d-pad is not the Control Stick, so a held d-pad
+   * direction stays held through the flick, and one hold stays one press.
+   * On the flick's own axis it yields to the flick for the flick's two
+   * frames: the flick's direction is then the only one on that axis, and
+   * fresh. The same direction comes back held, with no new press; the
+   * opposite one comes back as a fresh press, which the packed frame cannot
+   * avoid (the simulation reads a press as held now and not on the frame
+   * before).
+   *
    * Ruling R-T21a: only a pad with the W3C standard mapping has its right
    * stick on axes 2 and 3; on another layout they may be triggers, which rest
    * at an end of their travel, so such a pad gets no flick at all. And a
@@ -402,27 +426,32 @@ export class GamepadInput {
    * just outside the dead zone still arms), a deflection (on the first poll,
    * or held since the pad connected) never fires.
    */
-  private rightStickFrame(pad: Gamepad, mapping: GamepadMapping, frame: InputFrame): InputFrame {
+  private rightStickFrame(
+    pad: Gamepad,
+    mapping: GamepadMapping,
+    frame: InputFrame,
+    dpad: InputFrame,
+  ): { frame: InputFrame; flicked: boolean } {
     const mode = mapping.rightStick ?? "smash";
-    if (mode === "off" || pad.mapping !== "standard") return frame;
+    if (mode === "off" || pad.mapping !== "standard") return { frame, flicked: false };
     const r = radialDeadzone(pad.axes[mapping.rightStickX ?? 2] ?? 0, -(pad.axes[mapping.rightStickY ?? 3] ?? 0), this.deadzone);
     // One of four directions, the larger axis: smash attacks and specials are four-way.
     const dir: InputFrame =
       r.magnitude < WALK_THRESHOLD ? 0 : Math.abs(r.x) >= Math.abs(r.y) ? (r.x > 0 ? Btn.Right : Btn.Left) : r.y > 0 ? Btn.Up : Btn.Down;
+    // Absent on the pad's first poll, so a stick pushed then has no rest to flick from.
     const previous = this.lastRight.get(pad.index);
-    if (previous === undefined && dir !== 0) return frame;
     this.lastRight.set(pad.index, dir);
     const body = frame & ~(DIRECTION_MASK | Btn.Soft);
     const pending = this.pendingRight.get(pad.index);
     if (pending !== undefined) {
       this.pendingRight.delete(pad.index);
-      return body | pending | (mode === "smash" ? Btn.Attack : Btn.Special);
+      return { frame: body | offAxis(dpad, pending) | pending | (mode === "smash" ? Btn.Attack : Btn.Special), flicked: true };
     }
     if (dir !== 0 && previous === 0) {
       this.pendingRight.set(pad.index, dir);
-      return body;
+      return { frame: body | offAxis(dpad, dir), flicked: false };
     }
-    return frame;
+    return { frame, flicked: false };
   }
 
   private readonly onConnected = (event: Event): void => {
@@ -441,6 +470,12 @@ export class GamepadInput {
     this.pendingRight.delete(index);
     this.onConnectionChange?.(index, false);
   };
+}
+
+/** The directions in `bits` across `dir`'s axis: up and down for left or right, and the reverse. */
+function offAxis(bits: InputFrame, dir: InputFrame): InputFrame {
+  const horizontal = Btn.Left | Btn.Right;
+  return bits & ((dir & horizontal) !== 0 ? Btn.Up | Btn.Down : horizontal);
 }
 
 export function createGamepadInput(options: GamepadOptions = {}): GamepadInput {
@@ -468,9 +503,15 @@ export const DIRECTION_MASK: InputFrame = Btn.Left | Btn.Right | Btn.Up | Btn.Do
  * stick's "soft": otherwise a player resting a thumb on the stick could never
  * dash with the arrow keys. The keyboard's own soft, its Tilt key (Plan 5,
  * Task 21b), is kept: that is the player asking for a part-way push.
+ *
+ * Except on a right-stick flick's frame (`flick`, `GamepadPoll.flicks`;
+ * ruling R-FW3b): the flick is a full push of its own, in either of its
+ * modes, so the Tilt key does not soften its direction, and its smash attack
+ * stays a smash. It still softens the left stick.
  */
-export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame): InputFrame {
+export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame, flick = false): InputFrame {
   const merged = keys | pad;
+  if (flick) return merged & ~Btn.Soft;
   return (keys & DIRECTION_MASK) !== 0 ? (merged & ~Btn.Soft) | (keys & Btn.Soft) : merged;
 }
 

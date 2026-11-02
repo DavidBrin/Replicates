@@ -219,6 +219,12 @@ export interface MatchRunner {
   readonly netStats: NetStats | null;
   /** The last tick was refused by the rollback session — waiting on the peer. */
   readonly stalled: boolean;
+  /**
+   * Each port's input frame as this machine gathered it on the last tick (its keys
+   * and pad merged, or its CPU's), 0 before the first: for a test that must see a
+   * port nobody plays give the simulation nothing at all (Plan 5 final wave, part 3).
+   */
+  readonly lastInputs: readonly InputFrame[];
 }
 
 /**
@@ -330,6 +336,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let carriedPresses = noPresses;
   // This tick's presses plus the carried ones, kept in case it is refused too.
   let tickPresses = noPresses;
+  /** What `gatherInputs` gave each port on the last tick (`MatchRunner.lastInputs`). */
+  let lastInputs: readonly InputFrame[] = noPresses;
 
   function gatherInputs(): InputFrame[] {
     const drained = keyboard ? keyboard.drain() : null;
@@ -339,7 +347,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     return players.map((p, port) => {
       if (p.cpuLevel === null) {
         const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
-        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0);
+        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0, pads?.flicks[port] ?? false);
       }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
@@ -370,6 +378,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // test or a stray caller must not poll a pad or end a match after teardown.
     if (disposed) return;
     const inputs = gatherInputs();
+    lastInputs = inputs;
     if (session) {
       const result = session.advance(inputs);
       stalled = !result.advanced;
@@ -560,6 +569,9 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     },
     get stalled() {
       return stalled;
+    },
+    get lastInputs() {
+      return lastInputs;
     },
     get state() {
       return state;

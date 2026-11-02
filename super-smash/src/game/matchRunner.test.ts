@@ -339,7 +339,7 @@ function fakePad(read: () => InputFrame) {
       const frames = new Array<InputFrame>(portCount).fill(0);
       frames[0] = read();
       const none = new Array<InputFrame>(portCount).fill(0);
-      return { frames, pressed: none, released: none, sticks: [], connectedPads: [0] };
+      return { frames, pressed: none, released: none, sticks: [], flicks: [], connectedPads: [0] };
     },
   };
 }
@@ -378,6 +378,64 @@ describe("a gamepad drives a local match", () => {
     // Battlefield's left platform, which Mario walks off at frame 15.
     runner.advance(10);
     expect(runner.state.fighters[0].action).toBe("walk");
+  });
+
+  // Plan 5 final wave, part 3: what each port gave the simulation, for an e2e test
+  // that checks a port nobody plays gives nothing.
+  it("reports each port's input frame from the last tick, 0 before the first", () => {
+    let held: InputFrame = Btn.Right | Btn.Soft;
+    const runner = padRunner(() => held);
+    expect(runner.lastInputs).toEqual([0, 0]);
+    runner.advance(1);
+    expect(runner.lastInputs).toEqual([Btn.Right | Btn.Soft, 0]);
+    held = Btn.Jump;
+    runner.advance(1);
+    expect(runner.lastInputs).toEqual([Btn.Jump, 0]);
+    runner.dispose();
+  });
+
+  /**
+   * Ruling R-FW3b: the pad's flick frame (`GamepadPoll.flicks`) reaches the
+   * merge, so the keyboard's Tilt key held on the same port leaves a
+   * right-stick smash a smash.
+   */
+  it("hands the merge the pad's flick: a right-stick smash under the keyboard's Tilt key is still a forward smash", () => {
+    const keyboard = new KeyboardInput([{ port: 0, scheme: CONFIG_ARROWS }], { window, overlayHost: null });
+    keyboard.attach();
+    try {
+      let flick = false;
+      const runner = createMatchRunner({
+        stage: getStageOrThrow("battlefield"),
+        players: [
+          { selection: { defId: "mario" }, cpuLevel: null, label: "P1" },
+          { selection: { defId: "donkeyKong" }, cpuLevel: null, label: "P2" },
+        ],
+        rules: RULES,
+        seed: 0x5eed1e55,
+        getFighter: getFighterOrThrow,
+        keyboard,
+        gamepad: {
+          poll(portCount = 4) {
+            const frames = new Array<InputFrame>(portCount).fill(0);
+            const flicks = new Array<boolean>(portCount).fill(false);
+            frames[0] = flick ? Btn.Right | Btn.Attack : 0;
+            flicks[0] = flick;
+            const none = new Array<InputFrame>(portCount).fill(0);
+            return { frames, pressed: none, released: none, sticks: [], flicks, connectedPads: [0] };
+          },
+        },
+      });
+      runner.advance(90);
+      expect(runner.state.fighters[0].action).toBe("stand");
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: CONFIG_ARROWS.bindings.tilt }));
+      runner.advance(1);
+      flick = true;
+      runner.advance(1);
+      expect(runner.state.fighters[0].move).toBe("fsmash");
+      runner.dispose();
+    } finally {
+      keyboard.detach();
+    }
   });
 });
 
@@ -456,7 +514,7 @@ function padOn(port: number, read: () => InputFrame) {
       const frames = new Array<InputFrame>(portCount).fill(0);
       frames[port] = read();
       const none = new Array<InputFrame>(portCount).fill(0);
-      return { frames, pressed: none, released: none, sticks: [], connectedPads: [0] };
+      return { frames, pressed: none, released: none, sticks: [], flicks: [], connectedPads: [0] };
     },
   };
 }
@@ -528,7 +586,7 @@ describe("an online match ends once, on both machines", () => {
           frames[0] = scripted(0, f, link.seed, link.period);
           frames[1] = scripted(1, f, link.seed, link.period);
           const none = new Array<InputFrame>(portCount).fill(0);
-          return { frames, pressed: none, released: none, sticks: [], connectedPads: [0, 1] };
+          return { frames, pressed: none, released: none, sticks: [], flicks: [], connectedPads: [0, 1] };
         },
       },
     });

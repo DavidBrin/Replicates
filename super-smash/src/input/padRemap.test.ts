@@ -17,6 +17,7 @@ import {
   STANDARD_MAPPING,
   isPadSettings,
   mappingFrom,
+  mergeKeyboardAndPad,
   padButtonName,
   padPortMap,
   rebind,
@@ -183,6 +184,49 @@ describe("the right stick", () => {
 
   it("is a full push even over a soft left stick", () => {
     expect(flick(DEFAULT_PAD_SETTINGS, UP, [0.5, 0])).toEqual([0, Btn.Up | Btn.Attack, Btn.Right | Btn.Soft, Btn.Right | Btn.Soft]);
+  });
+
+  /**
+   * Ruling R-FW3a (codex P2-1): the flick lets go of the left stick, not the
+   * d-pad. Before, d-pad Up held through a flick to the right packed
+   * `[4, 0, 18, 4]`: one hold, two presses.
+   */
+  describe("over a held d-pad direction (ruling R-FW3a)", () => {
+    const DPAD = { up: 12, left: 14, right: 15 } as const;
+
+    /** Four polls with d-pad `button` held and the right stick at rest, then flicked right to 0.9 and held. */
+    function overDpad(button: number): { frames: InputFrame[]; presses: InputFrame[]; flicks: boolean[] } {
+      const { nav, set } = livePad();
+      const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+      const polls = [0, 0.9, 0.9, 0.9].map((x) => {
+        set(pad({ buttons: [button], axes: [0, 0, x, 0] }));
+        return pads.poll(1);
+      });
+      return { frames: polls.map((p) => p.frames[0]), presses: polls.map((p) => p.pressed[0]), flicks: polls.map((p) => p.flicks[0]) };
+    }
+
+    it("keeps a direction across the flick held: d-pad Up is pressed once", () => {
+      const { frames, presses } = overDpad(DPAD.up);
+      expect(frames).toEqual([Btn.Up, Btn.Up, Btn.Up | Btn.Right | Btn.Attack, Btn.Up]);
+      expect(presses.map((p) => (p & Btn.Up) !== 0)).toEqual([true, false, false, false]);
+    });
+
+    it("yields the flick's own axis to it for its two frames: the same direction comes back held", () => {
+      const { frames, presses } = overDpad(DPAD.right);
+      expect(frames).toEqual([Btn.Right, 0, Btn.Right | Btn.Attack, Btn.Right]);
+      // The second press is the flick's own: a smash needs a fresh direction.
+      expect(presses.map((p) => (p & Btn.Right) !== 0)).toEqual([true, false, true, false]);
+    });
+
+    it("yields the opposite direction too, which comes back as a fresh press", () => {
+      const { frames, presses } = overDpad(DPAD.left);
+      expect(frames).toEqual([Btn.Left, 0, Btn.Right | Btn.Attack, Btn.Left]);
+      expect(presses.map((p) => (p & Btn.Left) !== 0)).toEqual([true, false, false, true]);
+    });
+
+    it("reports the flick's frame, where its direction and button are pressed (ruling R-FW3b)", () => {
+      expect(overDpad(DPAD.up).flicks).toEqual([false, false, true, false]);
+    });
   });
 
   it("special: the same with the special button", () => {
@@ -393,5 +437,29 @@ describe("what the fighter does with a right-stick flick", () => {
 
   it("is an up smash, not a jump, with Stick Jump on", () => {
     expect(moveAfter([0, Btn.Up | Btn.Attack, 0])).toBe("usmash");
+  });
+
+  /**
+   * Ruling R-FW3b (codex P2-2): the keyboard's Tilt key held on the same port
+   * made the flick's forward smash a forward tilt: `Btn.Soft` rode onto the
+   * flick's frame (`[512, 530, 512]`). The flick is a full push of its own.
+   */
+  it("is still a smash with the keyboard's Tilt key held: Mario's forward smash, not his forward tilt", () => {
+    const { nav, set } = livePad();
+    const pads = input(nav, mappingFrom(DEFAULT_PAD_SETTINGS));
+    pads.poll(1);
+    const merged = [0.9, 0.9, 0.9].map((x) => {
+      set(pad({ axes: [0, 0, x, 0] }));
+      const p = pads.poll(1);
+      return mergeKeyboardAndPad(Btn.Soft, p.frames[0], p.flicks[0]);
+    });
+    expect(merged).toEqual([Btn.Soft, Btn.Right | Btn.Attack, Btn.Soft]);
+    expect(moveAfter(merged)).toBe("fsmash");
+  });
+
+  it("leaves the Tilt key softening the left stick: its full push and attack are a forward tilt (Task 21b)", () => {
+    const merged = mergeKeyboardAndPad(Btn.Soft, Btn.Right | Btn.Attack);
+    expect(merged).toBe(Btn.Soft | Btn.Right | Btn.Attack);
+    expect(moveAfter([Btn.Soft, merged, Btn.Soft])).toBe("ftilt");
   });
 });
