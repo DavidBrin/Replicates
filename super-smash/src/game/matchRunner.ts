@@ -336,6 +336,11 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let carriedPresses = noPresses;
   // This tick's presses plus the carried ones, kept in case it is refused too.
   let tickPresses = noPresses;
+  // The same for a pad's right-stick flick (ruling R-FW3f): its poll reports the
+  // fire frame's direction and button on one tick only (`GamepadPoll.flicks`), so
+  // a flick fired on a refused tick rides on the next one, `Btn.Flick` and all.
+  let carriedFlicks = noPresses;
+  let tickFlicks = noPresses;
   /** What `gatherInputs` gave each port on the last tick (`MatchRunner.lastInputs`). */
   let lastInputs: readonly InputFrame[] = noPresses;
 
@@ -344,10 +349,11 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // Exactly once per tick: a pad's press edges are the diff against the last poll.
     const pads = gamepad ? gamepad.poll(players.length) : null;
     tickPresses = players.map((_, port) => carriedPresses[port] | (drained?.pressed[port] ?? 0));
+    tickFlicks = players.map((_, port) => carriedFlicks[port] | (pads?.flicks[port] ?? 0));
     return players.map((p, port) => {
       if (p.cpuLevel === null) {
         const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
-        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0, pads?.flicks[port] ?? 0);
+        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0, tickFlicks[port]);
       }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
@@ -385,12 +391,14 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       if (!result.advanced) {
         // A refused frame ran nothing new: nothing to age, sound or report. The
         // picture holds still instead of re-blending the last step, and this
-        // tick's presses wait for the next one.
+        // tick's presses, and a flick, wait for the next one.
         previous = state;
         carriedPresses = tickPresses;
+        carriedFlicks = tickFlicks;
         return;
       }
       carriedPresses = noPresses;
+      carriedFlicks = noPresses;
       previous = state;
       state = result.state;
       events = result.events;

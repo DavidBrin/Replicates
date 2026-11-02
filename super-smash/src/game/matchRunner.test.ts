@@ -858,6 +858,81 @@ describe("a tick the rollback session refuses", () => {
     }
   });
 
+  /**
+   * Ruling R-FW3f: a pad's poll reports a right-stick flick's fire frame on one
+   * tick only, so a refused tick lost it, as it would have lost a tapped key; it
+   * rides on the next frame that runs, its direction, button and `Btn.Flick`.
+   */
+  it("keeps a right-stick flick fired during the stall for the next frame that runs", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const sent: InputFrame[] = [];
+    const transport = network.connect("host");
+    let fire = false;
+    const host = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules: RULES,
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      gamepad: {
+        poll(portCount = 4) {
+          const frames = new Array<InputFrame>(portCount).fill(0);
+          const flicks = new Array<InputFrame>(portCount).fill(0);
+          // The fire frame, with d-pad Up held across it; Up stays held after.
+          frames[0] = Btn.Up | (fire ? Btn.Right | Btn.Attack : 0);
+          flicks[0] = fire ? Btn.Right | Btn.Attack : 0;
+          fire = false;
+          const none = new Array<InputFrame>(portCount).fill(0);
+          return { frames, pressed: none, released: none, sticks: [], flicks, connectedPads: [0] };
+        },
+      },
+      net: {
+        transport: {
+          ...transport,
+          send(bytes) {
+            const packet = decodePacket(bytes);
+            if (packet?.type === PacketType.Input) packet.inputs.forEach((input, i) => (sent[packet.startFrame + i] = input));
+            transport.send(bytes);
+          },
+        },
+        localPorts: [0],
+        inputDelay: INPUT_DELAY_FOR_STALLS,
+        autoInputDelay: false,
+        now: () => network.now(),
+      },
+    });
+    const guest = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules: RULES,
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      net: { transport: network.connect("guest"), localPorts: [1], now: () => network.now() },
+    });
+    // The guest says nothing, so the host runs to the prediction cap and stops.
+    for (let i = 0; i < 20; i++) {
+      host.advance(1);
+      network.advance(FRAME_MS);
+    }
+    expect(host.stalled).toBe(true);
+    const stalledAt = host.frame;
+    // The flick fires on a refused tick.
+    fire = true;
+    host.advance(1);
+    expect(host.stalled).toBe(true);
+    // The guest catches up; the host's next frame runs, with the flick in it.
+    for (let i = 0; i < 30; i++) {
+      guest.advance(1);
+      host.advance(1);
+      network.advance(FRAME_MS);
+    }
+    expect(host.frame).toBeGreaterThan(stalledAt);
+    expect(sent[stalledAt + INPUT_DELAY_FOR_STALLS] ?? 0).toBe(Btn.Up | Btn.Right | Btn.Attack | Btn.Flick);
+    expect(sent.filter((input) => input & Btn.Flick)).toHaveLength(1);
+    host.dispose();
+    guest.dispose();
+  });
+
   it("holds the picture still instead of re-blending the last step", () => {
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => {});

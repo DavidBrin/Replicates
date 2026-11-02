@@ -4061,6 +4061,8 @@ recorded" means the ruling named no cost.
   the flick (flick right over d-pad Up or Down: `fair`, `sideB`, and from a crouch `fsmash`).
   Without it nothing changes, and the golden is byte-identical. Cost: an input-protocol bit both
   online peers must share, so both must run the same build (the packet already carried 16 bits).
+- R-FW3f (fix round 1): a flick fired on a tick the rollback session refuses rides on the next
+  tick that runs, as a tapped key does. Cost: none beyond the stated.
 - Also: the task reviews' parked test pins, labels and citations (Tasks 2 to 22); every named
   e2e locator matched exactly; F.L.U.D.D.'s nozzle and hose follow the hands down; a contact lab
   in the golden (`rebound`, `shieldStun` and `pummel` a second time); and part 1's carries: a
