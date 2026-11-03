@@ -859,6 +859,51 @@ describe("a tick the rollback session refuses", () => {
     }
   });
 
+  /** Keys down together, a refused tick, then all up and another; the guest then catches up. The moves the host's Mario began, and the frames it sent. */
+  function tapInStall(codes: readonly string[], heldAfter: readonly string[] = []) {
+    const { network, keyboard, host, guest, sent } = hostWithKeyboard();
+    const moves: string[] = [];
+    try {
+      for (let i = 0; i < 20; i++) {
+        host.advance(1);
+        network.advance(FRAME_MS);
+      }
+      expect(host.stalled).toBe(true);
+      for (const code of codes) window.dispatchEvent(new KeyboardEvent("keydown", { code }));
+      host.advance(1);
+      for (const code of codes) window.dispatchEvent(new KeyboardEvent("keyup", { code }));
+      for (const code of heldAfter) window.dispatchEvent(new KeyboardEvent("keydown", { code }));
+      host.advance(1);
+      expect(host.stalled).toBe(true);
+      for (let i = 0; i < 40; i++) {
+        guest.advance(1);
+        host.advance(1);
+        network.advance(FRAME_MS);
+        const move = host.state.fighters[0].move;
+        if (move !== null && moves.at(-1) !== move) moves.push(move);
+      }
+      for (const code of heldAfter) window.dispatchEvent(new KeyboardEvent("keyup", { code }));
+      return { moves, sent };
+    } finally {
+      keyboard.detach();
+    }
+  }
+
+  it("keeps a tilt tapped during the stall a tilt: the Tilt key's Soft is carried with its direction (Plan 6, Task 4 fix round 1)", () => {
+    const { bindings } = CONFIG_ARROWS;
+    const { moves, sent } = tapInStall([bindings.tilt, bindings.right, bindings.attack]);
+    expect(sent.filter((input) => (input & Btn.Attack) !== 0), "the tilt's one frame").toEqual([Btn.Right | Btn.Soft | Btn.Attack]);
+    expect(moves[0], "carried without its Soft, the tilt went out as a smash").toBe("ftilt");
+  });
+
+  it("drops a carried tilt's Soft on a frame that holds a hard direction (Plan 6, Task 4 fix round 1)", () => {
+    const { bindings } = CONFIG_ARROWS;
+    // Up held hard, no Tilt key, from the second refused tick on: the frame the tilt joins.
+    const { sent } = tapInStall([bindings.tilt, bindings.right, bindings.attack], [bindings.up]);
+    const joined = sent.filter((input) => (input & Btn.Attack) !== 0);
+    expect(joined).toEqual([Btn.Up | Btn.Right | Btn.Attack]);
+  });
+
   it("holds the picture still instead of re-blending the last step", () => {
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => {});
@@ -890,6 +935,8 @@ describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4
     const keyboard = new KeyboardInput([{ port: 0, scheme: CONFIG_ARROWS }], { window, overlayHost: null });
     keyboard.attach();
     const sent: InputFrame[] = [];
+    // Frames put on the wire again with another value: each one a frame the peer simulates differently.
+    let conflicts = 0;
     const transport = network.connect("host");
     try {
       const host = createMatchRunner({
@@ -904,7 +951,13 @@ describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4
             ...transport,
             send(bytes) {
               const packet = decodePacket(bytes);
-              if (packet?.type === PacketType.Input) packet.inputs.forEach((input, i) => (sent[packet.startFrame + i] = input));
+              if (packet?.type === PacketType.Input) {
+                packet.inputs.forEach((input, i) => {
+                  const f = packet.startFrame + i;
+                  if (sent[f] !== undefined && sent[f] !== input) conflicts++;
+                  sent[f] = input;
+                });
+              }
               transport.send(bytes);
             },
           },
@@ -931,11 +984,14 @@ describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4
       network.setOptions({ latencyMs: 0 });
       let delay = raised;
       let tappedOnRunningTick = false;
+      // The last frame scheduled (and sent) when the tap was made: the next one is the tap's.
+      let horizon = -1;
       for (let i = 0; i < 600; i++) {
         const now = host.netStats?.inputDelay ?? 0;
         // The delay fell on the last tick: this tick's input has no frame to land on.
         const tapNow = !tappedOnRunningTick && now < delay;
         if (tapNow) {
+          horizon = sent.length - 1;
           window.dispatchEvent(new KeyboardEvent("keydown", { code: CONFIG_ARROWS.bindings.jump }));
           window.dispatchEvent(new KeyboardEvent("keyup", { code: CONFIG_ARROWS.bindings.jump }));
         }
@@ -949,6 +1005,8 @@ describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4
         network.advance(FRAME_MS);
       }
       expect(tappedOnRunningTick).toBe(true);
+      expect(conflicts, "frames re-sent with another value").toBe(0);
+      expect(sent.findIndex((input) => (input & Btn.Jump) !== 0), "the first frame past the horizon the tap was made at").toBe(horizon + 1);
       expect(sent.filter((input) => (input & Btn.Jump) !== 0)).toHaveLength(1);
       for (let i = 0; i < 60 && host.frame !== guest.frame; i++) {
         (guest.frame < host.frame ? guest : host).advance(1);
@@ -963,11 +1021,11 @@ describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4
   });
 });
 
-/** Buttons on a pad with the W3C standard mapping (`STANDARD_MAPPING`): a jump and the d-pad. */
-const PAD = { jump: 2, up: 12, left: 14, right: 15 } as const;
+/** Buttons on a pad with the W3C standard mapping (`STANDARD_MAPPING`): an attack, a jump and the d-pad. */
+const PAD = { attack: 0, jump: 2, up: 12, left: 14, right: 15 } as const;
 
-/** What the scripted pad holds on each of the host's ticks, from 1: its buttons, and the right stick's x. */
-type PadScript = (tick: number) => { readonly buttons: readonly number[]; readonly rightX: number };
+/** What the scripted pad holds on each of the host's ticks, from 1: its buttons, the right stick's x, and the left stick's (at rest if left out). */
+type PadScript = (tick: number) => { readonly buttons: readonly number[]; readonly rightX: number; readonly leftX?: number };
 
 /** A flick match as `flickMatch` played it. */
 interface FlickRun {
@@ -996,6 +1054,7 @@ interface FlickRun {
 function flickMatch(script: PadScript, answerFrom: number, ticks = 60): FlickRun {
   let held: readonly number[] = [];
   let rightX = 0;
+  let leftX = 0;
   const pad = (): Gamepad =>
     ({
       id: "scripted",
@@ -1003,7 +1062,7 @@ function flickMatch(script: PadScript, answerFrom: number, ticks = 60): FlickRun
       connected: true,
       mapping: "standard",
       timestamp: 0,
-      axes: [0, 0, rightX, 0],
+      axes: [leftX, 0, rightX, 0],
       buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.includes(i), touched: held.includes(i), value: held.includes(i) ? 1 : 0 })),
       vibrationActuator: null,
     }) as unknown as Gamepad;
@@ -1047,7 +1106,7 @@ function flickMatch(script: PadScript, answerFrom: number, ticks = 60): FlickRun
   const inputs: InputFrame[] = [];
   let move: string | null = null;
   for (let tick = 1; tick <= ticks; tick++) {
-    ({ buttons: held, rightX } = script(tick));
+    ({ buttons: held, rightX, leftX = 0 } = script(tick));
     if (tick >= answerFrom) guest.advance(1);
     host.advance(1);
     network.advance(FRAME_MS);
@@ -1198,6 +1257,10 @@ describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", ()
     expect(stalled.refused).toEqual(expect.arrayContaining([STALL + 4, STALL + 5, last]));
     expect(stalled.refused).not.toContain(last + 1);
     expect(stalled.sent.filter((input) => (input & Btn.Flick) !== 0)).toHaveLength(1);
+    // The let-go goes out on the Jump's own tick and the fire on the next, so the Jump rides the
+    // tick after: two frames late, on the frame right behind the fire.
+    const fireAt = stalled.sent.findIndex((input) => (input & Btn.Flick) !== 0);
+    expect(stalled.sent.findIndex((input) => (input & Btn.Jump) !== 0), "the frame right behind the owed fire").toBe(fireAt + 1);
     expect(stalled.sent.filter((input) => (input & Btn.Jump) !== 0), "the Jump poll an owed frame stood in for").toHaveLength(1);
     expect(stalled.guest.frame).toBe(stalled.host.frame);
     expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
@@ -1240,6 +1303,42 @@ describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", ()
     expect(flicks).toHaveLength(1);
     expect(flicks[0] & Btn.Left, "the later flick's direction").not.toBe(0);
     expect(flicks[0] & Btn.Right).toBe(0);
+  });
+
+  it("a pad press on an owed flick frame a second flick's fire replaces still reaches the wire once (Plan 6, Task 4 fix round 1)", () => {
+    // Two flicks inside one stall, the later replacing the earlier's owed let-go and fire. Jump
+    // down on the earlier's fire poll, then on its let-go poll: neither poll ever goes out.
+    for (const jumpOn of [STALL + 3, STALL + 2]) {
+      const script: PadScript = (t) => ({
+        buttons: t === jumpOn ? [PAD.jump] : [],
+        rightX: t >= STALL + 2 && t <= STALL + 4 ? 0.9 : t >= STALL + 8 && t <= STALL + 10 ? -0.9 : 0,
+      });
+      const stalled = flickMatch(script, ANSWER);
+      expect(stalled.refused).toEqual(expect.arrayContaining([STALL + 2, STALL + 3, STALL + 9]));
+      expect(stalled.sent.filter((input) => (input & Btn.Flick) !== 0)).toHaveLength(1);
+      expect(stalled.sent.filter((input) => (input & Btn.Jump) !== 0), `the Jump on tick ${jumpOn}, under a replaced owed frame`).toHaveLength(1);
+      expect(stalled.guest.frame).toBe(stalled.host.frame);
+      expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
+    }
+  });
+
+  it("a pad tilt and Attack inside a stall go out as the forward tilt they were, not a forward smash (Plan 6, Task 4 fix round 1)", () => {
+    // The left stick half right with A: a forward tilt (types.ts: a fresh direction plus attack
+    // is a tilt, not a smash, with Btn.Soft). Made on one refused poll, then held for five refused
+    // polls and let go before the stall ends: either way the stick is at rest when the host runs again.
+    for (const [from, to] of [[STALL + 3, STALL + 3], [STALL + 3, STALL + 7]]) {
+      const script: PadScript = (t) => ({ buttons: t >= from && t <= to ? [PAD.attack] : [], rightX: 0, leftX: t >= from && t <= to ? 0.5 : 0 });
+      const live = flickMatch(script, 1);
+      const stalled = flickMatch(script, ANSWER);
+      expect(stalled.refused).toEqual(expect.arrayContaining([from, to, to + 1]));
+      const tilt = Btn.Right | Btn.Soft | Btn.Attack;
+      expect(live.move).toBe("ftilt");
+      expect(live.sent).toContain(tilt);
+      expect(stalled.sent.filter((input) => (input & Btn.Attack) !== 0), "the tilt's one frame").toEqual([tilt]);
+      expect(stalled.move, "carried without its Soft, the tilt went out as a smash").toBe("ftilt");
+      expect(stalled.guest.frame).toBe(stalled.host.frame);
+      expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
+    }
   });
 });
 

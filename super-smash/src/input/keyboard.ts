@@ -120,7 +120,10 @@ interface CodeTarget {
  * The bits whose coming and going are presses and releases. The Tilt key's
  * `Btn.Soft` (Plan 5, Task 21b) is a modifier on a direction, not a button,
  * as on a pad (`GamepadInput.poll`): it is held in the frame while its key is,
- * and never carried as a press (`matchRunner`'s refused-tick presses).
+ * and is no press of its own. A press with a direction, carried across ticks
+ * that never reached the wire, takes the Soft its drained frame held along
+ * (`matchRunner`'s `pressWithTilt`; Plan 6, Task 4 fix round 1), so a tilt
+ * carried across a stall stays a tilt.
  */
 const EDGE_BUTTONS = ~Btn.Soft;
 

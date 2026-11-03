@@ -44,7 +44,7 @@ import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { cpuInput, cpuWorldFromDef, type CpuWorld } from "@/ai/cpu";
 import { stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
-import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
+import { DIRECTION_MASK, mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
 import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
 import type { Transport } from "@/net/transport";
 // Three-free (`render3d/anchors.ts`): the overlay's anchors cost the page no three.js.
@@ -248,16 +248,37 @@ export function matchCpuWorlds(
   return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs, getFighter, bake) : { stage: view, jumps: 2, matchDefs: defs }));
 }
 
-/** One port's pad frame as a poll gave it: the packed frame, and on a flick's fire its direction and button (`GamepadPoll.flicks`). */
+/**
+ * One port's pad frame as a poll gave it: the packed frame, on a flick's fire its direction and
+ * button (`GamepadPoll.flicks`), and its presses (`fresh`: its bits the poll before lacked, with
+ * their tilt), which a later poll carries if this one never reaches the wire.
+ */
 interface PadFrame {
   readonly frame: InputFrame;
   readonly flick: InputFrame;
+  readonly fresh: InputFrame;
 }
 
-const NO_PAD: PadFrame = { frame: 0, flick: 0 };
+const NO_PAD: PadFrame = { frame: 0, flick: 0, fresh: 0 };
 
 /** A pad poll's bits that are presses a later poll may carry: all but the soft tilt and the flick's own mark. */
 const PAD_PRESS_BITS = ~(Btn.Soft | Btn.Flick);
+
+/**
+ * A press with its tilt (Plan 6, Task 4 fix round 1). `Btn.Soft` is no press of its own (`PAD_PRESS_BITS`,
+ * the keyboard's `EDGE_BUTTONS`), but a fresh direction plus Attack is a tilt with it and a smash
+ * without (`Btn.Soft`), so a press that has a direction keeps the Soft of the frame it was read on:
+ * a forward tilt carried across a stall is still a forward tilt.
+ */
+function pressWithTilt(press: InputFrame, read: InputFrame): InputFrame {
+  return (press & DIRECTION_MASK) !== 0 ? press | (read & Btn.Soft) : press;
+}
+
+/** `frame` with carried presses joined, their tilt too unless `frame` holds a hard direction (one held without Soft). */
+function joinCarried(frame: InputFrame, carried: InputFrame): InputFrame {
+  const hard = (frame & DIRECTION_MASK) !== 0 && (frame & Btn.Soft) === 0;
+  return frame | (hard ? carried & ~Btn.Soft : carried);
+}
 
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   const {
@@ -363,19 +384,18 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   // This tick's owed pad frames, its own flick's among them, kept in case it is refused.
   let tickPads = noPads;
   // A pad's fresh presses on polls that never reached the wire (Plan 6, Task 4): a poll a
-  // refused or unscheduled tick read, or one an owed flick frame went out in place of (Plan 5
-  // final wave 5's cost: "a pad press held for that one poll alone is lost"). They join the
-  // next poll that goes out whole, as a tapped key's do (`carriedPresses`).
+  // refused or unscheduled tick read, one an owed flick frame went out in place of (Plan 5
+  // final wave 5's cost: "a pad press held for that one poll alone is lost"), or an owed
+  // frame a later flick's fire replaced (fix round 1). They join the next poll that goes out
+  // whole, as a tapped key's do (`carriedPresses`).
   let carriedPadPresses: readonly InputFrame[] = noPresses;
-  // The same with the last poll's, if this tick found it lost; kept in case this tick's input reaches no frame.
+  // The same with the last poll's, if this tick found it lost, and any owed frame this tick's
+  // fire replaced; kept in case this tick's input reaches no frame.
   let tickPadPresses: readonly InputFrame[] = noPresses;
   // Each port's poll on the last tick and this one, and whether the last went out as polled.
   let lastPolls: readonly PadFrame[] = players.map(() => NO_PAD);
   let tickPolls = lastPolls;
   let lastPollsSent: readonly boolean[] = players.map(() => true);
-  // Each port's presses on the last poll and on this one: its bits the poll before lacked.
-  let lastPollFresh: readonly InputFrame[] = noPresses;
-  let tickPollFresh: readonly InputFrame[] = noPresses;
   /** What `gatherInputs` gave each port on the last tick (`MatchRunner.lastInputs`). */
   let lastInputs: readonly InputFrame[] = noPresses;
 
@@ -383,8 +403,13 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     const drained = keyboard ? keyboard.drain() : null;
     // Exactly once per tick: a pad's press edges are the diff against the last poll.
     const pads = gamepad ? gamepad.poll(players.length) : null;
-    tickPresses = players.map((_, port) => carriedPresses[port] | (drained?.pressed[port] ?? 0));
-    tickPolls = players.map((_, port) => (pads === null ? NO_PAD : { frame: pads.frames[port] ?? 0, flick: pads.flicks[port] ?? 0 }));
+    // A key's presses keep the Tilt key's Soft with their direction (fix round 1).
+    tickPresses = players.map((_, port) => carriedPresses[port] | pressWithTilt(drained?.pressed[port] ?? 0, drained?.frames[port] ?? 0));
+    tickPolls = players.map((_, port) => {
+      if (pads === null) return NO_PAD;
+      const frame = pads.frames[port] ?? 0;
+      return { frame, flick: pads.flicks[port] ?? 0, fresh: pressWithTilt(frame & ~lastPolls[port].frame & PAD_PRESS_BITS, frame) };
+    });
     tickPads = players.map((_, port) => {
       const poll = tickPolls[port];
       if (poll.flick === 0) return owedPads[port];
@@ -395,22 +420,23 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       // at 5 a second went out 50 ticks late, behind stale smashes).
       return [...(lastPollsSent[port] ? [] : [lastPolls[port]]), poll];
     });
-    tickPollFresh = tickPolls.map((poll, port) => poll.frame & ~lastPolls[port].frame & PAD_PRESS_BITS);
     tickPadPresses = players.map((_, port) => {
       // The last poll missed the wire and goes out as no owed frame either (this tick's fire did
       // not take it for its let-go, and it is no flick frame still owed): its presses are carried.
       // Decided now, not on its own tick, so a let-go's presses go out once, in the let-go.
       const lost = !lastPollsSent[port] && !tickPads[port].includes(lastPolls[port]);
-      return carriedPadPresses[port] | (lost ? lastPollFresh[port] : 0);
+      // Owed frames this tick's fire replaced never go out either (fix round 1).
+      const replaced = owedPads[port].reduce((bits, owed) => (tickPads[port].includes(owed) ? bits : bits | owed.fresh), 0);
+      return carriedPadPresses[port] | (lost ? lastPolls[port].fresh : 0) | replaced;
     });
     return players.map((p, port) => {
       if (p.cpuLevel === null) {
-        const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
+        const keys = joinCarried(drained?.frames[port] ?? 0, carriedPresses[port]);
         const owed = tickPads[port];
         const pad = owed[0] ?? tickPolls[port];
         // Presses carried from polls that missed the wire ride the first poll that goes out whole.
         const carried = owed.length === 0 ? tickPadPresses[port] : 0;
-        return mergeKeyboardAndPad(keys, pad.frame | carried, pad.flick);
+        return mergeKeyboardAndPad(keys, joinCarried(pad.frame, carried), pad.flick);
       }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
@@ -455,7 +481,6 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
         carriedPadPresses = tickPadPresses;
         owedPads = tickPads;
         lastPolls = tickPolls;
-        lastPollFresh = tickPollFresh;
         lastPollsSent = players.map(() => false);
       } else {
         carriedPresses = noPresses;
@@ -465,7 +490,6 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
         owedPads = tickPads.map((owed) => owed.slice(1));
         lastPollsSent = tickPads.map((owed, port) => owed.length === 0 || owed[0] === tickPolls[port]);
         lastPolls = tickPolls;
-        lastPollFresh = tickPollFresh;
       }
       if (!result.advanced) {
         // A refused frame ran nothing new: nothing to age, sound or report. The
