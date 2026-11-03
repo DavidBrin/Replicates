@@ -140,6 +140,23 @@ describe("the radial deadzone", () => {
 
 /* ---------------------------------------------------------------- polling -- */
 
+describe("press-to-join seats (Plan 6, Task 30)", () => {
+  it("drives a joined pad's seat by its index, and an unjoined pad never takes it", () => {
+    // Pad 3 pressed to join port 0. Pad 0, joined to nothing, keeps connection order
+    // among the pads nobody joined, and skips the joined seat: port 1.
+    const pads = [pad({ index: 0, buttons: [1] }), pad({ index: 3, buttons: [0] })];
+    const input = createGamepadInput({
+      navigator: navigatorWith(pads),
+      portForPad: padPortMap([0, 1]),
+      holdPorts: true,
+      portForPadIndex: (index) => (index === 3 ? 0 : -1),
+    });
+    const { frames } = input.poll(2);
+    expect([held(frames[0], Btn.Attack), held(frames[0], Btn.Special)]).toEqual([true, false]);
+    expect([held(frames[1], Btn.Attack), held(frames[1], Btn.Special)]).toEqual([false, true]);
+  });
+});
+
 describe("polling", () => {
   it("packs the standard mapping into an InputFrame", () => {
     const input = new GamepadInput({

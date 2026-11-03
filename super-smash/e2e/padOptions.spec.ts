@@ -1,13 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   P1,
+  READY_FRAME,
   ROUTES,
+  pauseMatch,
   readFighters,
   readInputs,
   startFromTitle,
   startMatch,
   startMatchFromMenu,
   stepFrames,
+  stepToFrame,
   type DebugFighter,
   type MatchOptions,
 } from "./helpers";
@@ -281,4 +284,46 @@ test("a Tilt key rebound on /controls plays the match: the new key holds up shor
   await eachFrame(page, 4);
   const onOld = await whileHoldingKeys(page, [P1.tilt, P1.up], 12);
   expect(statesOf(onOld).some((a) => jumping.test(a)), `the old Tilt key still softened up: ${statesOf(onOld).join(", ")}`).toBe(true);
+});
+
+test("a pad that presses A on the character select takes the CPU's seat, never P1's, and plays it (Plan 6, Task 30)", async ({ page }) => {
+  await startFromTitle(page);
+  await page.getByRole("button", { name: /smash/i }).first().click();
+  await page.waitForURL(`**${ROUTES.rules}`);
+  await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
+  await page.waitForURL(`**${ROUTES.stage}`);
+  await page.getByLabel("Stages", { exact: true }).getByRole("button").first().click();
+  await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
+  await page.waitForURL(`**${ROUTES.fighters}`);
+
+  // The fake pad (index 0) presses A: it takes P2, the CPU's seat made human, and never
+  // P1, the keyboard player's (ruling R-P6-11).
+  await setPadButtons(page, [0]);
+  await expect(page.locator("[data-port='1']").getByText("Pad", { exact: true })).toBeVisible();
+  await setPadButtons(page, []);
+  await expect(page.getByRole("button", { name: "HMN for P2", exact: true, pressed: true })).toBeVisible();
+  await expect(page.locator("[data-port='0']").getByText("Pad", { exact: true })).toHaveCount(0);
+
+  const roster = page.getByLabel("Fighters", { exact: true }).getByRole("button");
+  await roster.nth(0).click();
+  await roster.nth(1).click();
+  await page.getByRole("button", { name: /ready to fight/i }).click();
+  await page.waitForURL(`**${ROUTES.play}`);
+  await page.waitForFunction(() => Boolean((window as unknown as { __smashDebug?: unknown }).__smashDebug));
+  await pauseMatch(page);
+  await stepToFrame(page, READY_FRAME);
+  await expectBothStanding(page);
+
+  // The pad's A is P2's jab; P1, on the keyboard, is given nothing.
+  await setPadButtons(page, [0]);
+  let move: string | null = null;
+  for (let i = 0; i < 6 && move === null; i++) {
+    await stepFrames(page, 1);
+    const [p1, p2] = await readFighters(page);
+    const [p1Input] = await readInputs(page);
+    expect([p1.action, p1Input], "P1 was given the pad's press").toEqual(["stand", 0]);
+    move = p2.move;
+  }
+  await setPadButtons(page, []);
+  expect(move, "the joined pad's A did not reach P2").toBe("jab1");
 });

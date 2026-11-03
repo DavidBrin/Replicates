@@ -30,6 +30,7 @@ import {
   type PlayerSlot,
 } from "@/lib/matchConfig";
 import { buildStartConfig, newMatchSeed } from "@/game/onlineConfig";
+import { joinPresses } from "@/input/padJoin";
 import { LINKING_STATUS, leaveOnline, sendLobby, sendOwnPick, useOnlineStore } from "@/lib/onlineStore";
 import { ROLE_PORT } from "@/net/signalProtocol";
 
@@ -189,6 +190,23 @@ export function CharacterSelect() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [activePort, addPlayer, assign, entries, focusTile, gridIndex, onlinePort, players.length, removePlayer, setFighter]);
+
+  // Press-to-join (Plan 6, Task 30; ruling R-P6-11): a pad that is not seated presses A or
+  // Start to take a seat. Polled once an animation frame while the screen is up; the store
+  // refuses a seat online, where each machine has its one.
+  useEffect(() => {
+    if (typeof navigator.getGamepads !== "function") return;
+    const last = new Map<number, boolean>();
+    let raf = 0;
+    const tick = () => {
+      const { players: seats, seatPad } = useMatchConfig.getState();
+      const seated = new Set(seats.flatMap((p) => (p.joinedPad === null ? [] : [p.joinedPad])));
+      for (const index of joinPresses([...navigator.getGamepads()], seated, last)) seatPad(index);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   // The guest follows the host into the match the moment the start arrives —
   // if it is still the live one. A match left by browser Back withdraws its
@@ -515,6 +533,7 @@ function PlayerPanel({
 
   return (
     <SkewCard
+      data-port={player.port}
       className={cn(
         "w-[12rem] shrink-0 border-[4px] transition-transform",
         active ? "-translate-y-1 shadow-[0_8px_0_rgb(0_0_0/0.45)]" : "",
@@ -593,6 +612,14 @@ function PlayerPanel({
               onChange={(next) => setCpuLevel(player.port, next)}
             />
           </>
+        ) : player.joinedPad !== null ? (
+          // Seated by a pad's press (Plan 6, Task 30): the pad is this seat's control.
+          <Unskew
+            className="border-2 border-panel-ink px-2 py-0.5 font-display text-[0.7rem] leading-none tracking-[0.12em] text-panel-ink uppercase"
+            style={{ backgroundColor: colour }}
+          >
+            Pad
+          </Unskew>
         ) : (
           <Unskew className="max-w-full truncate text-[0.65rem] font-bold text-white/65">
             {SCHEME_INFO[player.scheme].name}

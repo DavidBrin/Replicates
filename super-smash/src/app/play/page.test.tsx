@@ -873,6 +873,15 @@ describe("the play page, local", () => {
     expect(pad.detach).toHaveBeenCalled();
   });
 
+  it("lets a pad that pressed to join drive its own seat, and the rest keep connection order on the other human ports (Plan 6, Task 30)", async () => {
+    // The pad at index 3 joined on the select screen: P2, the CPU's seat, made human.
+    useMatchConfig.getState().seatPad(3);
+    await renderPage();
+    const pad = only(mocks.pads);
+    expect([0, 3, 7].map((index) => pad.options.portForPadIndex?.(index))).toEqual([-1, 1, -1]);
+    expect([0, 1].map((ordinal) => pad.options.portForPad?.(ordinal))).toEqual([0, -1]);
+  });
+
   /**
    * Plan 5, Task 20: each human's Stick Jump goes to the sim, and a CPU plays the
    * default whatever its slot says (its recovery's re-press after a tap jump,

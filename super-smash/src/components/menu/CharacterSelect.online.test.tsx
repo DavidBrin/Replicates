@@ -150,6 +150,28 @@ describe("CharacterSelect, online", () => {
     expect(screen.getByText("Battlefield · 2:30")).toHaveClass("sm:hidden");
   });
 
+  it("leaves the seats alone when a pad presses A: joining is local only (Plan 6, Task 30)", async () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => [{ index: 0, connected: true, buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: i === 0, value: i === 0 ? 1 : 0 })) }],
+    });
+    try {
+      goOnline("guest");
+      await renderSelect();
+      await act(async () => {
+        vi.advanceTimersByTime(48);
+      });
+      expect(useMatchConfig.getState().players.map((p) => [p.kind, p.joinedPad])).toEqual([
+        ["human", null],
+        ["human", null],
+      ]);
+    } finally {
+      delete (navigator as { getGamepads?: unknown }).getGamepads;
+      vi.useRealTimers();
+    }
+  });
+
   it("makes the host's back button leave the room once the room cannot go on", async () => {
     const fake = goOnline("host");
     await renderSelect();

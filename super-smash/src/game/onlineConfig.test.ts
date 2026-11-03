@@ -17,8 +17,8 @@ const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 9000, smashBall
 
 function players(a: string | null, b: string | null): PlayerSlot[] {
   return [
-    { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows", stickJump: true, pad: DEFAULT_PAD_SETTINGS },
-    { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows", stickJump: false, pad: DEFAULT_PAD_SETTINGS },
+    { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows", stickJump: true, pad: DEFAULT_PAD_SETTINGS, joinedPad: null },
+    { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows", stickJump: false, pad: DEFAULT_PAD_SETTINGS, joinedPad: null },
   ];
 }
 

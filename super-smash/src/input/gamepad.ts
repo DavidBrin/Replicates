@@ -180,6 +180,13 @@ export interface GamepadOptions {
    */
   readonly holdPorts?: boolean;
   /**
+   * The port a pad drives by its `Gamepad.index`, for a pad seated by pressing to join on
+   * the character select (Plan 6, Task 30; ruling R-P6-11); -1 for none. The pads nobody
+   * joined keep `portForPad`'s connection order among themselves, and never take a port a
+   * joined pad drives.
+   */
+  readonly portForPadIndex?: (index: number) => number;
+  /**
    * Plan 5: each port's own mapping (its player's remap on /controls), asked
    * for the port a pad drives. Overrides `mapping` when given.
    */
@@ -213,6 +220,7 @@ export class GamepadInput {
   private readonly deadzone: number;
   private readonly portForPad: (padOrdinal: number) => number;
   private readonly holdPorts: boolean;
+  private readonly portForPadIndex: ((index: number) => number) | undefined;
   private readonly onConnectionChange: ((padIndex: number, connected: boolean) => void) | undefined;
 
   /** Last poll's packed frame per pad index, for edge detection. */
@@ -236,6 +244,7 @@ export class GamepadInput {
     this.deadzone = options.deadzone ?? RADIAL_DEADZONE;
     this.portForPad = options.portForPad ?? ((i) => i);
     this.holdPorts = options.holdPorts ?? false;
+    this.portForPadIndex = options.portForPadIndex;
     this.onConnectionChange = options.onConnectionChange;
   }
 
@@ -284,8 +293,20 @@ export class GamepadInput {
     // is the first pad, so it must drive the first port.
     const pads = padsInOrder(this.supported ? this.nav!.getGamepads() : []);
     if (this.holdPorts) this.releaseUnplugged(pads);
-    for (const [ordinal, pad] of pads.entries()) {
-      const port = this.holdPorts ? this.heldPortFor(pad.index, portCount) : this.portForPad(ordinal);
+    // A pad seated by pressing to join drives its own seat (Plan 6, Task 30). The others
+    // keep connection order among themselves, ordinals counted over them alone, and
+    // never take a joined seat.
+    const joinedPortOf = (pad: Gamepad): number => this.portForPadIndex?.(pad.index) ?? -1;
+    const joined = new Set(pads.map(joinedPortOf).filter((port) => port >= 0));
+    let ordinal = 0;
+    for (const pad of pads) {
+      const own = joinedPortOf(pad);
+      let port = own;
+      if (own < 0) {
+        port = this.holdPorts ? this.heldPortFor(pad.index, portCount, joined) : this.portForPad(ordinal);
+        ordinal += 1;
+        if (joined.has(port)) continue;
+      }
       if (port < 0 || port >= portCount) continue;
       seen.push(pad.index);
 
@@ -338,13 +359,13 @@ export class GamepadInput {
    * while it stays connected; with every port held it asks again next poll.
    * `poll` asks in connection order, so the lowest ordinal is seated first.
    */
-  private heldPortFor(index: number, portCount: number): number {
+  private heldPortFor(index: number, portCount: number, joined: ReadonlySet<number>): number {
     const held = this.heldPorts.get(index);
     if (held !== undefined) return held;
     const taken = new Set(this.heldPorts.values());
     for (let ordinal = 0; ordinal < portCount; ordinal++) {
       const port = this.portForPad(ordinal);
-      if (port >= 0 && port < portCount && !taken.has(port)) {
+      if (port >= 0 && port < portCount && !taken.has(port) && !joined.has(port)) {
         this.heldPorts.set(index, port);
         return port;
       }

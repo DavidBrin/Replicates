@@ -516,10 +516,13 @@ export default function PlayPage() {
         keyboardRef.current = keyboard;
         // One pad per human, in connection order: the first pad is the first
         // human. Held for the match, so a pad unplugging moves nobody else's.
-        // Each reads its human's own buttons and right stick (Plan 5).
+        // Each reads its human's own buttons and right stick (Plan 5). A pad that
+        // pressed to join on the select screen drives its own seat, and the rest
+        // keep connection order on the other human seats (Plan 6, Task 30).
         const mappings = new Map(humans.map((p) => [p.port, padMappingOf(p)]));
         gamepad = createGamepadInput({
-          portForPad: padPortMap(humans.map((p) => p.port)),
+          portForPad: padPortMap(humans.filter((p) => p.joinedPad === null).map((p) => p.port)),
+          portForPadIndex: (index) => humans.find((p) => p.joinedPad === index)?.port ?? -1,
           holdPorts: true,
           mappingForPort: (port) => mappings.get(port) ?? padMappingOf({ pad: DEFAULT_PAD_SETTINGS }),
         });

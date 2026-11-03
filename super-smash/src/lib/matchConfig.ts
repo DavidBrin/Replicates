@@ -648,6 +648,12 @@ export interface PlayerSlot {
    * machine only: what travels online is the packed frame.
    */
   pad: PadSettings;
+  /**
+   * The `Gamepad.index` of the pad that pressed to join this seat on the character
+   * select, or null (Plan 6, Task 30; ruling R-P6-11). A joined pad drives this seat
+   * whatever its connection order. Local only; a CPU seat holds none.
+   */
+  joinedPad: number | null;
 }
 
 /** A player's own control options (Plan 5): what `/controls` sets per port, and what an online session must not overwrite. */
@@ -842,6 +848,12 @@ interface MatchConfigState {
   resetBindings(scheme: SchemeId): void;
 
   setResult(result: MatchResult | null): void;
+  /**
+   * A pad pressed to join on the character select (Plan 6, Task 30; ruling R-P6-11): it takes
+   * the first CPU seat, made human, or else a new human seat while there are fewer than four.
+   * Never a seat a keyboard player is on, never a second seat for one pad, and never online.
+   */
+  seatPad(index: number): void;
   arm(): void;
   disarm(): void;
   reset(): void;
@@ -868,6 +880,7 @@ function makePlayer(port: number): PlayerSlot {
     costume: port,
     scheme: CONTROL_SCHEMES[Math.min(port, CONTROL_SCHEMES.length - 1)],
     ...DEFAULT_CONTROL_OPTIONS,
+    joinedPad: null,
   };
 }
 
@@ -883,7 +896,7 @@ function initialPlayers(local: ControlOptions = DEFAULT_CONTROL_OPTIONS, saved: 
  * never read here: the other peer's pad is on their machine.
  */
 function onlinePlayer(port: number, local: ControlOptions): PlayerSlot {
-  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows", stickJump: local.stickJump, pad: local.pad };
+  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows", stickJump: local.stickJump, pad: local.pad, joinedPad: null };
 }
 
 /**
@@ -999,15 +1012,29 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
 
   setPlayerKind: (port, kind) =>
     set((s) => ({
-      players: s.players.map((p) => (p.port === port ? { ...p, kind } : p)),
+      // A CPU seat holds no joined pad (Plan 6, Task 30): its pad goes back to connection order.
+      players: s.players.map((p) => (p.port === port ? { ...p, kind, joinedPad: kind === "cpu" ? null : p.joinedPad } : p)),
     })),
 
   togglePlayerKind: (port) =>
     set((s) => ({
       players: s.players.map((p) =>
-        p.port === port ? { ...p, kind: p.kind === "cpu" ? "human" : "cpu" } : p,
+        p.port === port ? (p.kind === "cpu" ? { ...p, kind: "human" } : { ...p, kind: "cpu", joinedPad: null }) : p,
       ),
     })),
+
+  seatPad: (index) =>
+    set((s) => {
+      if (s.online || s.players.some((p) => p.joinedPad === index)) return s;
+      const cpu = s.players.find((p) => p.kind === "cpu");
+      if (cpu !== undefined) {
+        return { players: s.players.map((p) => (p === cpu ? { ...p, kind: "human" as const, joinedPad: index } : p)) };
+      }
+      if (s.players.length >= MAX_PLAYERS) return s;
+      const port = s.players.length;
+      const players = [...s.players, { ...withOptions(makePlayer(port), s.controlPrefs[port]), kind: "human" as const, joinedPad: index }];
+      return { players, rules: withDerivedRules(s.rules, players) };
+    }),
 
   setCpuLevel: (port, level) =>
     set((s) => ({

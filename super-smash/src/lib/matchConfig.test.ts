@@ -44,6 +44,42 @@ describe("the armed flag (Plan 6, Task 29)", () => {
   });
 });
 
+describe("press-to-join seats (Plan 6, Task 30; ruling R-P6-11)", () => {
+  it("seats a joining pad on the first CPU seat, made human, never on the keyboard player's", () => {
+    store().seatPad(0);
+    expect(store().players.map((p) => [p.kind, p.joinedPad])).toEqual([
+      ["human", null],
+      ["human", 0],
+    ]);
+  });
+
+  it("adds a human seat once no CPU seat is left, up to four, and seats each pad once", () => {
+    store().seatPad(0);
+    store().seatPad(3);
+    store().seatPad(3);
+    expect(store().players.map((p) => [p.kind, p.joinedPad])).toEqual([
+      ["human", null],
+      ["human", 0],
+      ["human", 3],
+    ]);
+    store().seatPad(5);
+    store().seatPad(6);
+    expect(store().players.map((p) => p.joinedPad)).toEqual([null, 0, 3, 5]);
+  });
+
+  it("frees a pad whose seat is turned back into a CPU", () => {
+    store().seatPad(0);
+    store().togglePlayerKind(1);
+    expect(store().players[1]).toMatchObject({ kind: "cpu", joinedPad: null });
+  });
+
+  it("is off online", () => {
+    store().configureOnline();
+    store().seatPad(0);
+    expect(store().players.map((p) => p.joinedPad)).toEqual([null, null]);
+  });
+});
+
 describe("rules", () => {
   it("clamps the stock count to 1–99 rather than refusing the input", () => {
     store().setStocks(0);

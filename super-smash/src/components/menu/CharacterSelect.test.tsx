@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
@@ -65,6 +65,35 @@ describe("CharacterSelect", () => {
     expect(routerMock.push).toHaveBeenCalledWith("/play");
     // What lets `/play` start it (Plan 6, Task 29).
     expect(useMatchConfig.getState().armed).toBe(true);
+  });
+
+  it("seats a pad that presses A on the CPU's seat, never the keyboard player's, and says so on its panel (Plan 6, Task 30)", async () => {
+    // The pads are polled once an animation frame; the frames are stepped inside act().
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    let pressed: number[] = [];
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => [{ index: 0, connected: true, buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i), value: pressed.includes(i) ? 1 : 0 })) }],
+    });
+    try {
+      await renderSelect();
+      await act(async () => {
+        vi.advanceTimersByTime(16);
+      });
+      pressed = [0];
+      await act(async () => {
+        vi.advanceTimersByTime(16);
+      });
+      expect(useMatchConfig.getState().players.map((p) => [p.kind, p.joinedPad])).toEqual([
+        ["human", null],
+        ["human", 0],
+      ]);
+      expect(within(document.querySelector<HTMLElement>("[data-port='1']")!).getByText("Pad")).toBeInTheDocument();
+      expect(document.querySelector("[data-port='0']")).not.toHaveTextContent("Pad");
+    } finally {
+      delete (navigator as { getGamepads?: unknown }).getGamepads;
+      vi.useRealTimers();
+    }
   });
 
   /** Ultimate's CPU levels run 1–9 and the ends are hard stops, not wraps. */
