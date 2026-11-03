@@ -84,4 +84,21 @@ describe("the reverse smash (Plan 6, Task 6)", () => {
     expect(after.fighters[0].move).toBe("ftilt");
     expect(after.fighters[0].facing).toBe(1);
   });
+
+  // Reverse smash never turns (final wave, item 26): the turn is only for a forward smash. A
+  // run or an initial dash gives the dash attack, a crouch without a flick the down tilt, and
+  // neither turns the fighter round.
+  it.each([
+    ["run", "dashAttack"],
+    ["dashStart", "dashAttack"],
+    ["crouch", "dtilt"],
+    ["crouchStart", "dtilt"],
+    ["crawl", "dtilt"],
+  ] as const)("back and Attack out of %s: the %s, still facing right", (action, move) => {
+    const s = standing();
+    Object.assign(s.fighters[0], { action, actionFrame: 10 });
+    const [after] = run(s, [Btn.Left | Btn.Attack]);
+    expect(after.fighters[0].move).toBe(move);
+    expect(after.fighters[0].facing).toBe(1);
+  });
 });
