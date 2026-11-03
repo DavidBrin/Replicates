@@ -235,7 +235,7 @@ const MATCHES: readonly Match[] = [
   // Smash Ball on, so the CPU's own Smash Ball and Final Smash decisions are in the trace.
   // Kirby (level 7) traps Samus in Ultra Sword (part 2; fix rounds 2 and 3 had Samus fire
   // Zero Laser along Town & City's floor, round 1's Kirby's Ultra Sword, round 0's both).
-  cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 606, BALL_RULES),
+  cpuMatch("samus-kirby-townAndCity-ball", "townAndCity", ["samus", "kirby"], 607, BALL_RULES),
   // Plan 5 final wave, part 3 (the Task 13b re-review 1's carry): `rebound`, `shieldStun`
   // and `pummel` each rested on one non-CPU match, so a lab of their own reaches them
   // again; appended, so every other trace stays as it was.
@@ -524,6 +524,24 @@ const MATCHES: readonly Match[] = [
  * the tech lab (the wall and ceiling techs' bodies) and the slip lab (the slip's). The
  * other fourteen traces are byte-identical and every lab pin holds, `expectSlip` included.
  * All 60 are visited.
+ * Plan 6, Task 26 (a CPU at the ledge: no press while it slides that takes it off its
+ * floor's end, `runsOff`, unless the target is off the stage; the Smash Ball chase drifts
+ * home where its drift would strand it, `chaseStrands`; Kirby's Inhale is not started off
+ * the stage; past the Final Smash time limit, in the air over the stage, no aerial is started)
+ * adds no action. Three CPU matches move: donkeyKong-pikachu-finalDestination
+ * (from 1201-1300), link-samus-smashville (701-800) and kirby-marth-pokemonStadium2
+ * (1501-1600); mario-fox-battlefield and the labs are byte-identical. At seed 606 the
+ * ball-on CPU match's CPUs broke a Smash Ball but started no Final Smash, so its seed steps
+ * to 607 (ruling R-P6-18: the task's six-seed sweep passed R-P6-19 against Task 23's
+ * baseline, landed 1,307 to 1,394, mean hold 143.15 to 142.46), where every pin holds: 48
+ * hits, 1 KO, 2 balls broken and 2 Final Smashes (65, 2, 3 and 2 at 606 before).
+ * donkeyKong-pikachu lands 31 hits and 4 shield hits (35, 6); link-samus 35 hits, 1 shield
+ * hit and no KO (39, 0, 1), and no longer reaches `dead` or `respawnPlatform`, which
+ * kirby-marth and the ball-on match do, and reaches `downed`, `ledgeRoll`, `roll` and
+ * `shieldStun`; kirby-marth 29 hits and 1 shield hit (33, 0), and reaches `grab`,
+ * `shieldStun` and `techRoll`, no longer `roll` or `turnaround`, which the ball-on match
+ * does. The ball-on match no longer reaches `ledgeJump`, which donkeyKong-pikachu does, and
+ * reaches `downed`, `getUp` and `turnaround`. The four CPU matches reach 45 between them, up from 44. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

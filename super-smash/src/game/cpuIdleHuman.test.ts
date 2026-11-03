@@ -26,9 +26,10 @@
 import { describe, expect, it } from "vitest";
 
 import { cpuWorldFromDef, decideCpu, type CpuWorld } from "@/ai/cpu";
-import { stageViewFromDef } from "@/ai/behaviours";
+import { isStunned, stageViewFromDef } from "@/ai/behaviours";
 import { fx } from "@/engine/fixed";
 import { createInitialState, step } from "@/engine/simulate";
+import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
@@ -447,5 +448,98 @@ describe("a level-9 CPU against a player who stands still (ruling R-FW1c; the fi
     placed(s.fighters[1], { x: fx(43.86), action: "dashStart", facing: -1, framesSinceDirPress: 30 });
     const { firstHit, turns } = play(s, [0, 1], 300);
     expect([firstHit > 0 && firstHit <= 60, turns <= MAX_TURNS], `first hit ${firstHit}, ${turns} turns`).toEqual([true, true]);
+  });
+});
+
+/**
+ * Step `start` for `frames` frames, level-9 CPUs on `cpus` and nobody on the rest (Plan 6, Task 26):
+ * the last state, and each port's self-destructs (a KO with no hit taken since the fighter last
+ * stood on a floor, or since the start). `watch` sees every state.
+ */
+function playOut(start: GameState, cpus: readonly number[], frames: number, watch: (s: GameState) => void = () => {}): { state: GameState; selfDestructs: number[] } {
+  let state = start;
+  const view = stageViewFromDef(CTX.stage(state.stageId));
+  const defs = state.fighters.map((f) => CTX.fighter(f.defId));
+  const worlds: CpuWorld[] = defs.map((def) => cpuWorldFromDef(def, view, defs, (id) => CTX.fighter(id), CTX.bake));
+  let seed = state.rngSeed ^ 0x1f2e3d4c;
+  let prev: readonly InputFrame[] = state.fighters.map(() => 0);
+  const lastHit = state.fighters.map(() => -1_000);
+  // The start counts as standing: a fighter that never lands and is lost went off on its own.
+  const lastStood = state.fighters.map(() => 0);
+  const selfDestructs = state.fighters.map(() => 0);
+  for (let frame = 1; frame <= frames && state.outcome === null; frame++) {
+    const inputs = state.fighters.map((_, port) => {
+      if (!cpus.includes(port)) return 0;
+      const d = decideCpu(state, port, 9, seed, worlds[port]);
+      seed = d.seed;
+      return d.input;
+    });
+    const out = step(state, inputs, { prevInputs: prev, ctx: CTX });
+    for (const h of out.events.hits) lastHit[h.victim] = frame;
+    // Standing on its own: not in a hit's hitlag or hitstun, nor held (as Task 23's sweep counts).
+    for (const f of out.state.fighters) if (f.grounded && !isStunned(f) && f.grabbedBy < 0) lastStood[f.port] = frame;
+    for (const ko of out.events.kos) if (lastStood[ko.port] > lastHit[ko.port]) selfDestructs[ko.port] += 1;
+    state = out.state;
+    prev = inputs;
+    watch(state);
+  }
+  return { state, selfDestructs };
+}
+
+describe("a CPU stays on its stage at the ledge (Plan 6, Task 26)", () => {
+  it("the Smash Ball chase does not drift Donkey Kong past Pokémon Stadium 2's ledge to a lost stock", () => {
+    // In the air 40 inside the left ledge, 5 up, drifting out at 1.5 with his midair jump left;
+    // the ball 10 inside that ledge, 30 up. The chase drifted and jumped after it, past the
+    // ledge, from where his recovery fell short (KO on frame 135 at 46e0706 with Tasks 23-25).
+    const view = stageViewFromDef(CTX.stage("pokemonStadium2"));
+    const s = createInitialState("pokemonStadium2", [{ defId: "donkeyKong" }, { defId: "samus" }], { ...RULES, smashBall: true }, 5, CTX);
+    placed(s.fighters[0], { action: "fall", actionFrame: 10, grounded: false, platform: -1, x: view.leftLedge + fx(40), y: fx(5), facing: -1, vx: fx(-1.5), jumpsUsed: 1 });
+    placed(s.fighters[1], { action: "stand", platform: 0, x: view.rightLedge - fx(10), y: 0, facing: -1 });
+    s.smashBall = { active: true, x: view.leftLedge + fx(10), y: fx(30), vx: 0, vy: 0, health: fx(40), driftTimer: 600 };
+    expect(playOut(s, [0], 400).selfDestructs[0]).toBe(0);
+  });
+
+  it("a level-9 CPU running out between Mario and Smashville's ledge never ends on it or past it, 36 of 36", () => {
+    // Pikachu 40 to 5 inside the right end of the main floor, running out at 1.6, Mario 45 inside:
+    // turning back to him 3.5 to 6.5 from the end, the turn's slide hung Pikachu on the ledge
+    // (4 of 36 at 46e0706 with Tasks 23-25). The floor's end is the main platform's right end
+    // (Smashville's ledges are -69.05 and 70.25, so it is not centred on 0).
+    const sv = CTX.stage("smashville");
+    const main = sv.platforms.find((p) => !p.soft)!;
+    const ledge = main.x + main.halfWidth;
+    const past: number[] = [];
+    for (let run = 0; run < 36; run++) {
+      const s = createInitialState("smashville", [{ defId: "pikachu" }, { defId: "mario" }], RULES, 1000 + run, CTX);
+      placed(s.fighters[0], { action: "run", actionFrame: 10, platform: 0, x: ledge - fx(40) + fx(run), facing: 1, vx: fx(1.6) });
+      placed(s.fighters[1], { action: "stand", platform: 0, x: ledge - fx(45), facing: -1 });
+      let off = false;
+      playOut(s, [0], 120, (st) => {
+        const f = st.fighters[0];
+        off ||= f.ledge !== null || f.x > ledge;
+      });
+      if (off) past.push(run);
+    }
+    expect(past).toEqual([]);
+  });
+
+  it("leaves a run at a target off the stage as it was, the edgeguard's chase and any other behaviour's (rulings R-P6-17, R-P6-24)", () => {
+    // Mario running out 6 inside Final Destination's right ledge, Fox off the stage beyond it:
+    // the edgeguard's chase (`out | Attack`, its skill above 0.6) runs him off on purpose, and on
+    // a seed whose edgeguard roll fails, another behaviour's press is left as it was too. The
+    // run-off guard turns none into a shield.
+    const view = stageViewFromDef(CTX.stage("finalDestination"));
+    const seen: { behaviour: string; input: number }[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 5, CTX);
+      placed(s.fighters[0], { action: "run", actionFrame: 10, platform: 0, x: view.rightLedge - fx(6), facing: 1, vx: fx(1.6) });
+      placed(s.fighters[1], { action: "fall", actionFrame: 10, grounded: false, platform: -1, x: view.rightLedge + fx(15), y: fx(-5), facing: -1 });
+      const world = cpuWorldFromDef(CTX.fighter("mario"), view, [CTX.fighter("mario"), CTX.fighter("fox")], (id) => CTX.fighter(id), CTX.bake);
+      const d = decideCpu(s, 0, 9, seed, world);
+      seen.push({ behaviour: d.behaviour, input: d.input });
+    }
+    const guarding = seen.filter((d) => d.behaviour === "edgeguard");
+    expect(guarding.some((d) => (d.input & Btn.Right) !== 0)).toBe(true);
+    expect(seen.length - guarding.length, "seeds another behaviour took").toBeGreaterThan(0);
+    expect(seen.filter((d) => d.input === Btn.Shield)).toEqual([]);
   });
 });

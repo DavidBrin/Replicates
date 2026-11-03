@@ -32,7 +32,7 @@ import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
 import { BUFFER_FRAMES } from "@/engine/constants";
 import { nextRandom } from "@/engine/fixed";
 import { withCopyAbility } from "@/engine/inhale";
-import { Btn, type AirDodgeAttributes, type FighterDef, type FighterState, type GameState, type InputFrame } from "@/engine/types";
+import { Btn, held, type AirDodgeAttributes, type FighterDef, type FighterState, type GameState, type InputFrame } from "@/engine/types";
 import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
@@ -40,6 +40,7 @@ import {
   ROLL_FUMBLE,
   airBrakeFromDef,
   airDodgeFromDef,
+  isOffstage,
   meleeReachFromDef,
   type Behaviour,
   type BehaviourContext,
@@ -70,6 +71,7 @@ import {
   centre,
   edgeguard,
   idle,
+  leavesFloor,
   platformMove,
   retreat,
   slidesOff,
@@ -396,6 +398,16 @@ export function decideCpu(
   // not a roll.
   if (slidesOff(ctx, bestInput)) bestInput = Btn.Shield & ~forbid;
 
+  // Nor a direction pressed in a run or a dash whose slide, the press and then a let-go, takes
+  // the fighter off its floor's end, whoever asked for it (Plan 6, Task 26: the Smash Ball
+  // chase's run and jump at the ledge, a turn at Smashville's ledge); the shield brakes it. Not
+  // while the target is off the stage: the edge is then the edgeguard's, which acts only then,
+  // and its chase off the stage is deliberate, gated on its own skill (ruling R-P6-17); braking
+  // the other behaviours' runs there too cut its exits by 18% (ruling R-P6-24). Judgement, not
+  // a roll.
+  const offTarget = ctx.view.target !== null && isOffstage(ctx.view.target, ctx.stage);
+  if (!offTarget && runsOff(ctx, bestInput)) bestInput = Btn.Shield & ~forbid;
+
   // A carry's direction that would walk it off the floor it stands on is not pressed, whoever
   // asks for it (Plan 5 final wave, part 5: `carriesOff`). Judgement, not a roll.
   if (carriesOff(ctx, bestInput)) bestInput &= ~(Btn.Left | Btn.Right);
@@ -443,4 +455,19 @@ export function cpuInput(
 ): { input: InputFrame; seed: number } {
   const decision = decideCpu(state, port, level, rngSeed, world);
   return { input: decision.input, seed: decision.seed };
+}
+
+/**
+ * Whether `input`, a direction or a jump pressed while the fighter still slides on the ground
+ * (`vx` not 0: a dash, a run, its brake, a shield raised out of one), takes it off the floor it
+ * stands on: the press, then a let-go, run on its own copy to rest by `slidesOff`'s model
+ * (`leavesFloor`, ruling R-FW1n), a turn's slide and a jump's arc included (Plan 6, Task 26).
+ * Then `decideCpu` brakes with the shield instead, unless the target is off the stage (rulings
+ * R-P6-17, R-P6-24).
+ */
+export function runsOff(ctx: BehaviourContext, input: InputFrame): boolean {
+  const { self } = ctx.view;
+  if (!self.grounded || self.vx === 0) return false;
+  if (!held(input, Btn.Left) && !held(input, Btn.Right) && !held(input, Btn.Jump)) return false;
+  return leavesFloor(ctx, input);
 }

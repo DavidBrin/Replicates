@@ -373,7 +373,8 @@ export const finalSmash: Behaviour = (ctx) => {
   const fire = fireFinalSmash(ctx);
   if (fire.score > 0) return fire;
   const overdue = overdueApproach(ctx);
-  return overdue.score > 0 ? overdue : finalSmashSpot(ctx);
+  // In the air its kept-out buttons (`forbid`) go to `decideCpu` with a score of 0.
+  return overdue.score > 0 || overdue.forbid !== undefined ? overdue : finalSmashSpot(ctx);
 };
 
 /** Whether `self` has held the Smash Ball's power `FINAL_SMASH_HOLD_LIMIT` frames or more (ruling D10). */
@@ -393,13 +394,25 @@ function overdueHolding(self: FighterState): boolean {
  * level with it, there is no such place, and the CPU fights on as before (`approach` takes it
  * up to a platform). As `finalSmashSpot`, it moves by `goToSpot`'s rules and never presses
  * what takes it off its floor (`keepFloor`).
+ *
+ * In the air over the stage it starts no aerial, no special and no air grab either, whoever asks
+ * (Plan 6, Task 26, closing Task 24's carried gap: the approach acted only on the ground, and on
+ * Pokémon Stadium 2 a CPU that jumped at a target landing from the respawn platform swung an
+ * aerial at him 260 frames past the limit): it keeps their buttons out of the frame (`forbid`)
+ * and leaves the stick to the behaviour that drifts it, so it comes down on its way, or up on
+ * to the target's platform by its jumps. An aerial under way finishes. Off the stage, below its
+ * top or on a ledge, nothing is kept out: the recovery's up special and climb stay its own.
  */
 function overdueApproach(ctx: BehaviourContext): BehaviourResult {
   const { self, target, dx, dy } = ctx.view;
   const def = ctx.fighterDef;
   const fs = def?.moves.finalSmash;
   if (def === null || fs === undefined || target === null || !overdueHolding(self) || dashTravel(fs) === 0) return NOTHING;
-  if (!canAct(self) || !self.grounded || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
+  if (!self.grounded) {
+    const over = self.ledge === null && !isOffstage(self, ctx.stage) && self.y >= ctx.stage.groundY;
+    return over ? { score: 0, input: 0, forbid: OVERDUE_AIR_FORBID } : NOTHING;
+  }
+  if (!canAct(self) || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
   const floor = floorEnds(self, ctx.stage, ctx.state.stageFrame);
   if (floor === null) return NOTHING;
   const tx = self.x + dx;
@@ -420,6 +433,9 @@ function overdueApproach(ctx: BehaviourContext): BehaviourResult {
   if (!free(self)) return isShielding(self.action) ? NOTHING : { score: OVERDUE_SCORE, input: 0 };
   return keepFloor(ctx, moveToSpot(ctx, def, spot, OVERDUE_SCORE));
 }
+
+/** What `overdueApproach` keeps out of the frame in the air over the stage: an aerial's, a special's and an air grab's buttons. */
+const OVERDUE_AIR_FORBID: InputFrame = Btn.Attack | Btn.Special | Btn.Grab;
 
 /** UNVERIFIED (CPU judgement): `overdueApproach`'s score, above every attack and movement (at most 700), below the survival behaviours (900 and up). */
 const OVERDUE_SCORE = 890;
@@ -944,7 +960,12 @@ export const smashBall: Behaviour = (ctx) => {
     if (inReach) return { score: 490, input: aim | (swinging ? Btn.Attack : 0) };
     // UNVERIFIED (CPU judgement): its midair jump pressed two frames in eight, past its top.
     const again = by > VERTICAL_REACH && self.jumpsUsed < ctx.jumps && self.vy <= 0 && pulse(ctx.view.frame, self.port, 8, 2);
-    return { score, input: toward | (again ? Btn.Jump : 0) };
+    const chase = toward | (again ? Btn.Jump : 0);
+    // Not past a ledge after it, and lost (Plan 6, Task 26): a drift, or a midair jump, that would
+    // leave the fighter off the stage where its own recovery model has no way back is not made,
+    // and it drifts home instead.
+    if (chase !== 0 && chaseStrands(ctx, chase)) return { score, input: towardX(self.x, Math.trunc((ctx.stage.leftLedge + ctx.stage.rightLedge) / 2)) };
+    return { score, input: chase };
   }
   if (inReach && by <= BALL_NEAR) {
     // Facing it first: a grounded turn is an input.
@@ -954,6 +975,33 @@ export const smashBall: Behaviour = (ctx) => {
   const jump = by > BALL_NEAR && abs(bx) <= ctx.meleeReach * BALL_JUMP_REACHES && fullHopPulse(ctx.view.frame, self.port);
   return { score, input: (abs(bx) > BALL_NEAR ? toward : 0) | (jump ? Btn.Jump : 0) };
 };
+
+/** UNVERIFIED (CPU judgement): the frames the air chase's drift is followed (`chaseStrands`), about a full hop's rise and fall. */
+const CHASE_LOOKAHEAD_FRAMES = 45;
+
+/**
+ * Whether the Smash Ball chase's press in the air (`smashBall`): `input` now, its direction held
+ * after, leaves the fighter off the stage with no way back (Plan 6, Task 26): a copy run by the
+ * engine's rules (`ghostStep`) for `CHASE_LOOKAHEAD_FRAMES`, or until it lands on the stage; then
+ * the CPU's own recovery model judges it from there (`recoversFrom`). The chase past a ledge that
+ * Plan 5's sweep lost Donkey Kong's stock to was this drift, after the ball near the far ledge.
+ */
+function chaseStrands(ctx: BehaviourContext, input: InputFrame): boolean {
+  const def = ctx.fighterDef;
+  if (def === null) return false;
+  const f = cloneFighter(ctx.view.self);
+  const g = ghostContext(def, ctx.view.frame, f);
+  let prev: InputFrame = 0;
+  for (let k = 1; k <= CHASE_LOOKAHEAD_FRAMES; k++) {
+    const now = k === 1 ? input : input & ~Btn.Jump;
+    g.frame = ctx.view.frame + k;
+    ghostStep(f, now, prev, g);
+    prev = now;
+    if (f.grounded) return false;
+  }
+  if (!isOffstage(f, ctx.stage)) return false;
+  return !recoversFrom(def, f, ctx.stage, ctx.recovery, ctx.jumps, g.frame, ctx.state.stageFrame + CHASE_LOOKAHEAD_FRAMES);
+}
 
 /* ----------------------------------------------------- reflect, counter -- */
 
@@ -1264,7 +1312,9 @@ export const holding: Behaviour = (ctx) => {
     const catchable = target !== null && (targetDef === undefined || inhaleMayCatch(self, target, targetDef));
     // Neither intangible nor invincible (ruling R-FW1r: a respawn's invincibility, which
     // the Inhale passed through 30 frames into it).
-    if (inReach && catchable && target.intangible === 0 && target.invincible === 0 && target.grabbedBy < 0 && skilled(ctx)) return { score: 450, input: Btn.Special };
+    // Not off the stage (Plan 6, Task 26), as a trapping Final Smash is not (ruling R-FW1d): a
+    // mouthful taken there kept Kirby from recovering.
+    if (inReach && catchable && !isOffstage(self, ctx.stage) && target.intangible === 0 && target.invincible === 0 && target.grabbedBy < 0 && skilled(ctx)) return { score: 450, input: Btn.Special };
   }
   if (self.action === "grabHold") {
     if (ctx.rolls[ROLL_SPECIAL] < PUMMEL_CHANCE && ctx.fighterDef?.moves.pummel !== undefined) return { score: 530, input: Btn.Attack, decided: true };

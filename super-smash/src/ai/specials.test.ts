@@ -261,6 +261,40 @@ describe("the Final Smash", () => {
     expect(runs.filter((m) => m.selfDestructed).map((m) => m.seed), "seeds that self-destructed").toEqual([]);
   }, 60_000);
 
+  // Task 24's carried gap ("the overdue approach acts only on the ground"), closed in Task 26:
+  // there, a back throw before the limit KO'd Mario; Pikachu, past it, jumped while its view still
+  // showed him on the respawn platform, and in the air swung an aerial that hit him on 1,474.
+  it("past the limit, lands no hit on an idle Mario from the grace until the fire, on pokemonStadium2, seed 6, baked (Plan 6, Task 26)", () => {
+    const m = idleMatch("pokemonStadium2", 6, FINAL_SMASH_HOLD_LIMIT + 900);
+    expect({ lateHits: m.lateHits, fired: m.firedAt > 0, trapped: m.trapped, selfDestructed: m.selfDestructed }).toEqual({ lateHits: 0, fired: true, trapped: true, selfDestructed: false });
+  }, 60_000);
+
+  it("past the limit, in the air over the stage, starts no aerial and keeps its drift; off the stage it still recovers (Plan 6, Task 26)", () => {
+    const world = cpuWorldFromDef(pikachu, FD, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
+    const scene = (over: Partial<FighterState>, gap: number, standby: number) => {
+      const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+      Object.assign(s.fighters[0], { action: "jump", actionFrame: 5, grounded: false, platform: -1, x: 0, y: FD.groundY + fx(5), vx: 0, vy: fx(1), facing: 1, jumpsUsed: 1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY, ...over });
+      Object.assign(s.fighters[1], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: (over.x ?? 0) + fx(gap), y: FD.groundY, facing: -1, intangible: 0, invincible: 0 });
+      s.fighters[0].combat.standbyFrames = standby;
+      return s;
+    };
+    // Rising in a jump 5 above the stage, Mario standing 4 ahead (where `attack` throws the judged
+    // aerial on every frame of the rise); every frame of the swings' pulse, and a few seeds.
+    const presses = (over: Partial<FighterState>, gap: number, standby: number) => {
+      const s = scene(over, gap, standby);
+      return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((frame) => [1, 2, 3, 4].map((seed) => decideCpu({ ...s, frame }, 0, 9, seed, world).input));
+    };
+    const swings = (inputs: InputFrame[]) => inputs.filter((i) => (i & (Btn.Attack | Btn.Special | Btn.Grab)) !== 0).length;
+    expect(swings(presses({}, 4, FINAL_SMASH_HOLD_LIMIT - 1)), "before the limit, aerials at Mario below").toBeGreaterThan(0);
+    const past = presses({}, 4, FINAL_SMASH_HOLD_LIMIT);
+    expect(swings(past), "past it, none").toBe(0);
+    // Mario 60 ahead: the approach's drift toward him is left as it was.
+    expect(presses({}, 60, FINAL_SMASH_HOLD_LIMIT - 1)).toEqual(presses({}, 60, FINAL_SMASH_HOLD_LIMIT));
+    // Off the stage, 20 past the ledge and 30 below it, its jump spent: the up special still comes out.
+    const offstage = { action: "fall", actionFrame: 10, x: FD.rightLedge + fx(20), y: FD.groundY - fx(30), vy: fx(-1), jumpsUsed: 2, facing: -1 } as const;
+    expect(presses(offstage, -60, FINAL_SMASH_HOLD_LIMIT).filter((i) => held(i, Btn.Special)).length, "the recovery's up special").toBeGreaterThan(0);
+  });
+
   it("past the limit, drops attacking and approaching a free target for where it fires from (Task 24 fix round 1)", () => {
     const world = cpuWorldFromDef(pikachu, FD, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
     for (const gap of [6, 60]) {
@@ -1800,5 +1834,22 @@ describe("Kong Karry (Plan 6, Task 25)", () => {
     // The same roll for a fighter whose forward throw is no carry throws toward the edge.
     const m = { ...s, fighters: [{ ...s.fighters[0], defId: "mario" }, s.fighters[1]] };
     expect(holding(context(m, mario, 9, rollsWith(ROLL_SPECIAL, PUMMEL_CHANCE + 0.1))).input).toBe(Btn.Right);
+  });
+});
+
+describe("Kirby's Inhale off the stage (Plan 6, Task 26)", () => {
+  it("is not started off the stage, however near the target", () => {
+    const off = makeState({
+      fighters: [
+        makeFighter({ port: 0, defId: "kirby", x: FD.rightLedge + fx(10), y: fx(10), grounded: false, action: "fall", facing: -1 }),
+        makeFighter({ port: 1, x: FD.rightLedge + fx(2), y: fx(10), grounded: false, action: "fall" }),
+      ],
+    });
+    expect(isOffstage(off.fighters[0], FD)).toBe(true);
+    expect(holding(context(off, kirby, 9, rollsWith(ROLL_SPECIAL, 0), FD)).input & Btn.Special).toBe(0);
+    // Over the stage, the same reach: taken.
+    off.fighters[0] = makeFighter({ port: 0, defId: "kirby", x: FD.rightLedge - fx(10), y: fx(10), grounded: false, action: "fall", facing: -1 });
+    off.fighters[1] = makeFighter({ port: 1, x: FD.rightLedge - fx(18), y: fx(10), grounded: false, action: "fall" });
+    expect(holding(context(off, kirby, 9, rollsWith(ROLL_SPECIAL, 0), FD)).input & Btn.Special).toBe(Btn.Special);
   });
 });
