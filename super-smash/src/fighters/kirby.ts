@@ -37,7 +37,9 @@ const HALF_WIDTH = 1.9;
  * only, the near one for all, both pulling at 160°.
  */
 function inhalePull(frame: number, id: number): Hitbox[] {
-  const pull = { startFrame: frame, endFrame: frame, damage: fx(0), angle: fx(160), baseKnockback: fx(0), knockbackGrowth: fx(100), windbox: true, transcendent: true } as const;
+  // `Rehit=10` (Plan 6, Task 14): a windbox keeps the swing's record, so each strike
+  // re-arms ten frames on, the next box's frame.
+  const pull = { startFrame: frame, endFrame: frame, damage: fx(0), angle: fx(160), baseKnockback: fx(0), knockbackGrowth: fx(100), windbox: true, transcendent: true, rehit: 10 } as const;
   return [
     { ...pull, id, x: fx(15.5), y: fx(7.0), radius: fx(8.5), fixedKnockback: fx(30), situation: "ground" },
     { ...pull, id: id + 1, x: fx(9.7), y: fx(7.0), radius: fx(7.8), fixedKnockback: fx(25) },
@@ -733,8 +735,8 @@ const legacy: FighterDef = {
       //   KBG 100, FKB 30 / 25, BKB 0, `Flinchless=true` (a windbox),
       //   `DisableHitlag=true`, `Clang_Rebound=ATTACK_SETOFF_KIND_OFF`, `Rehit=10`.
       //   The rehit is the boxes' own: out one frame on 11, 21, 31 and 41 (and, held,
-      //   on 41 each time round), leaving no mark on the swing's record
-      //   (`simulate.ts` `unrecorded`). UNVERIFIED: SSBU times a rehit from each
+      //   on 41 each time round), each re-arming the swing's record ten
+      //   frames on (Plan 6, Task 14). UNVERIFIED: SSBU times a rehit from each
       //   victim's last hit; SmashWiki's "Opponent vacuum speed 0.9, 1.2" is not
       //   matched to the pull's knockback.
       // The catch boxes have the lower ids, so a fighter both reach is caught. The

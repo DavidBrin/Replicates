@@ -636,7 +636,8 @@ describe("a connecting pummel", () => {
     const ticks = holdThen(Btn.Attack, 40);
 
     const holding = ticks[HOLD_INPUT_TICK - 1].state;
-    expect(holding.fighters[0]).toMatchObject({ action: "grabHold", grabbing: 1, hitThisMove: [1] });
+    // A catch keeps no record (Plan 6, Task 14); the pummel's own hit is the one below.
+    expect(holding.fighters[0]).toMatchObject({ action: "grabHold", grabbing: 1, hitThisMove: [] });
     expect(holding.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
 
     const hit = ticks[HOLD_INPUT_TICK];
@@ -1145,6 +1146,57 @@ describe("presses during a KO's freeze (Plan 6, Task 13; SmashWiki \"Buffer\")",
     const [after] = stepEach(s, [Btn.Right]);
     expect(after.fighters[0].x).toBe(s.fighters[0].x);
     expect(after.fighters[0].action).toBe("stand");
+  });
+});
+
+describe("a windbox keeps the swing's record; a catch reads none of it (Plan 6, Task 14)", () => {
+  /** The tester with `slot` replaced by `over` (a move of 24 frames by default). */
+  function withMove(slot: "jab1" | "grab" | "neutralB", over: Partial<MoveDef>): SimContext {
+    const def: FighterDef = { ...DEF, moves: { ...DEF.moves, [slot]: move(slot, { totalFrames: 24, ...over }) } };
+    return { fighter: () => def, stage: () => STAGE };
+  }
+
+  // A pulse that pushes nobody anywhere (no knockback at all), so its victim stays in its
+  // reach and each push it makes is counted, never one lost to the victim sliding away.
+  const PULSE = hitbox({ id: 0, startFrame: 5, endFrame: 5, damage: 0, windbox: true, baseKnockback: 0, knockbackGrowth: 0, angle: 0, rehit: 10 });
+
+  /** Step the tester `frames` times, port 0 pressing `press` on the first step (or holding it throughout); the steps on which port 0 pushed someone. */
+  function swing(ctx: SimContext, press: InputFrame, frames: number, hold = false): { s: GameState; pushes: number[] } {
+    let s = standing();
+    let prev: InputFrame[] = [0, 0];
+    const pushes: number[] = [];
+    for (let i = 0; i < frames; i++) {
+      const now: InputFrame[] = [hold || i === 0 ? press : 0, 0];
+      const out = step(s, now, { prevInputs: prev, ctx });
+      if (out.events.pushes.some((p) => p.attacker === 0)) pushes.push(i);
+      s = out.state;
+      prev = now;
+    }
+    return { s, pushes };
+  }
+
+  it("a pull on frame 5 holds its victim against the same part's hit on 6, as a hitbox does", () => {
+    const { s } = swing(withMove("jab1", { hitboxes: [PULSE, hitbox({ id: 1, startFrame: 6, endFrame: 6, damage: fx(10) })] }), Btn.Attack, 10);
+    expect(s.fighters[1].damage).toBe(0);
+  });
+
+  it("but not a catch: pulled on 5, caught on 6", () => {
+    const { s } = swing(withMove("grab", { hitboxes: [PULSE, hitbox({ id: 1, startFrame: 6, endFrame: 6, grabbing: true, damage: 0 })] }), Btn.Grab, 8);
+    expect(s.fighters[1].action).toBe("grabbed");
+  });
+
+  it("and the pull pushes again after its rehit, not before", () => {
+    const { pushes } = swing(withMove("jab1", { hitboxes: [hitbox({ ...PULSE, endFrame: 20 })] }), Btn.Attack, 22);
+    expect(pushes).toEqual([4, 14]);
+  });
+
+  it("a held loop's wrap re-arms the record: a pull every ten frames, round after round", () => {
+    // Inhale's shape on the tester: pulls on 11, 21, 31 and 41 with `Rehit=10`, the loop
+    // 35-44 held (`holdLoopMain`).
+    const pull = (frame: number, id: number) => hitbox({ ...PULSE, id, startFrame: frame, endFrame: frame, angle: fx(160) });
+    const ctx = withMove("neutralB", { totalFrames: 63, holdLoop: { from: 35, to: 44 }, hitboxes: [11, 21, 31, 41].map((f, k) => pull(f, k)) });
+    const { pushes } = swing(ctx, Btn.Special, 80, true);
+    expect(pushes).toEqual([10, 20, 30, 40, 50, 60, 70]);
   });
 });
 

@@ -180,6 +180,10 @@ function holdLoopMain(f: FighterState, intent: Intent, loop: NonNullable<MoveDef
     if (intent.specialHeld) {
       f.actionFrame = actionFrameOf(loop.from);
       f.charge += 1;
+      // Back round the loop, its boxes are new strikes, as a replayed script's are: the
+      // swing's record is re-armed (Plan 6, Task 14; UNVERIFIED that SSBU's per-victim
+      // rehit lands there). Catches keep none of it.
+      clearHitRecord(f);
     } else f.charge = 0;
     return;
   }

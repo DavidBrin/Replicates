@@ -1173,9 +1173,9 @@ const legacy: FighterDef = {
     //   ×0 (its `Hitlag=0.0`, with `DisableHitlag=false`), `Rehit=10`; and two 0% pulls,
     //   FKB 30, flinchless, `DisableHitlag=true` (the start's only boxes that set it):
     //   18° at radius 20, 15 behind, and 366° at radius 30, 17 ahead,
-    //   loaded at 367 (ruling P5-R18's stand-in; `windboxPush`). A windbox pushes every
-    //   frame it is out, so each pull is authored one frame at a time on its `Rehit=10`,
-    //   48, 58 and 68. `clear_all` on 69. UNVERIFIED: the start's length, its last
+    //   loaded at 367 (ruling P5-R18's stand-in; `windboxPush`). Each pull spans 48-68 and
+    //   keeps the swing's record, so it pushes on 48, 58 and 68, its `Rehit=10` (Plan 6,
+    //   Task 14). `clear_all` on 69. UNVERIFIED: the start's length, its last
     //   scripted event (69; `final_start` publishes no CancelFrame).
     // - The muzzle, `game_final`, from the move's 70 (the laser's frame f is the move's
     //   69 + f): 1%, angle 20, KBG 100, FKB 22, radius 13, 15 up and 20 ahead on `top`,
@@ -1239,8 +1239,11 @@ const legacy: FighterDef = {
       clipStrike: 70,
       hitboxes: [
         finalBox(0, 48, 68, { damage: 1, angle: 18, kbg: 100, fkb: 12, radius: 10, x: 17, y: 13, hitlag: 0, transcendent: true, effect: "electric" }),
-        ...[48, 58, 68].map((f, i) => finalBox(1 + i, f, f, { damage: 0, angle: 18, kbg: 100, fkb: 30, radius: 20, x: -15, y: 13, hitlag: 0, transcendent: true, windbox: true })),
-        ...[48, 58, 68].map((f, i) => finalBox(4 + i, f, f, { damage: 0, angle: 367, kbg: 100, fkb: 30, radius: 30, x: 17, y: 13, hitlag: 0, transcendent: true, windbox: true })),
+        // `game_finalstart`'s pulls, IDs 1 and 2 on 48-68 with the charge's `Part=0` and
+        // `Rehit=10` (the move's `rehit`): a windbox keeps the swing's record (Plan 6, Task
+        // 14). The front pull's angle stays 367 (the script's 366 is refused at load, D56).
+        finalBox(1, 48, 68, { damage: 0, angle: 18, kbg: 100, fkb: 30, radius: 20, x: -15, y: 13, hitlag: 0, transcendent: true, windbox: true }),
+        finalBox(4, 48, 68, { damage: 0, angle: 367, kbg: 100, fkb: 30, radius: 30, x: 17, y: 13, hitlag: 0, transcendent: true, windbox: true }),
         finalBox(7, 70, 76, { damage: 1, angle: 20, kbg: 100, fkb: 22, radius: 13, x: 20, y: 15, hitlag: 0, transcendent: true, rehit: 8 }),
         finalBox(8, 77, 80, { damage: 2, angle: 20, kbg: 100, fkb: 22, radius: 15, x: 20, y: 15, hitlag: 0, transcendent: true, rehit: 8 }),
         finalBox(9, 81, 208, { damage: 1.5, angle: 20, kbg: 100, fkb: 16, radius: 5, x: 12, y: 15, x2: 162, y2: 15, transcendent: true }),

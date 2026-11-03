@@ -413,14 +413,14 @@ describe("hitbox values", () => {
     for (const hb of boxes.filter((b) => b.windbox === true)) expect(hb.damage, `${fighter.name} hitbox ${hb.id}`).toBe(0);
   });
 
-  it.each(each)("%s holds every windbox on a move to one frame, and imports none (Plan 5, Task 9 fix round 2)", (_name, fighter) => {
-    // A fighter's own windbox leaves no mark on its swing's hit record
-    // (`simulate.ts` `unrecorded`), which is right only for a box one frame long:
-    // Kirby's Inhale pull times its `Rehit=10` with one-frame boxes. A longer one
-    // would push on every frame it is out; it must fail here until its record is
-    // decided.
+  it.each(each)("%s gives every windbox longer than a frame a rehit, and imports none (Plan 6, Task 14)", (_name, fighter) => {
+    // A windbox keeps its swing's record (Plan 6, Task 14), so one out for several frames
+    // pushes once, then again only after its rehit: a box that should push on a rhythm
+    // must carry it (its own, or its move's).
     for (const { slot, hitbox } of everyHitbox(fighter).filter((h) => h.hitbox.windbox === true)) {
-      expect(hitbox.endFrame, `${fighter.name} ${slot} windbox ${hitbox.id}`).toBe(hitbox.startFrame);
+      if (hitbox.endFrame === hitbox.startFrame) continue;
+      const rehit = hitbox.rehit ?? fighter.moves[slot]?.rehit ?? 0;
+      expect(rehit, `${fighter.name} ${slot} windbox ${hitbox.id}`).toBeGreaterThan(0);
     }
     // And no imported script has a flinchless ATTACK (a windbox) of any length.
     const ref = REFERENCE_SCRIPTS[fighter.id];

@@ -1984,7 +1984,9 @@ function resolveHits(
       // ordinary grab still pulls a hanging fighter off, D56), no Kirby with someone
       // in his mouth, and nobody once its own mouth is full (Plan 5, Task 9: `inhaleMayCatch`).
       if (c.hitbox.grabbing === true && isInhale(defs[c.attacker], c) && !inhaleMayCatch(s.fighters[c.attacker], victim, defs[v])) continue;
-      if (c.final === "strike" ? sceneRecordHolds(s, c, victim.port) : !unrecorded(c) && recordSaysAlreadyHit(s, c, victim.port)) continue;
+      // A catch is the CatchModule's, and reads none of the swing's attack record (Plan 6,
+      // Task 14): a pull that marked its victim leaves the catch free to take them.
+      if (c.final === "strike" ? sceneRecordHolds(s, c, victim.port) : c.hitbox.grabbing !== true && recordSaysAlreadyHit(s, c, victim.port)) continue;
       // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
       // holds alone, and hits anyone else it reaches. SmashWiki "Throw"
       // (https://www.ssbwiki.com/Throw): "a few throws such as Mario's back throw
@@ -2218,26 +2220,6 @@ function isInvincible(f: FighterState, def: FighterDef): boolean {
   return release !== null && moveFrameOf(f.actionFrame) <= release;
 }
 
-/**
- * The replica's convention, not a published rule: a fighter's own windbox leaves
- * no mark on its swing's hit record (Plan 5, Task 9 fix round 1). SSBU's windbox
- * is a flinchless hitbox (SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox) and
- * keeps its record, striking again only after its rehit rate. The one melee
- * windbox here, Kirby's Inhale pull (`Rehit=10`), times its rehits with boxes one
- * frame long (frames 11, 21, 31, 41), so leaving no mark cannot let it push twice
- * from one box; marked, a pull would spend the swing on its victim, and the
- * Inhale's catch, the same swing in the replica's one record, could never take
- * them (SSBU keeps catches, `CatchModule`, and attacks, `AttackModule`, apart).
- * `schema.test.ts` holds every melee windbox to one frame. UNVERIFIED: the rehit
- * timed from the boxes' frames, where SSBU times it from each victim's last hit. A
- * projectile's windbox (F.L.U.D.D.'s water) marks its own record, as before. A
- * Final Smash start's strike and a scene's boxes keep a record of their own
- * (`sceneRecordHolds`; Plan 6, Task 9).
- */
-function unrecorded(c: Candidate): boolean {
-  return c.hitbox.windbox === true && c.projectile === null;
-}
-
 /** Is `c` a box of a move that inhales (`MoveDef.inhale`, Plan 5, Task 9: Kirby's neutral special)? */
 function isInhale(def: FighterDef, c: Candidate): boolean {
   return c.projectile === null && c.slot !== null && def.moves[c.slot]?.inhale !== undefined;
@@ -2279,6 +2261,10 @@ function recordSaysAlreadyHit(s: GameState, c: Candidate, port: number): boolean
 }
 
 function recordHit(c: Candidate, attacker: FighterState, port: number): void {
+  // A catch keeps none of the attack record (Plan 6, Task 14; SSBU's CatchModule). So a
+  // grab that meets an invincible fighter (`applyInvincibleHit`) is not spent on them:
+  // a box still out when the invincibility ends takes them (UNVERIFIED; D59).
+  if (c.hitbox.grabbing === true) return;
   // A Final Smash's scene and strike boxes record in a list of their own (Plan 6, Task
   // 9: `CombatState.sceneHits`), which leaves the start's trap free to catch whom a
   // strike hit (Plan 5, Task 15 fix round 1, ruling R-T15j: Volt Tackle's sparks, then
@@ -3611,7 +3597,9 @@ function applyHit(
  * rule names, so no damage is dealt here.
  */
 function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate, events: StepEvents, percents: readonly number[]): void {
-  if (!unrecorded(c)) recordHit(c, attacker, victim.port);
+  // A windbox keeps the swing's record as any hitbox does (Plan 6, Task 14; SmashWiki
+  // "Hitbox": "Flinchless" is a hitbox's property, and its "Rehit rate" and "Part" rule it).
+  recordHit(c, attacker, victim.port);
   if (isInvincible(victim, victimDef) || hitReachesShield(victim, victimDef, c)) return;
   // It reached the body: who pushed whom, for the results screen's kill credit
   // (`StepEvents.pushes`), whatever the push then does.

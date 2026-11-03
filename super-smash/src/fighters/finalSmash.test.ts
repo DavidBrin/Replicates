@@ -1115,14 +1115,12 @@ describe("the three's boxes carry their scripts' numbers", () => {
   // its 140, each fringe on a record of its own (`Hitbox.part` 1 and 2).
   it("Zero Laser's start, muzzle, beam, end, fringe beams and blasts", () => {
     const zero = def("samus").moves.finalSmash!;
-    const pulls = (f: number) => [
-      [f, f, 0, 18, 100, 0, 30, 20, fx(0), true, "normal", false],
-      [f, f, 0, 367, 100, 0, 30, 30, fx(0), true, "normal", false],
-    ];
+    // Its two pulls span the charge's 48-68, as `game_finalstart` lays them (Plan 6, Task 14:
+    // a windbox keeps its record, and pushes again on the move's `Rehit=10`).
     expect([...zero.hitboxes].sort((a, b) => a.id - b.id).map(row)).toEqual([
       [48, 68, 1, 18, 100, 0, 12, 10, fx(0), true, "electric", false],
-      ...[48, 58, 68].map((f) => pulls(f)[0]),
-      ...[48, 58, 68].map((f) => pulls(f)[1]),
+      [48, 68, 0, 18, 100, 0, 30, 20, fx(0), true, "normal", false],
+      [48, 68, 0, 367, 100, 0, 30, 30, fx(0), true, "normal", false],
       [70, 76, 1, 20, 100, 0, 22, 13, fx(0), true, "normal", false],
       [77, 80, 2, 20, 100, 0, 22, 15, fx(0), true, "normal", false],
       [81, 208, 1.5, 20, 100, 0, 16, 5, fx(1), true, "normal", false],
@@ -1134,13 +1132,9 @@ describe("the three's boxes carry their scripts' numbers", () => {
     ]);
     const byId = (id: number) => zero.hitboxes.find((hb) => hb.id === id)!;
     // Where they are, their records, their rehits and the windboxes.
-    expect(Array.from({ length: 15 }, (_, id) => [toFloat(byId(id).x), toFloat(byId(id).y), byId(id).part ?? 0, byId(id).rehit, byId(id).windbox === true])).toEqual([
+    expect([0, 1, 4, 7, 8, 9, 10, 11, 12, 13, 14].map((id) => [toFloat(byId(id).x), toFloat(byId(id).y), byId(id).part ?? 0, byId(id).rehit, byId(id).windbox === true])).toEqual([
       [17, 13, 0, undefined, false],
       [-15, 13, 0, undefined, true],
-      [-15, 13, 0, undefined, true],
-      [-15, 13, 0, undefined, true],
-      [17, 13, 0, undefined, true],
-      [17, 13, 0, undefined, true],
       [17, 13, 0, undefined, true],
       [20, 15, 0, 8, false],
       [20, 15, 0, 8, false],
