@@ -976,7 +976,8 @@ describe("the HUD's portraits from the loaded models (Plan 6, Task 38)", () => {
       Object.assign(gl(), {
         getRenderTarget: () => target,
         setRenderTarget: (t: unknown) => void (target = t),
-        readRenderTargetPixels: (_t: unknown, _x: number, _y: number, w: number, h: number, buffer: Uint8Array) => buffer.fill(255, 0, w * h * 4),
+        // Every texel opaque white, in the half floats the portrait's target holds (1.0 is 0x3c00).
+        readRenderTargetPixels: (_t: unknown, _x: number, _y: number, w: number, h: number, buffer: Uint16Array) => buffer.fill(0x3c00, 0, w * h * 4),
       });
       presenter.paint(rs, camera, 0, []);
       const made = presenter.portraits();

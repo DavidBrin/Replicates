@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
-import { Light, MeshStandardMaterial, type Camera } from "three";
+import { DataUtils, HalfFloatType, Light, MeshStandardMaterial, type Camera, type WebGLRenderTarget } from "three";
 
 import { FIGHTERS } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
@@ -20,8 +20,11 @@ const mario = withLimbScripts(FIGHTERS.find((f) => f.id === "mario")!, bake.bone
 const skeleton = parseSkeletonFile(JSON.parse(readFileSync(join(process.cwd(), "src", "render3d", "skeletons", "mario.json"), "utf8")));
 const poser = fighterPoser(mario, skeleton);
 
-/** The slice of `WebGLRenderer` a portrait reads back through, recording each draw as it was made; every texel reads as `linear`. */
-function fakePortraitGL(linear: number) {
+/** One texel of a target as three leaves it: linear colour, premultiplied by alpha, 0-1. */
+type Texel = readonly [r: number, g: number, b: number, a: number];
+
+/** The slice of `WebGLRenderer` a portrait reads back through, recording each draw as it was made; every texel reads back as `texel`, in half floats. */
+function fakePortraitGL(texel: Texel) {
   const drawn: { lights: number; fighters: number; background: unknown; camera: Camera; target: unknown }[] = [];
   let target: unknown = null;
   const gl: PortraitGL = {
@@ -34,7 +37,7 @@ function fakePortraitGL(linear: number) {
       drawn.push({ lights, fighters, background: (scene as unknown as { background: unknown }).background, camera, target });
     },
     readRenderTargetPixels: (_t, _x, _y, w, h, buffer) => {
-      for (let i = 0; i < w * h * 4; i++) buffer[i] = i % 4 === 3 ? 255 : linear;
+      for (let i = 0; i < w * h * 4; i++) buffer[i] = DataUtils.toHalfFloat(texel[i % 4]);
     },
   };
   return { gl, drawn, target: () => target };
@@ -56,7 +59,7 @@ describe("a portrait from the loaded model (Plan 6, Task 38)", () => {
     const fighter = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene: armatureModel(poser.rig3, [new MeshStandardMaterial()]) } });
     fighter.update({ f: makeFighter({ defId: "mario", action: "stand" }), x: 0, y: 0, frame: 0, blends: null, hitFlash: 0, hidden: false });
     const turned = fighter.placement.rotation.y;
-    const { gl, drawn, target } = fakePortraitGL(128);
+    const { gl, drawn, target } = fakePortraitGL([0.5, 0.5, 0.5, 1]);
     const { canvas, put } = fakeCanvas();
     const out = renderPortrait(gl, fighter, createLights(), () => canvas);
     expect(out).toBe(canvas);
@@ -69,7 +72,7 @@ describe("a portrait from the loaded model (Plan 6, Task 38)", () => {
     expect(drawn[0].fighters).toBe(1);
     expect(drawn[0].lights).toBeGreaterThan(0);
     expect(drawn[0].background).toBeNull();
-    // Linear 128 is sRGB 188: the target holds linear colour, the canvas shows sRGB.
+    // Linear 0.5 is sRGB 188: the target holds linear colour, the canvas shows sRGB.
     expect([...put[0].data.slice(0, 4)]).toEqual([188, 188, 188, 255]);
     // The fighter is handed back as it was.
     expect(fighter.placement.rotation.y).toBe(turned);
@@ -78,9 +81,33 @@ describe("a portrait from the loaded model (Plan 6, Task 38)", () => {
   it("makes none for a stand-in, or without the renderer's read-back (the 2D head stays)", () => {
     const standIn = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "standIn", reason: "test" } });
     const { canvas } = fakeCanvas();
-    expect(renderPortrait(fakePortraitGL(128).gl, standIn, createLights(), () => canvas)).toBeNull();
+    expect(renderPortrait(fakePortraitGL([0.5, 0.5, 0.5, 1]).gl, standIn, createLights(), () => canvas)).toBeNull();
     const glb = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene: armatureModel(poser.rig3, [new MeshStandardMaterial()]) } });
-    const noReadBack: PortraitGL = { ...fakePortraitGL(128).gl, readRenderTargetPixels: undefined };
+    const noReadBack: PortraitGL = { ...fakePortraitGL([0.5, 0.5, 0.5, 1]).gl, readRenderTargetPixels: undefined };
     expect(renderPortrait(noReadBack, glb, createLights(), () => canvas)).toBeNull();
+  });
+
+  /**
+   * The final wave (final review item 36): the portraits looked muted beside the models in
+   * the match. An 8-bit linear target posterised the dark tones, it had no multisampling,
+   * and edges kept their premultiplied colour.
+   */
+  it("renders into a half-float, multisampled target, and reads its colour back straight: dark tones and edges keep their colour", () => {
+    const glb = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene: armatureModel(poser.rig3, [new MeshStandardMaterial()]) } });
+    // A half-covered edge texel: straight linear (0.002, 0.25, 0.5) at alpha 0.5, premultiplied.
+    const { gl, drawn } = fakePortraitGL([0.001, 0.125, 0.25, 0.5]);
+    const { canvas, put } = fakeCanvas();
+    expect(renderPortrait(gl, glb, createLights(), () => canvas)).toBe(canvas);
+    const target = drawn[0].target as WebGLRenderTarget;
+    expect([target.texture.type, target.samples]).toEqual([HalfFloatType, 4]);
+    // Linear 0.002 is sRGB 7, a tone 8-bit linear cannot hold (linear 1/255 is sRGB 13).
+    expect([...put[0].data.slice(0, 4)]).toEqual([7, 137, 188, 128]);
+  });
+
+  it("makes none from a read-back with nothing in it, a context lost before three hears so (the 2D head stays)", () => {
+    const glb = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene: armatureModel(poser.rig3, [new MeshStandardMaterial()]) } });
+    const { canvas, put } = fakeCanvas();
+    expect(renderPortrait(fakePortraitGL([0, 0, 0, 0]).gl, glb, createLights(), () => canvas)).toBeNull();
+    expect(put).toEqual([]);
   });
 });
