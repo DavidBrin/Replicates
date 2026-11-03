@@ -447,7 +447,11 @@ const MATCHES: readonly Match[] = [
  * byte-identical. All 60 are visited.
  * Plan 6, Task 10 (a Final Smash ending in the air lifts its user) adds no action: the
  * beams lab's aerial Mario Finale and Ancient Arrow and the dash lab's Team Star Fox end
- * rising, and only those two traces move. All 60 are visited.
+ * rising, and only those two traces move. The dash lab's Volt Tackle ends in the air too
+ * (on 138) and gets the boost; Pikachu is still KO'd off the side blast line, on 169.
+ * Fox no longer lands before the dash lab ends (on 284 before), so that lab no longer
+ * reaches `land`; the beams lab still does (Mario lands on 719, Link on 949), as do the
+ * inhale, projectile, states and slip labs. All 60 are visited.
  * Plan 6, Task 11 (`SLOW_OPPONENT`) adds no action: each Final Smash's start slows the
  * others, so the Final Smash, beams and dash labs and the ball-on CPU match move, and
  * nothing else. All 60 are visited.

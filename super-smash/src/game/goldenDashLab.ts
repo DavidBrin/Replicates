@@ -32,8 +32,10 @@
  *   -150 the slower end then landed him on the far edge).
  * - Team Star Fox, in the air: Fox jumps on 140, jumps again on 152, and presses it on
  *   158, 50.45 up. Its trap box finds nobody, and it holds him there through its start
- *   (ruling R-T16j), which Pikachu's KO's freeze (169-183) stretches to 256; he falls
- *   with his midair jump back (`jumpsUsed` 2 → 1, ruling R-T16b) and lands on 284. His
+ *   (ruling R-T16j), which Pikachu's KO's freeze (169-183) stretches to 256; it ends
+ *   with his midair jump back (`jumpsUsed` 2 → 1, ruling R-T16b) and lifts him by his
+ *   short hop (`finalHeightBoost`, Plan 6, Task 10), and he is still falling, 7.0 up,
+ *   when the lab ends on 300: he never lands (he landed on 284 before Task 10). His
  *   steps came 20 frames earlier in fix round 3: at 160-178, Pikachu's earlier KO froze
  *   the world over his midair jump and his press, and Team Star Fox never started.
  *

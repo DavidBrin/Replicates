@@ -35,12 +35,14 @@
  *   480 and presses it on 513, 10 up, where it holds him until 673; its flames are out
  *   on 517 and strike Samus on 632 and 644 (3.0%, the mid stage: 50°, a launch to the
  *   left, so 130° in the world, then the air box's 23°, 157°), until she is off the
- *   stage's left edge; she falls and is KO'd on 762. Mario lands on 687; the flames are
- *   gone on 751.
+ *   stage's left edge; she falls and is KO'd on 762. Its end lifts Mario by his short
+ *   hop (`finalHeightBoost`, Plan 6, Task 10), and he lands on 719; the flames are gone
+ *   on 751.
  * - The Ancient Bow and Arrow, in the air: Link drops through the top platform on 780
  *   and presses it on 810, 12 up, after the flames, where it holds him until 909; the
  *   arrow is shot on 869 from 0 and strikes Mario, the first fighter in its line, on
- *   871: 35%, launched up and away at 120°. Link lands on 924.
+ *   871: 35%, launched up and away at 120°. Its end lifts Link by his short hop, and he
+ *   lands on 949, the lab's next-to-last frame.
  *
  * Each step's comment gives the frame it starts on and the events it names. They
  * were checked against a run when the match was added (Plan 5, Task 16); the pins in
