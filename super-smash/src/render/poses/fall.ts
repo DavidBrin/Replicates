@@ -225,7 +225,8 @@ export const fastFall: PoseClip = {
  * will cause the character to perform a short flipping animation"): one forward turn
  * over `FLIP_FRAMES` (`spin`, as the roll's and the tumble's turns are; a key's
  * `rotation` cannot make a whole turn), tucked, opening into the fall's first pose.
- * The replica's shape: the game's motion is unpublished.
+ * UNVERIFIED: the shape and its keys, which the game's unpublished motion leaves to the
+ * replica; the bake turns them into the bones the hurtboxes ride.
  */
 export const fallFlip: PoseClip = {
   loop: false,

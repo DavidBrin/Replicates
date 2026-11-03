@@ -896,13 +896,13 @@ export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs
   for (const f of state.fighters) {
     if (f.action !== "attack" && f.action !== "special") continue;
     if (f.charge <= 0) continue;
-    // A held loop counts its times round in `charge` (Plan 5, Task 9 fix round 1:
-    // Kirby's Inhale, `MoveDef.holdLoop`): no charge, no glow. Not for a Kirby with
-    // a Copy Ability: `defs` are the fighters' own, and his neutral special is then
-    // the copied one, which may charge (fix round 2).
-    // The definition the fighter runs (Plan 6, Task 35): a Kirby with a Copy Ability runs
-    // the copy's neutral special (`withCopyAbility`), so its hold and its full charge are the
-    // copy's. Without `fighterOf` the copy is unknown, and only its loop is ruled out.
+    // The definition the fighter runs (Plan 6, Task 35): `defs` are the fighters' own, and a
+    // Kirby with a Copy Ability runs the copy's neutral special (`withCopyAbility`; Plan 5,
+    // Task 9 fix round 2), which may charge, so its hold and its full charge are the copy's.
+    // A held loop counts its times round in `charge` (Plan 5, Task 9 fix round 1: Kirby's
+    // Inhale, `MoveDef.holdLoop`): no charge, no glow, read off that definition. Where a Copy
+    // Ability's fighter is not known (no `fighterOf`, or one that lacks it), the definition is
+    // not either, and no loop is ruled out.
     const own = defs?.[f.port];
     const copy = f.combat.copy !== "" ? fighterOf?.(f.combat.copy) : undefined;
     const runs = own != null && copy !== undefined ? withCopyAbility(own as FighterDef, copy) : own;

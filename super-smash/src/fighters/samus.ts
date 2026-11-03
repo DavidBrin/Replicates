@@ -445,8 +445,10 @@ const legacy: FighterDef = {
     // `Part=0`; hit 2 4.0%, angle 45, KBG 100, BKB 30, size 5.0, `Part=1`; both
     // `collision_attr_elec`, both on the `throw` bone at (0, 0, 0). UNVERIFIED: the boxes'
     // place, the beam's tip, which the bake does not place: the legacy grab's tip stands
-    // in. UNVERIFIED too: it is no aerial for the short hop's 0.85 (`isAerialSlot`). Not
-    // modelled (decision D3): the tether recovery on frames 2-4.
+    // in. UNVERIFIED too: it is no aerial (`isAerialSlot`), so the short hop's 0.85 and the
+    // aerial shieldstun's 0.33 (`ShieldstunOptions.aerial`) do not apply to it: on a shield
+    // it stuns with the formula's plain 0.8. Not modelled (decision D3): the tether recovery
+    // on frames 2-4.
     airGrab: {
       slot: "airGrab",
       name: "Grapple Beam (aerial)",

@@ -317,8 +317,10 @@ describe("the flip off a dash (Plan 6, Task 21)", () => {
 describe("Donkey Kong's carry and lift, and the full releases (Plan 6, Task 20)", () => {
   // Fix round 1: each release shows its clip's strike on the frame it hits or shoots
   // (rubendal 13.0.1: `game_specialnmax`'s ATTACK on frame 19; `game_specialnfiremax`
-  // shoots on frame 3). Samus's own motion already stands past her clip's strike on the
-  // loop frame (0.295 against 0.07), so hers turns back to it over its first frames.
+  // shoots on frame 3). Samus's own motion stood past her clip's strike on the loop frame
+  // (0.295 against 0.07) until fix round 2 (below) anchored her shot key on the plasma's spawn:
+  // her release now starts at 0.0607 and goes forward to the strike, as Donkey Kong's does;
+  // `fullReleaseClipTime`'s own test (below) keeps the turn back for a `from` past it.
   it("bake each full release on a motion of its own, its 47 frames, from the loop frame's pose to the strike on its hit or shot, then on through the clip", () => {
     for (const [id, motion, shot] of [["donkeyKong", "special_n_max", 19], ["samus", "special_n_f_max", 3]] as const) {
       const def = fighterOf(id);

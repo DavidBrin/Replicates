@@ -37,7 +37,7 @@
   "donkeyKong nair": {
     "measured": "F: best 11.0 -> 25.6 (x2.33)",
     "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the clip-gains): the published motion spins with the arms outstretched, and the box rides armr at full extension, 11.0 -> 25.6, x2.33 against a size cap of 2.19 (D57)"
+    "reason": "accepted by the controller (ruling on the clip-gains): the published motion spins with the arms outstretched, and the box rides armr at full extension, 11.0 -> 25.6, x2.33 against a size cap of 2.25 (D57)"
   },
   "link dsmash": {
     "measured": "SWEEP F: best 12.5 -> 21.5 (x1.72)",
@@ -52,7 +52,7 @@
   "link jab3": {
     "measured": "F: best 11.3 -> 22.6 (x2.00)",
     "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 11.3 -> 22.6, x2.00 against a size cap of 1.80, the blade box now out past the published root boxes at chest height (D57)"
+    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 11.3 -> 22.6, x2.00 against a size cap of 1.81, the blade box now out past the published root boxes at chest height (D57)"
   },
   "link nair": {
     "measured": "F: best 9.5 -> 13.7 (x1.44)",
@@ -67,7 +67,7 @@
   "link utilt": {
     "measured": "U: best 18.5 -> 37.5 (x2.03)",
     "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 18.5 -> 37.5, x2.03 against a size cap of 1.80 (D57)"
+    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 18.5 -> 37.5, x2.03 against a size cap of 1.81 (D57)"
   },
   "samus bair": {
     "measured": "B: best 11.5 -> 18.3 (x1.59)",
@@ -107,17 +107,17 @@
   "kirby dtilt": {
     "measured": "F: best 6.0 -> 13.5 (x2.25)",
     "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the clip-gains): the low kick extends the leg, and the toer box sits at the script's own offset (4.3) off the toe, 6.0 -> 13.5, x2.25 against a size cap of 1.79 (D57)"
+    "reason": "accepted by the controller (ruling on the clip-gains): the low kick extends the leg, and the toer box sits at the script's own offset (4.3) off the toe, 6.0 -> 13.5, x2.25 against a size cap of 1.96 (D57)"
   },
   "kirby ftilt": {
     "measured": "F: best 6.4 -> 15.3 (x2.39)",
     "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the clip-gains): the kick extends the leg, and the three footl boxes run 8.5 units out from the ankle along the pointed foot at the script's own offsets (game_attacks3: y 0, -4.5, -8.5), 6.4 -> 15.3, x2.39 against a size cap of 1.79 (D57). Task 13b: the roundhouse on the left foot the script names"
+    "reason": "accepted by the controller (ruling on the clip-gains): the kick extends the leg, and the three footl boxes run 8.5 units out from the ankle along the pointed foot at the script's own offsets (game_attacks3: y 0, -4.5, -8.5), 6.4 -> 15.3, x2.39 against a size cap of 1.96 (D57). Task 13b: the roundhouse on the left foot the script names"
   },
   "kirby nair": {
     "measured": "F: best 4.0 -> 9.3 (x2.31)",
     "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the clip-gains): the hip box reaches about its script offset plus its radius from a trunk bone that barely moves, 4.0 -> 9.3, x2.31 against a size cap of 1.79 (D57)"
+    "reason": "accepted by the controller (ruling on the clip-gains): the hip box reaches about its script offset plus its radius from a trunk bone that barely moves, 4.0 -> 9.3, x2.31 against a size cap of 1.96 (D57)"
   },
   "kirby uair": {
     "measured": "U: best 11.4 -> 17.6 (x1.55)",

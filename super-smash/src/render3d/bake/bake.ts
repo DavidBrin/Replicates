@@ -83,9 +83,12 @@ export function attackClipTime(strike: number | undefined, firstActive: number, 
  * long (Plan 6, Task 20): from `from`, where the move's own motion stood on its loop
  * frame, to the clip's `strike` on the frame the release first hits (`hit`), and on to
  * the end; linearly from `from` when there is no strike or no hit inside the motion.
- * Fix round 1: a `from` already past the strike turns back to it (Samus's own motion
- * stands at 0.295 on her loop frame, her clip's shot key at 0.07), so every release
+ * Fix round 1: a `from` already past the strike turns back to it, so every release
  * shows its strike on its hit or shot, and frame 1 still meets the loop frame's pose.
+ * Samus's own motion stood at 0.295 on her loop frame, her clip's shot key at 0.07, until
+ * fix round 2 anchored the key on the plasma's spawn (`MoveDef.clipStrike`): her release
+ * now starts at 0.0607 and only goes forward, as Donkey Kong's does (0.084 to 0.3), and
+ * the turn back is the guard for a `from` that passes the strike.
  */
 export function fullReleaseClipTime(from: number, strike: number | undefined, hit: number, frames: number, k: number): number {
   const f = k - 1;

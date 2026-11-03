@@ -295,8 +295,9 @@ export interface PaintedBox {
  * The box round everything a mock canvas was asked to draw, px (Plan 6, Task 37): every
  * path point, arc and rectangle, through the transform in force when it was given
  * (`translate`, `scale`, `rotate`, `transform`, `setTransform`, under `save`/`restore`).
- * An arc or an ellipse counts its four extremes, which a rotation can only make generous.
- * Null when nothing was drawn.
+ * An arc or an ellipse counts the four extremes of its whole circle, in its own axes: a
+ * rotation can make the box smaller than the shape's (a circle turned 45 degrees: 0.71 of
+ * its width), and a partial arc counts the circle it is part of. Null when nothing was drawn.
  */
 export function paintedBox(ctx: MockContext): PaintedBox | null {
   type M = [number, number, number, number, number, number];

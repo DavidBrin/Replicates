@@ -1253,7 +1253,7 @@ export const PUMMEL_CHANCE = 0.5;
  * UNVERIFIED (tuning): of the grabs that throw rather than pummel, the share a fighter whose
  * forward throw is a carry (`MoveDef.cargo`: Donkey Kong's Kong Karry) lifts, whichever way it
  * faces, and carries to the nearer edge (Plan 6, Task 25: in Plan 5's sweep he lifted only when
- * he had grabbed facing that edge, and never did).
+ * he had grabbed facing that edge, and rarely did: Task 23's baseline has 34 in 2,016 matches).
  */
 export const CARGO_CHANCE = 0.5;
 

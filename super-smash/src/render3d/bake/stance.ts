@@ -24,9 +24,11 @@
 export const STANCE_UP: Readonly<Record<string, number>> = {
   kirby: 0.57,
   // Carried, not lifted (Task 19's probe): Pikachu (legs 1.234 under, mesh 1.25) and Fox (legs
-  // 0.120, mesh 0.34). Lifting their bodies turned 12 close-range jabs, dtilts and dsmashes on
-  // them into whiffs (`stance.test.ts`'s Review Focus sweep), so the fix is their idle clips'
-  // feet, a clip-authoring item for a later plan.
+  // 0.120, mesh 0.34). Lifting Pikachu cut the far tail off four low moves' reach on him (10
+  // half-unit gaps: Mario's jab, Link's and Fox's down tilts, Kirby's down smash), and lifting
+  // Fox lost two point-blank hits (Mario's jab at 3 units, Donkey Kong's down smash at 0;
+  // `stance.test.ts`'s Review Focus sweep), so the fix is their idle clips' feet, a
+  // clip-authoring item for a later plan.
 };
 
 /** Fighters lifted by their mesh's sink, smaller than their hurtboxes': their lowest idle hurtbox stays under the floor. */

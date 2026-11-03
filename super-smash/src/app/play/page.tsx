@@ -66,7 +66,8 @@ const NET_STATS_MS = 250;
 
 /**
  * Online, the longest a match waits for its fighters' models before playing the
- * rest as stand-ins (ruling R3). The peer whose models came first stands at its
+ * rest as stand-ins (ruling R3), counted from the page's mount (`mountedAt`; Plan 6,
+ * Task 40), not from the 3D code's arrival. The peer whose models came first stands at its
  * prediction cap until this one starts, and its link monitor calls the match
  * lost after `STALL_LOST_MS` (10 s) without a confirmed frame: half that leaves
  * room for the two starts landing apart. A local match waits on the loader's

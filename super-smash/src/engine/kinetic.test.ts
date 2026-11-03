@@ -990,8 +990,8 @@ describe("kineticTurnLaunch", () => {
   // under 1/64 long left as zero) as behaviour. What holds for every vector, however short:
   // the launch is left as it was, or turned toward the vector, never onto the other side of
   // either axis. Its speed is not part of it below a vector of 1 (the length is a truncated
-  // Q12 square root: up to 72% short at (63, 90) units); the property above holds the speed
-  // for the vectors a hit makes, 1 or more.
+  // Q12 square root: at (63, 90), raw Q12, 64 against 109.9, so 42% short and the speed up to
+  // 72% too fast); the property above holds the speed for the vectors a hit makes, 1 or more.
   it("never turns the launch away from the vector, however short the vector", () => {
     fc.assert(
       fc.property(fc.integer({ min: -2 * ONE, max: 2 * ONE }), fc.integer({ min: -2 * ONE, max: 2 * ONE }), (dx, dy) => {

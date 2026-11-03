@@ -516,7 +516,7 @@ function drawOneFighter(ctx: CanvasRenderingContext2D, state: RenderState, cam: 
     frame,
   );
   // What hangs on the fighter hangs on the model's head, not the 2D rig's
-  // height: SSBU-sized Donkey Kong is 26.3 units tall, his rig 11.
+  // height: SSBU-sized Donkey Kong is 27.0 units tall, his rig 11.
   const anchor = state.anchors?.[f.port] ?? null;
   const height = anchor ? anchor.headTop : visualHeight(rig);
 

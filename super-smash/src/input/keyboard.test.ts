@@ -253,7 +253,7 @@ describe("focus", () => {
     expect(document.getElementById(FOCUS_OVERLAY_ID)).toBeNull();
   });
 
-  it("asks the window for focus without a jsdom not-implemented report (Plan 6, Task 2)", () => {
+  it("raises no jsdom not-implemented report when it asks the window for focus (Plan 6, Task 2)", () => {
     // vitest's jsdom environment keeps its JSDOM on `globalThis.jsdom`, and jsdom reports a
     // missing feature on that JSDOM's virtual console, not on the console a spy can see.
     type Report = (err: Error) => void;

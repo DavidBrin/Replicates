@@ -13,7 +13,7 @@
  * Plan 2's single capsule.
  *
  * Sizes are SSBU's (D57): with a bake, a fighter's body is its model's — DK's
- * standing hurtboxes reach 26.3 units up where his box stood 15, Kirby's 9.4
+ * standing hurtboxes reach 27.0 units up where his box stood 15, Kirby's 10.3
  * where his stood 6.6 — and `attributes.width` / `height` are only the no-bake
  * fallback. `src/game/hurt.allow.json` records, per fighter, the old box beside
  * the bones' numbers.
