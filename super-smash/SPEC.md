@@ -301,7 +301,7 @@ only the skin changes.
 | `/rules` | Stock/time, count, Smash Ball, timer |
 | `/stage` | Stage select, with the Normal / Battlefield / Ω toggle |
 | `/fighters` | Character select — the portrait grid and player panels |
-| `/play` | The match itself |
+| `/play` | The match itself (with no match set up, it goes to the menu) |
 | `/results` | Placings, KOs, falls, self-destructs |
 | `/controls` | The two schemes, and rebinding |
 

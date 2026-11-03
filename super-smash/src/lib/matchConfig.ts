@@ -783,6 +783,13 @@ interface MatchConfigState {
    * changes, and a seat added or seated again takes its port's entry.
    */
   controlPrefs: ControlPrefs;
+  /**
+   * A local match is set up to run (Plan 6, Task 29): armed by the select screen's
+   * start and the results' Rematch; disarmed by a result, by quitting the match and
+   * by `reset`. `/play` with nothing armed and nothing online goes to the menu, so
+   * browser Back from the results, or from the menu after a quit, starts nothing.
+   */
+  armed: boolean;
 
   setMode(mode: MatchRules["mode"]): void;
   setStocks(stocks: number): void;
@@ -835,6 +842,8 @@ interface MatchConfigState {
   resetBindings(scheme: SchemeId): void;
 
   setResult(result: MatchResult | null): void;
+  arm(): void;
+  disarm(): void;
   reset(): void;
 }
 
@@ -955,6 +964,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   online: false,
   localOptions: DEFAULT_CONTROL_OPTIONS,
   controlPrefs: {},
+  armed: false,
 
   setMode: (mode) => set((s) => ({ rules: { ...s.rules, mode } })),
 
@@ -1108,7 +1118,11 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   resetBindings: (scheme) =>
     set((s) => ({ bindings: { ...s.bindings, [scheme]: { ...DEFAULT_BINDINGS[scheme] } } })),
 
-  setResult: (result) => set({ result }),
+  setResult: (result) => set({ result, armed: false }),
+
+  arm: () => set({ armed: true }),
+
+  disarm: () => set({ armed: false }),
 
   reset: () =>
     set({
@@ -1121,6 +1135,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
       online: false,
       localOptions: DEFAULT_CONTROL_OPTIONS,
       controlPrefs: {},
+      armed: false,
     }),
 }));
 

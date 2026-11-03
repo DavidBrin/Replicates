@@ -425,6 +425,9 @@ export default function PlayPage() {
   // (the opponent left) before this page mounted. The seats are two humans on
   // one keyboard, not a local match, so this goes back to where the room is.
   const [stranded] = useState(() => online === null && useMatchConfig.getState().online);
+  // Nothing set up to play (Plan 6, Task 29): browser Back from the results or from
+  // the menu after a quit, or a cold load. Read once, on the way in, as `stranded` is.
+  const [unarmed] = useState(() => online === null && !useMatchConfig.getState().online && !useMatchConfig.getState().armed);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [netStats, setNetStats] = useState<NetStats | null>(null);
@@ -444,9 +447,15 @@ export default function PlayPage() {
     cancelResultRef.current?.();
     runnerRef.current?.dispose();
     keyboardRef.current?.detach();
+    // Browser Back from the menu must not start the match again (Plan 6, Task 29).
+    if (!online) useMatchConfig.getState().disarm();
     router.push("/menu");
     if (online) leaveOnline();
   }, [online, router]);
+
+  useEffect(() => {
+    if (unarmed) router.replace("/menu");
+  }, [unarmed, router]);
 
   useEffect(() => {
     if (!stranded) return;
@@ -465,7 +474,7 @@ export default function PlayPage() {
   /* ------------------------------------------------------------ local match -- */
 
   useEffect(() => {
-    if (online || stranded) return;
+    if (online || stranded || unarmed) return;
     const canvas = canvasRef.current;
     const gl = glRef.current;
     const background = bgRef.current;
@@ -558,7 +567,7 @@ export default function PlayPage() {
       mountedRef.current = null;
       keyboardRef.current = null;
     };
-  }, [online, stranded, players, stageId, stageForm, rules, bindings, router, setResult, bake.tables, world]);
+  }, [online, stranded, unarmed, players, stageId, stageForm, rules, bindings, router, setResult, bake.tables, world]);
 
   /* ----------------------------------------------------------- online match -- */
 

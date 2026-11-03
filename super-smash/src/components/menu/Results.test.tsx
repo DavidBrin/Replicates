@@ -88,6 +88,8 @@ describe("Results", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /rematch/i }));
     expect(routerMock.push).toHaveBeenCalledWith("/play");
+    // The rematch is armed, so `/play` plays it (Plan 6, Task 29).
+    expect(useMatchConfig.getState().armed).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: /change fighters/i }));
     expect(routerMock.push).toHaveBeenCalledWith("/fighters");

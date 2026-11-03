@@ -210,6 +210,9 @@ beforeEach(() => {
   routerMock.push.mockClear();
   routerMock.replace.mockClear();
   useMatchConfig.getState().reset();
+  // Every match below is one somebody set up (Plan 6, Task 29): a local `/play` with
+  // nothing armed goes to the menu instead ("a /play with no match set up").
+  useMatchConfig.getState().arm();
 });
 
 /** Render, and let the match start: the bake and the 3D world are in, and the fighters are ready. */
@@ -749,6 +752,30 @@ describe("the play page, leaving online", () => {
     expect(mocks.runners).toEqual([]);
     expect(routerMock.replace).toHaveBeenCalledWith("/online");
     expect(useMatchConfig.getState().online).toBe(false);
+  });
+});
+
+describe("a /play with no match set up (Plan 6, Task 29)", () => {
+  it("goes to the menu and starts nothing", async () => {
+    useMatchConfig.getState().disarm();
+    await renderPage();
+    expect(routerMock.replace).toHaveBeenCalledWith("/menu");
+    expect(mocks.runners).toEqual([]);
+  });
+
+  it("plays a match the select screen armed, and its result disarms it", async () => {
+    await renderPage();
+    expect(mocks.runners).toHaveLength(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
+    act(() => only(mocks.runners).options.onEnd?.({ kind: "timeUp", placings: [0, 1] }));
+    expect(useMatchConfig.getState().armed).toBe(false);
+  });
+
+  it("disarms a local match its player quits, so browser Back from the menu starts nothing", async () => {
+    await renderPage();
+    quitFromMenu("QUIT MATCH");
+    expect(routerMock.push).toHaveBeenCalledWith("/menu");
+    expect(useMatchConfig.getState().armed).toBe(false);
   });
 });
 

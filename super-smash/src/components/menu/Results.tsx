@@ -269,7 +269,11 @@ export function Results() {
           ) : (
             <>
               <SkewButton
-                onClick={() => router.push("/play")}
+                onClick={() => {
+                  // What `/play` starts (Plan 6, Task 29).
+                  useMatchConfig.getState().arm();
+                  router.push("/play");
+                }}
                 className="border-[4px] border-panel-ink bg-smash-yellow px-8 py-3 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform hover:-translate-y-1"
                 innerClassName="font-display text-xl tracking-[0.16em] uppercase"
               >

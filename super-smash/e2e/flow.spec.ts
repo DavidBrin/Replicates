@@ -107,11 +107,9 @@ test("plays two matches in a row, each drawing its world in 3D", async ({ page }
   expect(errors).toEqual([]);
 });
 
-test("a stock match ends and reaches the results screen", async ({ page }) => {
+test("a cold load of /play, with no match set up, goes to the menu (Plan 6, Task 29)", async ({ page }) => {
   await startFromTitle(page);
   await page.goto(ROUTES.play);
-  // A cold load of /play with no configuration should refuse rather than crash.
-  const alert = page.getByRole("alert");
-  const canvas = page.getByLabel("Match", { exact: true });
-  await expect(alert.or(canvas).first()).toBeVisible();
+  await page.waitForURL(`**${ROUTES.menu}`);
+  await expect(page.getByLabel("Match", { exact: true })).toHaveCount(0);
 });

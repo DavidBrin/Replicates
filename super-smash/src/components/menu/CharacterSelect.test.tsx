@@ -63,6 +63,8 @@ describe("CharacterSelect", () => {
 
     fireEvent.click(armed);
     expect(routerMock.push).toHaveBeenCalledWith("/play");
+    // What lets `/play` start it (Plan 6, Task 29).
+    expect(useMatchConfig.getState().armed).toBe(true);
   });
 
   /** Ultimate's CPU levels run 1–9 and the ends are hard stops, not wraps. */

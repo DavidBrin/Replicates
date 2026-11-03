@@ -223,6 +223,8 @@ export function CharacterSelect() {
   const startMatch = () => {
     if (!canStart) return;
     if (onlineRole === null) {
+      // What `/play` starts (Plan 6, Task 29).
+      useMatchConfig.getState().arm();
       router.push("/play");
       return;
     }

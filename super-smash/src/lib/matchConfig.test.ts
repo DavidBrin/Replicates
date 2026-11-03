@@ -28,6 +28,22 @@ beforeEach(() => {
   resetRosterCache();
 });
 
+describe("the armed flag (Plan 6, Task 29)", () => {
+  it("is set by arm(), and cleared by a result, by disarm() and by reset()", () => {
+    expect(store().armed).toBe(false);
+    store().arm();
+    expect(store().armed).toBe(true);
+    store().setResult({ kind: "timeUp", placings: [0, 1], stats: [], fighters: { 0: "mario", 1: "fox" } });
+    expect(store().armed).toBe(false);
+    store().arm();
+    store().disarm();
+    expect(store().armed).toBe(false);
+    store().arm();
+    store().reset();
+    expect(store().armed).toBe(false);
+  });
+});
+
 describe("rules", () => {
   it("clamps the stock count to 1–99 rather than refusing the input", () => {
     store().setStocks(0);
