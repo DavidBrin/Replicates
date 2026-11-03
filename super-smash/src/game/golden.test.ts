@@ -518,6 +518,12 @@ const MATCHES: readonly Match[] = [
  * still takes each hit's freeze, stays frozen the longer. The other fourteen traces are
  * byte-identical and every lab pin holds; both traces keep their hits, KOs, Final Smashes
  * and actions (54, 2, 3 and 65, 2, 2). All 60 are visited.
+ * Plan 6, Task 22 (the edge slip and the wall and ceiling techs have clips of their own:
+ * `status_edgeSlip` at the fighter's own lockout, and `surfaceTech` in place of the
+ * tumble's spin) adds no action. Only the two labs that visit them move, each from 1-100:
+ * the tech lab (the wall and ceiling techs' bodies) and the slip lab (the slip's). The
+ * other fourteen traces are byte-identical and every lab pin holds, `expectSlip` included.
+ * All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

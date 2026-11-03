@@ -598,6 +598,9 @@ describe("every fixed-length clip arrives before its state ends", () => {
     ["spotDodge", { action: "spotDodge" }],
     ["airDodge", { action: "airDodge" }],
     ["getUp", { action: "getUp" }],
+    // Plan 6, Task 22.
+    ["surfaceTech", { action: "techWall" }],
+    ["edgeSlip", { action: "edgeSlip" }],
     ["downed", { action: "downed" }],
     ["hitstun", { action: "hitstun", hitstun: 24 }],
     ["ledgeGetUp", { action: "ledgeGetUp" }],

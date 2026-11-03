@@ -60,6 +60,7 @@ import {
   LEDGE_JUMP_FRAMES,
   LEDGE_ROLL_FRAMES,
   PUMMEL_FRAMES,
+  edgeSlipFrames,
   RUN_BRAKE_FRAMES,
   SHIELD_START_FRAMES,
   TURNAROUND_FRAMES,
@@ -134,8 +135,6 @@ function airDodgeSuffix(charge: number): string {
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   rebound: "stand",
   specialFall: "fall",
-  // Plan 6, Task 7: the edge slip falls on the fall's clip until it has one of its own.
-  edgeSlip: "fall",
   specialLanding: "landingLag",
   cargoHeld: "grabbed",
   finalTrapped: "grabbed",
@@ -291,6 +290,9 @@ export function statusDuration(
       return TECH_WALL_FRAMES;
     case "techCeiling":
       return TECH_CEILING_FRAMES;
+    // The fighter's own lockout (Task 7), which its clip spans (Task 22).
+    case "edgeSlip":
+      return edgeSlipFrames(def);
     case "ledgeGetUp":
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":

@@ -27,7 +27,8 @@ import { turn } from "./turn";
 import { crouch, crouchStart, crouchEnd } from "./crouch";
 import { jumpSquat } from "./jumpSquat";
 import { rise, doubleJump } from "./rise";
-import { fall, fallFlip, fastFall } from "./fall";
+import { edgeSlip, fall, fallFlip, fastFall } from "./fall";
+import { surfaceTech } from "./surfaceTech";
 import { land, landingLag } from "./land";
 import { shield, shieldRelease } from "./shield";
 import { shieldBroken } from "./shieldBroken";
@@ -62,6 +63,9 @@ export type PoseName =
   | "fastFall"
   // Plan 6, Task 21: the flip off a dash.
   | "fallFlip"
+  // Plan 6, Task 22: the edge slip, and a tech off a wall or a ceiling.
+  | "edgeSlip"
+  | "surfaceTech"
   | "land"
   | "landingLag"
   // defence
@@ -143,6 +147,8 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   fall,
   fastFall,
   fallFlip,
+  edgeSlip,
+  surfaceTech,
   land,
   landingLag,
 

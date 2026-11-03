@@ -99,7 +99,9 @@ describe("the committed bake", () => {
     // scripts' motions at their own lengths (Task 13, and the six slots Task
     // 13b freed), and Plan 5's charging specials at their new lengths (Task 2):
     // 1.85 MB / 6.37 MB (1,846,005 / 6,370,707 bytes), 88.02% of the gzipped
-    // budget. Past this budget, bake fewer bones, not a bigger file.
+    // budget. Plan 6's bodies (Tasks 19, 20, 21 and 22): 2.03 MB / 7.04 MB
+    // (2,033,862 / 7,041,450 bytes), 96.98%. Past this budget, bake fewer bones,
+    // not a bigger file.
     expect(readFileSync(FILE).length).toBeLessThan(2 * 1024 * 1024);
     expect(fresh.length).toBeLessThan(8 * 1024 * 1024);
   });

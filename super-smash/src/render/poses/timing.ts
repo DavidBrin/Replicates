@@ -29,6 +29,7 @@ import { fighterParams } from "@/engine/params";
 import { actionFrameOf } from "@/engine/hitbox";
 import {
   DASH_INTERRUPT_FRAME,
+  EDGE_SLIP_FRAMES,
   FLIP_FRAMES,
   JUMP_SQUAT_FRAMES,
   SHIELD_BREAK_STUN,
@@ -52,6 +53,7 @@ import {
   RUN_BRAKE_FRAMES,
   SHIELD_START_FRAMES,
   TURNAROUND_FRAMES,
+  edgeSlipFrames,
 } from "@/engine/states";
 import type { CombatState } from "@/engine/combat";
 import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttributes, MoveSlot } from "@/engine/types";
@@ -113,6 +115,8 @@ export interface JumpTiming {
   readonly groundDodge: GroundDodgeAttributes;
   /** The fighter's pummel's length, its move's `totalFrames` (ruling P5-R10), carried for the same reason. */
   readonly pummel: number;
+  /** The fighter's edge slip's length (`edgeSlipFrames`; Plan 6, Task 22), carried for the same reason. */
+  readonly edgeSlip?: number;
 }
 
 const jumpTimings = new WeakMap<FighterDef, JumpTiming>();
@@ -131,6 +135,7 @@ export function jumpTimingFor(def: FighterDef): JumpTiming {
       airDodge: airDodgeOf(def.attributes),
       groundDodge: groundDodgeOf(def.attributes),
       pummel: def.moves.pummel?.totalFrames ?? PUMMEL_FRAMES,
+      edgeSlip: edgeSlipFrames(def),
     };
     jumpTimings.set(def, t);
   }
@@ -302,9 +307,10 @@ export function poseNameFor(
     // Helpless (Plan 5, Task 4b) has no clip of its own: the fall's, as the
     // bake's motion is (`MOTION_OF_ACTION`), and its landing the landing lag's.
     case "specialFall":
-    // The edge slip (Plan 6, Task 7) too, until it has a clip of its own.
-    case "edgeSlip":
       return f.fastFalling ? "fastFall" : "fall";
+    // Plan 6, Task 22: the edge slip's own clip.
+    case "edgeSlip":
+      return "edgeSlip";
     case "land":
       return "land";
     case "landingLag":
@@ -338,9 +344,11 @@ export function poseNameFor(
       return "hitstun";
     case "tumble":
     case "tumbleFall":
+      return "tumble";
+    // Plan 6, Task 22: a wall or ceiling tech braces and opens; it does not tumble.
     case "techWall":
     case "techCeiling":
-      return "tumble";
+      return "surfaceTech";
     case "grabbed":
     // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held. Task 14:
     // trapped in a Final Smash, held still for its scene.
@@ -455,6 +463,9 @@ export function actionDurationFor(
       return TECH_WALL_FRAMES;
     case "techCeiling":
       return TECH_CEILING_FRAMES;
+    // Plan 6, Task 22: the fighter's own lockout.
+    case "edgeSlip":
+      return jump?.edgeSlip ?? EDGE_SLIP_FRAMES;
     case "ledgeGetUp":
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":

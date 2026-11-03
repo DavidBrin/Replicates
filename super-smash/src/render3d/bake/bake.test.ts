@@ -76,7 +76,7 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 62 over the 60 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 63 over the 60 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
@@ -100,11 +100,11 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
     // round 1: one more, the rebound, and no motion more: it plays the stand's.
     // Task 14: one more, the trapped, and no motion more: it plays the grab's.
     // Task 17: two motions more, the footstooled's and the crawl's, their own clips.
-    // Plan 6, Task 7: one more, the edge slip, and no motion more: it plays the fall's.
+    // Plan 6, Task 7: one more, the edge slip, on the fall's motion; Task 22: on one of its own.
     // Task 20: the carry leaves the walk's for two of its own, on the ground and in the air.
     // Task 21: the fall gains the flip off a dash.
     expect(ACTIONS).toHaveLength(60);
-    expect(named.size).toBe(62);
+    expect(named.size).toBe(63);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
     // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their
     // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`), as
@@ -287,6 +287,19 @@ describe("a move's clip time (DECISIONS D34, in motion frames)", () => {
     expect(attackClipTime(undefined, 6, 20, 11)).toBe(0.5);
     // A box live on the first frame has no wind-up to stretch.
     expect(attackClipTime(0.4, 1, 20, 11)).toBe(0.5);
+  });
+});
+
+describe("clips of their own for the edge slip and the wall and ceiling techs (Plan 6, Task 22)", () => {
+  it("bake each on its own clip, none of them turning the body over", () => {
+    for (const def of FIGHTERS) {
+      const samplers = statusSamplers(def);
+      for (const [motion, name] of [["status_edgeSlip", "edgeSlip"], ["status_techWall", "surfaceTech"], ["status_techCeiling", "surfaceTech"]] as const) {
+        const s = samplers.get(motion)!;
+        expect(s.clip, `${def.id} ${motion}`).toBe(clipFor(def.id, name));
+        for (let k = 1; k <= s.clock.frames; k++) expect(sampleAt(s, k).spin, `${def.id} ${motion} ${k}`).toBe(0);
+      }
+    }
   });
 });
 

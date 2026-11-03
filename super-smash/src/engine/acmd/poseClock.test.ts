@@ -96,8 +96,6 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
     expect(MOTION_OF_ACTION).toEqual({
       rebound: "stand",
       specialFall: "fall",
-      // Plan 6, Task 7: the edge slip falls on the fall's clip.
-      edgeSlip: "fall",
       specialLanding: "landingLag",
       cargoHeld: "grabbed",
       finalTrapped: "grabbed",
@@ -280,6 +278,16 @@ describe("a dash off a platform flips (Plan 6, Task 21)", () => {
   });
 });
 
+describe("the edge slip plays a motion of its own (Plan 6, Task 22)", () => {
+  it("names status_edgeSlip, as long as the fighter's own slip", () => {
+    expect(MOTION_OF_ACTION.edgeSlip).toBeUndefined();
+    expect(statusMotion({ action: "edgeSlip", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_edgeSlip");
+    const slip = { action: "edgeSlip" as const, actionFrame: 0, charge: 0, hitstun: 0, jumpsUsed: 1, shortHop: false, vy: 0 };
+    expect(statusDuration(slip, FIGHTERS.find((d) => d.id === "mario")!)).toBe(26);
+    expect(statusDuration(slip, donkeyKong)).toBe(25);
+  });
+});
+
 describe("each fighter's dodges are motions of their own, per direction (ruling R4)", () => {
   it("names one air-dodge motion per direction class, chosen by the direction charge remembers", () => {
     for (let charge = 0; charge <= 9; charge++) {
@@ -305,12 +313,11 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
       for (const charge of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         for (const jumpsUsed of [1, 2])
           for (const fastFalling of [false, true]) names.add(statusMotion({ action, jumpsUsed, fastFalling, charge }));
-    // 50 actions of their own (the two helpless ones share the fall's and the
+    // 51 actions of their own (the two helpless ones share the fall's and the
     // landing lag's; Plan 5 Task 8's carried, the grab's (the carry has its own
     // since Plan 6, Task 20); Task 9's mouthful, swallowed and spat, the walk's and the
     // tumble's; Task 13c's rebound, the stand's; Task 14's trapped, the grab's;
-    // Task 11's footstooled and Task 12's crawl have their own since Task 17;
-    // Plan 6, Task 7's edge slip, the fall's),
+    // Task 11's footstooled and Task 12's crawl have their own since Task 17),
     // the second jump, two fast falls, five directional air dodges and the back roll.
     expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
     expect(ACTIONS.length).toBe(60);

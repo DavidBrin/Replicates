@@ -3,8 +3,9 @@
  * hurtboxes in one little-endian binary (Plan 4). The ECB is not stored: it is
  * read off the baked hurt capsules (Task 12).
  *
- * Committed gzipped as `public/bake/roster.bin.gz` (1,965,143 bytes, 1.97 MB, on the committed
- * skeletons: 93.71% of its 2 MiB budget, `render3d/bake/roster.test.ts`); its fingerprint
+ * Committed gzipped as `public/bake/roster.bin.gz` (2,033,862 bytes, 2.03 MB, on the committed
+ * skeletons, after Plan 6's bodies: 96.98% of its 2 MiB budget,
+ * `render3d/bake/roster.test.ts`); its fingerprint
  * is the SHA-256 of the *uncompressed* bytes (`src/fighters/bake/digest.ts`),
  * so it does not depend on the compressor, and two peers whose fingerprints
  * differ refuse to start an online match together. Derived numbers only — the

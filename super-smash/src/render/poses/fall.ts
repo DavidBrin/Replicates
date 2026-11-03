@@ -257,3 +257,50 @@ export const fallFlip: PoseClip = {
     { t: 1, pose: fall.keys[0].pose, offsetY: fall.keys[0].offsetY, scaleX: fall.keys[0].scaleX, scaleY: fall.keys[0].scaleY },
   ],
 };
+
+/**
+ * An edge slip (Plan 6, Task 22; Task 7's status, rubendal 13.0.1 motion `miss_foot`;
+ * SmashWiki "Edge slipping": the fighter "will lose their footing and fall off the
+ * edge"): knocked off backward, it leans back over the drop, the front foot kicking up and
+ * the arms thrown forward, then gathers into the fall's first pose by the lockout's end.
+ * The replica's shape: the game's animation is unpublished.
+ */
+export const edgeSlip: PoseClip = {
+  loop: false,
+  keys: [
+    {
+      t: 0,
+      ease: "out",
+      pose: P({
+        torso: -22, head: 14,
+        thighR: 128, shinR: 40, footR: -80,
+        thighL: 186, shinL: 24, footL: -96,
+        upperArmR: 40, forearmR: -20,
+        upperArmL: 312, forearmL: 20,
+      }),
+    },
+    {
+      t: 0.35,
+      pose: P({
+        torso: -30, head: 18,
+        thighR: 112, shinR: 56, footR: -78,
+        thighL: 176, shinL: 46, footL: -92,
+        upperArmR: 20, forearmR: -36,
+        upperArmL: 330, forearmL: 34,
+      }),
+      offsetY: 0.2,
+    },
+    {
+      t: 0.7,
+      pose: P({
+        torso: -12, head: 8,
+        thighR: 150, shinR: 40, footR: -76,
+        thighL: 196, shinL: 30, footL: -82,
+        upperArmR: 70, forearmR: -14,
+        upperArmL: 290, forearmL: 14,
+      }),
+      offsetY: 0.2,
+    },
+    { t: 1, pose: fall.keys[0].pose, offsetY: fall.keys[0].offsetY, scaleX: fall.keys[0].scaleX, scaleY: fall.keys[0].scaleY },
+  ],
+};
