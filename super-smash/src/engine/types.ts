@@ -1864,6 +1864,13 @@ export interface StepEvents {
      * only, like everything else here, and never fed back into the simulation.
      */
     hitboxId: number;
+    /**
+     * Set on a hit whose launch a stronger one the victim took earlier in the same
+     * step outranked (Plan 6, Task 17; D9): it dealt its damage and its freeze, and
+     * the launch that stands is the earlier hit's, so the kill credit is too
+     * (`killCredit.ts`). Absent on every other hit.
+     */
+    outranked?: boolean;
   }[];
   shieldHits: { victim: number; x: number; y: number }[];
   clanks: { x: number; y: number }[];

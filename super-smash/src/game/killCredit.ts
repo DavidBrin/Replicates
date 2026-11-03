@@ -51,6 +51,9 @@ export function trackFrame(tracker: StatTracker, frame: number, events: Pick<Ste
   const stoodOn = events.footstools.map((s) => ({ attacker: s.jumper, victim: s.victim }));
   for (const touch of [...events.hits, ...events.pushes, ...stoodOn]) {
     if (touch.attacker === touch.victim) continue;
+    // A hit whose launch was outranked leaves the credit with the step's launch that
+    // stands, the hit before it (Plan 6, Task 17 fix round 1), whichever port it was.
+    if ("outranked" in touch && touch.outranked === true) continue;
     tracker.lastHitBy[touch.victim] = touch.attacker;
     tracker.lastHitFrame[touch.victim] = frame;
   }

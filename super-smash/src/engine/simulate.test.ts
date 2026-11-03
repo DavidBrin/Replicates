@@ -29,6 +29,7 @@ import {
 import type { SimContext } from "./simulate";
 import { LEDGE_HANG_MIN } from "./states";
 import { Btn } from "./types";
+import { createTracker, trackFrame } from "@/game/killCredit";
 import type {
   FighterAttributes,
   FighterDef,
@@ -1216,30 +1217,73 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
   // Jabs that pass through each other's boxes (no clank), and a stronger one (BKB 44 for 40).
   const WEAK: FighterDef = { ...DEF, moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true })] }) } };
   const STRONG: FighterDef = { ...WEAK, id: "strong", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, baseKnockback: fx(44) })] }) } };
-  const DUO: SimContext = { fighter: (id) => (id === "strong" ? STRONG : WEAK), stage: () => STAGE };
+  // The weak jab with no freeze, so its launch fires on contact and lifts the victim off
+  // the floor (`releasePendingLaunch`), and the strong one sending flat (fix round 1).
+  const SNAP: FighterDef = { ...WEAK, id: "snap", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, hitlagMultiplier: 0 })] }) } };
+  const FLAT: FighterDef = { ...WEAK, id: "flat", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, baseKnockback: fx(44), angle: 0 })] }) } };
+  const BY_ID: Record<string, FighterDef> = { strong: STRONG, snap: SNAP, flat: FLAT };
+  const DUO: SimContext = { fighter: (id) => BY_ID[id] ?? WEAK, stage: () => STAGE };
+
+  interface Layout {
+    /** The left attacker's def (default the tester's weak jab). */
+    readonly leftId?: string;
+    /** The right attacker's def (default the tester's weak jab). */
+    readonly rightId?: string;
+    /** The victim crouches, holding Down, as the jabs land. */
+    readonly crouch?: boolean;
+    /** The right attacker jabs too (default); without it, the left jab lands alone. */
+    readonly rightJabs?: boolean;
+  }
+
+  interface Outcome {
+    readonly side: number;
+    readonly hitstun: number;
+    readonly damage: number;
+    readonly x: number;
+    readonly y: number;
+    readonly grounded: boolean;
+    readonly jumpsUsed: number;
+    /** Who the kill credit names for the victim after the step the jabs land on. */
+    readonly credit: number;
+  }
 
   /**
    * A victim on port 0 standing at 0, the attacker on port `left` 8 to its left and the one
-   * on port `right` 8 to its right (a `rightId`), both jabbing on the same step: which way
-   * the victim flies 40 steps on, and its hitstun on the step the jabs land.
+   * on port `right` 8 to its right, both jabbing on the same step: which way the victim
+   * flies 40 steps on and where it is, its hitstun on the step the jabs land, and whom the
+   * kill credit names after that step (`trackFrame`).
    */
-  function sandwich(left: number, right: number, rightId = "tester"): { side: number; hitstun: number } {
-    const ids = [0, 1, 2].map((port) => (port === right ? rightId : "tester"));
+  function sandwich(left: number, right: number, layout: Layout = {}): Outcome {
+    const { leftId = "tester", rightId = "tester", crouch = false, rightJabs = true } = layout;
+    const ids = [0, 1, 2].map((port) => (port === right ? rightId : port === left ? leftId : "tester"));
     let s = createInitialState("flat", ids.map((defId) => ({ defId })), RULES, 12345, DUO);
-    const place = (port: number, x: number, facing: number) =>
-      Object.assign(s.fighters[port], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x, y: 0, facing, intangible: 0, vx: 0, vy: 0 });
-    place(0, 0, 1);
-    place(left, -fx(8), 1);
-    place(right, fx(8), -1);
-    let prev: InputFrame[] = [0, 0, 0];
+    const place = (port: number, x: number, facing: number, action: "stand" | "crouch") =>
+      Object.assign(s.fighters[port], { action, actionFrame: 0, grounded: true, platform: 0, x, y: 0, facing, intangible: 0, vx: 0, vy: 0 });
+    place(0, 0, 1, crouch ? "crouch" : "stand");
+    place(left, -fx(8), 1, "stand");
+    place(right, fx(8), -1, "stand");
+    const hold = crouch ? Btn.Down : 0;
+    const tracker = createTracker(3);
+    let prev: InputFrame[] = [hold, 0, 0];
     let hitstun = -1;
+    let credit = -1;
     for (let i = 0; i < 40; i++) {
-      const now: InputFrame[] = i === 0 ? [0, Btn.Attack, Btn.Attack] : [0, 0, 0];
-      s = step(s, now, { prevInputs: prev, ctx: DUO }).state;
+      const now: InputFrame[] = [hold, 0, 0];
+      if (i === 0) {
+        now[left] = Btn.Attack;
+        if (rightJabs) now[right] = Btn.Attack;
+      }
+      const out = step(s, now, { prevInputs: prev, ctx: DUO });
+      s = out.state;
       prev = now;
-      if (hitstun < 0 && s.fighters[0].damage > 0) hitstun = s.fighters[0].hitstun;
+      trackFrame(tracker, i, out.events);
+      if (hitstun < 0 && s.fighters[0].damage > 0) {
+        hitstun = s.fighters[0].hitstun;
+        credit = tracker.lastHitBy[0];
+      }
     }
-    return { side: Math.sign(s.fighters[0].x), hitstun };
+    const v = s.fighters[0];
+    return { side: Math.sign(v.x), hitstun, damage: v.damage, x: v.x, y: v.y, grounded: v.grounded, jumpsUsed: v.jumpsUsed, credit };
   }
 
   it("from both sides with equal launches, the attacker further left sets the direction, whichever ports", () => {
@@ -1247,10 +1291,40 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
   });
 
   it("the stronger launch sets the direction and the hitstun, even when the weaker resolves after it", () => {
-    const strongLast = sandwich(1, 2, "strong");
-    const strongFirst = sandwich(2, 1, "strong");
+    const strongLast = sandwich(1, 2, { rightId: "strong" });
+    const strongFirst = sandwich(2, 1, { rightId: "strong" });
     expect([strongLast.side, strongFirst.side]).toEqual([-1, -1]);
     expect(strongFirst.hitstun).toBe(strongLast.hitstun);
+  });
+
+  it("an outranked hit still deals its damage: two jabs' worth, whichever ports", () => {
+    const alone = sandwich(1, 2, { rightJabs: false }).damage;
+    const strongLast = sandwich(1, 2, { rightId: "strong" });
+    const strongFirst = sandwich(2, 1, { rightId: "strong" });
+    expect(alone).toBeGreaterThan(0);
+    expect([strongLast.damage, strongFirst.damage]).toEqual([2 * alone, 2 * alone]);
+  });
+
+  it("a crouching victim: both launches are reckoned crouching, so the same one stands whichever ports (fix round 1)", () => {
+    const even = [sandwich(1, 2, { crouch: true }), sandwich(2, 1, { crouch: true })];
+    expect(even.map((o) => o.side)).toEqual([1, 1]);
+    expect(even[1].hitstun).toBe(even[0].hitstun);
+    const strong = [sandwich(1, 2, { crouch: true, rightId: "strong" }), sandwich(2, 1, { crouch: true, rightId: "strong" })];
+    expect(strong.map((o) => o.side)).toEqual([-1, -1]);
+    expect(strong[1].hitstun).toBe(strong[0].hitstun);
+  });
+
+  it("a launch with no freeze that fires first is replaced from where it found the victim, whichever ports (fix round 1)", () => {
+    // The snap jab fires on contact and lifts; the flat one outranks it and sends along
+    // the floor at 0.8, from the ground, with the ground jump unspent.
+    const [snapFirst, flatFirst] = [sandwich(1, 2, { leftId: "snap", rightId: "flat" }), sandwich(2, 1, { leftId: "snap", rightId: "flat" })];
+    const pick = (o: Outcome) => ({ x: o.x, y: o.y, grounded: o.grounded, jumpsUsed: o.jumpsUsed, hitstun: o.hitstun });
+    expect(flatFirst.side).toBe(-1);
+    expect(pick(snapFirst)).toEqual(pick(flatFirst));
+  });
+
+  it("the kill credit goes to the attacker whose launch stands, whichever ports (fix round 1)", () => {
+    expect([sandwich(1, 2, { rightId: "strong" }).credit, sandwich(2, 1, { rightId: "strong" }).credit]).toEqual([2, 1]);
   });
 });
 

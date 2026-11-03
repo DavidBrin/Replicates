@@ -1173,8 +1173,13 @@ export function step(
   // The launch each fighter took this step, for the next to weigh against (Plan 6, Task
   // 17: `launchOutranks`), across the hits and the throws.
   const launches = new Map<number, LaunchRank>();
-  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents, launches);
-  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents, launches);
+  // How each fighter stood as the step's hits began, what every launch of the step is
+  // reckoned from, as the percent is (ruling R-FW2c): a first launch ends a crouch and
+  // may lift its victim off the floor, and the next is still the step's (Task 17 fix
+  // round 1, `HitStance`).
+  const stances = s.fighters.map(hitStance);
+  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents, stances, launches);
+  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents, stances, launches);
   for (const user of s.fighters) {
     const held = s.fighters.filter((v) => v.action === "finalTrapped" && v.combat.trappedBy === user.port);
     if (held.some((v) => trappedBefore[v.port] !== user.port)) faceTrapped(user, held, facingBefore[user.port]);
@@ -1904,6 +1909,7 @@ function resolveHits(
   destroyed: Set<number>,
   finalOut: () => boolean,
   percents: readonly number[],
+  stances: readonly HitStance[],
   launches: Map<number, LaunchRank>,
 ): void {
   for (let v = 0; v < s.fighters.length; v++) {
@@ -2082,7 +2088,7 @@ function resolveHits(
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
-        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut, percents, launches);
+        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut, percents, stances, launches);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
         // on contact, whatever else the hit does: a launch, a launch it cannot
         // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
@@ -2157,6 +2163,7 @@ function resolveThrows(
   events: StepEvents,
   finalOut: () => boolean,
   percents: readonly number[],
+  stances: readonly HitStance[],
   launches: Map<number, LaunchRank>,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
@@ -2186,7 +2193,7 @@ function resolveThrows(
       const v = victim.port;
       const at = { x: victim.x, y: victim.y };
       const own = f.hitlag;
-      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut, percents, launches);
+      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut, percents, stances, launches);
       f.hitlag = own;
     }
     for (const flash of run.state.flashed) {
@@ -2658,9 +2665,30 @@ function sdiDistance(f: FighterState): number {
 }
 
 /**
+ * How a fighter stood as the step's hits began (Plan 6, Task 17 fix round 1): every
+ * launch of the step is reckoned from it, as every hit's knockback is from the percent
+ * the step began with (ruling R-FW2c). A first launch ends a crouch (`startAction`), and
+ * one with no freeze fires on contact and may lift its victim off the floor, spending its
+ * ground jump (`leaveGroundIfLifted`). Read live, the next launch would lose its crouch
+ * cancel and its grounded angle, so the port that resolved second would rank and fly on
+ * other terms than the first.
+ */
+interface HitStance {
+  readonly crouching: boolean;
+  readonly grounded: boolean;
+  readonly platform: number;
+  readonly jumpsUsed: number;
+}
+
+function hitStance(f: FighterState): HitStance {
+  return { crouching: isCrouching(f), grounded: f.grounded, platform: f.platform, jumpsUsed: f.jumpsUsed };
+}
+
+/**
  * One launch a fighter took this step, as `launchOutranks` weighs it (Plan 6, Task 17):
  * its knockback, how much it rises, where its source stood (an attacker's or a projectile's
- * x) and which way it sends.
+ * x) and the facing it launches by (`launchSourceFacing`), not the way it finally sends: a
+ * launch past 90° sends back across that facing.
  */
 interface LaunchRank {
   readonly kb: number;
@@ -2673,9 +2701,11 @@ interface LaunchRank {
  * Two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFIED: no source
  * rules on simultaneous hits from two attackers; SmashWiki "Knockback" orders stacking for
  * hits in sequence): the one with more knockback sets the launch; a tie goes to the one
- * rising more, then to the source further left, then to the one sending right. Every rule
- * is port-free, so a swap of ports flies the same way; two launches equal in all four go
- * the same way, so either may stand.
+ * rising more, then to the source further left, then to the one whose box faces right (its
+ * launch facing, not the way it sends: 30° and 150° from the same facing rise alike and
+ * send opposite ways). Every rule is port-free, so a swap of ports flies the same way. Two
+ * launches equal in all four (sources at the very same x, one sending forward and one back
+ * past 90°) leave the first to resolve standing: the one case port order still decides.
  */
 function launchOutranks(a: LaunchRank, b: LaunchRank): boolean {
   if (a.kb !== b.kb) return a.kb > b.kb;
@@ -3052,6 +3082,7 @@ function applyHit(
   events: StepEvents,
   finalOut: () => boolean,
   percents: readonly number[],
+  stances: readonly HitStance[],
   launches: Map<number, LaunchRank>,
 ): void {
   const hb = c.hitbox;
@@ -3380,7 +3411,10 @@ function applyHit(
     return;
   }
 
-  const crouchCancel = isCrouching(victim);
+  // Crouch cancel and the ground as the step's hits began (Task 17 fix round 1:
+  // `HitStance`), not as an earlier launch this step left them.
+  const stance = stances[victim.port];
+  const crouchCancel = stance.crouching;
 
   // Set knockback runs the formula on the box's `fkb` with the victim's weight;
   // set weight makes that weight 100, in either formula (Plan 3, Task 16b).
@@ -3485,7 +3519,7 @@ function applyHit(
   // A launch this fighter already took this step outranks this one (Plan 6, Task 17;
   // D9): this hit's damage and freeze land, and nothing of its launch does, so the step's
   // strongest launch sets the direction and the reaction whichever port resolves first.
-  const rank: LaunchRank = { kb, rise: launchRise(hitAngle(hb, victim.grounded, kb)), x: c.projectile !== null ? c.projectile.x : attacker.x, side: sourceFacing >= 0 ? 1 : -1 };
+  const rank: LaunchRank = { kb, rise: launchRise(hitAngle(hb, stance.grounded, kb)), x: c.projectile !== null ? c.projectile.x : attacker.x, side: sourceFacing >= 0 ? 1 : -1 };
   const earlier = launches.get(victim.port);
   const outranked = earlier !== undefined && !launchOutranks(rank, earlier);
   const verdict = outranked
@@ -3522,8 +3556,18 @@ function applyHit(
       // launch, Plan 6, Task 17). One armoured through launches nothing new.
       angle: verdict === "armour" ? 0 : keptLaunchAngle(victim, sourceFacing),
       hitboxId: hb.id,
+      // The kill credit stays with the launch that stands (Task 17 fix round 1).
+      ...(verdict === "outranked" ? { outranked: true } : {}),
     });
     return;
+  }
+  // This launch replaces one the fighter took earlier this step, so it starts from where
+  // that one found the fighter: on the floor it may have lifted it off, its ground jump
+  // unspent (Task 17 fix round 1). Everything below reads the ground from here.
+  if (earlier !== undefined) {
+    victim.grounded = stance.grounded;
+    victim.platform = stance.platform;
+    victim.jumpsUsed = stance.jumpsUsed;
   }
   launches.set(victim.port, rank);
   victim.combat.launchSource = source;
