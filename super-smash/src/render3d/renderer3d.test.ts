@@ -408,6 +408,62 @@ describe("the 3D presenter", () => {
     expect(shown).toEqual([0, 1, 2, 3].map((i) => 2 * TRAIL_SAMPLES * 2 + i));
   });
 
+  it("holds a trail still while its fighter's clock is stopped: a forward tilt held 8 frames in hitlag keeps its ribbon (Plan 6, Task 34 fix round 1)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    const ftilt = defs[2].moves.ftilt!;
+    const first = Math.min(...ftilt.hitboxes.map((h) => h.startFrame));
+    const trails = () => gl().scene!.getObjectByName("trails") as Mesh;
+    const ribbon = () => {
+      const position = trails().geometry.getAttribute("position");
+      const colour = trails().geometry.getAttribute("color");
+      return [...Array(colour.count).keys()].filter((i) => colour.getW(i) > 0).map((i) => [position.getX(i), position.getY(i)]);
+    };
+    presenter.paint(rs, createCamera(stage), 1, []);
+    for (let k = 0; k < 2; k++) {
+      state.frame += 1;
+      state.fighters[2] = { ...state.fighters[2], action: "attack", move: "ftilt", actionFrame: actionFrameOf(first) + k };
+      presenter.paint(rs, createCamera(stage), 1, []);
+    }
+    const before = ribbon();
+    expect(before).toHaveLength(4);
+    // The hit's freeze: the sim's frame runs on, the fighter's own clock (its action frame) does not.
+    for (let h = 8; h >= 1; h--) {
+      state.frame += 1;
+      state.fighters[2] = { ...state.fighters[2], hitlag: h };
+      presenter.paint(rs, createCamera(stage), 1, []);
+    }
+    expect(ribbon()).toEqual(before);
+    expect(trails().visible).toBe(true);
+  });
+
+  it("shakes a trail's two edges together with its fighter in hitlag (Plan 6, Task 34 fix round 1)", async () => {
+    const ftilt = defs[2].moves.ftilt!;
+    const first = Math.min(...ftilt.hitboxes.map((h) => h.startFrame));
+    /** Port 2's newest sample, inner and outer, after two live steps, the second struck with `hitlag`. */
+    const newest = async (hitlag: number) => {
+      const { presenter, rs, state, stage, gl } = setup();
+      await presenter.ready;
+      standAll(state);
+      for (let k = 0; k < 2; k++) {
+        state.frame += 1;
+        state.fighters[2] = { ...state.fighters[2], action: "attack", move: "ftilt", actionFrame: actionFrameOf(first) + k, hitlag: k === 1 ? hitlag : 0 };
+        presenter.paint(rs, createCamera(stage), 1, []);
+      }
+      const position = (gl().scene!.getObjectByName("trails") as Mesh).geometry.getAttribute("position");
+      const v = 2 * TRAIL_SAMPLES * 2 + 2;
+      const edges = { inner: position.getX(v), outer: position.getX(v + 1) };
+      presenter.dispose();
+      return edges;
+    };
+    const still = await newest(0);
+    const shaken = await newest(8);
+    const shake = 0.55 * 0.8;
+    expect(shaken.inner - still.inner).toBeCloseTo(shake, 5);
+    expect(shaken.outer - still.outer).toBeCloseTo(shake, 5);
+  });
+
   it("tips each shadow disc toward the camera, so the level side camera sees it under the feet (Plan 6, Task 33)", async () => {
     const { presenter, rs, state, stage, gl } = setup();
     await presenter.ready;

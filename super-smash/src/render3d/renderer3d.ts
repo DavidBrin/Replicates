@@ -51,10 +51,11 @@ import {
 
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { toFloat } from "@/engine/fixed";
-import { activeHitboxes, moveFrameOf } from "@/engine/hitbox";
+import { moveFrameOf } from "@/engine/hitbox";
 import { platformCentreX } from "@/engine/physics";
 import type { FighterDef, FighterState, GameState, MoveSlot, StageDef } from "@/engine/types";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
+import { hitlagShake } from "@/render/characterArt";
 import { interpolatePosition, sceneShiftAt, type RenderState } from "@/render/renderer";
 import { hitFlashAmount } from "@/render/vfx";
 import { fighterPoser } from "./bake/bake";
@@ -65,7 +66,7 @@ import { NO_WEBGL } from "./webgl";
 import type { ModelCache } from "./models/loader";
 import type { SkeletonFile } from "./skeleton/skeleton";
 import { createStage3D } from "./stage3d";
-import { createTrails3D, trailBoneOf, trailSample, type TrailBone } from "./trail3d";
+import { createTrails3D, newTrailSample, trailBoxesOf, trailSample, type TrailBox } from "./trail3d";
 import { createVfx3D, shieldLook, type ShieldLook } from "./vfx3d";
 
 /** The part of `WebGLRenderer` the presenter uses — a fake in jsdom tests. */
@@ -297,22 +298,27 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   const shadowClip = clipInstances(shadows);
 
   // Sword and kick trails (Plan 6, Task 34): one ribbon for every fighter, and each
-  // fighter's trail bone per move, found once.
+  // fighter's trailed box per move and game frame, found once (fix round 1: box by box).
   const trails = createTrails3D(opts.defs.length);
-  const trailBones: ReadonlyMap<string, TrailBone>[] = opts.defs.map(
+  const trailBoxes: ReadonlyMap<string, readonly (TrailBox | null)[]>[] = opts.defs.map(
     (d) =>
       new Map(
         d === null
           ? []
           : Object.keys(d.moves).flatMap((slot) => {
-              const bone = trailBoneOf(d, slot as MoveSlot);
-              return bone === null ? [] : [[slot, bone] as const];
+              const boxes = trailBoxesOf(d, slot as MoveSlot, opts.bake.bones);
+              return boxes === null ? [] : [[slot, boxes] as const];
             }),
       ),
   );
-  /** The sim frame each port last sampled its trail on: once a sim frame, however often it paints. */
-  const trailFrames: number[] = opts.defs.map(() => -1);
+  /**
+   * The fighter's own clock (action, move, action frame) each port last sampled its trail
+   * on (fix round 1). A step of it is a sample; a paint, a hitlag freeze, a slowed
+   * fighter's still step or a scene's freeze is none, so the ribbon stops as its fighter does.
+   */
+  const trailClock = opts.defs.map(() => ({ action: "", move: null as MoveSlot | null, frame: -1 }));
   const tip = new Vector3();
+  const sample = newTrailSample();
   /** Every layer but the fighters, whose matrices `paint` builds; each fighter builds its own (`Fighter3D.update`). */
   const fixed: Object3D[] = [hemisphere, ambient, sun, stage.group, shadows, vfx.group, trails.mesh];
   scene.add(...fixed);
@@ -419,13 +425,17 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
           hitFlash: hitFlashAmount(rs.vfx, f.port),
           hidden: hidden[f.port] ?? false,
         });
-        // A trail along the blade its move's boxes ride, a sample a sim frame (Plan 6, Task 34).
-        if (trailFrames[f.port] !== game.frame) {
-          trailFrames[f.port] = game.frame;
-          const bone = f.move === null || f.action === "dead" ? undefined : trailBones[f.port]?.get(f.move);
-          const move = f.move === null ? undefined : def.moves[f.move];
-          const live = bone !== undefined && move !== undefined && fighter.bonePosition(bone.bone, tip);
-          trails.push(f.port, live ? trailSample(bone, activeHitboxes(move, moveFrameOf(f.actionFrame)), pos.x, pos.y, f.facing, { x: tip.x, y: tip.y, z: tip.z }) : null);
+        // A trail along the blade its move's boxes ride, a sample a step of the fighter's own clock (Plan 6, Task 34).
+        const clock = trailClock[f.port];
+        if (clock !== undefined && (clock.action !== f.action || clock.move !== f.move || clock.frame !== f.actionFrame)) {
+          clock.action = f.action;
+          clock.move = f.move;
+          clock.frame = f.actionFrame;
+          // None for a fighter not drawn (dead, or hidden: its bones were not placed this paint).
+          const box = f.move === null || !fighter.placement.visible ? null : (trailBoxes[f.port]?.get(f.move)?.[moveFrameOf(f.actionFrame)] ?? null);
+          // The model is drawn shaken in hitlag (`Fighter3D.update`), so the box's edge is too.
+          const live = box !== null && fighter.bonePosition(box.bone, tip);
+          trails.push(f.port, live ? trailSample(box, pos.x + hitlagShake(f), pos.y, f.facing, tip, sample) : null);
         }
         // The sim's bubble, centre and radius, carried to where its fighter is drawn between frames.
         const look: ShieldLook | null = shieldLook(f, def, rs.vfx.parryFlash[f.port] ?? 0);
