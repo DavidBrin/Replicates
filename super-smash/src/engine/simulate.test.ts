@@ -278,6 +278,7 @@ describe("cloneState", () => {
       f.staleQueue = ["jab1", "fair"];
       f.combat.staleShield = [true, false];
       f.combat.helplessMove = "upB";
+      f.combat.sceneHits = [1, 2];
       f.hitThisMove = [1, 2];
     }
     s.projectiles = [

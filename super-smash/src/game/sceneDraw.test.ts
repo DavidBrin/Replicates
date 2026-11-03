@@ -181,8 +181,10 @@ const TRAPS = [
   ["kirby", 5, 5],
   ["pikachu", 2, 7.3],
   ["pikachu", 4, 9.3],
-  ["pikachu", 8, 9.37],
-  ["pikachu", 10, 11.42],
+  // Plan 6, Task 9: the startup's sparks are live through their window (10-45, a rehit
+  // of 6 apart), so from 8 and 10 they catch Mario again as he drifts back into reach.
+  ["pikachu", 8, 13.4],
+  ["pikachu", 10, 10.23],
   ["pikachu", 30, 13.6],
   ["pikachu", 54, 13],
   ["pikachu", 42, 13.3],

@@ -513,6 +513,8 @@ export function startMove(f: FighterState, action: ActionState, slot: MoveSlot):
   f.move = slot;
   f.charge = 0;
   clearHitRecord(f);
+  // A Final Smash part's own record starts again with the part (Plan 6, Task 9).
+  f.combat.sceneHits.length = 0;
   // A new swing: it will join the stale queue on its first hit (Plan 3, Task 16),
   // and a smash charges while the button stays held from here (R-T13l).
   f.combat.swingQueued = false;

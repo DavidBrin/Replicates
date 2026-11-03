@@ -28,7 +28,7 @@ import type { ChargedHitbox, FighterDef, FighterState, GameState, Hitbox, InputF
 import { STAGES } from "@/stages";
 import { dashTravel } from "@/ai/specials";
 import { REFERENCE_SCRIPTS } from "./acmd/index";
-import { barrage, finalBox } from "./finalKit";
+import { finalBox } from "./finalKit";
 import { FIGHTERS, getFighter } from "./index";
 import { bakedContext } from "@/game/bake";
 import { readBakeFromDisk } from "@/game/bakeNode";
@@ -773,25 +773,34 @@ describe("a start's boxes", () => {
 });
 
 describe("the scene's hits land once each", () => {
-  // A scene box reaches its trapped wherever they are and keeps no hit record, so
-  // a box live n frames would land n times (Task 14): every one is a single frame. So
-  // is a start's box that hits rather than traps (`Hitbox.trap` false, ruling R-T15j),
-  // which keeps no hit record either.
-  it.each(CINEMATIC.map((c) => c.id))("%s's scene, last blow and start hits are one-frame boxes", (id) => {
+  // A scene box, an end and a start's box that hits rather than traps (`Hitbox.trap`
+  // false, ruling R-T15j) keep a record of their own, by target and part (Plan 6, Task 9:
+  // `CombatState.sceneHits`), which lets go after the box's rehit, or on the next frame
+  // with none. So a box longer than a frame carries a rehit (a loop of the script's), or
+  // is an end's, which launches the trapped on its first frame.
+  it.each(CINEMATIC.map((c) => c.id))("%s's scene, last blow and start hits are one frame long, or carry a rehit, or end it", (id) => {
     const fighter = def(id);
     for (const slot of ["finalAttack", "finalEnd"] as const) {
       const move = fighter.moves[slot];
       if (move === undefined) continue;
       expect(move.hitboxes.length, `${id} ${slot}`).toBeGreaterThan(0);
-      for (const hb of move.hitboxes) expect(hb.endFrame, `${id} ${slot} hitbox ${hb.id}`).toBe(hb.startFrame);
+      for (const hb of move.hitboxes) {
+        if (hb.endFrame > hb.startFrame && slot !== "finalEnd") expect(hb.rehit ?? 0, `${id} ${slot} hitbox ${hb.id}`).toBeGreaterThan(0);
+      }
     }
-    for (const hb of fighter.moves.finalSmash!.hitboxes) if (hb.trap === false) expect(hb.endFrame, `${id} finalSmash hitbox ${hb.id}`).toBe(hb.startFrame);
+    for (const hb of fighter.moves.finalSmash!.hitboxes) {
+      if (hb.trap === false && hb.endFrame > hb.startFrame) expect(hb.rehit ?? 0, `${id} finalSmash hitbox ${hb.id}`).toBeGreaterThan(0);
+    }
   });
 
   it("gives Ultra Sword's 5% swing and Volt Tackle's sparks no trap, and every other start box one", () => {
     const hits = (id: string) => def(id).moves.finalSmash!.hitboxes.filter((hb) => hb.trap === false).map((hb) => [hb.startFrame, hb.damage]);
     expect(hits("kirby")).toEqual([[54, fx(5)]]);
-    expect(hits("pikachu")).toEqual([10, 16, 22, 28, 34, 40].flatMap((f) => [[f, fx(0.3)], [f, fx(0.3)]]));
+    // Plan 6, Task 9: the six sparks are two capsules with a rehit of 6, from 10.
+    expect(hits("pikachu")).toEqual([
+      [10, fx(0.3)],
+      [10, fx(0.3)],
+    ]);
     for (const id of ["donkeyKong", "marth", "fox"]) expect(hits(id), id).toEqual([]);
   });
 });
@@ -1900,12 +1909,51 @@ describe("finalKit", () => {
     const bare = finalBox(0, 1, 1, { damage: 1, angle: 0, kbg: 0 });
     for (const k of ["trap", "forceReaction"]) expect(k in bare, k).toBe(false);
   });
+});
 
-  it("spaces a barrage's one-frame hits evenly, with ids from the first", () => {
-    const hits = barrage(18, 79, 13, 4, { damage: 1.1, angle: 135, kbg: 100, fkb: 40 });
-    expect(hits).toHaveLength(13);
-    expect(hits.map((h) => h.id)).toEqual(Array.from({ length: 13 }, (_, i) => 18 + i));
-    expect(hits.map((h) => h.startFrame)).toEqual(Array.from({ length: 13 }, (_, i) => 79 + 4 * i));
-    for (const h of hits) expect(h.endFrame).toBe(h.startFrame);
+/** Marth's end part with Mario trapped at 10 and Fox standing 9 ahead, in its second box. */
+function criticalHitWithBystander(): { bystanderHit: boolean } {
+  const s = createInitialState("finalDestination", [{ defId: "marth" }, { defId: "mario" }, { defId: "fox" }], RULES, 5);
+  Object.assign(s.fighters[0], { action: "special", move: "finalEnd", actionFrame: 0, grounded: true, platform: 0, x: 0, y: 0, facing: 1, intangible: 0 });
+  Object.assign(s.fighters[1], { action: "finalTrapped", actionFrame: 0, grounded: true, platform: 0, x: fx(10), y: 0, facing: -1, intangible: 0 });
+  s.fighters[1].combat.trappedBy = 0;
+  Object.assign(s.fighters[2], { action: "stand", actionFrame: 10, grounded: true, platform: 0, x: fx(9), y: 0, facing: -1, intangible: 0, invincible: 0 });
+  s.cinematic = 0;
+  let st = s;
+  let bystanderHit = false;
+  for (let i = 0; i < 10; i++) {
+    const out = step(st, [0, 0, 0], { prevInputs: [0, 0, 0] });
+    if (out.events.hits.some((h) => h.attacker === 0 && h.victim === 2)) bystanderHit = true;
+    st = out.state;
+  }
+  return { bystanderHit };
+}
+
+describe("Final Smash boxes keep a record of their own, and three ends hit the world (Plan 6, Task 9)", () => {
+  // The landings themselves are `SCENE_HITS`'s ("lands each hit on its script's frame",
+  // above: 520 steps, past Jungle Rush's 163-step scene) and the startup sparks' ("hits a
+  // fighter beside it six times in place"): each keeps its frames through this change.
+
+  it("Jungle Rush's barrage is two boxes spanning the script's loops, each with the loop's period as its rehit", () => {
+    const boxes = def("donkeyKong").moves.finalAttack!.hitboxes;
+    expect(boxes.map((b) => [b.startFrame, b.endFrame, b.rehit])).toEqual([
+      [6, 75, 4],
+      [79, 127, 4],
+    ]);
+  });
+
+  it("the three world ends are flagged and carry their scripts' top-bone boxes", () => {
+    expect(def("donkeyKong").moves.finalEnd!.final?.world).toBe(true);
+    expect(def("marth").moves.finalEnd!.final?.world).toBe(true);
+    expect(def("pikachu").moves.finalEnd!.final?.world).toBe(true);
+    expect(def("marth").moves.finalEnd!.hitboxes.map((b) => [b.startFrame, b.endFrame, toFloat(b.radius)])).toEqual([
+      [2, 5, 18],
+      [2, 5, 12],
+    ]);
+    for (const id of ["mario", "kirby", "fox", "samus", "link"]) expect(def(id).moves.finalEnd?.final?.world, id).not.toBe(true);
+  });
+
+  it("Marth's Critical Hit end launches a bystander standing in its blade, not only the fighter it trapped", () => {
+    expect(criticalHitWithBystander().bystanderHit).toBe(true);
   });
 });

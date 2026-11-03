@@ -13,11 +13,12 @@
  * 10, `y` 8, `radius` 10), and any offset or radius a fighter file does not quote,
  * are UNVERIFIED stand-ins.
  *
- * A scene box keeps no hit record (Task 14), so one live n frames would land n
- * times: each scene hit is authored one frame long, on the first frame of its
- * script's window (`barrage`, and a single `finalBox(id, f, f, …)`), and lands
- * once, as each published hit does. So is a start's ordinary hit (`trap: false`,
- * fix round 1, ruling R-T15j), which keeps no hit record either.
+ * A scene box, a start's ordinary hit (`trap: false`, fix round 1, ruling R-T15j) and
+ * an end keep a record of their own, by target and part, with the box's rehit (Plan 6,
+ * Task 9: `CombatState.sceneHits`): a loop of the script's is one box whose rehit is the
+ * loop's period, spanning its window; a box without a rehit lets go on the next frame,
+ * so each published single hit is one box one frame long (`finalBox(id, f, f, …)`), on
+ * the first frame of its script's window.
  */
 
 import { fx } from "@/engine/fixed";
@@ -87,9 +88,4 @@ export function finalBox(id: number, from: number, to: number, h: Hit): Hitbox {
     ...(h.windbox === true ? { windbox: true } : {}),
     ...(h.fightersOnly === true ? { fightersOnly: true } : {}),
   };
-}
-
-/** `count` one-frame hits, `every` frames apart from `from`: a scene's barrage. Ids from `firstId`. */
-export function barrage(firstId: number, from: number, count: number, every: number, h: Hit): Hitbox[] {
-  return Array.from({ length: count }, (_, i) => finalBox(firstId + i, from + i * every, from + i * every, h));
 }

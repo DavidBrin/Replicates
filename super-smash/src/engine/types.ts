@@ -694,6 +694,14 @@ export interface FinalPhase {
    * reach further behind him than his front does ahead). Presentation only.
    */
   readonly sceneGapBehind?: number;
+  /**
+   * An end part whose script lays its boxes in the world (Plan 6, Task 9: `ATTACK`, no
+   * `set_catch_only_all`; Donkey Kong's and Marth's `game_finalend`, Pikachu's
+   * `game_final2`): they launch the user's trapped wherever they are, as every end does,
+   * and hit anyone else they reach as ordinary boxes (SmashWiki "Volt Tackle": "anyone
+   * within range of the final blast will be impacted").
+   */
+  readonly world?: boolean;
 }
 
 /**

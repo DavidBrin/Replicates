@@ -82,6 +82,8 @@ import {
   hurtboxCapsule,
   markHit,
   moveFrameOf,
+  recordHolds,
+  recordMark,
   reboundFrames,
   resolveClank,
   sweptCapsuleOverlaps,
@@ -584,10 +586,12 @@ interface Candidate {
    * ruling R-T15j), hits the world as an ordinary box and its user's trapped as a
    * `hold` does; `world`, a box of a Final Smash that traps nobody, or of one of its
    * projectiles (Task 16: Mario Finale's flames, Zero Laser, the Ancient Arrow), hits
-   * the world as an ordinary box, its hit record kept. No shield or counter takes any
-   * of them. Null for every other box.
+   * the world as an ordinary box, its hit record kept; `launchWorld`, an end laid in the
+   * world (`FinalPhase.world`; Plan 6, Task 9), launches its user's trapped as `launch`
+   * does and hits anyone else as a `world` box. No shield or counter takes any of them.
+   * Null for every other box.
    */
-  readonly final: "trap" | "hold" | "launch" | "strike" | "world" | null;
+  readonly final: "trap" | "hold" | "launch" | "launchWorld" | "strike" | "world" | null;
   /**
    * Frames after it strikes a fighter before it may strike them again, 0 for once
    * (smash-script `Rehit`; Plan 5, Task 16: `Hitbox.rehit`, `ProjectileDef.rehit`), and
@@ -610,7 +614,9 @@ interface Candidate {
 function finalKind(final: FinalPhase | undefined, hb: Hitbox): Candidate["final"] {
   if (final === undefined) return null;
   if (final.phase === "start") return final.trap === true ? (hb.trap === false ? "strike" : "trap") : "world";
-  return final.phase === "attack" ? "hold" : "launch";
+  if (final.phase === "attack") return "hold";
+  // An end laid in the world launches the trapped and hits anyone else (Plan 6, Task 9).
+  return final.world === true ? "launchWorld" : "launch";
 }
 
 /**
@@ -1877,7 +1883,7 @@ function resolveHits(
     for (const c of candidates) {
       if (c.suppressed || c.attacker === v) continue;
       // A Final Smash's scene reaches exactly the fighters its user trapped, wherever
-      // they are and with no hit record (its boxes are distinct, each to land), and
+      // they are and with a record of its own (Plan 6, Task 9: `sceneRecordHolds`), and
       // nothing else reaches them (Plan 5, Task 14: `final.ts`). UNVERIFIED: that a
       // bystander cannot hit a trapped fighter; while the scene plays it is stood
       // still anyway, but before it (the trap's own move) nothing says. A trap box
@@ -1892,8 +1898,12 @@ function resolveHits(
       // powerful tenth blow"), and the world below as any box does.
       const trapped = victim.action === "finalTrapped";
       const ownTrapped = trapped && victim.combat.trappedBy === c.attacker;
-      if (isSceneBox(c) ? !ownTrapped : trapped && !(c.final === "strike" && ownTrapped)) continue;
+      // A world end reaches its own trapped as a scene's end does, and the world besides.
+      const reachesOwn = c.final === "strike" || c.final === "launchWorld";
+      if (isSceneBox(c) ? !ownTrapped : trapped && !(reachesOwn && ownTrapped)) continue;
       if (isSceneBox(c) || ownTrapped) {
+        // Its own record, by target and part, with its rehit (Plan 6, Task 9).
+        if (sceneRecordHolds(s, c, victim.port)) continue;
         const key = pickKey(c);
         const incumbent = perSource.get(key);
         if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
@@ -1915,7 +1925,7 @@ function resolveHits(
       // ordinary grab still pulls a hanging fighter off, D56), no Kirby with someone
       // in his mouth, and nobody once its own mouth is full (Plan 5, Task 9: `inhaleMayCatch`).
       if (c.hitbox.grabbing === true && isInhale(defs[c.attacker], c) && !inhaleMayCatch(s.fighters[c.attacker], victim, defs[v])) continue;
-      if (!unrecorded(c) && recordSaysAlreadyHit(s, c, victim.port)) continue;
+      if (c.final === "strike" ? sceneRecordHolds(s, c, victim.port) : !unrecorded(c) && recordSaysAlreadyHit(s, c, victim.port)) continue;
       // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
       // holds alone, and hits anyone else it reaches. SmashWiki "Throw"
       // (https://www.ssbwiki.com/Throw): "a few throws such as Mario's back throw
@@ -2161,10 +2171,12 @@ function isInvincible(f: FighterState, def: FighterDef): boolean {
  * them (SSBU keeps catches, `CatchModule`, and attacks, `AttackModule`, apart).
  * `schema.test.ts` holds every melee windbox to one frame. UNVERIFIED: the rehit
  * timed from the boxes' frames, where SSBU times it from each victim's last hit. A
- * projectile's windbox (F.L.U.D.D.'s water) marks its own record, as before.
+ * projectile's windbox (F.L.U.D.D.'s water) marks its own record, as before. A
+ * Final Smash start's strike and a scene's boxes keep a record of their own
+ * (`sceneRecordHolds`; Plan 6, Task 9).
  */
 function unrecorded(c: Candidate): boolean {
-  return (c.hitbox.windbox === true && c.projectile === null) || c.final === "strike";
+  return c.hitbox.windbox === true && c.projectile === null;
 }
 
 /** Is `c` a box of a move that inhales (`MoveDef.inhale`, Plan 5, Task 9: Kirby's neutral special)? */
@@ -2208,10 +2220,14 @@ function recordSaysAlreadyHit(s: GameState, c: Candidate, port: number): boolean
 }
 
 function recordHit(c: Candidate, attacker: FighterState, port: number): void {
-  // A Final Smash start's ordinary hit keeps no record (Plan 5, Task 15 fix round 1,
-  // ruling R-T15j): a one-frame box that lands once, as a scene's does, which leaves
-  // the start's trap free to catch whom it hit (Volt Tackle's sparks, then its 1%).
-  if (c.final === "strike") return;
+  // A Final Smash's scene and strike boxes record in a list of their own (Plan 6, Task
+  // 9: `CombatState.sceneHits`), which leaves the start's trap free to catch whom a
+  // strike hit (Plan 5, Task 15 fix round 1, ruling R-T15j: Volt Tackle's sparks, then
+  // its 1%), and lets a box with a rehit span its script's window.
+  if (isSceneBox(c) || c.final === "strike") {
+    recordMark(attacker.combat.sceneHits, port, sceneRearmFrame(c), recordPart(c));
+    return;
+  }
   // A box with a rehit lets go of its target that many frames on its clock from now
   // (Plan 5, Task 16; SmashWiki "Hitbox", https://www.ssbwiki.com/Hitbox: a rehit rate
   // "allows the hitbox to strike again after the specified amount of frames"),
@@ -2221,6 +2237,26 @@ function recordHit(c: Candidate, attacker: FighterState, port: number): void {
   const rearmAt = rearmFrame(c);
   if (c.projectile !== null) markProjectileHit(c.projectile, port, rearmAt);
   else markHit(attacker, port, rearmAt, recordPart(c));
+}
+
+/**
+ * Has a Final Smash scene, strike or end box of `c`'s part struck `port`, and not yet let
+ * go (Plan 6, Task 9: `CombatState.sceneHits`)? By target and part, as every record is:
+ * SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox), a part "Determines how many
+ * hitboxes can hit in one attack", so Volt Tackle's two spark capsules land once a rehit
+ * between them, not once each.
+ */
+function sceneRecordHolds(s: GameState, c: Candidate, port: number): boolean {
+  return recordHolds(s.fighters[c.attacker].combat.sceneHits, port, c.clock, recordPart(c));
+}
+
+/**
+ * The frame a scene, strike or end box lets go of its target (Plan 6, Task 9): after its
+ * rehit; with none, on the next frame, as when the scene's boxes kept no record: each is
+ * one frame long, or launches the trapped on its first (`finalSmash.test.ts` pins both).
+ */
+function sceneRearmFrame(c: Candidate): number {
+  return c.clock + (c.rehit > 0 ? c.rehit : 1);
 }
 
 /**

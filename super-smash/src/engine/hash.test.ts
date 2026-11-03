@@ -229,6 +229,8 @@ describe("hashState", () => {
       ["fighter.combat.staleShield", (s) => s.fighters[0].combat.staleShield.push(true)],
       // Plan 5, Task 4b: null to a move, which the walk below cannot reach from null.
       ["fighter.combat.helplessMove", (s) => (s.fighters[0].combat.helplessMove = "upB")],
+      // Plan 6, Task 9: a Final Smash scene's own record.
+      ["fighter.combat.sceneHits", (s) => s.fighters[0].combat.sceneHits.push(5)],
       ["projectiles", (s) => s.projectiles.push(projectile())],
     ];
     for (const [name, mutate] of mutations) {
@@ -261,7 +263,7 @@ describe("hashState", () => {
       combat: { ...emptyCombat(), helplessMove: "upB" },
     };
     /** Arrays `mixFighter` hashes element by element, each with an explicit case in the list above. */
-    const HANDLED_ARRAYS = new Set(["staleQueue", "hitThisMove", "combat.staleShield"]);
+    const HANDLED_ARRAYS = new Set(["staleQueue", "hitThisMove", "combat.staleShield", "combat.sceneHits"]);
     const leaves: string[][] = [];
     const walk = (v: unknown, path: string[]): void => {
       if (v === null) throw new Error(`fighter.${path.join(".")} is null: give it a value in FULL`);

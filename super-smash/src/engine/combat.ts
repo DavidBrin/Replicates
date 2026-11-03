@@ -274,6 +274,13 @@ export interface CombatState {
    * match's start (`createInitialState`), and kept through a KO and the respawn.
    */
   controls: number;
+  /**
+   * The record of a Final Smash's scene, strike and end boxes (Plan 6, Task 9), apart from
+   * the swing's `hitThisMove`, so a start's strike leaves its trap free to catch (ruling
+   * R-T15j). Entries as `hitThisMove`'s (`recordMark`): by target and part, with the
+   * frame each lets go. Cleared when a move starts (`startMove`).
+   */
+  sceneHits: number[];
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -328,6 +335,7 @@ export function emptyCombat(): CombatState {
     turned: false,
     trappedBy: -1,
     controls: 0,
+    sceneHits: [],
   };
 }
 
@@ -380,5 +388,6 @@ export function cloneCombat(c: CombatState): CombatState {
     turned: c.turned,
     trappedBy: c.trappedBy,
     controls: c.controls,
+    sceneHits: c.sceneHits.slice(),
   };
 }

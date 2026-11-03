@@ -14,7 +14,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
-import { barrage, finalBox } from "./finalKit";
+import { finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { DONKEY_KONG } from "./acmd/generated/donkeyKong";
 import { FIGHTER_PARAMS } from "./params";
@@ -1017,12 +1017,12 @@ const legacy: FighterDef = {
     // SLOW_OPPONENT(7, 30), its slowing of the other fighters through the startup, is not
     // modelled (the page publishes neither its rate nor its length, and the arguments'
     // meaning is unpublished): they move at full speed.
-    // UNVERIFIED-simplified: each scene hit is the first frame of its window (the
-    // page's "6-7" is one hit; `finalKit.ts`). The barrage's knockback (FKB 40) is
-    // the scene's: a trapped fighter is held. `DisableHitlag=true` is not modelled,
-    // as for every box. The uppercut's boxes are world boxes in its script (no
-    // `set_catch_only_all`), but here they reach only the trapped, as every end box
-    // does (Task 14's reading).
+    // UNVERIFIED-simplified: each run of the barrage's loops is one box with the loop's
+    // period as its rehit (Plan 6, Task 9; the page's "6-7" is one hit; `finalKit.ts`).
+    // The barrage's knockback (FKB 40) is the scene's: a trapped fighter is held.
+    // `DisableHitlag=true` is not modelled, as for every box. The uppercut's top-bone
+    // boxes are world boxes, as in its script (no `set_catch_only_all`; Plan 6, Task 9:
+    // `FinalPhase.world`).
     // UNVERIFIED: the scene boxes' x (the stand-in 10): they reach the trapped
     // wherever they are.
     finalSmash: {
@@ -1047,8 +1047,11 @@ const legacy: FighterDef = {
       // reach further behind than his punches do ahead.
       final: { phase: "attack", next: "finalEnd", sceneGap: fx(12), sceneGapBehind: fx(15) },
       hitboxes: [
-        ...barrage(0, 6, 18, 4, { damage: 1.2, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
-        ...barrage(18, 79, 13, 4, { damage: 1.1, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true }),
+        // rubendal 13.0.1 `game_finalattack`: 18 loops from frame 6 every 4 (each box live
+        // 2 frames), then 13 from 79 every 4 (1 frame); one box a run of loops, its rehit
+        // the period (Plan 6, Task 9: a scene box keeps its own record).
+        finalBox(0, 6, 75, { damage: 1.2, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true, rehit: 4 }),
+        finalBox(1, 79, 127, { damage: 1.1, angle: 135, kbg: 100, fkb: 40, radius: 8.5, hitlag: 0.4, transcendent: true, rehit: 4 }),
       ],
     },
     finalEnd: {
@@ -1060,8 +1063,13 @@ const legacy: FighterDef = {
       // The drawing (Task 17 fix rounds 1 and 2, rulings R-T17d and R-T17i): 13, a
       // unit past the barrage's, so his head clears the knee of a fighter the
       // uppercut sends up past it.
-      final: { phase: "end", sceneGap: fx(13), sceneGapBehind: fx(15) },
-      hitboxes: [finalBox(0, 7, 7, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true })],
+      // `game_finalend` lays its boxes in the world (Plan 6, Task 9): its top-bone pair,
+      // frames 7-8 (`clear_all` on 9); the `handl` and `arml` pair is not placed (no bone).
+      final: { phase: "end", world: true, sceneGap: fx(13), sceneGapBehind: fx(15) },
+      hitboxes: [
+        finalBox(0, 7, 8, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 13, x: 5, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true }),
+        finalBox(1, 7, 8, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 15, x: 25, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true }),
+      ],
     },
   },
 

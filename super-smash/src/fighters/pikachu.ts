@@ -17,7 +17,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
-import { barrage, finalBox } from "./finalKit";
+import { finalBox } from "./finalKit";
 import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
 import { PIKACHU } from "./acmd/generated/pikachu";
 import { FIGHTER_PARAMS } from "./params";
@@ -1088,12 +1088,12 @@ const legacy: FighterDef = {
     //   that fighter is slowed and has barely moved; here it flies at full speed.
     // UNVERIFIED-simplified: `game_final2`'s 0% push on its frames 1-2 is not
     // modelled (an end box launches the trapped, so it would end the scene before
-    // the blast). The blast's box is a world box in its script ("anyone within range
-    // of the final blast will be impacted", Volt Tackle), but here it reaches only the
-    // trapped, as every end box does (Task 14's reading); and it goes off where the
-    // trap landed, not "at the center of the stage" (Volt Tackle). Each scene hit, and
-    // each spark, is the first frame of its window (`finalKit.ts`); the scene boxes'
-    // offsets are stand-ins: they reach the trapped wherever they are.
+    // the blast). The blast's box is a world box, as in its script ("anyone within range
+    // of the final blast will be impacted", Volt Tackle; Plan 6, Task 9:
+    // `FinalPhase.world`); it goes off where the trap landed, not "at the center of the
+    // stage" (Volt Tackle). The sparks and the loop are one box each with its rehit
+    // (Plan 6, Task 9: `finalKit.ts`); the scene boxes' offsets are stand-ins: they reach
+    // the trapped wherever they are.
     finalSmash: {
       slot: "finalSmash",
       name: "Volt Tackle",
@@ -1111,15 +1111,15 @@ const legacy: FighterDef = {
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "start", trap: true, next: "finalAttack", nextAt: 47, sceneGap: fx(8) },
       hitboxes: [
-        // The startup's six sparks, two capsules each.
-        ...[10, 16, 22, 28, 34, 40].flatMap((f, i) => [
-          finalBox(2 * i, f, f, { damage: 0.3, angle: 70, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", trap: false }),
-          finalBox(2 * i + 1, f, f, { damage: 0.3, angle: 40, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", trap: false }),
-        ]),
+        // The startup's sparks, two capsules of one part (`game_final`: `Rehit=6` from 10).
+        // Six strikes, 10-40, on SmashWiki's count; the window ends on 45 (Plan 6, Task 9:
+        // a strike keeps its own record, by part, so the two land once a rehit between them).
+        finalBox(0, 10, 45, { damage: 0.3, angle: 70, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", trap: false, rehit: 6 }),
+        finalBox(1, 10, 45, { damage: 0.3, angle: 40, kbg: 70, fkb: 20, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", trap: false, rehit: 6 }),
         // The initial hit, then the tackle.
-        finalBox(12, 47, 49, { damage: 1, angle: 50, kbg: 100, fkb: 75, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, effect: "electric" }),
-        finalBox(13, 47, 49, { damage: 1, angle: 30, kbg: 100, fkb: 30, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, effect: "electric" }),
-        finalBox(14, 50, 83, { damage: 1, angle: 90, kbg: 45, fkb: 125, bkb: 70, radius: 13, x: 0, y: 3, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
+        finalBox(2, 47, 49, { damage: 1, angle: 50, kbg: 100, fkb: 75, radius: 5.5, x: 5, y: 0, x2: -5, y2: 0, hitlag: 0.2, transcendent: true, effect: "electric" }),
+        finalBox(3, 47, 49, { damage: 1, angle: 30, kbg: 100, fkb: 30, radius: 5.5, x: 5, y: 10, x2: -5, y2: 10, hitlag: 0.2, transcendent: true, effect: "electric" }),
+        finalBox(4, 50, 83, { damage: 1, angle: 90, kbg: 45, fkb: 125, bkb: 70, radius: 13, x: 0, y: 3, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
       ],
     },
     finalAttack: {
@@ -1130,7 +1130,8 @@ const legacy: FighterDef = {
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "attack", next: "finalEnd", sceneGap: fx(13) },
-      hitboxes: barrage(0, 6, 8, 8, { damage: 1.5, angle: 367, kbg: 90, fkb: 100, radius: 13, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric" }),
+      // UNVERIFIED as before: eight hits, eight frames apart, one box with that rehit (Plan 6, Task 9).
+      hitboxes: [finalBox(0, 6, 62, { damage: 1.5, angle: 367, kbg: 90, fkb: 100, radius: 13, hitlag: 0.2, transcendent: true, lr: "position", effect: "electric", rehit: 8 })],
     },
     finalEnd: {
       slot: "finalEnd",
@@ -1140,8 +1141,9 @@ const legacy: FighterDef = {
       intangible: [1, 79],
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 15 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
-      final: { phase: "end", sceneGap: fx(15) },
-      hitboxes: [finalBox(0, 10, 10, { damage: 20, angle: 70, kbg: 82, bkb: 70, radius: 32, hitlag: 0.7, transcendent: true, lr: "position", effect: "electric", forceReaction: true })],
+      // `game_final2` lays its blast in the world, frames 10-11 (Plan 6, Task 9).
+      final: { phase: "end", world: true, sceneGap: fx(15) },
+      hitboxes: [finalBox(0, 10, 11, { damage: 20, angle: 70, kbg: 82, bkb: 70, radius: 32, x: 0, y: 10, hitlag: 0.7, transcendent: true, lr: "position", effect: "electric", forceReaction: true })],
     },
   },
 

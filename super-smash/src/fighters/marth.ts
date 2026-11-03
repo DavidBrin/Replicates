@@ -1209,12 +1209,11 @@ const legacy: FighterDef = {
     // SLOW_OPPONENT(4, 45), its slowing of the other fighters through the startup, is not
     // modelled (the page publishes neither its rate nor its length, and the arguments'
     // meaning is unpublished): they move at full speed.
-    // UNVERIFIED-simplified: the strike is one frame (its script's 2-5; it "only
-    // hits once", `finalKit.ts`). Its boxes are world boxes in its script (no
-    // `set_catch_only_all`; SmashWiki "Critical Hit": "it is also possible for a
-    // fighter to walk into the user's sword once it hits another opponent and still
-    // be given a OHKO"), but here they reach only the trapped, as every end box does
-    // (Task 14's reading).
+    // The strike's boxes are live on its script's 2-5 and land once each fighter (it "only
+    // hits once"), world boxes as in its script (no `set_catch_only_all`; SmashWiki
+    // "Critical Hit": "it is also possible for a fighter to walk into the user's sword once
+    // it hits another opponent and still be given a OHKO"; Plan 6, Task 9:
+    // `FinalPhase.world`).
     finalSmash: {
       slot: "finalSmash",
       name: "Critical Hit",
@@ -1235,8 +1234,12 @@ const legacy: FighterDef = {
       intangible: [1, 59],
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
-      final: { phase: "end", sceneGap: fx(13) },
-      hitboxes: [finalBox(0, 2, 2, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 18, x: 16, y: 8, hitlag: 1, transcendent: true, effect: "slash", forceReaction: true })],
+      // `game_finalend` lays its boxes in the world, frames 2-5 (`clear_all` on 6) (Plan 6, Task 9).
+      final: { phase: "end", world: true, sceneGap: fx(13) },
+      hitboxes: [
+        finalBox(0, 2, 5, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 18, x: 16, y: 8, hitlag: 1, transcendent: true, effect: "slash", forceReaction: true }),
+        finalBox(1, 2, 5, { damage: 60, angle: 361, kbg: 120, bkb: 120, radius: 12, x: 9, y: 8, hitlag: 1, transcendent: true, effect: "slash", forceReaction: true }),
+      ],
     },
   },
 
