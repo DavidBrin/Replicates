@@ -82,12 +82,15 @@ export function attackClipTime(strike: number | undefined, firstActive: number, 
  * Normalised clip time on frame `k` (1-based) of a full release's own motion, `frames`
  * long (Plan 6, Task 20): from `from`, where the move's own motion stood on its loop
  * frame, to the clip's `strike` on the frame the release first hits (`hit`), and on to
- * the end; linearly from `from` when the strike is behind it or there is no hit.
+ * the end; linearly from `from` when there is no strike or no hit inside the motion.
+ * Fix round 1: a `from` already past the strike turns back to it (Samus's own motion
+ * stands at 0.295 on her loop frame, her clip's shot key at 0.07), so every release
+ * shows its strike on its hit or shot, and frame 1 still meets the loop frame's pose.
  */
 export function fullReleaseClipTime(from: number, strike: number | undefined, hit: number, frames: number, k: number): number {
   const f = k - 1;
   const h = hit - 1;
-  if (strike !== undefined && strike > from && h > 0 && h < frames) {
+  if (strike !== undefined && h > 0 && h < frames) {
     return f <= h ? from + ((strike - from) * f) / h : Math.min(1, strike + ((1 - strike) * (f - h)) / (frames - h));
   }
   return frames <= 0 ? from : Math.min(1, from + ((1 - from) * f) / frames);
@@ -328,8 +331,14 @@ export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & {
     // striking on the first game frame after it that hits or shoots.
     const sc = move.specialCharge;
     const fullMotion = sc?.mode === "store" ? sc.fromStore.motion : undefined;
+    if (sc?.mode === "store" && fullMotion === undefined && sc.fromStore.fullFrames !== undefined) {
+      throw new Error(`bake ${def.id}: ${slot}'s full release has fullFrames ${sc.fromStore.fullFrames} but no motion`);
+    }
     if (sc?.mode === "store" && fullMotion !== undefined) {
-      const frames = sc.fromStore.fullFrames ?? 1;
+      // "Both or neither" (`StoredFullCharge`), loudly (fix round 1): a motion with no
+      // length would bake one frame and freeze the release on it.
+      const frames = sc.fromStore.fullFrames;
+      if (frames === undefined) throw new Error(`bake ${def.id}: ${slot}'s full release ${fullMotion} names no fullFrames`);
       const from = time(runScript(script, sc.loopFrame + 1).motionFrame);
       let hit = -1;
       for (let g = sc.loopFrame + 1; g <= move.totalFrames && hit < 0; g++) if (runScript(script, g).attacks.length > 0) hit = g - sc.loopFrame;

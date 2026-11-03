@@ -258,6 +258,12 @@ describe("Donkey Kong's carry and a full release play motions of their own (Plan
     expect(poseIndexOf(donkeyKong, f, 0, clocks({ special_n_max: { kind: "once", frames: 47 } }))).toEqual({ motion: "special_n_max", frame: 19 });
     expect(poseIndexOf(donkeyKong, f, 0, clocks({}))).toBeNull();
   });
+
+  it("plays no full release named by half: a motion with no length is none (fix round 1; the bake refuses it)", () => {
+    const sc = store(samus);
+    const half = { ...samus, moves: { ...samus.moves, neutralB: { ...samus.moves.neutralB!, specialCharge: { ...sc, fromStore: { start: sc.fromStore.start, interruptible: sc.fromStore.interruptible, motion: "special_n_f_max" } } } } };
+    expect(fullReleaseIndex(half, releasing(half, sc.loopFrame + 2))).toBeNull();
+  });
 });
 
 describe("a dash off a platform flips (Plan 6, Task 21)", () => {

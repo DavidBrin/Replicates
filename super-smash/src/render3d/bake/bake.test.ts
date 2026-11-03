@@ -7,7 +7,7 @@ import { gameScriptFor } from "@/engine/acmd/legacy";
 import { clipTimeOfFrame, MOTION_OF_ACTION, OPEN_ENDED_FRAMES, poseIndexOf, statusDuration, statusMotion, type ClockedFighter } from "@/engine/acmd/poseClock";
 import { dodgeIntangible, groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from "@/engine/groundDodge";
 import { STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
-import type { ActionState, FighterDef } from "@/engine/types";
+import type { ActionState, FighterDef, StoreCharge, StoredFullCharge } from "@/engine/types";
 import { FIGHTERS, getFighter } from "@/fighters";
 import { bakeTables } from "@/engine/acmd/bakeTables";
 import { localHurtboxes } from "@/engine/acmd/hurtboxes";
@@ -24,6 +24,7 @@ import {
   bakeFighter,
   bakesStatus,
   fighterPoser,
+  fullReleaseClipTime,
   motionSamplers,
   moveSamplers,
   poseWorld,
@@ -301,8 +302,12 @@ describe("the flip off a dash (Plan 6, Task 21)", () => {
 });
 
 describe("Donkey Kong's carry and lift, and the full releases (Plan 6, Task 20)", () => {
-  it("bake each full release on a motion of its own, its 47 frames, from the loop frame's pose on through the clip", () => {
-    for (const [id, motion] of [["donkeyKong", "special_n_max"], ["samus", "special_n_f_max"]] as const) {
+  // Fix round 1: each release shows its clip's strike on the frame it hits or shoots
+  // (rubendal 13.0.1: `game_specialnmax`'s ATTACK on frame 19; `game_specialnfiremax`
+  // shoots on frame 3). Samus's own motion already stands past her clip's strike on the
+  // loop frame (0.295 against 0.07), so hers turns back to it over its first frames.
+  it("bake each full release on a motion of its own, its 47 frames, from the loop frame's pose to the strike on its hit or shot, then on through the clip", () => {
+    for (const [id, motion, shot] of [["donkeyKong", "special_n_max", 19], ["samus", "special_n_f_max", 3]] as const) {
       const def = fighterOf(id);
       const moves = moveSamplers(def);
       const full = moves.get(motion)!;
@@ -313,12 +318,32 @@ describe("Donkey Kong's carry and lift, and the full releases (Plan 6, Task 20)"
       // Where the move's own motion stands on the loop frame (the press's first frame of the release)…
       const loopMotionFrame = moveScriptFrame(def, { move: "neutralB", actionFrame: sc.loopFrame })!.state.motionFrame;
       expect(full.time(1), id).toBeCloseTo(own.time(loopMotionFrame), 12);
-      // …on through the clip, never back, never holding.
-      for (let k = 2; k <= 47; k++) expect(full.time(k), `${id} ${k}`).toBeGreaterThan(full.time(k - 1));
+      // …to the clip's strike on the release's hit or shot, every frame nearer it, never holding…
+      const strike = full.clip.strike!;
+      expect(full.time(shot), `${id} strikes on its frame ${shot}`).toBeCloseTo(strike, 12);
+      for (let k = 2; k <= shot; k++) expect(Math.abs(full.time(k) - strike), `${id} ${k}`).toBeLessThan(Math.abs(full.time(k - 1) - strike));
+      // …and on through the clip from there, never back.
+      for (let k = shot + 1; k <= 47; k++) expect(full.time(k), `${id} ${k}`).toBeGreaterThan(full.time(k - 1));
     }
-    // Donkey Kong's punch strikes on the motion's frame 19, the script's hit (rubendal `game_specialnmax`).
-    const dk = moveSamplers(fighterOf("donkeyKong")).get("special_n_max")!;
-    expect(dk.time(19)).toBeCloseTo(dk.clip.strike!, 12);
+  });
+
+  it("play a full release's wind-up back to the strike when the loop frame stands past it (fix round 1)", () => {
+    expect(fullReleaseClipTime(0.3, 0.07, 3, 47, 1)).toBe(0.3);
+    expect(fullReleaseClipTime(0.3, 0.07, 3, 47, 3)).toBeCloseTo(0.07, 12);
+    expect(fullReleaseClipTime(0.3, 0.07, 3, 47, 47)).toBeLessThan(1);
+    // Without a strike or a hit inside the motion, linearly on from where it stood.
+    expect(fullReleaseClipTime(0.3, undefined, 3, 47, 1)).toBe(0.3);
+    expect(fullReleaseClipTime(0.3, 0.07, -1, 47, 2)).toBeGreaterThan(0.3);
+  });
+
+  it("refuse a full release named by half: a motion with no length, or a length with no motion (fix round 1)", () => {
+    const samus = fighterOf("samus");
+    const nb = samus.moves.neutralB!;
+    const sc = nb.specialCharge as StoreCharge;
+    const half = (fromStore: StoredFullCharge): FighterDef => ({ ...samus, moves: { ...samus.moves, neutralB: { ...nb, specialCharge: { ...sc, fromStore } } } });
+    const base = { start: sc.fromStore.start, interruptible: sc.fromStore.interruptible };
+    expect(() => moveSamplers(half({ ...base, motion: "special_n_f_max" }))).toThrow("bake samus: neutralB's full release special_n_f_max names no fullFrames");
+    expect(() => moveSamplers(half({ ...base, fullFrames: 47 }))).toThrow("bake samus: neutralB's full release has fullFrames 47 but no motion");
   });
 
   it("bake the lift (Donkey Kong's forward throw, `cargo`) on the lift clip, and his carried forward throw on the throw's, as before", () => {

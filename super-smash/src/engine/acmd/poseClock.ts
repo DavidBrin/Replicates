@@ -335,8 +335,11 @@ const wrap = (n: number, frames: number): number => (((n % frames) + frames) % f
 export function fullReleaseIndex(def: FighterDef, f: Pick<ClockedFighter, "action" | "move" | "charge" | "actionFrame">): PoseIndex | null {
   if (f.action !== "special" || f.move === null) return null;
   const sc = def.moves[f.move]?.specialCharge;
-  if (sc?.mode !== "store" || sc.fromStore.motion === undefined || f.charge < sc.frames || f.actionFrame < sc.loopFrame) return null;
-  return { motion: sc.fromStore.motion, frame: clampFrame(f.actionFrame - sc.loopFrame + 1, sc.fromStore.fullFrames ?? 1) };
+  if (sc?.mode !== "store") return null;
+  // Named by half, no full release (fix round 1): the bake refuses such a def.
+  const { motion, fullFrames } = sc.fromStore;
+  if (motion === undefined || fullFrames === undefined || f.charge < sc.frames || f.actionFrame < sc.loopFrame) return null;
+  return { motion, frame: clampFrame(f.actionFrame - sc.loopFrame + 1, fullFrames) };
 }
 
 /**
