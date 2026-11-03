@@ -330,7 +330,7 @@ export function cloneFighter(f: FighterState): FighterState {
     bufferedAction:
       f.bufferedAction === null
         ? null
-        : ({ kind: f.bufferedAction.kind, frame: f.bufferedAction.frame } as FighterState["bufferedAction"]),
+        : { ...f.bufferedAction },
     kinetic: cloneKinetic(f.kinetic),
     combat: cloneCombat(f.combat),
   };

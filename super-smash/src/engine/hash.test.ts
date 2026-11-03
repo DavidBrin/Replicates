@@ -7,6 +7,7 @@ import { emptyKinetic } from "./kinetic";
 import { hashState, mixBool, mixInt, mixString } from "./hash";
 import { markHit } from "./hitbox";
 import { markProjectileHit } from "./projectile";
+import { cloneState } from "./simulate";
 import type { FighterState, GameState, ProjectileState } from "./types";
 
 function fighter(over: Partial<FighterState> = {}): FighterState {
@@ -253,7 +254,10 @@ describe("hashState", () => {
     const FULL: Partial<FighterState> = {
       move: "jab1",
       ledge: { platform: 0, side: 1 },
-      bufferedAction: { kind: "jump", frame: 3 },
+      // A buffered flick (Plan 6, Task 5), so the walk reaches its direction. Its fields
+      // first: the walk mutates this one object in place, leaf by leaf, and once `kind` is
+      // no longer "attack" the flick is not mixed at all.
+      bufferedAction: { flickX: 1, flickY: 0, kind: "attack", frame: 3 },
       combat: { ...emptyCombat(), helplessMove: "upB" },
     };
     /** Arrays `mixFighter` hashes element by element, each with an explicit case in the list above. */
@@ -287,6 +291,18 @@ describe("hashState", () => {
       target[key] = typeof v === "number" ? v + 1 : typeof v === "boolean" ? !v : `${String(v)}x`;
       expect(hashState(s), `hash ignored fighter.${path.join(".")}`).not.toBe(before);
     }
+  });
+
+  it("hashes a buffered flick's direction, and nothing new for a press without one (Plan 6, Task 5)", () => {
+    const plain = state();
+    plain.fighters[0].bufferedAction = { kind: "attack", frame: 3 };
+    const right = state();
+    right.fighters[0].bufferedAction = { kind: "attack", frame: 3, flickX: 1, flickY: 0 };
+    const up = state();
+    up.fighters[0].bufferedAction = { kind: "attack", frame: 3, flickX: 0, flickY: 1 };
+    expect(hashState(right)).not.toBe(hashState(plain));
+    expect(hashState(up)).not.toBe(hashState(right));
+    expect(cloneState(right).fighters[0].bufferedAction).toEqual(right.fighters[0].bufferedAction);
   });
 
   it("notices a change to every projectile field", () => {

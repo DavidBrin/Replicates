@@ -27,6 +27,7 @@ import { releaseHeld, struggleInGrab } from "./grab";
 import {
   PUMMEL_FRAMES,
   THROW_FRAMES,
+  attackFlick,
   bufferPress,
   endsHelpless,
   handOff,
@@ -259,18 +260,23 @@ export const STATUS_CATCH_WAIT: FighterStatus = {
       return;
     }
     const p = presses(f, intent, ctx.frame);
-    if (p.attack && hasMove(ctx, "pummel")) {
+    // A right-stick flick throws its way (Plan 6, Task 5; ruling D1, UNVERIFIED: SmashWiki
+    // "Grab" gives the pummel to "an attack or grab button" and the throws to "tilting the
+    // control stick", and no page says which a flick, both at once, is).
+    const flick = attackFlick(intent, p);
+    if (p.attack && flick === null && hasMove(ctx, "pummel")) {
       startMove(f, "pummel", "pummel");
       return;
     }
+    const dir = flick ?? intent;
     const throwSlot: MoveSlot | null =
-      intent.y > 0
+      dir.y > 0
         ? "uthrow"
-        : intent.y < 0
+        : dir.y < 0
           ? "dthrow"
-          : intent.x === f.facing
+          : dir.x === f.facing
             ? "fthrow"
-            : intent.x === -f.facing
+            : dir.x === -f.facing
               ? "bthrow"
               : null;
     if (throwSlot !== null && hasMove(ctx, throwSlot)) {

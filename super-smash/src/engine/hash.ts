@@ -157,6 +157,10 @@ export function mixFighter(h: number, f: FighterState): number {
   } else {
     x = mixString(x, f.bufferedAction.kind);
     x = mixInt(x, f.bufferedAction.frame);
+    const b = f.bufferedAction;
+    if ((b.kind === "attack" || b.kind === "special") && b.flickX !== undefined) {
+      x = mixInt(x, 1 + (b.flickX + 1) * 3 + ((b.flickY ?? 0) + 1));
+    }
   }
   x = mixKinetic(x, f.kinetic);
   return mixCombat(x, f.combat);

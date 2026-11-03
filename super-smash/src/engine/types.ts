@@ -1589,8 +1589,13 @@ export interface FighterState {
 
 export type BufferedAction =
   | { kind: "jump"; frame: number }
-  | { kind: "attack"; frame: number }
-  | { kind: "special"; frame: number }
+  /**
+   * `flickX`/`flickY`: a right-stick flick's direction (`Intent.rightFlick`), each −1/0/1,
+   * when the press was one (Plan 6, Task 5; SmashWiki "C-Stick": C-Stick inputs "can be
+   * accidentally buffered"). Absent for a press of the button.
+   */
+  | { kind: "attack"; frame: number; flickX?: number; flickY?: number }
+  | { kind: "special"; frame: number; flickX?: number; flickY?: number }
   | { kind: "shield"; frame: number }
   | { kind: "grab"; frame: number };
 

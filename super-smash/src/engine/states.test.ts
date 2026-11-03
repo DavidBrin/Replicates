@@ -978,6 +978,77 @@ describe("input buffer", () => {
   });
 });
 
+describe("a buffered right-stick flick keeps its direction (Plan 6, Task 5; SmashWiki \"C-Stick\")", () => {
+  /** A smash-mode flick's fire frame on top of `held`: its direction and Attack fresh, with `Btn.Flick`. */
+  const flick = (dir: Btn, held: InputFrame = 0): InputFrame => held | dir | Btn.Attack | Btn.Flick;
+
+  it("records the flick's direction with the buffered attack", () => {
+    const f = fighter({ action: "landingLag", charge: 6, actionFrame: 0 });
+    tick(f, flick(Btn.Right), 0);
+    expect(f.bufferedAction).toMatchObject({ kind: "attack", flickX: 1, flickY: 0 });
+  });
+
+  it("comes out of landing lag as the flick's forward smash, the stick at rest by then", () => {
+    const f = fighter({ action: "landingLag", charge: 6, actionFrame: 0 });
+    tick(f, flick(Btn.Right), 0);
+    hold(f, 0, 6, flick(Btn.Right));
+    expect(f.action).toBe("attack");
+    expect(f.move).toBe("fsmash");
+  });
+
+  it("comes out of landing lag as the flick's up smash over a d-pad at rest, not a jab", () => {
+    const f = fighter({ action: "landingLag", charge: 6, actionFrame: 0 });
+    tick(f, flick(Btn.Up), 0);
+    hold(f, 0, 6, flick(Btn.Up));
+    expect(f.move).toBe("usmash");
+  });
+
+  it("comes out of a crouch's first frames as the flick's smash, not the down tilt (ruling R-FW3e's crouch rule)", () => {
+    const f = fighter();
+    tick(f, Btn.Down, 0);
+    expect(f.action).toBe("crouchStart");
+    tick(f, flick(Btn.Right, Btn.Down), Btn.Down);
+    hold(f, Btn.Down, 6, flick(Btn.Right, Btn.Down));
+    expect(f.action).toBe("attack");
+    expect(f.move).toBe("fsmash");
+  });
+
+  it("does not aim an aerial buffered in jumpsquat: the stick's neutral air (SmashWiki: the Control Stick decides)", () => {
+    const f = fighter();
+    tick(f, Btn.Jump, 0);
+    expect(f.action).toBe("jumpSquat");
+    tick(f, flick(Btn.Right), Btn.Jump);
+    hold(f, 0, 4, flick(Btn.Right));
+    expect(f.action).toBe("attack");
+    expect(f.move).toBe("nair");
+  });
+
+  it("keeps a buffered press without a flick exactly as before", () => {
+    const f = fighter({ action: "landingLag", charge: 6, actionFrame: 0 });
+    tick(f, Btn.Attack, 0);
+    expect(f.bufferedAction).toEqual({ kind: "attack", frame: expect.any(Number) });
+    hold(f, 0, 6, Btn.Attack);
+    expect(f.move).toBe("jab1");
+  });
+
+  it("leaves a fresh Attack on the frame the buffer fires to that press: a jab, not the buffered flick's smash", () => {
+    const f = fighter({ action: "landingLag", charge: 6, actionFrame: 0 });
+    tick(f, flick(Btn.Right), 0);
+    hold(f, 0, 5, flick(Btn.Right));
+    expect(f.action).toBe("stand");
+    tick(f, Btn.Attack, 0);
+    expect(f.move).toBe("jab1");
+  });
+
+  it("aims only the press it was buffered with: a fresh B on the frame a buffered attack flick fires is the neutral special", () => {
+    const f = fighter({ action: "landingLag", charge: 6, actionFrame: 0 });
+    tick(f, flick(Btn.Right), 0);
+    hold(f, 0, 5, flick(Btn.Right));
+    tick(f, Btn.Special, 0);
+    expect(f.move).toBe("neutralB");
+  });
+});
+
 /* -------------------------------------------------------------- charge -- */
 
 describe("smash charge", () => {

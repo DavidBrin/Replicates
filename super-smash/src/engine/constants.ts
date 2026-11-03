@@ -19,7 +19,8 @@ export const TICK_RATE = 60;
  * differ here play different games and desync on the first hit, so the
  * version goes into `engineFingerprint` (`src/game/simContext.ts`). Plan 3
  * sets it to 3; each later plan that changes what `step()` does bumps it once,
- * as its first behaviour change (Plan 4 sets 4, Plan 5 sets 5).
+ * as its first behaviour change (Plan 4 sets 4, Plan 5 sets 5, Plan 6 sets 6 in
+ * its Task 5).
  *
  * Inside a plan the rules move task by task and the version stays: a task that
  * changes behaviour regenerates the golden trace, and
@@ -27,7 +28,7 @@ export const TICK_RATE = 60;
  * that task rewrites the digest in the pin and nothing else. Bumping this
  * number fails the same test until the pin's version follows.
  */
-export const ENGINE_RULES_VERSION = 5;
+export const ENGINE_RULES_VERSION = 6;
 
 /* ------------------------------------------------------------------ combat -- */
 

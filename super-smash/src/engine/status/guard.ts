@@ -29,6 +29,7 @@ import { kineticSetX } from "../kinetic";
 import { mashFrames } from "../shield";
 import {
   SHIELD_START_FRAMES,
+  attackFlick,
   bufferPress,
   buttonPresses,
   endStatus,
@@ -70,8 +71,26 @@ export const STATUS_GUARD: FighterStatus = {
       startMove(f, "grab", "grab");
       return;
     }
-    if (p.attack && hasMove(ctx, "usmash")) {
-      startMove(f, "attack", "usmash");
+    if (p.attack) {
+      // A smash-mode right-stick flick (Plan 6, Task 5): SmashWiki "C-Stick", "The C-Stick
+      // can also be used to roll or sidestep out of shield"; down sidesteps, sideways rolls
+      // that way, y first, as a diagonal aerial flick reads (`attackDirection`).
+      const flick = attackFlick(intent, p);
+      if (flick !== null && flick.y < 0) {
+        startAction(f, "spotDodge");
+        return;
+      }
+      if (flick !== null && flick.y === 0) {
+        startRoll(f, flick.x, ctx);
+        return;
+      }
+      // Up is the up smash: the C-Stick flicked "upward while shielding" (SmashWiki "Out of
+      // shield"), or without a flick the stick's up smash input (SPEC §6: Up pressed fresh
+      // within 5 frames). Attack otherwise grabs (ruling R-P6-14): SmashWiki "Grab", a grab
+      // "can be performed by pressing the shield and attack buttons simultaneously".
+      const up = flick !== null ? flick.y > 0 : intent.smash && intent.smashY > 0;
+      if (up && hasMove(ctx, "usmash")) startMove(f, "attack", "usmash");
+      else startMove(f, "grab", "grab");
       return;
     }
     if (intent.y < 0) {
