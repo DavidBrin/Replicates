@@ -1079,13 +1079,10 @@ const legacy: FighterDef = {
     // mark neither as the catch.
     // UNVERIFIED: the loop's eight hits, eight frames apart, and its length (70): the
     // game's are status-driven and unpublished.
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_final`'s
-    // SLOW_OPPONENT(9, 45), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
-    //   It is why the startup's sparks (FKB 20, at 70° and 40°) can push a fighter beside
-    //   Pikachu out of the initial hit's reach (5.5 either side) by its frame 47: in the game
-    //   that fighter is slowed and has barely moved; here it flies at full speed.
+    // rubendal 13.0.1 `game_final`: SLOW_OPPONENT(9, 45), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
+    //   With it a fighter beside Pikachu is slowed by 9 through the sparks, as in the game,
+    //   and has barely moved by the initial hit's frame 47.
     // UNVERIFIED-simplified: `game_final2`'s 0% push on its frames 1-2 is not
     // modelled (an end box launches the trapped, so it would end the scene before
     // the blast). The blast's box is a world box, as in its script ("anyone within range
@@ -1099,6 +1096,7 @@ const legacy: FighterDef = {
       name: "Volt Tackle",
       totalFrames: 137,
       intangible: [1, 137],
+      slowOpponent: { rate: 9, frames: 45 },
       momentum: [
         { frame: 47, x: fx(4.1), y: fx(0), hold: 36 },
         // The end's first frame: game_finaldashend (and game_finalairdashend) open with

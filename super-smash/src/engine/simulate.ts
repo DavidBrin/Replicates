@@ -148,6 +148,7 @@ import {
   ENTRY_INTANGIBILITY,
   advanceFighter,
   applyMovement,
+  bufferPress,
   chargeMultiplier,
   grabHoldFrames,
   grabLedge,
@@ -168,6 +169,7 @@ import {
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
+import { slowOthers, tickSlow } from "./slow";
 import {
   cloneKinetic,
   emptyKinetic,
@@ -800,6 +802,10 @@ export function step(
   // Who a Final Smash's scene stands still this step (Plan 5, Task 14: `final.ts`):
   // frozen as in hitlag, and more. Decided with `paused` (above, ruling R-T14g).
   const stilled: boolean[] = s.fighters.map((f) => paused && !inCinematic(s, f));
+  // The Final Smashes started this step, whose `SLOW_OPPONENT` lands once every fighter
+  // has stepped, so the slowed count from the next step whatever the port order (Plan 6,
+  // Task 11).
+  const slowStarts: { user: number; slow: { readonly rate: number; readonly frames: number } }[] = [];
 
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -812,6 +818,10 @@ export function step(
       frozen[i] = true;
       continue;
     }
+
+    // Slowed by a Final Smash's start (Plan 6, Task 11: `slow.ts`): is this one of the
+    // steps it stands still on? Counted here, on every step the match runs.
+    const slowStill = tickSlow(f);
 
     // Tech input counts on every frame, frozen or not, before anything else in
     // this phase, so phase 5's collision sees a press made on the frame of
@@ -885,6 +895,17 @@ export function step(
       continue;
     }
 
+    // A slowed fighter's still step (Plan 6, Task 11; ruling R-P6-10): its hitlag counted
+    // above, on every step (UNVERIFIED-simplified); its hitstun, status and movement wait
+    // for its next running step. A press made now waits in the buffer, as in a KO's
+    // freeze (Task 13), and a dodge's or a move's intangible frames hold, as in hitlag.
+    if (slowStill) {
+      bufferPress(f, intent, s.frame);
+      updateDodgeIntangibility(f, defs[i]);
+      frozen[i] = true;
+      continue;
+    }
+
     if (f.hitstun > 0) f.hitstun -= 1;
     // A string of hits is over once the fighter is out of hitstun (SDI ×1.15, Task 11).
     if (f.hitstun === 0) f.combat.comboHits = 0;
@@ -905,13 +926,20 @@ export function step(
     // its sound and puff (Plan 5, Task 17). Presentation only.
     if (f.combat.wallJumps > wallJumpsBefore) events.jumps.push({ port: f.port, x: f.x, y: f.y, from: "wall" });
     // A Final Smash started this frame (Plan 5, Task 14), for its sound and burst.
-    if (f.action === "special" && f.move === "finalSmash" && f.actionFrame === 0) events.finalSmashes.push(f.port);
+    if (f.action === "special" && f.move === "finalSmash" && f.actionFrame === 0) {
+      events.finalSmashes.push(f.port);
+      // Its start's `SLOW_OPPONENT` (Plan 6, Task 11), applied after the loop.
+      const slow = defs[i].moves.finalSmash?.slowOpponent;
+      if (slow !== undefined) slowStarts.push({ user: f.port, slow });
+    }
     // A copy whose loss waited for its special landed as that special ended
     // (`landPendingCopyLoss`): the rest of this step runs Kirby's own definition,
     // so a special begun on the hand-off is his own from its first frame (Plan 5,
     // Task 9 fix round 2).
     if (f.combat.copy !== copyBefore) defs[i] = defOf(f);
   }
+
+  for (const { user, slow } of slowStarts) slowOthers(s, user, slow);
 
   // Whoever was stood on this frame feels it now, after every state machine, so
   // the outcome is the same whichever port is which (Plan 5, Task 11).

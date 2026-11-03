@@ -1205,10 +1205,8 @@ const legacy: FighterDef = {
     // UNVERIFIED: the catch box's offset (10 ahead, 7 up): it hangs off the sword, whose
     // place in the dash is unpublished. 10 ahead, its radius, reaches no further behind
     // Marth than his origin (Plan 5 final wave 2, ruling R-FW2h; it was 8, 2 behind).
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
-    // SLOW_OPPONENT(4, 45), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
+    // rubendal 13.0.1 `game_finalstart`: SLOW_OPPONENT(4, 45), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
     // The strike's boxes are live on its script's 2-5 and land once each fighter (it "only
     // hits once"), world boxes as in its script (no `set_catch_only_all`; SmashWiki
     // "Critical Hit": "it is also possible for a fighter to walk into the user's sword once
@@ -1219,6 +1217,7 @@ const legacy: FighterDef = {
       name: "Critical Hit",
       totalFrames: 117,
       intangible: [1, 117],
+      slowOpponent: { rate: 4, frames: 45 },
       momentum: [{ frame: 25, x: fx(6), y: fx(0), hold: 45 }],
       dashEnd: { edge: true, special: true },
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 13 to the

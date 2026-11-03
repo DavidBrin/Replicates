@@ -424,11 +424,13 @@ describe("a trap behind its user (ruling R-FW2h)", () => {
   // Part 2's fix round 2, ruling R-FW2p (re-review 2's N1): the turn counts every fighter
   // the user holds, not only the step's catches. Jungle Rush's catch freezes Donkey Kong on
   // its catch for about 30 steps with the box live: Mario, 12 ahead, is caught on step 29;
-  // Fox, 2 behind with his shield up, spot-dodges the catch and is caught on step 59. Held
+  // Fox, 2 behind with his shield up, spot-dodges the catch and is caught on step 59 (Plan
+  // 6, Task 11: on step 1, his first slowed step, so the slow stretches the dodge over the
+  // catch, 48 steps in all). Held
   // either side, Donkey Kong keeps his facing, in both port orders. Judged from the step's
   // catches alone, Fox turned him away from Mario.
   it("keeps facing a fighter caught ahead when one behind is caught 30 steps later, whatever the ports (ruling R-FW2p)", () => {
-    const fox = (id: string, i: number) => (id !== "fox" ? 0 : i < 20 ? Btn.Shield : i === 20 ? Btn.Shield | Btn.Down : 0);
+    const fox = (id: string, i: number) => (id !== "fox" ? 0 : i === 0 ? Btn.Shield : i === 1 ? Btn.Shield | Btn.Down : 0);
     for (const order of [[["mario", 12], ["fox", -2]], [["fox", -2], ["mario", 12]]] as const) {
       const states = trapScene("donkeyKong", order, false, 160, fox);
       const portOf = (id: string) => 1 + order.findIndex(([o]) => o === id);
@@ -824,12 +826,14 @@ describe("Jungle Rush against Marth's Counter: a Final Smash is not countered", 
     s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? -30 : -12), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
     s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
     // The detection punch is out on frames 29-34; Marth's window is 6-27 of his counter.
+    // Marth counters first, and Jungle Rush starts on step 10: its `SLOW_OPPONENT` (Plan 6,
+    // Task 11) holds the counter in its window through the punch, on steps 38-43.
     let st = s;
     let prev: InputFrame[] = [0, 0];
     const states: GameState[] = [];
     const counters: number[] = [];
     for (let i = 0; i < 200; i++) {
-      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, i === 14 ? Btn.Down | Btn.Special : 0];
+      const now: InputFrame[] = [i === 10 ? Btn.Special : 0, i === 0 ? Btn.Down | Btn.Special : 0];
       const out = step(st, now, { prevInputs: prev });
       st = out.state;
       prev = now;
@@ -1209,11 +1213,13 @@ describe("a Final Smash's beams and projectiles are unblockable and not countere
   });
 
   it.each([
-    ["the Ancient Arrow", "link", 50, 45, 140],
+    // Plan 6, Task 11: Marth counters first, and the Ancient Arrow comes on step 6: its
+    // `SLOW_OPPONENT(30, 100)` holds his counter in its window as the arrow arrives.
+    ["the Ancient Arrow", "link", 50, 6, 0, 146],
     // Fix round 1: the beam is out from the move's 81, after `final_start` (R-T16c).
-    ["Zero Laser's beam", "samus", 90, 74, 160],
-  ] as const)("Marth's Counter does not catch %s", (_name, user, gap, press, frames) => {
-    const { states, events } = runHeld(duel(user, "marth", gap), frames, () => {}, (i) => [i === 0 ? Btn.Special : 0, i === press ? Btn.Down | Btn.Special : 0]);
+    ["Zero Laser's beam", "samus", 90, 0, 74, 160],
+  ] as const)("Marth's Counter does not catch %s", (_name, user, gap, start, press, frames) => {
+    const { states, events } = runHeld(duel(user, "marth", gap), frames, () => {}, (i) => [i === start ? Btn.Special : 0, i === press ? Btn.Down | Btn.Special : 0]);
     expect(states.some((s) => s.fighters[1].move === "downB")).toBe(true);
     expect(events.flatMap((e) => e.counters)).toEqual([]);
     expect(hitsOnPort1(events).length).toBeGreaterThan(0);
@@ -1630,9 +1636,11 @@ describe("Zero Laser's start, clears and fringe beams (rulings R-T16c to R-T16e)
     // Behind: the 18° pull, 15 behind and 20 across; in front: the 367° pull (366° in the
     // script), 17 ahead and 30 across, toward its centre.
     const behind = ready("samus", -10);
-    const { states: b, events: be } = run(behind, 50);
+    const { states: b, events: be } = run(behind, 55);
     expect(be[47].pushes).toContainEqual({ attacker: 0, victim: 1 });
-    expect(b[49].fighters[1].x).toBeGreaterThan(b[46].fighters[1].x);
+    // Slowed by the start's `SLOW_OPPONENT(5, 50)` (Plan 6, Task 11), Mario moves on his
+    // next running step after the pull, by 54.
+    expect(b[54].fighters[1].x).toBeGreaterThan(b[46].fighters[1].x);
     const front = ready("samus", 35);
     Object.assign(front.fighters[1], { action: "fall", grounded: false, platform: -1, y: fx(13) });
     const { states: f, events: fe } = runHeld(front, 48, (st) => {

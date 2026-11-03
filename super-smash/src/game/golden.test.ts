@@ -448,6 +448,9 @@ const MATCHES: readonly Match[] = [
  * Plan 6, Task 10 (a Final Smash ending in the air lifts its user) adds no action: the
  * beams lab's aerial Mario Finale and Ancient Arrow and the dash lab's Team Star Fox end
  * rising, and only those two traces move. All 60 are visited.
+ * Plan 6, Task 11 (`SLOW_OPPONENT`) adds no action: each Final Smash's start slows the
+ * others, so the Final Smash, beams and dash labs and the ball-on CPU match move, and
+ * nothing else. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

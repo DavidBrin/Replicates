@@ -731,7 +731,8 @@ describe("the scene holds the match still, its user and the stage included (Task
     // SmashWiki "Stone" (https://www.ssbwiki.com/Stone), Trivia: "If a cinematic Final
     // Smash is used on Kirby in Stone form, it will not work." Donkey Kong's Jungle
     // Rush (its detection punch, 12%, frames 29-34) on the real Kirby, in Stone from
-    // his Down+B pressed on step 10.
+    // his Down+B pressed on step 0, before the start on step 12: its `SLOW_OPPONENT`
+    // (Plan 6, Task 11) would hold a Stone begun after it short of forming by the punch.
     const game: SimContext = { fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
     let s = createInitialState("finalDestination", [{ defId: "donkeyKong" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 3, game);
     s.fighters.forEach((f, i) => Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? 0 : 22), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }));
@@ -739,8 +740,8 @@ describe("the scene holds the match still, its user and the stage included (Task
     let prev: InputFrame[] = [0, 0];
     const states: GameState[] = [];
     const events: StepEvents[] = [];
-    for (let i = 0; i < 60; i++) {
-      const now: InputFrame[] = [i === 0 ? Btn.Special : 0, i === 10 ? Btn.Down | Btn.Special : 0];
+    for (let i = 0; i < 80; i++) {
+      const now: InputFrame[] = [i === 12 ? Btn.Special : 0, i === 0 ? Btn.Down | Btn.Special : 0];
       const out = step(s, now, { prevInputs: prev, ctx: game });
       s = out.state;
       prev = now;
@@ -748,12 +749,12 @@ describe("the scene holds the match still, its user and the stage included (Task
       events.push(out.events);
     }
     // In Stone when the punch comes out...
-    expect(stoneOf(states[27].fighters[1], game.fighter("kirby"))).not.toBeNull();
+    expect(stoneOf(states[39].fighters[1], game.fighter("kirby"))).not.toBeNull();
     // ...it lands on the stone (a hit of no damage), and traps nobody: no scene.
     expect(events.flatMap((e) => e.hits).filter((h) => h.attacker === 0)).toEqual([expect.objectContaining({ victim: 1, damage: 0 })]);
     expect(states.every((st) => st.fighters[1].action !== "finalTrapped" && st.cinematic === -1)).toBe(true);
-    expect(states[59].fighters[1].damage).toBe(0);
-    expect(states[40].fighters[1].combat.stoneTaken).toBeGreaterThan(0);
+    expect(states[79].fighters[1].damage).toBe(0);
+    expect(states[60].fighters[1].combat.stoneTaken).toBeGreaterThan(0);
   });
 
   it("stands the stage still too: a bystander on Smashville's moving platform rides out a 168-frame scene on it (ruling R-T14f)", () => {

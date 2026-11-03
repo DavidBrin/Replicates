@@ -281,6 +281,11 @@ export interface CombatState {
    * frame each lets go. Cleared when a move starts (`startMove`).
    */
   sceneHits: number[];
+  /** `SLOW_OPPONENT` on this fighter (Plan 6, Task 11): one step in `slowRate` runs, for `slowFrames` steps; 0 when none. */
+  slowRate: number;
+  slowFrames: number;
+  /** Where in its `slowRate` this fighter's next step falls: 0 runs. */
+  slowPhase: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -336,6 +341,9 @@ export function emptyCombat(): CombatState {
     trappedBy: -1,
     controls: 0,
     sceneHits: [],
+    slowRate: 0,
+    slowFrames: 0,
+    slowPhase: 0,
   };
 }
 
@@ -389,5 +397,8 @@ export function cloneCombat(c: CombatState): CombatState {
     trappedBy: c.trappedBy,
     controls: c.controls,
     sceneHits: c.sceneHits.slice(),
+    slowRate: c.slowRate,
+    slowFrames: c.slowFrames,
+    slowPhase: c.slowPhase,
   };
 }

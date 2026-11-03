@@ -1131,6 +1131,11 @@ export interface MoveDef {
   /** Which part of a Final Smash this move is (Plan 5, Task 14: `final.ts`). See `FinalPhase`. */
   readonly final?: FinalPhase;
   /**
+   * The script's `SLOW_OPPONENT(rate, frames)`, applied to every other fighter on the
+   * move's first step (Plan 6, Task 11; reading UNVERIFIED, decision D5): a Final Smash's.
+   */
+  readonly slowOpponent?: { readonly rate: number; readonly frames: number };
+  /**
    * The dash the move carries its fighter on, its first `momentum` window, ends
    * early: on the ground at a platform's edge, where it stops (`edge`), and when the
    * special button is pressed during it (`special`). The fighter stops dead and the

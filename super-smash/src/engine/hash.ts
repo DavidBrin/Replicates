@@ -219,6 +219,10 @@ export function mixCombat(h: number, c: CombatState): number {
   // Plan 6, Task 9: a Final Smash scene's own record.
   x = mixInt(x, c.sceneHits.length);
   for (const e of c.sceneHits) x = mixInt(x, e);
+  // Plan 6, Task 11: the slow a Final Smash's start put on this fighter.
+  x = mixInt(x, c.slowRate);
+  x = mixInt(x, c.slowFrames);
+  x = mixInt(x, c.slowPhase);
   return x;
 }
 

@@ -1162,10 +1162,8 @@ const legacy: FighterDef = {
     //   alternative.
     // UNVERIFIED: the arrow's speed (6 a frame), lifetime (60 frames) and launch offset
     // (10 ahead, 7 up).
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_final`'s
-    // SLOW_OPPONENT(30, 100), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
+    // rubendal 13.0.1 `game_final`: SLOW_OPPONENT(30, 100), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
     // UNVERIFIED-simplified: the explosion lands on the fighter the arrow reaches, not
     // on everybody within its 25 units ("A small explosion occurs as the opponent is
     // hit, damaging anybody else near the victim at the time"), and the flying box's
@@ -1179,6 +1177,7 @@ const legacy: FighterDef = {
       totalFrames: 104,
       aerialTotalFrames: 99,
       intangible: [1, 104],
+      slowOpponent: { rate: 30, frames: 100 },
       final: { phase: "start" },
       hitboxes: [],
       projectiles: [

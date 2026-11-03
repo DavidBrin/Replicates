@@ -1242,10 +1242,8 @@ const legacy: FighterDef = {
     // 3 + 5 + 8 × 2.6 + 16 = 44.8 (the moveset's rounded 2.5 gives 44).
     // UNVERIFIED: the scene from the start's frame 61 (`nextAt`): the script raises no
     // hand-over flag; 61 clears the swing's boxes.
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
-    // SLOW_OPPONENT(4, 50), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
+    // rubendal 13.0.1 `game_finalstart`: SLOW_OPPONENT(4, 50), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
     // UNVERIFIED-simplified: each scene hit, and hit 1, is the first frame of its
     // window (`finalKit.ts`): on a whiff the swing reaches the world on 54 alone. The
     // swing's place is a stand-in: its script hangs it off the sword (`haver`, 0, 18
@@ -1258,6 +1256,7 @@ const legacy: FighterDef = {
       name: "Ultra Sword",
       totalFrames: 86,
       intangible: [1, 86],
+      slowOpponent: { rate: 4, frames: 50 },
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 8 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "start", trap: true, next: "finalAttack", nextAt: 61, sceneGap: fx(8) },

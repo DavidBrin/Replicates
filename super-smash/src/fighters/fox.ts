@@ -1082,10 +1082,8 @@ const legacy: FighterDef = {
     // (its status lands it; the script only sets it). An ATTACK_ABS has no box: the
     // lasers' and the end's offsets are the stand-ins (`finalKit.ts`), and they reach
     // the trapped wherever they are.
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finallockon`'s
-    // SLOW_OPPONENT(4, 30), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
+    // rubendal 13.0.1 `game_finallockon`: SLOW_OPPONENT(4, 30), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
     // UNVERIFIED: the reticle's ATTACK_LR_CHECK_SPEED, unmodelled: it traps, and
     // launches nothing.
     finalSmash: {
@@ -1093,6 +1091,7 @@ const legacy: FighterDef = {
       name: "Team Star Fox",
       totalFrames: 84,
       intangible: [1, 84],
+      slowOpponent: { rate: 4, frames: 30 },
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 6 to the
       // fighter it holds, where this part's clip stays off its body (`sceneDrawShift`).
       final: { phase: "start", trap: true, next: "finalAttack", nextAt: 32, sceneGap: fx(6) },

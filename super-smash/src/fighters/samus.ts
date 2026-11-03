@@ -1220,15 +1220,14 @@ const legacy: FighterDef = {
     // bonus; Mario Finale's flames and the Ancient Arrow take it too, as projectiles stamped
     // with their move's staleness as they are fired (Plan 5 final wave 2, ruling R-FW2b).
     // Not modelled: the laser's thruster box (1.5% behind its muzzle) and aiming the beam.
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
-    // SLOW_OPPONENT(5, 50), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
+    // rubendal 13.0.1 `game_finalstart`: SLOW_OPPONENT(5, 50), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
     finalSmash: {
       slot: "finalSmash",
       name: "Zero Laser",
       totalFrames: 263,
       intangible: [1, 263],
+      slowOpponent: { rate: 5, frames: 50 },
       rehit: 10,
       clearAt: [69, 77, 81, 209],
       final: { phase: "start" },

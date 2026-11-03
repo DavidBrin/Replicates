@@ -1013,10 +1013,8 @@ const legacy: FighterDef = {
     //   boxes, with no rate: final_air_end's CancelFrame 47, 46 frames
     //   (`aerialTotalFrames`, read where Donkey Kong is when it could end; UNVERIFIED:
     //   the game picks final_air_end where the end begins).
-    // UNVERIFIED-simplified (Plan 5 final wave 2, ruling R-FW2k): `game_finalstart`'s
-    // SLOW_OPPONENT(7, 30), its slowing of the other fighters through the startup, is not
-    // modelled (the page publishes neither its rate nor its length, and the arguments'
-    // meaning is unpublished): they move at full speed.
+    // rubendal 13.0.1 `game_finalstart`: SLOW_OPPONENT(7, 30), the slowing of the other fighters
+    // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
     // UNVERIFIED-simplified: each run of the barrage's loops is one box with the loop's
     // period as its rehit (Plan 6, Task 9; the page's "6-7" is one hit; `finalKit.ts`).
     // The barrage's knockback (FKB 40) is the scene's: a trapped fighter is held.
@@ -1030,6 +1028,7 @@ const legacy: FighterDef = {
       name: "Jungle Rush",
       totalFrames: 96,
       intangible: [1, 96],
+      slowOpponent: { rate: 7, frames: 30 },
       // The drawing (Task 17 fix round 2, ruling R-T17i): no nearer than 19 to the
       // fighter it holds, where the lunge this part holds stays off its body
       // (`sceneDrawShift`); 12 from the barrage on, where its clips stay off.
