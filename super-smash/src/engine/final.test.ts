@@ -152,7 +152,7 @@ const USE = (i: number): InputFrame[] => [i === 0 ? Btn.Special : 0, 0, 0];
 
 /** The bystander's (port 2) shot, still, at (`x`, `y`): its box is 8 ahead of it (facing left) and 6 up. */
 function hangingShot(x: number, y: number): ProjectileState {
-  return { instanceId: 1, defId: "shot", owner: 2, x, y, vx: 0, vy: 0, facing: -1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1, staleAs: null, staleDamage: ONE, staleKnockback: ONE };
+  return { instanceId: 1, defId: "shot", owner: 2, x, y, vx: 0, vy: 0, facing: -1, age: 10, bouncesLeft: 0, chargeScale: ONE, hitPorts: [], returning: false, source: "t", charge: 0, reflected: 0, damageMul: ONE, mode: "fly", life: 0, ground: -1, face: -1, staleAs: null, staleDamage: ONE, staleKnockback: ONE };
 }
 
 /** For each of `states`, stepped on from `start`: whether its step began with `user`'s scene playing (a paused step, ruling R-T14g). */

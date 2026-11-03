@@ -64,6 +64,7 @@ import {
   holding,
   mash,
   mashPeriod,
+  projectileRange,
   reflect,
   SIDE_RECOVER_ABOVE,
   SIDE_RECOVER_BELOW,
@@ -1549,5 +1550,13 @@ describe("Review Focus: a CPU and the Smash Ball", () => {
     }
     expect(broke).toBeGreaterThanOrEqual(0);
     expect(used).toBeGreaterThan(broke);
+  });
+});
+
+describe("the CPU's range for a projectile that runs along the ground (Plan 6, Task 16)", () => {
+  it("reads Thunder Jolt fired on the ground as its wave, 1.8 a frame for 96 frames, and fired in the air as its spark", () => {
+    const jolt = pikachu.moves.neutralB!.projectiles![0];
+    expect(projectileRange(jolt)).toBe(fx(1.8) * 96);
+    expect(projectileRange(jolt, false, false)).toBe(fx(1.0598) * 98);
   });
 });

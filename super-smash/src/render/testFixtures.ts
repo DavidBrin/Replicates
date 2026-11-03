@@ -126,6 +126,7 @@ export function makeProjectile(over: Partial<ProjectileState> = {}): ProjectileS
     mode: "fly",
     life: 0,
     ground: -1,
+    face: -1,
     staleAs: null,
     staleDamage: ONE,
     staleKnockback: ONE,

@@ -279,6 +279,7 @@ export function mixProjectile(h: number, p: ProjectileState): number {
   x = mixString(x, p.mode);
   x = mixInt(x, p.life);
   x = mixInt(x, p.ground);
+  x = mixInt(x, p.face);
   // Plan 5 final wave 2, ruling R-FW2b: its staleness stamp, and whether it has queued.
   x = mixString(x, p.staleAs ?? "");
   x = mixInt(x, p.staleDamage);

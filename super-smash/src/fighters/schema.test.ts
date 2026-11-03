@@ -271,8 +271,9 @@ describe("projectiles", () => {
     ["link", "boomerangSmash", 167, [0, 166], "https://www.ssbwiki.com/Link_(SSBU)/Side_special"],
     // "Maximum time before exploding 1800 frames (30 seconds)".
     ["link", "remoteBomb", 1800, [0, 1799], "https://www.ssbwiki.com/Link_(SSBU)/Down_special"],
-    // The grounded jolt: "Lifetime 96 frames"; "Clean hit 19-52", "Mid hit 53-85", "Late hit 86-114".
-    ["pikachu", "thunderJolt", 96, [0, 95], "https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special"],
+    // The aerial jolt: "Lifetime 98 frames", "Hitbox 19-116" (Plan 6, Task 16: the grounded
+    // wave's 96 is its `crawl.life`, from wherever it lands).
+    ["pikachu", "thunderJolt", 98, [0, 97], "https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special"],
     // Kirby's spit star (Plan 5, Task 9), live as long as it flies: "a maximum of 60"
     // frames, and "The star's speed decreases by 0.05 per frame, and it releases the
     // target when its speed drops below 0.4", so at its base speed 2.8 it is gone
@@ -388,13 +389,12 @@ describe("projectiles", () => {
     expect(blaster.destroyOnHit).toBe(false);
   });
 
-  it("makes the ground-hugging projectiles actually fall", () => {
-    // Mario's fireball and Pikachu's Thunder Jolt are defined by bouncing along
-    // the floor. Zero gravity would make both of them lasers.
-    for (const [id, owner] of [
-      ["fireball", "mario"],
-      ["thunderJolt", "pikachu"],
-    ] as const) {
+  it("makes the ground-hugging projectiles actually fall, or run along the ground", () => {
+    // Mario's fireball is defined by bouncing along the floor; zero gravity would make
+    // it a laser. Pikachu's Thunder Jolt runs along whatever it meets (Plan 6, Task 16).
+    const jolt = everyProjectile(getFighterOrThrow("pikachu")).find((x) => x.projectile.id === "thunderJolt")!.projectile;
+    expect(jolt.crawl, "thunderJolt does not run along the ground").toBeDefined();
+    for (const [id, owner] of [["fireball", "mario"]] as const) {
       const p = everyProjectile(getFighterOrThrow(owner)).find(
         (x) => x.projectile.id === id
       )!.projectile;

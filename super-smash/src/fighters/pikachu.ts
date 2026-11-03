@@ -625,48 +625,66 @@ const legacy: FighterDef = {
       slot: "neutralB",
       name: "Thunder Jolt",
       totalFrames: 51,
-      // Fired as an arc that then **rolls along the floor**, hugging the
-      // terrain — which is the whole reason it is useful. Pikachu can run
-      // alongside it to approach, and it covers grounded escape options while
-      // he is cornered. The gravity and the bounce count below are what produce
-      // that skipping ground-hugging path; a zero-gravity version would be a
-      // completely different move.
-      //
-      // It weakens over a very long life — 6% fresh, 5% from frame 53, 4% from
-      // frame 86 — on the ground 96 frames, 19-114 (SmashWiki "Pikachu
-      // (SSBU)/Neutral special",
-      // https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special: grounded jolt
-      // "Lifetime 96 frames"; the aerial jolt's 98, which starts over on
-      // landing, is not modelled) — which `ProjectileDef` has no field for, so what is encoded
-      // is the clean hit. Reflectable and absorbable. Every phase uses the
-      // Sakurai angle with low knockback: pressure and combo tool, never a kill.
+      // A spark that runs along the terrain, round corners, down walls and under the
+      // stage, which is the whole reason it is useful: Pikachu can run alongside it to
+      // approach, and it covers grounded escape options and the ledge (Plan 6, Task 16:
+      // `crawl`; SmashWiki "Thunder Jolt", https://www.ssbwiki.com/Thunder_Jolt, and
+      // "Pikachu (SSBU)/Neutral special",
+      // https://www.ssbwiki.com/Pikachu_(SSBU)/Neutral_special). In the air it is a
+      // spark flying at −58° at 2 a frame for 98 frames ("Lifetime 98 frames", "Travel
+      // speed 2", "Travel angle −58°"; 4.8%, BK 35, KS 30, size 3.0); on any surface,
+      // or fired on the ground, it is the wave, 96 frames from where it lands ("its
+      // hitbox duration always starts from the beginning"): 6%, then 5% from its 34th
+      // frame and 4% from its 67th ("Clean hit 19-52", "Mid hit 53-85", "Late hit
+      // 86-114"), BK 18, KS 20, size 3.0 on fighters on the ground, and 1% less, BK 13,
+      // size 1.8 on fighters in the air (rubendal 13.0.1 `pikachu_dengeki` `Regular`, IDs
+      // 0 and 1, `COLLISION_SITUATION_MASK_G` and `_A`). Off a soft platform's end it
+      // falls as a spark again. Reflectable and absorbable; every phase uses the Sakurai
+      // angle with low knockback: pressure and combo tool, never a kill.
+      // UNVERIFIED: the wave's 1.8 a frame ("Movement speed multiplier 0.9" against the
+      // aerial's 2; the page's phase lengths, 34 and 33, are also the script's
+      // `wait(Frames=30)` at 0.9, so the multiplier may be the wave's motion rate), no
+      // gravity on the spark (none published), and its size 3.0 where the replica had 2.4
+      // (the page's, for both).
       hitboxes: [],
       projectiles: [
         {
           id: "thunderJolt",
           spawnFrame: 19,
-          offsetX: fx(4.0),
-          offsetY: fx(2.6),
-          vx: fx(1.6),
-          vy: fx(0.2),
-          gravity: fx(0.05),
-          lifetime: 96,
+          // "Jolt offsets [6.5, 1]".
+          offsetX: fx(6.5),
+          offsetY: fx(1.0),
+          // "Travel speed 2", "Travel angle −58°": 2·cos 58°, −2·sin 58°.
+          vx: fx(1.0598),
+          vy: -fx(1.6961),
+          gravity: 0,
+          lifetime: 98,
           destroyOnHit: true,
-          bounces: 8,
           visual: "spark",
           // pikachu_dengekidama `Regular`: `Reflectable=true`.
           reflectable: true,
+          crawl: {
+            speed: fx(1.8),
+            life: 96,
+            hitbox: { damage: fx(6.0), baseKnockback: fx(18), knockbackGrowth: fx(20), radius: fx(3.0) },
+            air: { damage: fx(5.0), baseKnockback: fx(13), knockbackGrowth: fx(20), radius: fx(1.8) },
+            stages: [
+              { from: 34, hitbox: { damage: fx(5.0) }, air: { damage: fx(4.0) } },
+              { from: 67, hitbox: { damage: fx(4.0) }, air: { damage: fx(3.0) } },
+            ],
+          },
           hitbox: {
+            // The aerial spark (pikachu_dengekidama `Regular`): 4.8%, BK 35, KS 30, size 3.0.
             id: 0,
             startFrame: 0,
-            endFrame: 95,
+            endFrame: 97,
             x: fx(0),
             y: fx(0),
-            radius: fx(2.4),
-            damage: fx(6.0),
+            radius: fx(3.0),
+            damage: fx(4.8),
             angle: fx(361),
-            baseKnockback: fx(18),
-            knockbackGrowth: fx(20),
+            baseKnockback: fx(35),
+            knockbackGrowth: fx(30),
             effect: "electric",
             // pikachu_dengekidama and pikachu_dengeki `Regular`:
             // `Clang_Rebound=ATTACK_SETOFF_KIND_THRU`, so it clanks and goes on, its

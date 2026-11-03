@@ -83,6 +83,7 @@ function projectile(over: Partial<ProjectileState> = {}): ProjectileState {
     mode: "fly",
     life: 0,
     ground: -1,
+    face: -1,
     staleAs: "neutralB",
     staleDamage: fx(1),
     staleKnockback: fx(1),
@@ -348,6 +349,8 @@ describe("hashState", () => {
     // Plan 5, Task 13c: lodged or knocked, its count, the platform it rests on.
     expect(withProjectile({ mode: "lodged" })).not.toBe(base);
     expect(withProjectile({ mode: "knocked" })).not.toBe(base);
+    // Plan 6, Task 16: the face of its platform a crawling projectile runs on.
+    expect(withProjectile({ face: 1 })).not.toBe(base);
     expect(withProjectile({ life: 5 })).not.toBe(base);
     expect(withProjectile({ ground: 0 })).not.toBe(base);
     // Plan 5 final wave 2, ruling R-FW2b: the move it stales as, until its first hit

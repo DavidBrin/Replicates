@@ -568,6 +568,23 @@ export interface ProjectileDef {
    */
   readonly stages?: readonly { readonly from: number; readonly hitbox: ChargedHitbox; readonly ground?: ChargedHitbox }[];
   /**
+   * It meets every surface by running along it (Plan 6, Task 16: Thunder Jolt; SmashWiki
+   * "Thunder Jolt": it "hops along the terrain's surface" and "will wrap around corners
+   * and snake along walls and even ceilings", but "cannot wrap around the underside of
+   * soft platforms"). Running, it goes `speed` a frame round the platform's outline. Its
+   * boxes are `hitbox` (for fighters on the ground) and `air` (for fighters in the air),
+   * each over its `hitbox`, then each of `stages` from its age. Meeting a surface sets its
+   * age to 0 and its life to `life` ("its hitbox duration always starts from the
+   * beginning"). One fired from a fighter on the ground runs from its first frame.
+   */
+  readonly crawl?: {
+    readonly speed: number;
+    readonly life: number;
+    readonly hitbox: ChargedHitbox;
+    readonly air: ChargedHitbox;
+    readonly stages?: readonly { readonly from: number; readonly hitbox: ChargedHitbox; readonly air?: ChargedHitbox }[];
+  };
+  /**
    * It slows by `perFrame` every frame and is gone once slower than `minSpeed`
    * (Plan 5, Task 9: Kirby's spit star). Q12, units a frame.
    */
@@ -1688,6 +1705,12 @@ export interface ProjectileState {
    */
   ground: number;
   /**
+   * Running (`mode` `"crawl"`; Plan 6, Task 16): the face of platform `ground` it is on,
+   * 0 the top, 1 the right wall, 2 the underside, 3 the left wall; `facing` +1 runs
+   * clockwise (rightward on the top), −1 the other way. −1 otherwise.
+   */
+  face: number;
+  /**
    * The move it stales as (Plan 5 final wave 2, ruling R-FW2b): the slot that launched
    * it, as the stale queue keys it (`staleSlot`), until its first connection queues it on
    * its owner's queue; null after that, for one a reflector has made its own, and for
@@ -1703,7 +1726,8 @@ export interface ProjectileState {
 }
 
 /** `ProjectileState.mode` (Plan 5, Task 13c). */
-export type ProjectileMode = "fly" | "lodged" | "knocked";
+/** `"crawl"`: running along a platform's outline (`ProjectileDef.crawl`; Plan 6, Task 16). */
+export type ProjectileMode = "fly" | "lodged" | "knocked" | "crawl";
 
 export interface SmashBallState {
   active: boolean;

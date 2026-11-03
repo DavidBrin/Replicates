@@ -887,9 +887,12 @@ export const CHARGE_FAR = fx(60);
 /**
  * How far a projectile flies in its life: its speed a frame, a full charge's where
  * it has one (`ProjectileDef.charged`), gaining as it accelerates
- * (`ProjectileDef.accelerate`: the Super Missile), along its own way.
+ * (`ProjectileDef.accelerate`: the Super Missile), along its own way. One that runs
+ * along the ground (`ProjectileDef.crawl`: Thunder Jolt), fired `grounded`, runs its
+ * wave's life at its wave's speed (Plan 6, Task 16).
  */
-export function projectileRange(p: ProjectileDef, full = false): number {
+export function projectileRange(p: ProjectileDef, full = false, grounded = true): number {
+  if (grounded && p.crawl !== undefined) return p.crawl.speed * p.crawl.life;
   let speed = abs(full && p.charged !== undefined ? p.charged.vx : p.vx);
   let range = 0;
   for (let age = 1; age <= p.lifetime; age++) {
