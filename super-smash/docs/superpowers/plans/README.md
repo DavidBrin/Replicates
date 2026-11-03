@@ -1,11 +1,11 @@
 # David-Smash rebuild: roadmap (2026-10-24)
 
-Five implementation plans turn the `super-smash` replica into **David-Smash**: SSBU-shaped engine, published combat numbers, 3D models, online play, hosted free on Cloudflare.
+Six implementation plans turn the `super-smash` replica into **David-Smash**: SSBU-shaped engine, published combat numbers, 3D models, online play, hosted free on Cloudflare, then a polish pass (Plan 6).
 
 - **Why:** `../specs/2026-10-24-david-smash-design.md` (requirements, David's decisions).
 - **Evidence:** `../../../research/rebuild-2026-10/README.md` (repo analysis, physics gap table, compute budget, hosting comparison).
 
-**Status: planned, not executed.** Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised. Nothing has been committed, deployed or installed.
+**Status: Plans 1-6 are executed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plans 1-5 are deployed; Plan 6 is pushed and waits for David's go to deploy.
 
 ## Order
 
