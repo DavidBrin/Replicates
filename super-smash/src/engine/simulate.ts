@@ -2271,11 +2271,14 @@ function recordHit(c: Candidate, attacker: FighterState, port: number): void {
 }
 
 /**
- * Has a Final Smash scene, strike or end box of `c`'s part struck `port`, and not yet let
- * go (Plan 6, Task 9: `CombatState.sceneHits`)? By target and part, as every record is:
- * SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox), a part "Determines how many
- * hitboxes can hit in one attack", so Volt Tackle's two spark capsules land once a rehit
- * between them, not once each.
+ * Has a Final Smash scene box (`hold`, `launch`) or a start's strike of `c`'s part struck
+ * `port`, and not yet let go (Plan 6, Task 9: `CombatState.sceneHits`)? By target and
+ * part, as every record is: SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox), a part
+ * "Determines how many hitboxes can hit in one attack", so Volt Tackle's two spark
+ * capsules land once a rehit between them, not once each. A world end (`launchWorld`)
+ * reaching its own trapped is checked here too, but `recordHit` marks it in the swing's
+ * `hitThisMove`, so this never holds for it: it lands once because its launch ends the
+ * trap on that frame, after which the swing's record holds the fighter.
  */
 function sceneRecordHolds(s: GameState, c: Candidate, port: number): boolean {
   return recordHolds(s.fighters[c.attacker].combat.sceneHits, port, c.clock, recordPart(c));

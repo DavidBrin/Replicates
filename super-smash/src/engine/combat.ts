@@ -275,10 +275,12 @@ export interface CombatState {
    */
   controls: number;
   /**
-   * The record of a Final Smash's scene, strike and end boxes (Plan 6, Task 9), apart from
-   * the swing's `hitThisMove`, so a start's strike leaves its trap free to catch (ruling
-   * R-T15j). Entries as `hitThisMove`'s (`recordMark`): by target and part, with the
-   * frame each lets go. Cleared when a move starts (`startMove`).
+   * The record of a Final Smash's scene boxes (`hold`, and a scene end's `launch`) and a
+   * start's strikes (Plan 6, Task 9), apart from the swing's `hitThisMove`, so a start's
+   * strike leaves its trap free to catch (ruling R-T15j). Entries as `hitThisMove`'s
+   * (`recordMark`): by target and part, with the frame each lets go. Cleared when a move
+   * starts (`startMove`). An end laid in the world (`FinalPhase.world`) records in
+   * `hitThisMove` instead, as an ordinary box does.
    */
   sceneHits: number[];
   /** `SLOW_OPPONENT` on this fighter (Plan 6, Task 11): one step in `slowRate` runs, for `slowFrames` steps; 0 when none. */

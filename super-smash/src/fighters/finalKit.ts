@@ -13,12 +13,19 @@
  * 10, `y` 8, `radius` 10), and any offset or radius a fighter file does not quote,
  * are UNVERIFIED stand-ins.
  *
- * A scene box, a start's ordinary hit (`trap: false`, fix round 1, ruling R-T15j) and
- * an end keep a record of their own, by target and part, with the box's rehit (Plan 6,
- * Task 9: `CombatState.sceneHits`): a loop of the script's is one box whose rehit is the
- * loop's period, spanning its window; a box without a rehit lets go on the next frame,
- * so each published single hit is one box one frame long (`finalBox(id, f, f, …)`), on
- * the first frame of its script's window.
+ * A scene box (the attack part's `hold`, a scene end's `launch`) and a start's ordinary
+ * hit (`trap: false`, fix round 1, ruling R-T15j) keep a record of their own, by target
+ * and part, with the box's rehit (Plan 6, Task 9: `CombatState.sceneHits`): a loop of the
+ * script's is one box whose rehit is the loop's period, spanning its window; a box without
+ * a rehit lets go on the next frame, so each published single hit is one box one frame
+ * long (`finalBox(id, f, f, …)`), on the first frame of its script's window.
+ *
+ * An end laid in the world (`FinalPhase.world`: Donkey Kong's, Marth's and Pikachu's)
+ * is not a scene box: it records in the swing's `hitThisMove`, kept for good, as an
+ * ordinary box does. Its boxes span their script's window with no rehit (2-5, 7-8,
+ * 10-11), and land once on the trapped because the launch ends the trap on its first
+ * frame (the fighter is no longer `finalTrapped`, so the swing's record holds it), and
+ * once on anyone else they reach.
  */
 
 import { fx } from "@/engine/fixed";

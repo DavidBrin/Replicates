@@ -1064,6 +1064,10 @@ const legacy: FighterDef = {
       // uppercut sends up past it.
       // `game_finalend` lays its boxes in the world (Plan 6, Task 9): its top-bone pair,
       // frames 7-8 (`clear_all` on 9); the `handl` and `arml` pair is not placed (no bone).
+      // UNVERIFIED-simplified: the script runs one of three branches on conditions the dump
+      // leaves unresolved (`0x120890(…)`). Two give these boxes hitlag 1.0, kept here; the
+      // third gives 1.6. One branch also adds a 0% push on frame 6 (ID 0, `top` Z 9-11,
+      // size 15), which is not modelled, like Pikachu's end push.
       final: { phase: "end", world: true, sceneGap: fx(13), sceneGapBehind: fx(15) },
       hitboxes: [
         finalBox(0, 7, 8, { damage: 14, angle: 70, kbg: 96, bkb: 90, radius: 13, x: 5, y: 11, hitlag: 1, transcendent: true, lr: "position", forceReaction: true }),

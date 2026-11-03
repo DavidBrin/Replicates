@@ -1177,8 +1177,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * The guard is the Giant Punch's own (its recovery's "boxer's guard"), with
    * the spine pitched no further than it; the punches alternate near and far
    * arm, one every four frames from the barrage's first on its frame 6 of 132,
-   * as its boxes land (`donkeyKong.ts`, `barrage(…)` every 4). Presentation
-   * choice, every number: the game's barrage animation is not published.
+   * as its boxes land (`donkeyKong.ts`, `finalAttack`: two boxes with rehit 4).
+   * Presentation choice, every number: the game's barrage animation is not
+   * published.
    */
   finalAttack: {
     loop: false,
