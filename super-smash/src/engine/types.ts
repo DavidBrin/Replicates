@@ -237,6 +237,9 @@ export type MoveSlot =
   // Plan 5, Task 13d fix round 1: a throw with its article already out
   // (`MoveDef.whenOut`): Link's failed throw.
   | "sideBFailed"
+  // Plan 6, Task 8: a grab aerial, Grab pressed in the air (SmashWiki "Grab aerial";
+  // of the eight, Samus's Grapple Beam).
+  | "airGrab"
   // Plan 5, Task 14: a cinematic Final Smash's scene and its finishing blow
   // (`MoveDef.final`), after its `finalSmash` start.
   | "finalAttack"

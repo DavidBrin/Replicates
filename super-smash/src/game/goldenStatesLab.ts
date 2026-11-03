@@ -54,14 +54,15 @@ function mash(n: number, key: InputFrame): ScriptStep[] {
 }
 
 const STEPS: readonly ScriptStep[] = [
-  // The struggle. Mario mashes the grab button: a press counts as any button's,
-  // and does nothing once he is free in the air.
+  // The struggle. Mario mashes the grab button: a press counts as any button's.
+  // He stops on the press that frees him: a Grab pressed in the air air-dodges
+  // since Plan 6, Task 8, and the presses after it used to do nothing.
   [1, G, 0], //                   1: Donkey Kong grabs; Mario is caught on 8
   [11, 0, 0],
   [1, R, 0], //                  13: forward throw: the lift, carrying from 28
   [16, 0, 0],
-  ...mash(15, G), //             30: Mario mashes out on 48 (the carry's 20th frame), lands on 73
-  [55, 0, 0],
+  ...mash(10, G), //             30: Mario mashes out on 48 (the carry's 20th frame), lands on 73
+  [65, 0, 0],
   // The carry, once Mario's grab immunity is over (on 108).
   [1, G, 0], //                 115: grab again; Mario is caught on 122
   [10, 0, 0],

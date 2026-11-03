@@ -233,6 +233,7 @@ timing instead:
 | Drop through | Down pressed while standing on a soft platform. |
 | SDI | Each fresh direction press during hitlag is one pulse — mashing works exactly as it does in the real game. |
 | Directional air dodge | Shield in the air with a direction held. |
+| Grab in the air | An air dodge, as Shield; Samus's grab aerial (her Grapple Beam) instead. |
 
 **Walking takes the Tilt key.** A key is *always a full deflection*, and a fully-deflected
 stick in the real game dashes and then runs; a walk, like a standing tilt, needs a partial

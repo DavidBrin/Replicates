@@ -1093,6 +1093,17 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   // shield/grab can turn into a directional air dodge buffer, which can be a
   // misinput"; Plan 3, Task 20c).
   if ((p.shield || intent.shieldHeld) && startAirDodge(f, intent)) return true;
+  // Grab in the air (Plan 6, Task 8): a grab aerial where the fighter has one (SmashWiki
+  // "Grab aerial": "simply pressing the grab button while in the air"), otherwise the air
+  // dodge Shield gives (SmashWiki "Air dodge": the grab button "when used in midair by a
+  // character without a grab aerial"). Beside the shield's dodge, in R-T10e's order.
+  if (p.grab) {
+    if (hasMove(ctx, "airGrab")) {
+      startMove(f, "attack", "airGrab");
+      return true;
+    }
+    if (startAirDodge(f, intent)) return true;
+  }
   if (p.special && beginSpecial(f, ctx, specialSlot(aim), aim.x, aim, specialFlick(intent))) return true;
   if (p.attack) {
     const slot = aerialSlot(f, aimAttack);
@@ -1121,6 +1132,11 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
 export function airActionFirst(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   const b = peekBuffer(f, ctx.frame);
   if ((intent.shieldPressed || intent.shieldHeld || b === "shield") && !f.airDodged) return true;
+  // Grab (Plan 6, Task 8): the grab aerial, or the air dodge without one.
+  if (intent.grabPressed || b === "grab") {
+    if (hasMove(ctx, "airGrab")) return true;
+    if (!f.airDodged) return true;
+  }
   if ((intent.specialPressed || b === "special") && hasMove(ctx, specialSlot(intent))) return true;
   return intent.attackPressed || b === "attack";
 }

@@ -85,6 +85,8 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // the game is `special_s1_blank`, on his throw's animation); its own motion since
   // Task 17, the throw's clip across its own length.
   sideBFailed: "special_s_blank",
+  // Plan 6, Task 8: Samus's grab aerial (rubendal 13.0.1 Motions: `air_catch`, the motion of `game_aircatch`).
+  airGrab: "air_catch",
   // Plan 5, Task 14: a cinematic Final Smash's scene and its finishing blow, after
   // its start (`final`); the motions of its `game_finalattack` and `game_finalend`
   // scripts (Task 15).

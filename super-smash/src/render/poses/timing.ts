@@ -207,6 +207,8 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   // Fix round 1: Link's failed throw borrows his throw's clip; since Task 17 it is
   // its own motion, the clip played across its own 59 frames (no held last pose).
   sideBFailed: "sideB",
+  // Plan 6, Task 8: the grab aerial borrows the grab's clip (no clip of its own yet).
+  airGrab: "grab",
   // Plan 5, Task 14: a Final Smash's scene and finishing blow borrow the neutral
   // special's clip, as its start does (UNVERIFIED: no Final Smash clip is authored).
   // Task 17 fix round 1 (ruling R-T17d): the scene and the blow have poses of their

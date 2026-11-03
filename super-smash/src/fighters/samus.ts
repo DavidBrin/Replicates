@@ -438,6 +438,51 @@ const legacy: FighterDef = {
       ],
     },
 
+    // Grab aerial, Grapple Beam (Plan 6, Task 8): SmashWiki "Samus (SSBU)/Grab aerial"
+    // (https://www.ssbwiki.com/Samus_(SSBU)/Grab_aerial): hit 1 frames 8-15, hit 2 16-19,
+    // "Interruptible 60", "Animation length 59", landing "Interruptible 9"; rubendal Data
+    // Viewer 13.0.1 `game_aircatch`: hit 1 2.5%, angle 45, KBG 30, BKB 30, size 3.0,
+    // `Part=0`; hit 2 4.0%, angle 45, KBG 100, BKB 30, size 5.0, `Part=1`; both
+    // `collision_attr_elec`, both on the `throw` bone at (0, 0, 0). UNVERIFIED: the boxes'
+    // place, the beam's tip, which the bake does not place: the legacy grab's tip stands
+    // in. UNVERIFIED too: it is no aerial for the short hop's 0.85 (`isAerialSlot`). Not
+    // modelled (decision D3): the tether recovery on frames 2-4.
+    airGrab: {
+      slot: "airGrab",
+      name: "Grapple Beam (aerial)",
+      totalFrames: 59,
+      landingLag: 8,
+      hitboxes: [
+        {
+          id: 0,
+          startFrame: 8,
+          endFrame: 15,
+          x: fx(14.0),
+          y: fx(6.5),
+          radius: fx(3.0),
+          damage: fx(2.5),
+          angle: fx(45),
+          baseKnockback: fx(30),
+          knockbackGrowth: fx(30),
+          effect: "electric",
+        },
+        {
+          id: 1,
+          startFrame: 16,
+          endFrame: 19,
+          x: fx(14.0),
+          y: fx(6.5),
+          radius: fx(5.0),
+          damage: fx(4.0),
+          angle: fx(45),
+          baseKnockback: fx(30),
+          knockbackGrowth: fx(100),
+          effect: "electric",
+          part: 1,
+        },
+      ],
+    },
+
     fair: {
       slot: "fair",
       name: "Forward Air",
