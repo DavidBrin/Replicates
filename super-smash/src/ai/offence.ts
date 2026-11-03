@@ -109,7 +109,9 @@ export const attack: Behaviour = (ctx) => {
   const { self, target, targetAction, dx, dy, distance, facingTarget } = ctx.view;
   const { tuning } = ctx;
   if (!canAct(self) || !target) return NOTHING;
-  if (distance > ctx.meleeReach) return NOTHING;
+  // Beyond its own reach (`meleeReach`, which leaves the target's body out: D30), only a
+  // judged swing at the target's baked body (Plan 6, Task 27: `spacedSwing`).
+  if (distance > ctx.meleeReach) return spacedSwing(ctx);
   // Nothing lands on a body that cannot be hit (Plan 5, Task 19): a roll, a dodge,
   // a ledge's intangibility, a respawn's invincibility, as the CPU sees them, with
   // the action it has noticed (ruling R-T19k: `observe`), so a slow level still
@@ -427,6 +429,50 @@ function landingSwing(ctx: BehaviourContext): InputFrame | null {
     if (swingLands(ctx, input)) return input;
   }
   return null;
+}
+
+/**
+ * How far the target's baked body reaches toward this fighter, in x (Plan 6, Task 27; P5-R23):
+ * the furthest any of its hurt capsules (the bake's, `fighterHurtboxes`, the body `swingLands`
+ * reaches for) extends from its x on this fighter's side, radius included. 0 without the bake or
+ * the target's definition: D30's reading, the body left out.
+ */
+export function bodyToward(ctx: BehaviourContext): number {
+  const { self, target } = ctx.view;
+  const def = target === null ? undefined : ctx.matchDefs[target.port];
+  if (target === null || def === undefined || ctx.bake === undefined) return 0;
+  const body = fighterHurtboxes(def, target, ctx.view.frame, ctx.bake);
+  if (body === null) return 0;
+  const side = self.x <= target.x ? -1 : 1;
+  let out = 0;
+  for (const c of body) out = Math.max(out, side * (c.x1 - target.x) + c.r, side * (c.x2 - target.x) + c.r);
+  return out;
+}
+
+/**
+ * `attack` beyond its own reach (Plan 6, Task 27; P5-R23, carried by D58). `meleeReach` is its
+ * shortest poke's reach and leaves the target's body out (D30: too far cost a match, too close
+ * nothing). Every ground swing is judged now (ruling R-FW1b: `swingLands`), so out to where the
+ * target's baked body could still meet it (`bodyToward`), a CPU on the ground, free and facing
+ * the target, on its swing's beat, throws the swing that lands: the default one, or the first
+ * of its jab and tilts that does (`landingSwing`); in a dash or a run, its dash attack, judged
+ * as `attack` judges one (`dashLands`: at a moving target, a contact inside its own first
+ * window only; Task 25, ruling R-P6-16). Otherwise nothing, and `approach`, which still closes
+ * to `meleeReach`, goes on closing: no distance is left where neither acts (D30), and nothing
+ * here goes unjudged. `decideCpu`'s run-off guard (`runsOff`, Task 26) holds for these swings
+ * as for any, unless the target is off the stage (rulings R-P6-17, R-P6-24).
+ */
+function spacedSwing(ctx: BehaviourContext): BehaviourResult {
+  const { self, target, dx, distance, facingTarget } = ctx.view;
+  if (target === null || ctx.fighterDef === null || target.intangible > 0 || target.invincible > 0) return NOTHING;
+  if (!self.grounded || !free(self) || !facingTarget || !pulse(ctx.view.frame, self.port, 10, 3)) return NOTHING;
+  if (distance > ctx.meleeReach + bodyToward(ctx)) return NOTHING;
+  const stale = self.framesSinceDirPress > SMASH_INPUT_WINDOW;
+  const swing = (stale ? towardX(0, dx) | Btn.Soft : 0) | Btn.Attack;
+  if (self.action === "dashStart" || self.action === "run") return dashLands(ctx, swing) ? { score: 400, input: swing } : NOTHING;
+  if (swingLands(ctx, swing)) return { score: 400, input: swing };
+  const pick = landingSwing(ctx);
+  return pick === null ? NOTHING : { score: 400, input: pick };
 }
 
 /** The context as if the fighter stood still where it is, as a swing pressed in its own swing or a landing comes out (`attack`). */

@@ -42,6 +42,7 @@ import {
   POINT_BLANK,
   approach,
   attack,
+  bodyToward,
   firstWindowEnd,
   edgeguard,
   platformMove,
@@ -1591,5 +1592,63 @@ describe("the CPU's dash attacks at a moving target (Plan 6, Task 25; ruling R-P
     const run = { x: 0, action: "run" as const, vx: fx(1.6), framesSinceDirPress: 99 };
     expect(beat(run, { x: fx(8), vx: fx(1.6), action: "run" }).some((i) => held(i, Btn.Attack)), "running away at 1.6").toBe(true);
     expect(beat(run, { x: fx(8) }).some((i) => held(i, Btn.Attack)), "standing").toBe(true);
+  });
+});
+
+describe("spacing by the target's baked body (Plan 6, Task 27; P5-R23)", () => {
+  const FTILT = Btn.Right | Btn.Soft | Btn.Attack;
+
+  /** `a` running at `speed` toward `b`, `gap` ahead; `b` doing `action` at `vx` (facing its way), as `pointBlank` places them. */
+  const running = (a: string, b: string, gap: number, speed: number, action: "stand" | "walk" | "run" = "stand", vx = 0) => {
+    const s = pointBlank(a, b, gap, { action: "run", actionFrame: 10 });
+    kineticSet(s.fighters[0], fx(speed), 0);
+    Object.assign(s.fighters[1], { action, actionFrame: 10, facing: vx > 0 ? 1 : -1 });
+    kineticSet(s.fighters[1], fx(vx), 0);
+    return bakedCtx(s);
+  };
+
+  it("measures the target's body toward the CPU from its baked hurt capsules, and none without the bake", () => {
+    const dk = bakedCtx(pointBlank("mario", "donkeyKong", 30));
+    const mario = bakedCtx(pointBlank("mario", "mario", 30));
+    expect(bodyToward(mario)).toBeGreaterThan(0);
+    expect(bodyToward(dk)).toBeGreaterThan(bodyToward(mario));
+    // Plan 2's world, with no bake: the body left out, as D30 leaves it.
+    expect(bodyToward({ ...dk, bake: undefined })).toBe(0);
+  });
+
+  it("beyond its own reach, swings what lands on the target's body: Mario's forward tilt at Donkey Kong 16 away", () => {
+    const s = pointBlank("mario", "donkeyKong", 16);
+    const ctx = bakedCtx(s);
+    expect(ctx.view.distance).toBeGreaterThan(ctx.meleeReach);
+    const swing = attack(ctx);
+    expect(swing.score).toBeGreaterThan(0);
+    expect(swing.input).toBe(FTILT);
+    expect(landsInEngine(s, swing.input)).toBe(true);
+  });
+
+  it("in a run beyond its own reach, dash-attacks as Task 25 judges a dash attack (dashLands, ruling R-P6-16)", () => {
+    // Donkey Kong standing 14 ahead of Mario, and walking at him: the first hit meets both.
+    const still = running("mario", "donkeyKong", 14, 1.6);
+    expect(still.view.distance).toBeGreaterThan(still.meleeReach);
+    expect(held(attack(still).input, Btn.Attack), "standing").toBe(true);
+    expect(held(attack(running("mario", "donkeyKong", 14, 1.6, "walk", -0.8)).input, Btn.Attack), "walking at him").toBe(true);
+    // Mario running away 17 ahead of Samus: only her dash attack's late hit, past its first window, meets him.
+    const away = running("samus", "mario", 17, 2, "run", 1.6);
+    expect(away.view.distance).toBeGreaterThan(away.meleeReach);
+    expect(attack(away).score, "running away").toBe(0);
+  });
+
+  it("at every distance attack or approach acts (D30), and beyond its own reach attack throws only what lands", () => {
+    // Kirby at Samus: nothing of his lands beyond his reach; the others: some swings do.
+    const pairs = [["kirby", "samus"], ["mario", "donkeyKong"], ["pikachu", "fox"], ["marth", "kirby"]] as const;
+    for (const [a, b] of pairs) {
+      for (let d = 1; d <= 40; d++) {
+        const s = pointBlank(a, b, d);
+        const ctx = bakedCtx(s);
+        const swing = attack(ctx);
+        expect(swing.score > 0 || approach(ctx).score > 0, `nothing to do: ${a} at ${b}, ${d} away`).toBe(true);
+        if (ctx.view.distance > ctx.meleeReach && swing.score > 0) expect(landsInEngine(s, swing.input), `${a} at ${b}, ${d} away`).toBe(true);
+      }
+    }
   });
 });

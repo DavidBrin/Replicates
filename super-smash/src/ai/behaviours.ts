@@ -522,6 +522,11 @@ const POKE_SLOTS: readonly MoveSlot[] = ["jab1", "ftilt"];
  * Conservative on purpose in one more way: it ignores the victim's hurtbox
  * radius, which only ever adds reach. Standing a little too close costs the CPU
  * nothing; standing a little too far costs it the entire match.
+ *
+ * It stays `approach`'s threshold (Plan 6, Task 27). Beyond it, `attack` throws
+ * only a swing judged to land on the target's baked body, out to where that body
+ * reaches (`spacedSwing`, `bodyToward` in `offence.ts`): the body counts where a
+ * swing is judged, and nowhere a CPU would stop closing for it.
  */
 export function meleeReachFromDef(def: FighterDef): number {
   let reach = 0;

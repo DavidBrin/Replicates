@@ -542,6 +542,14 @@ const MATCHES: readonly Match[] = [
  * `shieldStun` and `techRoll`, no longer `roll` or `turnaround`, which the ball-on match
  * does. The ball-on match no longer reaches `ledgeJump`, which donkeyKong-pikachu does, and
  * reaches `downed`, `getUp` and `turnaround`. The four CPU matches reach 45 between them, up from 44. All 60 are visited.
+ * Plan 6, Task 27 (the CPU spaces by the target's baked body: beyond its own reach, a swing
+ * judged to land) adds no action. The four CPU matches reach 43 between them, down from 45:
+ * they newly reach `ledgeAttack`, `rebound` and `turnaround`; none reaches `cargoCarry`,
+ * `cargoHeld`, `ledgeJump`, `ledgeRoll` or `pummel` any more, which the states lab
+ * (`cargoCarry`, `cargoHeld`), the script (`ledgeJump`, `ledgeRoll`, `pummel`), the ball-on
+ * match and the contact lab (`pummel`) reach. The ball-on match reaches `pummel`, which the
+ * four do not, and no longer `finalTrapped` (the Final Smash lab's) or `turnaround`. All 60
+ * are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -1441,6 +1449,15 @@ describe("engine golden trace", () => {
   // 152, Team Star Fox 158): at 160-178 they fell in the KO's freeze and Team Star Fox
   // never started. Held to 256 through the freeze, Fox lands on 284. No hit and one KO,
   // two Final Smashes, as before; every other trace is byte-identical.
+  // Plan 6 Task 27 (the CPU spaces by the target's baked body: beyond its own reach, a
+  // swing judged to land) moved the five CPU matches, the four from 101-200 and the
+  // ball-on match from 201-300: hits 60/31/35/29 and 48 to 37/49/30/38 and 35, shield hits
+  // 0/4/1/1 and 1 to 1/1/2/0 and 1, KOs 0/0/0/1 and 1 to 1/1/0/1 and 1. The ball-on match's
+  // CPUs break the ball once and start one Final Smash (2 and 2). The 'before' is the tree
+  // after Task 26: Plan 6's earlier tasks moved these matches without an entry here. The
+  // script and the labs are byte-identical. So now: hits 37/49/30/38, 6, 0, 1, 4, 1, 2, 33,
+  // 54, 0, 35, 2 and 0; shield hits 1/1/2/0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1 and 0; KOs
+  // 1/1/0/1, 1, 2, 0, 0, 0, 0, 0, 2, 1, 1, 0 and 0.
   // (Plan 4 Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
