@@ -48,10 +48,10 @@ const BOOMERANG: ProjectileDef = {
   // would be under "Minimum speed 0.3", which is frame 45 of its life, where
   // the returning hitbox starts (72 − 27); back up to "Maximum returning
   // speed 3", steering at Link by "Angle deviation per frame when returning
-  // 0.75°" (its sine and cosine below). Not modelled: "Distance spent
-  // turning back 16", the clean hit's 8% giving way to the late 6% on frame
-  // 10 (the box below is the clean one, at the replica's radius), and the
-  // floor's "Downward ground collision range −0.5u".
+  // 0.75°" (its sine and cosine below). The clean hit gives way to the late one
+  // on frame 10 of its flight (`stages`; Plan 6, Task 15). Not modelled:
+  // "Distance spent turning back 16" (it cannot fit the published hitbox frames:
+  // `steerReturning`; D8) and the floor's "Downward ground collision range −0.5u".
   //
   // One out at a time (Plan 5, Task 13d fix round 1, ruling R-T13d-d): thrown with
   // one out, the throw fails (the page's "Throw (failed)"; `sideBFailed`). Both
@@ -93,7 +93,8 @@ const BOOMERANG: ProjectileDef = {
     endFrame: 124,
     x: fx(0),
     y: fx(0),
-    radius: fx(3.0),
+    // The clean hit's size (Plan 6, Task 15; the page's 4.0, where the replica had 3.0).
+    radius: fx(4.0),
     damage: fx(8.0),
     angle: fx(70),
     baseKnockback: fx(80),
@@ -101,6 +102,9 @@ const BOOMERANG: ProjectileDef = {
     // link_boomerang `Fly` and `Turn`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5,
     // Task 13c).
   },
+  // "Tilt input hitboxes (clean, late, returning) 27-36, 37-71, 72-151": late from frame 10
+  // of its flight, 6.0%, BK 60, KS 40, size 3.6 (Plan 6, Task 15).
+  stages: [{ from: 10, hitbox: { damage: fx(6.0), baseKnockback: fx(60), radius: fx(3.6) } }],
 };
 
 /** The hand-authored moveset; `link` below runs its root-bone moves from the imported scripts. */
@@ -761,13 +765,14 @@ const legacy: FighterDef = {
           // flight, where the returning hit starts (87 − 27). UNVERIFIED: that the 1.2
           // reaches the knockback too (it multiplies the box's damage here). Published,
           // not modelled, as for the tilt throw: "Distance spent turning back ... 24
-          // (smash)", the late 7.2% (6.0 × 1.2) from frame 10, "Rotation speed ... 26°
-          // (smash)".
+          // (smash)" and "Rotation speed ... 26° (smash)".
           ...BOOMERANG,
           id: "boomerangSmash",
           vx: fx(3.1),
           lifetime: 167,
           hitbox: { ...BOOMERANG.hitbox, endFrame: 166, damage: fx(9.6) },
+          // The late 7.2% (6.0 × 1.2) from frame 10, "27-36, 37-86" (Plan 6, Task 15).
+          stages: [{ from: 10, hitbox: { damage: fx(7.2), baseKnockback: fx(60), radius: fx(3.6) } }],
         },
       ],
     },

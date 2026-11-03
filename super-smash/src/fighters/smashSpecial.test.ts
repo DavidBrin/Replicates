@@ -398,7 +398,15 @@ describe("Link's smash-thrown Boomerang (SmashWiki \"Link (SSBU)/Side special\")
     expect(toFloat(s.hitbox.damage)).toBeCloseTo(8 * 1.2, 3);
     // Everything else is the tilt throw's: the way back, its returning hit (not ×1.2:
     // the page multiplies the "clean and late hits"), the clash, the floor.
-    const same = (p: ProjectileDef) => ({ ...p, id: "", vx: 0, lifetime: 0, hitbox: { ...p.hitbox, endFrame: 0, damage: 0 } });
+    // Its late hit is ×1.2 too (Plan 6, Task 15: `stages`), so the stages' damage is left out.
+    const same = (p: ProjectileDef) => ({
+      ...p,
+      id: "",
+      vx: 0,
+      lifetime: 0,
+      hitbox: { ...p.hitbox, endFrame: 0, damage: 0 },
+      stages: p.stages?.map((st) => ({ ...st, hitbox: { ...st.hitbox, damage: 0 } })),
+    });
     expect(same(s)).toEqual(same(t));
   });
 
@@ -414,7 +422,8 @@ describe("Link's smash-thrown Boomerang (SmashWiki \"Link (SSBU)/Side special\")
     const life = thrown(Btn.Right | Btn.Special, "boomerangSmash");
     for (let age = 0; age < 60; age++) expect([life[age]!.returning, life[age]!.vx], `age ${age}`).toEqual([false, fx(3.1) - age * fx(0.047)]);
     expect([life[60]!.returning, life[60]!.vx]).toEqual([true, -fx(0.3)]);
-    expect(projectileHitbox(life[59]!, SMASH_THROW()).damage).toBe(fx(9.6));
+    // Its late 7.2% to the turn (Plan 6, Task 15), then the returning 3%.
+    expect(projectileHitbox(life[59]!, SMASH_THROW()).damage).toBe(fx(7.2));
     expect(projectileHitbox(life[60]!, SMASH_THROW()).damage).toBe(fx(3));
   });
 

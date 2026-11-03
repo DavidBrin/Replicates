@@ -963,11 +963,10 @@ const legacy: FighterDef = {
       // 37, 61 and 75 of its life, goes off at 72 in a hop under a unit high, and
       // rests from 83 (`projectiles.test.ts`). UNVERIFIED: the 1 forward; and the
       // minimum bounce speed read as the speed it lands at (read as the speed after
-      // the ×0.6, it would rest from 75; fix round 1). Published, not modelled: the early,
-      // mid and late explosions' own numbers (one box here; the early one's radius
-      // is 7.38), the "Detection hitbox 33-82" that sets it off early, and its
-      // "Rotation speed". The blast also pops Samus herself upward, which is a
-      // recovery mixup rather than a side effect.
+      // the ×0.6, it would rest from 75; fix round 1). The early, mid and late blasts
+      // are its `stages` (Plan 6, Task 15). Published, not modelled: the "Detection
+      // hitbox 33-82" that sets it off early, and its "Rotation speed". The blast also
+      // pops Samus herself upward, which is a recovery mixup rather than a side effect.
       //
       // The 5% explosion is what the projectile carries; brushing the bomb
       // itself before it goes off is a separate 4% at the Sakurai angle.
@@ -995,7 +994,8 @@ const legacy: FighterDef = {
             endFrame: 89,
             x: fx(0),
             y: fx(0),
-            radius: fx(5.0),
+            // The early blast's size (Plan 6, Task 15: the page's 7.38).
+            radius: fx(7.38),
             damage: fx(5.0),
             angle: fx(60),
             baseKnockback: fx(40),
@@ -1003,6 +1003,13 @@ const legacy: FighterDef = {
             effect: "fire",
             // samus_bomb `BurstAttack`: `Clang_Rebound=ATTACK_SETOFF_KIND_ON` (Plan 5, Task 13c).
           },
+          // The blast shrinks: rubendal 13.0.1 `samus_bomb` `BurstAttack` sets Size 4.9 after
+          // 12 frames and 2.5 after 3 more ("Explosion (early, mid, late) 83-94, 95-97,
+          // 98-100"); ages 84 and 87 (Plan 6, Task 15).
+          stages: [
+            { from: 84, hitbox: { radius: fx(4.9) } },
+            { from: 87, hitbox: { radius: fx(2.5) } },
+          ],
         },
       ],
     },

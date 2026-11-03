@@ -16,7 +16,7 @@ import { COPY_DAMAGE, COPY_GRACE_FRAMES } from "@/engine/inhale";
 import { advanceProjectile, findProjectileDef, projectileHitbox, projectileHitboxActive, spawnProjectile } from "@/engine/projectile";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { FighterState, GameState, InputFrame, MatchRules, ProjectileDef, ProjectileState, StepEvents } from "@/engine/types";
+import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, MoveSlot, ProjectileDef, ProjectileState, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
 import { FIGHTERS } from "./index";
 
@@ -216,8 +216,8 @@ describe("Link's boomerang turns where its page says, and steers home (SmashWiki
     }
     // 2.4 − 45 × 0.047 is under 0.3: it turns back along its path at 0.3.
     expect([life[45]!.returning, life[45]!.vx, life[45]!.vy]).toEqual([true, -fx(0.3), 0]);
-    // Its hit from then is the returning row's.
-    expect(projectileHitbox(life[44]!, BOOMERANG()).damage).toBe(fx(8));
+    // Its late hit to the turn (Plan 6, Task 15), and from then the returning row's.
+    expect(projectileHitbox(life[44]!, BOOMERANG()).damage).toBe(fx(6));
     expect(projectileHitbox(life[45]!, BOOMERANG())).toMatchObject({ damage: fx(3), angle: fx(70), baseKnockback: fx(50), knockbackGrowth: fx(40), radius: fx(3.6) });
   });
 
@@ -794,5 +794,50 @@ describe("Link's Remote Bomb is an item: immune to staling (SmashWiki \"Stale-mo
       expect(hit!.damage).toBe(fx(7));
       expect(states.at(-1)!.fighters[0].staleQueue).toEqual([...queue]);
     }
+  });
+});
+
+describe("projectile phases by age (Plan 6, Task 15)", () => {
+  const link = () => FIGHTERS.find((d) => d.id === "link")!;
+  const samus = () => FIGHTERS.find((d) => d.id === "samus")!;
+  const proj = (owner: FighterDef, slot: MoveSlot) => owner.moves[slot]!.projectiles![0];
+  /** A fighter to throw from: Link standing on Final Destination. */
+  const thrower = (): FighterState => duel("link", "samus", 0, 40).fighters[0];
+  /** A flying projectile of `def` at `age`, outbound. */
+  const at = (def: ProjectileDef, age: number): ProjectileState => ({ ...spawnProjectile(def, thrower(), 1), age, mode: "fly" });
+  /** Its box's damage and radius, raw Q12. */
+  const box = (def: ProjectileDef, p: ProjectileState) => {
+    const hb = projectileHitbox(p, def);
+    return [hb.damage, hb.radius];
+  };
+
+  it("the Boomerang hits clean for 10 frames, then late (SmashWiki: 8%/4.0, then 6%/3.6, BK 60)", () => {
+    const b = proj(link(), "sideB");
+    expect(box(b, at(b, 9))).toEqual([fx(8), fx(4)]);
+    expect(box(b, at(b, 10))).toEqual([fx(6), fx(3.6)]);
+    expect(projectileHitbox(at(b, 10), b).baseKnockback).toBe(fx(60));
+  });
+
+  it("the smash-thrown Boomerang's clean and late hits are 1.2 times", () => {
+    const b = proj(link(), "sideBSmash");
+    expect(box(b, at(b, 9))).toEqual([fx(9.6), fx(4)]);
+    expect(box(b, at(b, 10))).toEqual([fx(7.2), fx(3.6)]);
+  });
+
+  it("returning, it is the returning hit whatever its age", () => {
+    const b = proj(link(), "sideB");
+    expect(box(b, { ...at(b, 20), returning: true })).toEqual([fx(3), fx(3.6)]);
+  });
+
+  it("Samus's bomb blast shrinks: 7.38, then 4.9 from its 13th frame, then 2.5 from its 16th", () => {
+    const bomb = proj(samus(), "downB");
+    expect([72, 83, 84, 86, 87, 89].map((age) => box(bomb, at(bomb, age)))).toEqual([
+      [fx(5), fx(7.38)],
+      [fx(5), fx(7.38)],
+      [fx(5), fx(4.9)],
+      [fx(5), fx(4.9)],
+      [fx(5), fx(2.5)],
+      [fx(5), fx(2.5)],
+    ]);
   });
 });

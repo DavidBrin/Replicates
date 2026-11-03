@@ -244,8 +244,9 @@ export function projectileHitbox(p: ProjectileState, def: ProjectileDef): Hitbox
 /**
  * Every box this projectile hits with now: `projectileHitbox`, or both of its
  * latest stage's where that has an air box and a ground box (Plan 5, Task 16). A
- * staged definition's boxes are its `hitbox` with each stage's numbers over it; none
- * on the roster is also `charged` or `returns`.
+ * staged definition's boxes are its `hitbox` with each stage's numbers over it. None
+ * on the roster is also `charged`; the Boomerang is also `returns`, and its return takes
+ * over from its stages (`projectileHitbox`; Plan 6, Task 15).
  */
 export function projectileHitboxes(p: ProjectileState, def: ProjectileDef): readonly Hitbox[] {
   const stage = p.returning && def.returns !== undefined ? -1 : stageOf(p, def);
@@ -398,7 +399,10 @@ function carryOnGround(p: ProjectileState, stage: StageDef, frame: number): void
  * same each frame up to `maxSpeed`, turned towards its owner's chest by at most
  * the homing angle a frame. UNVERIFIED: that it gains on the way back what it lost
  * on the way out (the page gives only the deceleration and the maximum), and its
- * "Distance spent turning back" is not modelled: it turns on the spot.
+ * "Distance spent turning back" is not modelled: it turns on the spot (Plan 6, Task 15;
+ * D8). Read as a stretch the turn travels, 16 units at the 0.3 minimum is 53 frames,
+ * while the page's returning hitbox starts on the very frame the out flight reaches the
+ * minimum (age 45 = 72 − 27), so the two published numbers cannot both hold.
  */
 function steerReturning(p: ProjectileState, r: NonNullable<ProjectileDef["returns"]>, owner: FighterState | null): void {
   const speed = length(p.vx, p.vy);

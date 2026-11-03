@@ -462,6 +462,15 @@ const MATCHES: readonly Match[] = [
  * a smash-input special its smash version); and a KO ends a slow. Three CPU matches
  * (donkeyKong-pikachu-finalDestination, link-samus-smashville, kirby-marth-pokemonStadium2)
  * and the ball-on CPU match move, and nothing else. All 60 are visited.
+ * Plan 6, Task 15 (the projectile stages: the Boomerang's late hit from frame 10 of its
+ * flight, its clean box 4.0; the Bomb's blast 7.38, then 4.9 and 2.5) adds no action. Only
+ * the projectile lab and link-samus-smashville move. In the lab the smash-thrown Boomerang
+ * reaches Samus a frame sooner (473) with its late hit, which leaves her in hitstun rather
+ * than tumbling, so the lab no longer reaches `tumble`, `tumbleFall`, `downed` or `getUp`;
+ * the CPU matches and the states lab do. In link-samus the Boomerang meets Samus's Super
+ * Missile on 39, a frame sooner, and the match no longer reaches `ledgeTrumped`, which the
+ * script does: the four CPU matches reach 43 between them, down from 44. All 60 are
+ * visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
