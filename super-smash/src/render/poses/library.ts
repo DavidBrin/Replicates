@@ -27,7 +27,7 @@ import { turn } from "./turn";
 import { crouch, crouchStart, crouchEnd } from "./crouch";
 import { jumpSquat } from "./jumpSquat";
 import { rise, doubleJump } from "./rise";
-import { fall, fastFall } from "./fall";
+import { fall, fallFlip, fastFall } from "./fall";
 import { land, landingLag } from "./land";
 import { shield, shieldRelease } from "./shield";
 import { shieldBroken } from "./shieldBroken";
@@ -60,6 +60,8 @@ export type PoseName =
   | "doubleJump"
   | "fall"
   | "fastFall"
+  // Plan 6, Task 21: the flip off a dash.
+  | "fallFlip"
   | "land"
   | "landingLag"
   // defence
@@ -140,6 +142,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   doubleJump,
   fall,
   fastFall,
+  fallFlip,
   land,
   landingLag,
 

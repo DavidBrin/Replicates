@@ -36,6 +36,7 @@ import { airDodgeDirection, airDodgeFrames, airDodgeOf } from "../airDodge";
 import { FOOTSTOOL_GROUND_FRAMES } from "../footstool";
 import {
   DASH_INTERRUPT_FRAME,
+  FLIP_FRAMES,
   JUMP_SQUAT_FRAMES,
   SHIELD_BREAK_STUN,
   SHIELD_RELEASE_FRAMES,
@@ -63,6 +64,7 @@ import {
   SHIELD_START_FRAMES,
   TURNAROUND_FRAMES,
 } from "../states";
+import type { CombatState } from "../combat";
 import type { ActionState, FighterDef, FighterState } from "../types";
 import { moveScriptFrame } from "./run";
 import type { MotionKind } from "./types";
@@ -148,13 +150,19 @@ export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>
  * (`airDodgeFrames`: a left and a right diagonal last the same; `rollOf`), so
  * each is its own motion, baked once at that length.
  */
-export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling" | "charge"> & Partial<Pick<FighterState, "grounded">>): MotionKind {
+export function statusMotion(
+  f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling" | "charge"> &
+    Partial<Pick<FighterState, "grounded" | "actionFrame">> & { readonly combat?: Pick<CombatState, "dashedOff"> },
+): MotionKind {
   const shared = MOTION_OF_ACTION[f.action];
   if (shared !== undefined) return statusMotion({ ...f, action: shared });
   // Carried in the air (a jump with the load), not striding (Plan 6, Task 20). A caller
   // that names no `grounded` is read as on the ground: the sim passes whole states.
   if (f.action === "cargoCarry" && f.grounded === false) return "status_cargoCarry_air";
   if (f.action === "jump" && f.jumpsUsed >= 2) return "status_jump_aerial";
+  // The flip off a dash, fast fall or not (Plan 6, Task 21). A caller that names no
+  // combat or frame (a bake spec, a partial literal) is no flip.
+  if (f.action === "fall" && f.combat?.dashedOff === true && (f.actionFrame ?? 0) < FLIP_FRAMES) return "status_fall_flip";
   if ((f.action === "fall" || f.action === "dead") && f.fastFalling) return `status_${f.action}_fast`;
   if (f.action === "airDodge") return `status_airDodge${airDodgeSuffix(f.charge)}`;
   if (f.action === "roll" && f.charge === ROLL_BACK) return "status_roll_back";

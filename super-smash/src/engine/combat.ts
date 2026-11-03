@@ -243,6 +243,13 @@ export interface CombatState {
    */
   stoneEndedAir: boolean;
   /**
+   * Plan 6, Task 21: left the ground out of a dash or a run (`onLeftGround`), so the
+   * fall flips for its first `FLIP_FRAMES` (SmashWiki "Dash": "dashing off a platform
+   * will cause the character to perform a short flipping animation"). Any change of
+   * action but into the fall clears it (`changeStatus`).
+   */
+  dashedOff: boolean;
+  /**
    * The length, in frames after its freeze, of the rebound a lost clank sends the
    * fighter into (Plan 5, Task 13c fix round 1, ruling R-T13c-a: `reboundFrames`); 0
    * outside it. Cleared when the rebound ends, however it ends (`STATUS_REBOUND`).
@@ -336,6 +343,7 @@ export function emptyCombat(): CombatState {
     stoneFrames: 0,
     stoneTaken: 0,
     stoneEndedAir: false,
+    dashedOff: false,
     rebound: 0,
     aimX: 0,
     aimY: 0,
@@ -392,6 +400,7 @@ export function cloneCombat(c: CombatState): CombatState {
     stoneFrames: c.stoneFrames,
     stoneTaken: c.stoneTaken,
     stoneEndedAir: c.stoneEndedAir,
+    dashedOff: c.dashedOff,
     rebound: c.rebound,
     aimX: c.aimX,
     aimY: c.aimY,

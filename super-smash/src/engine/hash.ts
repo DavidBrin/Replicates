@@ -214,6 +214,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.stoneFrames);
   x = mixInt(x, c.stoneTaken);
   x = mixBool(x, c.stoneEndedAir);
+  x = mixBool(x, c.dashedOff);
   x = mixInt(x, c.rebound);
   x = mixInt(x, c.aimX);
   x = mixInt(x, c.aimY);

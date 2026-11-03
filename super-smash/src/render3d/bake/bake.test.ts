@@ -13,6 +13,7 @@ import { bakeTables } from "@/engine/acmd/bakeTables";
 import { localHurtboxes } from "@/engine/acmd/hurtboxes";
 import { moveScriptFrame } from "@/engine/acmd/run";
 import { toFloat } from "@/engine/fixed";
+import { FLIP_FRAMES } from "@/engine/constants";
 import { clipFor } from "@/render/chars";
 import { airDodgeClipTime } from "@/render/poses/airDodge";
 import { rollClipTime, rollTurnTime, spotDodgeClipTime } from "@/render/poses/groundDodgeTime";
@@ -74,13 +75,15 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 61 over the 60 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 62 over the 60 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
         for (const jumpsUsed of [0, 1, 2, 3]) {
           for (const fastFalling of [false, true]) {
-            for (const grounded of [true, false]) named.add(statusMotion({ action, charge, jumpsUsed, fastFalling, grounded }));
+            for (const grounded of [true, false]) {
+              for (const dashedOff of [false, true]) named.add(statusMotion({ action, charge, jumpsUsed, fastFalling, grounded, actionFrame: 0, combat: { dashedOff } }));
+            }
           }
         }
       }
@@ -98,15 +101,16 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
     // Task 17: two motions more, the footstooled's and the crawl's, their own clips.
     // Plan 6, Task 7: one more, the edge slip, and no motion more: it plays the fall's.
     // Task 20: the carry leaves the walk's for two of its own, on the ground and in the air.
+    // Task 21: the fall gains the flip off a dash.
     expect(ACTIONS).toHaveLength(60);
-    expect(named.size).toBe(61);
+    expect(named.size).toBe(62);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
     // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their
     // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`), as
     // the carried plays the grab's (Task 8).
     expect(new Set(specs.map((s) => s.action))).toEqual(new Set(ACTIONS.filter((a) => MOTION_OF_ACTION[a] === undefined)));
     expect(specs.map((s) => s.motion)).toContain("status_tumbleFall");
-    for (const s of specs) expect(statusMotion(s)).toBe(s.motion);
+    for (const s of specs) expect(statusMotion({ ...s, actionFrame: 0, combat: { dashedOff: s.dashedOff } })).toBe(s.motion);
   });
 
   it("bake each of the nine dodge motions at a charge the sim gives it, not 0 for all", () => {
@@ -154,6 +158,11 @@ describe("the status clocks are each fighter's own (DISPATCH-NOTES 10.1)", () =>
         if (!bakesStatus(def, spec)) continue;
         const { clock } = samplers.get(spec.motion)!;
         if (clock.kind !== "once") continue;
+        // The flip off a dash (Plan 6, Task 21) is the fall's first FLIP_FRAMES, a part of a state with no length.
+        if (spec.motion === "status_fall_flip") {
+          expect(clock.frames, def.id).toBe(FLIP_FRAMES);
+          continue;
+        }
         const twoD = actionDurationFor(posedAt(def.id, spec, 0), jumpTimingFor(def)) ?? OPEN_ENDED_FRAMES;
         expect(clock.frames, `${def.id} ${spec.motion}`).toBe(twoD);
       }
@@ -277,6 +286,17 @@ describe("a move's clip time (DECISIONS D34, in motion frames)", () => {
     expect(attackClipTime(undefined, 6, 20, 11)).toBe(0.5);
     // A box live on the first frame has no wind-up to stretch.
     expect(attackClipTime(0.4, 1, 20, 11)).toBe(0.5);
+  });
+});
+
+describe("the flip off a dash (Plan 6, Task 21)", () => {
+  it("bake it for every fighter over FLIP_FRAMES on the flip's own clip, one forward turn by its end", () => {
+    for (const def of FIGHTERS) {
+      const flip = statusSamplers(def).get("status_fall_flip")!;
+      expect(flip.clock, def.id).toEqual({ kind: "once", frames: FLIP_FRAMES });
+      expect(flip.clip, def.id).toBe(clipFor(def.id, "fallFlip"));
+      expect(sampleAt(flip, FLIP_FRAMES).spin / (2 * Math.PI), def.id).toBeCloseTo((FLIP_FRAMES - 1) / FLIP_FRAMES, 9);
+    }
   });
 });
 

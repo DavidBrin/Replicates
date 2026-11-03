@@ -29,6 +29,7 @@ import { fighterParams } from "@/engine/params";
 import { actionFrameOf } from "@/engine/hitbox";
 import {
   DASH_INTERRUPT_FRAME,
+  FLIP_FRAMES,
   JUMP_SQUAT_FRAMES,
   SHIELD_BREAK_STUN,
   SHIELD_RELEASE_FRAMES,
@@ -52,6 +53,7 @@ import {
   SHIELD_START_FRAMES,
   TURNAROUND_FRAMES,
 } from "@/engine/states";
+import type { CombatState } from "@/engine/combat";
 import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttributes, MoveSlot } from "@/engine/types";
 import { STRIDE_UNITS } from "@/engine/acmd/poseClock";
 import { THROW_SLOTS, gameScriptFor } from "@/engine/acmd/legacy";
@@ -252,7 +254,12 @@ function wrap(cycles: number): number {
   return cycles - Math.floor(cycles);
 }
 
-export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed" | "fastFalling"> & Partial<Pick<FighterState, "grounded">>): PoseName {
+export function poseNameFor(
+  f: Pick<PosedFighter, "action" | "move" | "jumpsUsed" | "fastFalling"> &
+    Partial<Pick<FighterState, "grounded" | "actionFrame">> & { readonly combat?: Pick<CombatState, "dashedOff"> },
+): PoseName {
+  // The flip off a dash (Plan 6, Task 21), as `statusMotion` names its motion.
+  if (f.action === "fall" && f.combat?.dashedOff === true && (f.actionFrame ?? 0) < FLIP_FRAMES) return "fallFlip";
   switch (f.action) {
     case "stand":
     case "entering":

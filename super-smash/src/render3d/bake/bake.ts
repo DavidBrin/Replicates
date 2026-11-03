@@ -44,6 +44,7 @@ import {
 } from "@/engine/acmd/poseClock";
 import type { AcmdScript, MotionKind } from "@/engine/acmd/types";
 import { scriptBoneNames } from "@/engine/acmd/scriptBones";
+import { FLIP_FRAMES } from "@/engine/constants";
 import { ONE, toFloat } from "@/engine/fixed";
 import { dodgeIntangible, groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from "@/engine/groundDodge";
 import { fighterParams } from "@/engine/params";
@@ -130,6 +131,8 @@ export interface StatusMotionSpec {
   readonly charge: number;
   /** On the ground or not: the carry's two motions (Plan 6, Task 20). */
   readonly grounded: boolean;
+  /** Off a dash: the fall's flip (Plan 6, Task 21), baked over `FLIP_FRAMES`. */
+  readonly dashedOff: boolean;
 }
 
 /**
@@ -139,6 +142,8 @@ export interface StatusMotionSpec {
  * direction (Plan 3; DISPATCH-NOTES 10.1).
  */
 export function statusClock(clip: PoseClip, poseName: PoseName, spec: StatusMotionSpec, def: FighterDef): MotionClock {
+  // The flip is the fall's first frames, a part of a state that has no length (Plan 6, Task 21).
+  if (spec.dashedOff) return { kind: "once", frames: FLIP_FRAMES };
   if (clip.loop) {
     // `timing.ts`'s DEFAULT_PERIOD for a clip that names none.
     const frames = clip.period ?? 30;
@@ -190,10 +195,12 @@ export function statusMotionSpecs(): StatusMotionSpec[] {
     for (const charge of DODGE_CHARGES[action] ?? [0]) {
       for (const v of VARIANTS) {
         for (const grounded of [true, false]) {
-          const motion = statusMotion({ action, charge, ...v, grounded });
-          if (seen.has(motion)) continue;
-          seen.add(motion);
-          out.push({ motion, action, charge, ...v, grounded });
+          for (const dashedOff of [false, true]) {
+            const motion = statusMotion({ action, charge, ...v, grounded, actionFrame: 0, combat: { dashedOff } });
+            if (seen.has(motion)) continue;
+            seen.add(motion);
+            out.push({ motion, action, charge, ...v, grounded, dashedOff });
+          }
         }
       }
     }
@@ -385,7 +392,15 @@ export function statusSamplers(def: FighterDef): Map<MotionKind, MotionSampler> 
   const out = new Map<MotionKind, MotionSampler>();
   for (const spec of statusMotionSpecs()) {
     if (!bakesStatus(def, spec)) continue;
-    const poseName = poseNameFor({ action: spec.action, move: null, jumpsUsed: spec.jumpsUsed, fastFalling: spec.fastFalling, grounded: spec.grounded });
+    const poseName = poseNameFor({
+      action: spec.action,
+      move: null,
+      jumpsUsed: spec.jumpsUsed,
+      fastFalling: spec.fastFalling,
+      grounded: spec.grounded,
+      actionFrame: 0,
+      combat: { dashedOff: spec.dashedOff },
+    });
     const clip = clipFor(def.id, poseName);
     const clock = statusClock(clip, poseName, spec, def);
     out.set(spec.motion, { clip, clock, ...(dodgeTiming(spec, poseName, def, clock) ?? { time: (k) => clipTimeOfFrame(clock, k) }) });

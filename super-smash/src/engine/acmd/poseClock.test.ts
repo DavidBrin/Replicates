@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { airDodgeFrames, airDodgeOf } from "../airDodge";
-import { TECH_CEILING_FRAMES, TECH_FRAMES, TECH_ROLL_FRAMES, TECH_WALL_FRAMES } from "../constants";
+import { FLIP_FRAMES, TECH_CEILING_FRAMES, TECH_FRAMES, TECH_ROLL_FRAMES, TECH_WALL_FRAMES } from "../constants";
 import { fx } from "../fixed";
 import { groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from "../groundDodge";
 import { jumpRiseSpeeds } from "../kinetic";
@@ -257,6 +257,20 @@ describe("Donkey Kong's carry and a full release play motions of their own (Plan
     const f = releasing(donkeyKong, sc.loopFrame + 18);
     expect(poseIndexOf(donkeyKong, f, 0, clocks({ special_n_max: { kind: "once", frames: 47 } }))).toEqual({ motion: "special_n_max", frame: 19 });
     expect(poseIndexOf(donkeyKong, f, 0, clocks({}))).toBeNull();
+  });
+});
+
+describe("a dash off a platform flips (Plan 6, Task 21)", () => {
+  it("names the flip for a fall out of a dash in its first FLIP_FRAMES, then the fall", () => {
+    const off = { action: "fall" as const, jumpsUsed: 1, fastFalling: false, charge: 0, actionFrame: 3, combat: { dashedOff: true } };
+    expect(statusMotion(off)).toBe("status_fall_flip");
+    // Fast-falling in the flip still flips.
+    expect(statusMotion({ ...off, fastFalling: true })).toBe("status_fall_flip");
+    expect(statusMotion({ ...off, actionFrame: FLIP_FRAMES - 1 })).toBe("status_fall_flip");
+    expect(statusMotion({ ...off, actionFrame: FLIP_FRAMES })).toBe("status_fall");
+    expect(statusMotion({ ...off, combat: { dashedOff: false } })).toBe("status_fall");
+    // A caller that passes no combat (a bake spec, an old literal) is no flip.
+    expect(statusMotion({ action: "fall", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_fall");
   });
 });
 

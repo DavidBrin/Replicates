@@ -1782,7 +1782,12 @@ export function onLeftGround(f: FighterState): void {
     startAction(f, "edgeSlip");
     return;
   }
-  if (exit === "fall" || exit === "tumbleFall") startAction(f, exit);
+  // Off the edge out of a dash or a run, the fall flips (Plan 6, Task 21; SmashWiki "Dash").
+  const dashed = f.action === "dashStart" || f.action === "run";
+  if (exit === "fall" || exit === "tumbleFall") {
+    startAction(f, exit);
+    if (dashed && exit === "fall") f.combat.dashedOff = true;
+  }
   // A grounded attack's own movement stops at the edge (`stopsAtEdge`), so one that
   // leaves the ground was pushed off: the ledge cancel, a fall (fix round 3, ruling
   // R-T12g; SmashWiki "Ledge-canceling"). One that rises off it by itself carries on.

@@ -219,3 +219,41 @@ export const fastFall: PoseClip = {
     },
   ],
 };
+
+/**
+ * A dash off a platform (Plan 6, Task 21; SmashWiki "Dash": "dashing off a platform
+ * will cause the character to perform a short flipping animation"): one forward turn
+ * over `FLIP_FRAMES` (`spin`, as the roll's and the tumble's turns are; a key's
+ * `rotation` cannot make a whole turn), tucked, opening into the fall's first pose.
+ * The replica's shape: the game's motion is unpublished.
+ */
+export const fallFlip: PoseClip = {
+  loop: false,
+  spin: 1,
+  keys: [
+    {
+      t: 0,
+      ease: "out",
+      pose: P({
+        torso: 24, head: -14,
+        thighR: 110, shinR: 110, footR: -80,
+        thighL: 118, shinL: 104, footL: -84,
+        upperArmR: 118, forearmR: -48,
+        upperArmL: 242, forearmL: 48,
+      }),
+      offsetY: 0.6,
+    },
+    {
+      t: 0.6,
+      pose: P({
+        torso: 30, head: -18,
+        thighR: 96, shinR: 128, footR: -80,
+        thighL: 102, shinL: 124, footL: -84,
+        upperArmR: 118, forearmR: -48,
+        upperArmL: 242, forearmL: 48,
+      }),
+      offsetY: 0.6,
+    },
+    { t: 1, pose: fall.keys[0].pose, offsetY: fall.keys[0].offsetY, scaleX: fall.keys[0].scaleX, scaleY: fall.keys[0].scaleY },
+  ],
+};

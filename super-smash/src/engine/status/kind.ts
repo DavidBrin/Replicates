@@ -254,6 +254,8 @@ export function changeStatus(f: FighterState, action: ActionState, table: Status
   table[f.action]?.end?.(f);
   f.action = action;
   f.actionFrame = 0;
+  // The flip off a dash belongs to the fall it began (Plan 6, Task 21): any other action forgets it.
+  if (action !== "fall") f.combat.dashedOff = false;
   if (action !== "attack" && action !== "special" && action !== "throw" && action !== "pummel") {
     f.move = null;
     f.charge = 0;

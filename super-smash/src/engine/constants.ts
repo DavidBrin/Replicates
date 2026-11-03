@@ -585,6 +585,12 @@ export const TECH_WALL_INTERRUPT = 6;
  */
 export const TECH_WALL_HOLD = 5;
 export const TECH_CEILING_FRAMES = 26;
+/**
+ * The flip off a dash (Plan 6, Task 21): the first frames of a fall out of a dash
+ * or a run play the flip's motion. UNVERIFIED: SmashWiki "Dash" calls it "a short
+ * flipping animation" and gives no length; 20 frames, by eye.
+ */
+export const FLIP_FRAMES = 20;
 export const TECH_INTANGIBLE = [1, 20] as const;
 export const TECH_CEILING_INTANGIBLE = [1, 17] as const;
 /** How far a tech roll travels. UNVERIFIED: the ground roll's distance stands in. */

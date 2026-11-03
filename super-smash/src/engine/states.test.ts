@@ -26,6 +26,7 @@ import {
   isParrying,
   NO_FLICK,
   onLanded,
+  onLeftGround,
   peekBuffer,
   specialSlot,
   startAction,
@@ -1136,5 +1137,23 @@ describe("a soft stick (a gamepad's partial tilt, Btn.Soft)", () => {
   it("reports itself on the intent, for DI", () => {
     expect(interpretInput(fighter(), Btn.Up | Btn.Soft, 0).soft).toBe(true);
     expect(interpretInput(fighter(), Btn.Up, 0).soft).toBe(false);
+  });
+});
+
+describe("a dash off a platform flips (Plan 6, Task 21; SmashWiki \"Dash\")", () => {
+  it("marks the fall a run or a dash leaves into, and not a walk's", () => {
+    for (const action of ["run", "dashStart", "walk"] as const) {
+      const f = fighter({ action, actionFrame: 3, grounded: false, platform: -1 });
+      onLeftGround(f);
+      expect(f.action, action).toBe("fall");
+      expect(f.combat.dashedOff, action).toBe(action !== "walk");
+    }
+  });
+
+  it("forgets it on the next action: a midair jump out of the flip", () => {
+    const f = fighter({ action: "fall", grounded: false, platform: -1, y: fx(10), jumpsUsed: 1, combat: { ...emptyCombat(), dashedOff: true } });
+    tick(f, Btn.Jump, 0);
+    expect(f.action).toBe("jump");
+    expect(f.combat.dashedOff).toBe(false);
   });
 });
