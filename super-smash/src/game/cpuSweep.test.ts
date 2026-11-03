@@ -9,9 +9,13 @@
 
 import { describe, expect, it } from "vitest";
 
+import { stageViewFromDef } from "@/ai/behaviours";
+import { findProjectileDef, markProjectileHit, spawnProjectile } from "@/engine/projectile";
+import { cloneState, createInitialState } from "@/engine/simulate";
+import { emptyEvents, type GameState, type StepEvents } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
-import { sweep } from "./cpuSweep";
+import { countMatch, emptySweepStats, sweep, type SweepStats } from "./cpuSweep";
 
 const IDS = FIGHTERS.map((f) => f.id);
 const PAIRS = IDS.flatMap((a) => IDS.filter((b) => b !== a).map((b) => [a, b] as const));
@@ -25,6 +29,179 @@ describe("the CPU sweep's harness", () => {
     expect(stats.longestStandby).toBe(0);
     expect(stats.holds).toEqual({});
   }, 60_000);
+});
+
+/**
+ * Constructed steps for each counting rule the CPU tasks are judged by (Task 23 fix round 1):
+ * Mario (port 0) against Fox (port 1) on Battlefield, each frame a copy of the last with the
+ * fields the rule reads set by hand.
+ */
+describe("the CPU sweep's counting rules", () => {
+  const fighter = (id: string) => FIGHTERS.find((f) => f.id === id)!;
+  const stage = (id: string) => STAGES.find((st) => st.id === id)!;
+  const rules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: true, oneOnOne: true } as const;
+
+  function match(): { stats: SweepStats; s: GameState; play: (edit: (s: GameState) => void, events?: Partial<StepEvents>) => void; end: () => void } {
+    const stats = emptySweepStats();
+    const start = createInitialState("battlefield", [{ defId: "mario" }, { defId: "fox" }], rules, 1, { fighter, stage });
+    const counter = countMatch(stats, start, stageViewFromDef(stage("battlefield")), fighter);
+    let s = start;
+    let frame = 0;
+    return {
+      stats,
+      get s() {
+        return s;
+      },
+      play(edit, events = {}) {
+        const before = s;
+        s = cloneState(s);
+        edit(s);
+        frame += 1;
+        counter.observe(frame, before, s, { ...emptyEvents(), ...events }, s.fighters.map(() => "idle"));
+      },
+      end() {
+        counter.close(s);
+      },
+    };
+  }
+
+  const hit = (attacker: number, victim: number): StepEvents["hits"][number] => ({
+    attacker,
+    victim,
+    damage: 0,
+    x: 0,
+    y: 0,
+    contactX: 0,
+    contactY: 0,
+    knockback: 0,
+    angle: 0,
+    hitboxId: 0,
+  });
+  const ko = (port: number): StepEvents["kos"][number] => ({ port, x: 0, y: 0, kind: "blast" });
+  const inFinal = (s: GameState) => {
+    s.fighters[0].action = "special";
+    s.fighters[0].move = "finalSmash";
+  };
+  const done = (s: GameState) => {
+    s.fighters[0].action = "fall";
+    s.fighters[0].move = null;
+  };
+  const flame = (s: GameState) => spawnProjectile(findProjectileDef(fighter("mario"), "hugeFlame")!, s.fighters[0], 1);
+
+  it("credits a Final Smash its flames land after its user's move has ended", () => {
+    const m = match();
+    m.play((s) => {
+      inFinal(s);
+      s.projectiles.push(flame(s));
+    });
+    m.play(done);
+    m.play(
+      (s) => markProjectileHit(s.projectiles[0], 1, s.projectiles[0].age + 7),
+      { hits: [hit(0, 1)] },
+    );
+    m.play((s) => {
+      s.projectiles.length = 0;
+    });
+    expect(m.stats.finalSmashes.mario).toEqual({ fired: 1, landed: 1 });
+  });
+
+  it("does not credit a Final Smash with its user's own hit while its flames are out", () => {
+    const m = match();
+    m.play((s) => {
+      inFinal(s);
+      s.projectiles.push(flame(s));
+    });
+    m.play(done);
+    m.play(() => {}, { hits: [hit(0, 1)] });
+    m.play((s) => {
+      s.projectiles.length = 0;
+    });
+    expect(m.stats.finalSmashes.mario).toEqual({ fired: 1, landed: 0 });
+  });
+
+  it("tallies a Final Smash that has landed and is still running when the match stops", () => {
+    const m = match();
+    m.play(inFinal);
+    m.play(() => {}, { hits: [hit(0, 1)] });
+    m.end();
+    expect(m.stats.finalSmashes.mario).toEqual({ fired: 1, landed: 1 });
+  });
+
+  it("counts a KO after a shield break as somebody's, not a self-destruct", () => {
+    const m = match();
+    m.play((s) => {
+      s.fighters[1].grounded = true;
+      s.fighters[1].action = "shield";
+    });
+    m.play(
+      (s) => {
+        s.fighters[1].action = "shieldBroken";
+        s.fighters[1].grounded = false;
+      },
+      { shieldHits: [{ victim: 1, x: 0, y: 0 }], shieldBreaks: [1] },
+    );
+    m.play(() => {}, { kos: [ko(1)] });
+    expect(m.stats.selfDestructs).toBe(0);
+  });
+
+  it("counts a KO after a footstool as somebody's, not a self-destruct", () => {
+    const m = match();
+    m.play((s) => {
+      s.fighters[1].grounded = true;
+      s.fighters[1].action = "stand";
+    });
+    m.play(
+      (s) => {
+        s.fighters[1].action = "fall";
+        s.fighters[1].grounded = false;
+      },
+      { footstools: [{ jumper: 0, victim: 1 }] },
+    );
+    m.play(() => {}, { kos: [ko(1)] });
+    expect(m.stats.selfDestructs).toBe(0);
+  });
+
+  it("counts a KO with no hit since the fighter stood, and none after a hit, as before", () => {
+    const m = match();
+    m.play((s) => {
+      s.fighters[1].grounded = true;
+      s.fighters[1].action = "stand";
+    });
+    m.play((s) => {
+      s.fighters[1].grounded = false;
+      s.fighters[1].action = "fall";
+    });
+    m.play(() => {}, { kos: [ko(1)] });
+    expect(m.stats.selfDestructs).toBe(1);
+    m.play((s) => {
+      s.fighters[0].grounded = true;
+      s.fighters[0].action = "stand";
+    });
+    m.play((s) => {
+      s.fighters[0].grounded = false;
+      s.fighters[0].action = "tumble";
+    }, { hits: [hit(1, 0)] });
+    m.play(() => {}, { kos: [ko(0)] });
+    expect(m.stats.selfDestructs).toBe(1);
+  });
+
+  it("counts a new stock's fall off its respawn platform without landing as a self-destruct", () => {
+    const m = match();
+    m.play((s) => {
+      s.fighters[1].grounded = false;
+      s.fighters[1].action = "tumble";
+    }, { hits: [hit(0, 1)] });
+    m.play(() => {}, { kos: [ko(1)] });
+    expect(m.stats.selfDestructs).toBe(0);
+    m.play((s) => {
+      s.fighters[1].action = "respawnPlatform";
+    });
+    m.play((s) => {
+      s.fighters[1].action = "fall";
+    });
+    m.play(() => {}, { kos: [ko(1)] });
+    expect(m.stats.selfDestructs).toBe(1);
+  });
 });
 
 describe.skipIf(process.env.CPU_SWEEP !== "1")("the CPU sweep (opt-in)", () => {
