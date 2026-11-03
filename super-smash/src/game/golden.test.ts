@@ -443,6 +443,13 @@ const MATCHES: readonly Match[] = [
  * Part 3 adds the contact lab, a second match for `rebound`, `shieldStun` and `pummel`
  * (`expectContacts`), which the script and the projectile lab reach as before. All 59
  * are visited.
+ * Plan 6, Task 6 (a forward smash pressed behind a grounded fighter turns it round first)
+ * adds no action. Only two CPU matches move, where a CPU's cross-up now turns before its
+ * smash: mario-fox-battlefield (from 2201-2300) and kirby-marth-pokemonStadium2 (from
+ * 401-500); the other thirteen traces are byte-identical, and the pin moves (26d4ec66 to
+ * 4d52c87e) by those two. mario-fox lands 60 hits (39), and kirby-marth's counts hold. The
+ * four CPU matches reach 43 between them, down from 44: mario-fox no longer gets up from
+ * lying down (`getUp`), which the states and projectile labs reach. All 59 are visited.
  * Plan 6, Task 7 adds `edgeSlip`. No match reaches it, and none can on Final
  * Destination (a slip off a ledge-bearing edge hangs on the step it leaves the ground),
  * so the slip lab (`goldenSlipLab.ts`) does, on Battlefield; the fifteen other traces are
@@ -460,10 +467,11 @@ const MATCHES: readonly Match[] = [
  * (169); in the beams lab Donkey Kong on 666 (593) and Samus on 761 (762). All 60 are
  * visited.
  * Its fix round 1 adds no action: the input buffer keeps a stick smash with its press, so
- * a CPU's smash pressed in another action's last frames comes out a smash, not a tilt (and
- * a smash-input special its smash version); and a KO ends a slow. Three CPU matches
- * (donkeyKong-pikachu-finalDestination, link-samus-smashville, kirby-marth-pokemonStadium2)
- * and the ball-on CPU match move, and nothing else. All 60 are visited.
+ * a CPU's smash pressed in another action's last frames comes out a smash, not a tilt. That
+ * alone moves the traces: a buffered smash-input special keeping its smash version, and a
+ * KO ending a slow, move none. Three CPU matches (donkeyKong-pikachu-finalDestination,
+ * link-samus-smashville, kirby-marth-pokemonStadium2) and the ball-on CPU match move, and
+ * nothing else. All 60 are visited.
  * Plan 6, Task 13 (presses during a KO's freeze go into the buffer) adds no action. The
  * traces with a KO freeze move, each first differing right after its first freeze: the
  * scripted match, the tech lab, the beams lab, link-samus-smashville,
@@ -471,14 +479,16 @@ const MATCHES: readonly Match[] = [
  * the ball-on CPU match (from 3201-3300). The dash lab's freeze (191) moves nothing: its
  * living fighter's direction counter is already at its 1000 cap. All 60 are visited.
  * Plan 6, Task 14 (a windbox keeps the swing's record; a catch reads none of it) adds no
- * action. Only the beams lab moves: Zero Laser's pull holds Donkey Kong on 58, so the
- * charge strikes him again on 68, not 59, and the lab's 54 hits hold. All 60 are visited.
+ * action. Only the beams lab moves: Zero Laser's pull draws Donkey Kong in on 58, and its
+ * record holds the charge off him until 68, so the charge strikes him again on 68, not 59,
+ * and the lab's 54 hits hold. All 60 are visited.
  * Plan 6, Task 15 (the projectile stages: the Boomerang's late hit from frame 10 of its
  * flight, its clean box 4.0; the Bomb's blast 7.38, then 4.9 and 2.5) adds no action. Only
  * the projectile lab and link-samus-smashville move. In the lab the smash-thrown Boomerang
  * reaches Samus a frame sooner (473) with its late hit, which leaves her in hitstun rather
  * than tumbling, so the lab no longer reaches `tumble`, `tumbleFall`, `downed` or `getUp`;
- * the CPU matches and the states lab do. In link-samus the Boomerang meets Samus's Super
+ * the CPU matches and the states lab do (`downed` in mario-fox and link-samus, `getUp` in
+ * link-samus and the states lab). In link-samus the Boomerang meets Samus's Super
  * Missile on 39, a frame sooner, and the match no longer reaches `ledgeTrumped`, which the
  * script does: the four CPU matches reach 43 between them, down from 44. All 60 are
  * visited.
@@ -501,9 +511,10 @@ const MATCHES: readonly Match[] = [
  * and reaches `downed` and `runBrake`; the four CPU matches still reach the same 42
  * between them. All 60 are visited.
  * Plan 6, Task 19 (Kirby's idle stance stands on the floor: his whole pose 0.57 higher,
- * so his hurtboxes, bones and ECB top rise with it) adds no action. Only the two matches
- * with Kirby move: kirby-marth-pokemonStadium2 (from 301-400) and the ball-on CPU match
- * (1101-1200); the other fourteen traces are byte-identical, the slip lab's included, and
+ * so his hurtboxes, bones and ECB top rise with it) adds no action. Only two of the three
+ * matches with Kirby move: kirby-marth-pokemonStadium2 (from 301-400) and the ball-on CPU
+ * match (1101-1200); the other fourteen traces are byte-identical, the Inhale lab's Kirby
+ * and the slip lab included, and
  * every lab pin holds (the ball-on match's CPUs still start 2 Final Smashes). kirby-marth
  * lands 33 hits (28) and no shield hit (1), and no longer reaches `grab`, `grabHold`,
  * `grabbed`, `pummel`, `shieldStun`, `throw` or `thrown`, which other traces still do; it
@@ -535,7 +546,7 @@ const MATCHES: readonly Match[] = [
  * (1501-1600); mario-fox-battlefield and the labs are byte-identical. At seed 606 the
  * ball-on CPU match's CPUs broke a Smash Ball but started no Final Smash, so its seed steps
  * to 607 (ruling R-P6-18: the task's six-seed sweep passed R-P6-19 against Task 23's
- * baseline, landed 1,307 to 1,394, mean hold 143.15 to 142.46), where every pin holds: 48
+ * baseline, landed 1,307 to 1,397, mean hold 143.15 to 142.15), where every pin holds: 48
  * hits, 1 KO, 2 balls broken and 2 Final Smashes (65, 2, 3 and 2 at 606 before).
  * donkeyKong-pikachu lands 31 hits and 4 shield hits (35, 6); link-samus 35 hits, 1 shield
  * hit and no KO (39, 0, 1), and no longer reaches `dead` or `respawnPlatform`, which
@@ -555,8 +566,8 @@ const MATCHES: readonly Match[] = [
  * Plan 6, Task 41's fix wave (a match whose length is not a multiple of 100 also samples
  * its last frame: final review item 27) adds no action and changes no behaviour. The two
  * such traces gain a last digest: the beams lab (frames 901-950) and the slip lab
- * (101-120). Every earlier digest of every trace is byte-identical, and every lab pin
- * holds. All 60 are visited.
+ * (101-120). Every earlier digest of every trace is byte-identical, every lab pin holds,
+ * and the pin moves (c5ea40aa to ccc446b7) by those two digests alone. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
