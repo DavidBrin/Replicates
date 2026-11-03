@@ -63,6 +63,7 @@ import {
   fullHopPulse,
   isHelpless,
   isOffstage,
+  isShielding,
   moveReach,
   pulse,
   towardX,
@@ -381,9 +382,9 @@ function overdueHolding(self: FighterState): boolean {
 }
 
 /**
- * Past the time limit (ruling D10, made firm in Task 24's fix round 1), a CPU holding a
- * travelling Final Smash drops whatever else it does on the ground and goes to where it fires
- * from: on its own floor, `OVERDUE_AHEAD_MIN` to `FINAL_SMASH_RANGE` short of its target and
+ * Past the time limit (ruling D10, made firm in Task 24's fix rounds 1 and 2), a CPU holding a
+ * travelling Final Smash starts nothing else on the ground (in a move or a landing it lets go, so
+ * nothing follows; a shield is left to its own behaviour) and goes to where it fires from: on its own floor, `OVERDUE_AHEAD_MIN` to `FINAL_SMASH_RANGE` short of its target and
  * `SPOT_EDGE_ROOM` inside the floor's ends, on the side it is on (the other where that side has
  * no room), facing it, still; there it waits for the target to be catchable (`hittable`, on the
  * ground), and `fireFinalSmash` fires. Its score beats every attack and movement but loses to the
@@ -398,7 +399,7 @@ function overdueApproach(ctx: BehaviourContext): BehaviourResult {
   const def = ctx.fighterDef;
   const fs = def?.moves.finalSmash;
   if (def === null || fs === undefined || target === null || !overdueHolding(self) || dashTravel(fs) === 0) return NOTHING;
-  if (!free(self) || !self.grounded || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
+  if (!canAct(self) || !self.grounded || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
   const floor = floorEnds(self, ctx.stage, ctx.state.stageFrame);
   if (floor === null) return NOTHING;
   const tx = self.x + dx;
@@ -410,6 +411,13 @@ function overdueApproach(ctx: BehaviourContext): BehaviourResult {
   const side = dx >= 0 ? 1 : -1;
   const spot = stretch(side) ?? stretch(-side);
   if (spot === null) return NOTHING;
+  // Not yet free to move but able to act (in a move: a jab's loop, a smash's charge, a special's;
+  // or landing), it lets go, so that nothing new follows: an attack under way finishes, but no
+  // jab loops on, no smash charges, and no press is buffered for the next one (Task 24 fix round
+  // 2: a rapid jab looped on 446 frames past the limit against an idle Mario on Battlefield, and
+  // on Pokémon Stadium 2 an Attack pressed in a landing came out as a smash that KO'd him). Not
+  // a shield, which its own behaviour keeps up or lets go.
+  if (!free(self)) return isShielding(self.action) ? NOTHING : { score: OVERDUE_SCORE, input: 0 };
   return keepFloor(ctx, moveToSpot(ctx, def, spot, OVERDUE_SCORE));
 }
 

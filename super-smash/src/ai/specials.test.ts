@@ -28,6 +28,9 @@ import { FIGHTERS, donkeyKong, fox, kirby, link, mario, marth, pikachu, samus } 
 import { STAGES } from "@/stages";
 import { makeFighter, makeState } from "@/render/testFixtures";
 import { fighterParams } from "@/engine/params";
+import type { SimContext } from "@/engine/simulate";
+import { bakedContext } from "@/game/bake";
+import { readBakeFromDisk } from "@/game/bakeNode";
 import {
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
@@ -64,6 +67,7 @@ import {
   whiffEnd,
   finalSmash,
   framesToMeet,
+  hittable,
   holdLeft,
   holding,
   mash,
@@ -199,41 +203,62 @@ describe("the Final Smash", () => {
 
   /**
    * Pikachu holding the power from the match's start against an idle Mario (input 0), with
-   * the ball off: past `FINAL_SMASH_HOLD_LIMIT` it drops what it is doing, goes to where it
-   * fires from and fires (Task 24 fix round 1, ruling D10 made firm).
+   * the ball off, in the game's own baked context (`bakedContext`, as the game and the sweep
+   * run): past `FINAL_SMASH_HOLD_LIMIT` it starts no new attack, goes to where it fires from and
+   * fires (Task 24 fix rounds 1 and 2, ruling D10 made firm). The match's seed `seed`, the CPU's
+   * `seed ^ 0x1f2e3d4c`, as the sweep seeds them. Reports the frame it fired on, the first frame
+   * past the limit Mario could be caught (`hittable`, on the ground), and the hits that landed
+   * on him from `HIT_GRACE` frames past the limit until the fire (a move begun before the limit
+   * may still land in those).
    */
-  const idleMatch = (id: string, frames: number) => {
-    const view = stageViewFromDef(STAGES.find((x) => x.id === id)!);
-    const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 9, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+  const HIT_GRACE = 30;
+  let game: SimContext | null = null;
+  const idleMatch = (id: string, seed: number, frames: number) => {
+    game ??= bakedContext({ fighter: (f) => FIGHTERS.find((d) => d.id === f)!, stage: (x) => STAGES.find((d) => d.id === x)! }, readBakeFromDisk());
+    const ctx = game;
+    const view = stageViewFromDef(ctx.stage(id));
+    const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 9, timeLimit: 0, smashBall: false, oneOnOne: true }, seed, ctx);
     s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
-    const world = cpuWorldFromDef(pikachu, view, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
+    const defs = s.fighters.map((f) => ctx.fighter(f.defId));
+    const world = cpuWorldFromDef(defs[0], view, defs, (f) => ctx.fighter(f), ctx.bake);
     let st = s;
     let prev: InputFrame[] = [0, 0];
-    let seed = 3;
+    let cpuSeed = seed ^ 0x1f2e3d4c;
     let firedAt = -1;
+    let catchableAt = -1;
+    let lateHits = 0;
     for (let i = 1; i <= frames && firedAt < 0; i++) {
-      const d = decideCpu(st, 0, 9, seed, world);
-      seed = d.seed;
-      const out = step(st, [d.input, 0], { prevInputs: prev });
+      const d = decideCpu(st, 0, 9, cpuSeed, world);
+      cpuSeed = d.seed;
+      const out = step(st, [d.input, 0], { prevInputs: prev, ctx });
       if (out.events.finalSmashes.includes(0)) firedAt = i;
+      const m = out.state.fighters[1];
+      if (i > FINAL_SMASH_HOLD_LIMIT && catchableAt < 0 && m.grounded && hittable(m)) catchableAt = i;
+      if (i > FINAL_SMASH_HOLD_LIMIT + HIT_GRACE && firedAt < 0 && m.hitstun > st.fighters[1].hitstun) lateHits++;
       st = out.state;
       prev = [d.input, 0];
     }
     let trapped = false;
     for (let i = 0; i < 400 && firedAt > 0; i++) {
-      st = step(st, [0, 0], { prevInputs: prev }).state;
+      st = step(st, [0, 0], { prevInputs: prev, ctx }).state;
       prev = [0, 0];
       trapped ||= st.fighters[1].action === "finalTrapped";
     }
-    return { firedAt, trapped, stocks: st.fighters[0].stocks, start: s.fighters[0].stocks };
+    return { seed, firedAt, catchableAt, lateHits, trapped, selfDestructed: st.fighters[0].stocks !== s.fighters[0].stocks };
   };
 
-  it.each(STAGES.map((x) => x.id))("fires Volt Tackle at an idle Mario within 240 frames past the limit, traps him, and never self-destructs, on %s (Task 24 fix round 1)", (id) => {
-    const m = idleMatch(id, FINAL_SMASH_HOLD_LIMIT + 240);
-    expect(m.firedAt, "fired within 1,200 + 240 frames").toBeGreaterThan(0);
-    expect(m.trapped, "trapped him").toBe(true);
-    expect(m.stocks, "no self-destruct").toBe(m.start);
-  });
+  // Within 240 frames of the limit, or of the first frame past it that Mario can be caught where
+  // that is later: on Town and City (every seed) and Small Battlefield (seed 5) a hit landed before
+  // the limit (frames 1,148 and 1,059) KOs him, and the idle Mario rides the respawn platform
+  // out and is invincible after it; Pikachu fires 2 frames after he can be caught. No hit of
+  // Pikachu's lands on him past the limit (bar a move already under way): it starts no new attack.
+  it.each(STAGES.map((x) => x.id))("fires Volt Tackle at an idle Mario within 240 frames past the limit, traps him, and never self-destructs, on %s, seeds 1-6, baked (Task 24 fix rounds 1 and 2)", (id) => {
+    const runs = [1, 2, 3, 4, 5, 6].map((seed) => idleMatch(id, seed, FINAL_SMASH_HOLD_LIMIT + 900));
+    expect(runs.filter((m) => m.lateHits > 0).map((m) => m.seed), "seeds with a hit landed past the limit").toEqual([]);
+    expect(runs.filter((m) => m.firedAt < 0 || m.firedAt > Math.max(FINAL_SMASH_HOLD_LIMIT, m.catchableAt) + 240).map((m) => [m.seed, m.firedAt, m.catchableAt]), "seeds not fired within 240 frames of the limit or of his first catchable frame").toEqual([]);
+    expect(runs.filter((m) => !m.trapped).map((m) => m.seed), "seeds whose fire trapped nobody").toEqual([]);
+    expect(runs.filter((m) => m.selfDestructed).map((m) => m.seed), "seeds that self-destructed").toEqual([]);
+  }, 60_000);
 
   it("past the limit, drops attacking and approaching a free target for where it fires from (Task 24 fix round 1)", () => {
     const world = cpuWorldFromDef(pikachu, FD, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
@@ -249,6 +274,18 @@ describe("the Final Smash", () => {
       // Going there outranks every attack and movement (700 at most), and no survival behaviour (900 and up).
       if (gap === 60) expect(finalSmash(context(s, pikachu, 9, undefined, FD)).score).toSatisfy((x: number) => x > 700 && x < 900);
     }
+  });
+
+  it("past the limit, lets go in a move or a landing so that nothing new follows, and leaves a shield to its own behaviour (Task 24 fix round 2)", () => {
+    const at = (over: Partial<FighterState>) => {
+      const s = ready(20, { x: 0, defId: "pikachu", ...over });
+      s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT;
+      return finalSmash(context(s, pikachu, 9, undefined, FD));
+    };
+    expect(at({ action: "attack", move: "jab1", actionFrame: 6 }), "a jab's loop").toEqual({ score: 890, input: 0 });
+    expect(at({ action: "attack", move: "fsmash", actionFrame: 8 }), "a smash's charge").toEqual({ score: 890, input: 0 });
+    expect(at({ action: "land", actionFrame: 1 }), "a landing").toEqual({ score: 890, input: 0 });
+    expect(at({ action: "shield", actionFrame: 10 }).score, "a shield").toBe(0);
   });
 
   it("past the limit, waits out a target's invincibility each time it comes back, then fires once it can be hit (Task 24 fix round 1)", () => {
