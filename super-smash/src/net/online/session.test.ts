@@ -661,6 +661,22 @@ describe("OnlineSession", () => {
       expect(h.signalling.closed).toBe(false);
     });
 
+    /**
+     * The final wave (Task 40b review Minor 1, final review item 35): a started match owns
+     * the channel, so a stray or hostile no-direct-link from the room cannot end it. Only
+     * a lobby session ends on one.
+     */
+    it("lets a no-direct-link that arrives after the start end nothing: no error, the channel and the room stay", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "no-direct-link" } });
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      expect(errors(events)).toEqual([]);
+      expect(signalling.closed).toBe(false);
+      expect(session.transport.status).toBe("open");
+    });
+
     /** A channel that had opened and dropped is a reconnect, not a first link: its re-offers stand. */
     it("says the room is lost once every re-offer to a channel that had opened has timed out too", async () => {
       const h = await hostMeetingGuest();
