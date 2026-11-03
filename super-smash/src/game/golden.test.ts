@@ -498,6 +498,16 @@ const MATCHES: readonly Match[] = [
  * it no longer reaches `dead` or `respawnPlatform`, which link-samus and kirby-marth do,
  * and reaches `downed` and `runBrake`; the four CPU matches still reach the same 42
  * between them. All 60 are visited.
+ * Plan 6, Task 19 (Kirby's idle stance stands on the floor: his whole pose 0.57 higher,
+ * so his hurtboxes, bones and ECB top rise with it) adds no action. Only the two matches
+ * with Kirby move: kirby-marth-pokemonStadium2 (from 301-400) and the ball-on CPU match
+ * (1101-1200); the other fourteen traces are byte-identical, the slip lab's included, and
+ * every lab pin holds (the ball-on match's CPUs still start 2 Final Smashes). kirby-marth
+ * lands 33 hits (28) and no shield hit (1), and no longer reaches `grab`, `grabHold`,
+ * `grabbed`, `pummel`, `shieldStun`, `throw` or `thrown`, which other traces still do; it
+ * reaches `downed`, `getUp`, `roll` and `turnaround`. The ball-on match lands 65 hits (27)
+ * and 2 KOs (1), and no longer reaches `pummel`. The four CPU matches reach 44 between
+ * them, up from 42. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

@@ -18,6 +18,7 @@ import { REFERENCE_SCRIPTS } from "@/fighters/acmd";
 import { withLimbScripts } from "@/fighters/acmd/limb";
 import type { SkeletonFile } from "../skeleton/skeleton";
 import { bakeFighter } from "./bake";
+import { STANCE_UP } from "./stance";
 
 /** Every bone any of a fighter's reference scripts names (lower case, `top` excluded). */
 export function referenceScriptBones(fighterId: string): Set<string> {
@@ -28,10 +29,11 @@ export function referenceScriptBones(fighterId: string): Set<string> {
   return out;
 }
 
-export function bakeRoster(skeletons: Readonly<Record<string, SkeletonFile>>): BakedFighter[] {
+/** `stance`: each fighter's idle lift (`STANCE_UP`; Plan 6, Task 19). `stance.test.ts` bakes with none to compare. */
+export function bakeRoster(skeletons: Readonly<Record<string, SkeletonFile>>, stance: Readonly<Record<string, number>> = STANCE_UP): BakedFighter[] {
   return FIGHTERS.map((def) => {
     const skeleton = skeletons[def.id];
     if (skeleton === undefined) throw new Error(`bake: no committed skeleton for ${def.id} (run pnpm models)`);
-    return bakeFighter({ def: withLimbScripts(def, null), skeleton, scriptBones: referenceScriptBones(def.id) });
+    return bakeFighter({ def: withLimbScripts(def, null), skeleton, scriptBones: referenceScriptBones(def.id), stanceUp: stance[def.id] ?? 0 });
   });
 }

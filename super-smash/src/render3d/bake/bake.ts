@@ -59,6 +59,7 @@ import type { Rig } from "@/render/skeleton";
 import { buildRig, type Rig3, type SkeletonFile } from "../skeleton/skeleton";
 import { calibrate, retarget, type Calibration } from "../retarget/retarget";
 import { IDENTITY_ROOT, sideBonePose, worldMatrices, type RootXform } from "./fk";
+import { STANCE_UP } from "./stance";
 
 /* --------------------------------------------------------- clip timing -- */
 
@@ -188,6 +189,8 @@ export interface FighterBakeInput {
   readonly skeleton: SkeletonFile;
   /** Lower-case bones scripts may name for this fighter (active and reference scripts). */
   readonly scriptBones: ReadonlySet<string>;
+  /** The idle stance's lift, world units (Plan 6, Task 19); `STANCE_UP`'s when absent. */
+  readonly stanceUp?: number;
 }
 
 /** Everything one fighter's poses depend on, prepared once. */
@@ -200,9 +203,11 @@ export interface FighterPoser {
   readonly rigScale2d: number;
   /** `FighterParams.scale` as a float. */
   readonly scale: number;
+  /** The idle stance's lift, world units (`STANCE_UP`; Plan 6, Task 19). */
+  readonly stanceUp: number;
 }
 
-export function fighterPoser(def: FighterDef, skeleton: SkeletonFile): FighterPoser {
+export function fighterPoser(def: FighterDef, skeleton: SkeletonFile, stanceUp: number = STANCE_UP[def.id] ?? 0): FighterPoser {
   const rig3 = buildRig(skeleton);
   const character = getCharacterRig(def.id);
   return {
@@ -212,6 +217,7 @@ export function fighterPoser(def: FighterDef, skeleton: SkeletonFile): FighterPo
     rig2d: character.bones,
     rigScale2d: character.scale,
     scale: toFloat(fighterParams(def).scale),
+    stanceUp,
   };
 }
 
@@ -226,7 +232,8 @@ export type RootXformOut = { -readonly [K in keyof RootXform]: RootXform[K] };
 /** `rootXformOf`, written into `out`. */
 export function rootXformInto(p: FighterPoser, s: PoseSample, out: RootXformOut): RootXformOut {
   out.forward = s.offsetX * p.rigScale2d;
-  out.up = s.offsetY * p.rigScale2d;
+  // Lifted so the idle stance stands on the floor (Plan 6, Task 19): the bake and the drawing alike.
+  out.up = s.offsetY * p.rigScale2d + p.stanceUp;
   out.squashForward = s.scaleX;
   out.squashUp = s.scaleY;
   out.scale = p.scale;
@@ -370,7 +377,7 @@ const q12 = (v: number): number => Math.round(v * ONE);
 
 export function bakeFighter(input: FighterBakeInput): BakedFighter {
   const { def, skeleton } = input;
-  const p = fighterPoser(def, skeleton);
+  const p = fighterPoser(def, skeleton, input.stanceUp);
   const lowerOf = (i: number) => p.rig3.names[i].toLowerCase();
 
   // The bones the sim reads: hurtbox bones and every bone a script names that

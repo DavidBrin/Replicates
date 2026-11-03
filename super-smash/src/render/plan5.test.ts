@@ -726,9 +726,10 @@ describe("Jungle Rush's barrage (ruling R-T17d)", () => {
         "fox finalSmash": 6,
         "fox finalAttack": 10,
         "fox finalEnd": 9,
-        "kirby finalSmash": 8,
-        "kirby finalAttack": 8,
-        "kirby finalEnd": 9,
+        // Plan 6, Task 19: Kirby's re-measured for his stance lift (`sceneDraw.test.ts`'s probe).
+        "kirby finalSmash": 8.5,
+        "kirby finalAttack": 8.5,
+        "kirby finalEnd": 9.5,
         "pikachu finalSmash": 8,
         "pikachu finalAttack": 13,
         "pikachu finalEnd": 15,

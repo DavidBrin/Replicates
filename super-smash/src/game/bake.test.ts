@@ -250,7 +250,9 @@ describe("a bake that does not arrive in time", () => {
 
   it("counts the answer as progress: a server that answers at 14 s and then sends a chunk every 14 s is never idle long enough", async () => {
     const seen = watch(fetchBake(link({ bytes: 1_000_000, everyMs: 14_000, latencyMs: 14_000 })));
-    await vi.advanceTimersByTimeAsync(14_000 * 3 + 1000);
+    // The answer, then as many 1 MB chunks as the file takes (two to Plan 5; three once Plan 6's
+    // bodies pass 2,000,000 bytes), each 14 s apart.
+    await vi.advanceTimersByTimeAsync(14_000 * (1 + Math.ceil(GZ.length / 1_000_000)) + 1000);
     await vi.waitFor(() => expect(seen.settled).toBe(true));
     expect(seen.error).toBeUndefined();
     expect(seen.value?.fingerprint).toBe(BAKE_DIGEST);
