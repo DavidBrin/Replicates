@@ -25,7 +25,8 @@ import { frame, momentum, script } from "./acmd/dsl";
 import { ONE, fx, toFloat } from "./fixed";
 import { FINAL_SMASH_READY, travelWindows } from "./final";
 import { hashState } from "./hash";
-import { kineticSet } from "./kinetic";
+import { jumpLaunchSpeed, kineticSet } from "./kinetic";
+import { fighterParams } from "./params";
 import { platformCentreX } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
@@ -1045,5 +1046,46 @@ describe("Review Focus: a Final Smash under rollback", () => {
         expect(hashState(s), `rolled back to ${at}, frame ${i}`).toBe(hashState(straight[i]));
       }
     }
+  });
+});
+
+describe("an aerial Final Smash's height boost (Plan 6, Task 10; SmashWiki \"Final Smash\")", () => {
+  /** The real roster and stages, as the game steps them. */
+  const GAME: SimContext = { fighter: (id) => FIGHTERS.find((f) => f.id === id)!, stage: (id) => STAGES.find((st) => st.id === id)! };
+  const once = (s: GameState): GameState => step(s, [0, 0], { prevInputs: [0, 0], ctx: GAME }).state;
+
+  /** `who` in the last frame of its whiffed Final Smash start, 60 over Final Destination. */
+  function ending(who: string): GameState {
+    const s = createInitialState("finalDestination", [{ defId: who }, { defId: "fox" }], RULES, 5, GAME);
+    const def = FIGHTERS.find((d) => d.id === who)!;
+    const fs = def.moves.finalSmash!;
+    Object.assign(s.fighters[0], {
+      action: "special", move: "finalSmash", actionFrame: fs.totalFrames - 1, grounded: false, platform: -1,
+      x: 0, y: fx(60), vx: 0, vy: 0, facing: 1, jumpsUsed: 2, intangible: 0,
+    });
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: fx(70), y: 0 });
+    return s;
+  }
+
+  it("rises as the move ends in the air, with its midair jumps back", () => {
+    for (const who of ["mario", "donkeyKong", "samus", "link"]) {
+      const f = once(ending(who)).fighters[0];
+      expect(f.move, who).not.toBe("finalSmash");
+      expect(f.vy, `${who} rises`).toBeGreaterThan(0);
+      expect(f.jumpsUsed, who).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("rises by its own short hop (UNVERIFIED stand-in, decision D4), less the step's gravity", () => {
+    // The boost is set as the move ends, in the step's status phase; the step's
+    // gravity is applied after it, in its movement phase.
+    const p = fighterParams(FIGHTERS.find((d) => d.id === "mario")!);
+    expect(once(ending("mario")).fighters[0].vy).toBe(jumpLaunchSpeed(p.air_accel_y, p.mini_jump_y) - p.air_accel_y);
+  });
+
+  it("does nothing on the ground", () => {
+    const s = ending("mario");
+    Object.assign(s.fighters[0], { grounded: true, platform: 0, y: 0 });
+    expect(once(s).fighters[0].vy).toBe(0);
   });
 });

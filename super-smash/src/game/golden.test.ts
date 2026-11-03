@@ -445,6 +445,9 @@ const MATCHES: readonly Match[] = [
  * Destination (a slip off a ledge-bearing edge hangs on the step it leaves the ground),
  * so the slip lab (`goldenSlipLab.ts`) does, on Battlefield; the fifteen other traces are
  * byte-identical. All 60 are visited.
+ * Plan 6, Task 10 (a Final Smash ending in the air lifts its user) adds no action: the
+ * beams lab's aerial Mario Finale and Ancient Arrow and the dash lab's Team Star Fox end
+ * rising, and only those two traces move. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

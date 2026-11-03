@@ -56,7 +56,8 @@
  */
 
 import { momentumWindows } from "./acmd/run";
-import { kineticClear } from "./kinetic";
+import { jumpLaunchSpeed, kineticClear, kineticJump } from "./kinetic";
+import { fighterParams } from "./params";
 import { SMASH_BALL_HEALTH } from "./constants";
 import { fx } from "./fixed";
 import { actionFrameOf, moveFrameOf } from "./hitbox";
@@ -163,6 +164,20 @@ export function travelWindows(def: Pick<FighterDef, "moves" | "scripts">, slot: 
  */
 export function refreshFinalJumps(f: FighterState): void {
   if (!f.grounded) f.jumpsUsed = Math.min(f.jumpsUsed, 1);
+}
+
+/**
+ * A Final Smash ending in the air lifts its user (Plan 6, Task 10): SmashWiki "Final Smash",
+ * "When most Final Smashes are performed in the air, upon ending the move, the character
+ * gains a slight boost in height and regains their spent midair jumps". UNVERIFIED (decision
+ * D4): the size, which no source publishes (rubendal 13.0.1's `game_final*` scripts set no
+ * upward speed; the boost is status code): the fighter's own short hop stands in, the
+ * smallest jump it has. And "most" is not narrowed: every Final Smash gets it.
+ */
+export function finalHeightBoost(f: FighterState, def: FighterDef): void {
+  if (f.grounded) return;
+  const p = fighterParams(def);
+  kineticJump(f, jumpLaunchSpeed(p.air_accel_y, p.mini_jump_y));
 }
 
 /** The fighters `user`'s Final Smash has trapped. */

@@ -17,7 +17,7 @@ import { SMASH_CHARGE_MAX, SMASH_FULL_CHARGE_HOLD } from "../constants";
 import { smashHoldFrame } from "../acmd/run";
 import { actionFrameOf, clearHitRecord, moveFrameOf } from "../hitbox";
 import { landPendingCopyLoss } from "../inhale";
-import { endDash, inDash, nextFinalPhase, refreshFinalJumps } from "../final";
+import { endDash, finalHeightBoost, inDash, nextFinalPhase, refreshFinalJumps } from "../final";
 import { specialChargeMain } from "../specialCharge";
 import { stoneMain } from "../stone";
 import { upSpecialStick } from "../upSpecial";
@@ -117,8 +117,12 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     // Task 14: `final.ts`); the part entered counts this frame as its frame 1.
     if (move.final !== undefined && nextFinalPhase(f, ctx, move.final.next) !== null) return;
     // A Final Smash that ends in the air gives back its user's midair jumps (Task 16
-    // fix round 1, ruling R-T16b: `refreshFinalJumps`).
-    if (move.final !== undefined) refreshFinalJumps(f);
+    // fix round 1, ruling R-T16b: `refreshFinalJumps`), and lifts it (Plan 6, Task 10:
+    // `finalHeightBoost`).
+    if (move.final !== undefined) {
+      refreshFinalJumps(f);
+      finalHeightBoost(f, ctx.def);
+    }
     // In the air a move with a longer aerial animation plays on to its end
     // unless the fighter acts (`MoveDef.airTotalFrames`, Plan 5: Mario's Cape,
     // SmashWiki "Mario (SSBU)": "forcing the player to have to interrupt the

@@ -1472,7 +1472,9 @@ describe("a Final Smash in the air (ruling R-T16b)", () => {
     expect(last - launch).toBeGreaterThan(10);
     for (const st of states.slice(0, last + 1)) expect([st.fighters[0].x, st.fighters[0].y]).toEqual([at.x, at.y]);
     expect([states[last + 1].fighters[0].action, states[last + 1].fighters[0].jumpsUsed]).toEqual(["fall", 1]);
-    expect(states[last + 10].fighters[0].y).toBeLessThan(at.y);
+    // Plan 6, Task 10: the end lifts him by his short hop (`finalHeightBoost`), then he falls.
+    expect(states[last + 1].fighters[0].vy).toBeGreaterThan(0);
+    expect(states.slice(last + 1).some((st) => st.fighters[0].y < at.y)).toBe(true);
   });
 
   /**

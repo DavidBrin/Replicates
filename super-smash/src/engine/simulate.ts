@@ -1033,7 +1033,10 @@ export function step(
     // meaning it is fairly easy to self-destruct off the side blast line if the player
     // misses". UNVERIFIED for every other start and for the scene and end parts, read
     // from SmashWiki "Final Smash": "the game effectively pauses as an unskippable
-    // scene plays out".
+    // scene plays out". Re-checked (Plan 6, Task 10): Pikachu's self-destruct is
+    // published (SmashWiki "Volt Tackle"); Donkey Kong's is not (SmashWiki "Jungle Rush"
+    // is silent on edges), and since the height boost (`finalHeightBoost`) and the jumps
+    // given back, his whiff past the edge ends rising, with his jumps.
     const finalPart = f.action === "special" && f.move !== null && defs[i].moves[f.move]?.final !== undefined;
     if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw" && !holdsMouthful(f, defs[i]) && !finalPart) {
       const grab = findLedgeGrab(f, stage, s.stageFrame, ecb.half, s.fighters);
