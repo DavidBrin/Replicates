@@ -571,7 +571,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       const def = defs[f.port];
       return def ? drawnTop(def, f, state.frame, GAME_SIM_CONTEXT.bake) : null;
     });
-    stepVfx(vfx, events, state, defs, peekSceneShift(shiftEase, sceneDrawShift(state, defs, tops), state.frame));
+    stepVfx(vfx, events, state, defs, peekSceneShift(shiftEase, sceneDrawShift(state, defs, tops), state.frame), getFighter);
     updateHud(hud, state);
     // The moves, for a Final Smash's end-hit punch-in, and the tops.
     updateCamera(camera, state, stage, events, defs, tops);

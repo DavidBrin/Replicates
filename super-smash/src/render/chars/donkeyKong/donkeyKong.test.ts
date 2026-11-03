@@ -21,6 +21,10 @@
 
 import { describe, expect, it } from "vitest";
 import { donkeyKong } from "@/fighters/donkeyKong";
+import { emptyCombat } from "@/engine/combat";
+import { countOf } from "../../mockContext";
+import { runPainter } from "../../testFixtures";
+import { storedChargeTell } from "./fx";
 import type { BoneName } from "../../skeleton";
 import { resolve } from "../../skeleton";
 import { rotationPivot } from "../../characterArt";
@@ -762,5 +766,16 @@ describe("his effects are wired to moves he actually has", () => {
     // States the fixture's shape rather than assuming it: DK throws no
     // projectile today, so both sets are empty and that is the fact under test.
     expect(painted.size).toBe(launched.size);
+  });
+});
+
+describe("a stored full Giant Punch shows (Plan 6, Task 35)", () => {
+  it("puffs steam off his fist in any action while a full punch is stored, and nothing short of full", () => {
+    const full = donkeyKong.moves.neutralB!.specialCharge!.frames;
+    const tell = (storedCharge: number, action: "stand" | "walk" = "stand") =>
+      runPainter(storedChargeTell, donkeyKong, { frame: 0, f: { action, combat: { ...emptyCombat(), storedCharge } } });
+    expect(countOf(tell(full), "arc")).toBeGreaterThan(0);
+    expect(countOf(tell(full, "walk"), "arc")).toBeGreaterThan(0);
+    expect(countOf(tell(full - 1), "arc")).toBe(0);
   });
 });

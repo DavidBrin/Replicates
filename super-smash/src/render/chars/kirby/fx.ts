@@ -51,7 +51,7 @@ import {
   type FxFn,
 } from "../../fxKit";
 import { resolvePalette, withAlpha } from "../../rigKit";
-import type { FighterDef, MoveSlot } from "@/engine/types";
+import type { FighterDef, MoveSlot, SpecialCharge } from "@/engine/types";
 import type { ProjectilePainter } from "../../fxKit";
 
 /* ------------------------------------------------------------- geometry -- */
@@ -66,6 +66,28 @@ import type { ProjectilePainter } from "../../fxKit";
  */
 function ball(x: number, y: number, u: number): { cx: number; cy: number; r: number } {
   return { cx: x, cy: y - 5.28 * 0.78 * u, r: 4.45 * 0.78 * u };
+}
+
+/**
+ * When Hammer Flip's hammer goes (Plan 6, Task 35): rubendal 13.0.1 `game_specials` and
+ * `game_specialairs` call `ArticleModule::remove_exist(FIGHTER_KIRBY_GENERATE_ARTICLE_HAMMER)`
+ * on frame 54, `game_specialsmax` and `game_specialairsmax` on 56. Those count the swing,
+ * which hits on its frame 11; the move's hit is on 26 (`kirby.ts`), so the swing's frames
+ * start after the loop frame (15), and 54 is the move's 69, its last.
+ */
+export const HAMMER_PUT_AWAY = 54;
+export const HAMMER_PUT_AWAY_MAX = 56;
+/** SmashWiki "Kirby (SSBU)/Side special": "partially charged with at least 30 charge frames, adding a flame effect to the hitboxes". */
+export const HAMMER_FLAME_FROM = 30;
+
+/** Whether the hammer is out on the move's `frame`, `charge` frames held, by the swing's put-away frame. */
+export function hammerVisible(frame: number, charge: number, sc: Pick<SpecialCharge, "loopFrame" | "frames">): boolean {
+  return frame - sc.loopFrame < (charge >= sc.frames ? HAMMER_PUT_AWAY_MAX : HAMMER_PUT_AWAY);
+}
+
+/** Whether `charge` frames held light the hammer. */
+export function hammerLit(charge: number): boolean {
+  return charge >= HAMMER_FLAME_FROM;
 }
 
 /** 0 at `from`, 1 at `to`, clamped. */
@@ -391,10 +413,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * on a 19% one.
    */
   sideB: ({ ctx, f, def, x, y, u, dir, frame, over }) => {
-    // Nothing before he reaches for it, nothing after he has put it away.
+    // Nothing before he reaches for it, nothing after he has put it away (Plan 6,
+    // Task 35: on the script's frame, `hammerVisible`).
     const drawn = ramp(frame, 9, 15);
-    const kept = 1 - ramp(frame, 40, 45);
-    if (drawn <= 0.01 || kept <= 0.01) return NOTHING;
+    const sc = def.moves.sideB?.specialCharge;
+    if (drawn <= 0.01 || (sc !== undefined && !hammerVisible(frame, f.charge, sc))) return NOTHING;
 
     const { cx, cy, r } = ball(x, y, u);
     // Straight up is 0 and the front is positive: hauled out overhead at −25°,
@@ -404,7 +427,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     const swing = ramp(frame, 15, 26);
     const settle = ramp(frame, 27, 44);
     const angle = (-25 - 50 * drawn + 160 * swing + 30 * settle) * DEG;
-    const charged = f.charge > 0;
+    // Lit only from 30 charge frames (Plan 6, Task 35; SmashWiki), not on any charge.
+    const charged = hammerLit(f.charge);
 
     // It comes out of nowhere — so it comes out *growing*, which is the only
     // honest way to introduce a prop the rig does not have a bone for.
@@ -420,7 +444,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 
     const paint = (): void => {
       ctx.save();
-      ctx.globalAlpha = Math.min(1, drawn * 1.8) * kept;
+      ctx.globalAlpha = Math.min(1, drawn * 1.8);
       ctx.translate(cx, cy);
       ctx.scale(dir, 1);
       // Pivot at his hands, not at the middle of his face. The swing turns

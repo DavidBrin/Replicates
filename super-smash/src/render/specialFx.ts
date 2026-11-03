@@ -43,7 +43,7 @@
 import type { FighterDef, FighterState } from "@/engine/types";
 import type { Camera } from "./camera";
 import { fxContextFor, struckWithFor, DREW_NOTHING, type MoveFxResult } from "./fxKit";
-import { fxFor } from "./chars";
+import { alwaysFxFor, fxFor } from "./chars";
 
 export type { SpecialFxResult, MoveFxResult, FxContext, FxFn } from "./fxKit";
 export { MOVE_FX_KEYS } from "./chars";
@@ -92,6 +92,10 @@ export function drawMoveFx(
   /** Cosmetic state, for the effects that need to know a swing connected. */
   struck?: { lastHit: ({ hitboxId: number; frame: number } | null)[]; frame: number },
 ): MoveFxResult {
+  // A state the fighter carries is drawn whatever it is doing (Plan 6, Task 35: a stored
+  // charge), before any move's, on the match's own clock (`frame` is the sim's here).
+  const always = def ? alwaysFxFor(def.id) : undefined;
+  if (def && always) always({ ...fxContextFor(ctx, def, f, cam, height, screenX, screenY, 1), frame: struck?.frame ?? 0 });
   if (f.move === null || !def) return DREW_NOTHING;
   if (!DRAWS_ITS_MOVE[f.action]) return DREW_NOTHING;
   const move = def.moves[f.move];

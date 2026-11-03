@@ -200,6 +200,32 @@ function decay(frame: number, from: number, span: number): number {
 
 /* ------------------------------------------------------------------- moves -- */
 
+/**
+ * A stored full Charge Shot, shown in every action (Plan 6, Task 35; `FxModule.always`):
+ * a ring pulsing out of the arm cannon every 20 frames of the match's clock, while
+ * `CombatState.storedCharge` holds a full charge. UNVERIFIED (cosmetic): Ultimate's own
+ * tell is a glow and a sound; the shape is by eye, in the Charge Shot's own colours.
+ */
+export const storedChargeTell: FxFn = ({ ctx, f, def, x, y, u, dir, height, frame }) => {
+  const full = def.moves.neutralB?.specialCharge?.frames;
+  if (full === undefined || f.combat.storedCharge < full) return NOTHING;
+  const k = (frame % 20) / 20;
+  const cx = x + dir * u * height * 0.24;
+  const cy = y - u * height * 0.52;
+  ctx.save();
+  glow(ctx, cx, cy, u * 1.6, "rgba(120,220,255,0.55)");
+  ctx.strokeStyle = `rgba(190,240,255,${(0.8 * (1 - k)).toFixed(3)})`;
+  ctx.lineWidth = Math.max(1, u * 0.25);
+  ctx.beginPath();
+  ctx.arc(cx, cy, u * (0.6 + 1.8 * k), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  return NOTHING;
+};
+
+/** Painted on every frame, before any move's (`FxModule.always`). */
+export const always: FxFn = storedChargeTell;
+
 export const fx: Partial<Record<MoveSlot, FxFn>> = {
   /**
    * Charge Shot.

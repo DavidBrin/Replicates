@@ -24,7 +24,8 @@ import { rotationPivot } from "../../characterArt";
 import { assignmentsTo, callsOf, createMockContext, type MockContext } from "../../mockContext";
 import { getCharacterRig } from "..";
 import { poses } from "./poses";
-import { fx } from "./fx";
+import { fx, HAMMER_FLAME_FROM, hammerLit, hammerVisible } from "./fx";
+import { runPainter } from "../../testFixtures";
 
 const rig = getCharacterRig("kirby");
 const NAMES = Object.keys(poses) as PoseName[];
@@ -645,7 +646,9 @@ describe("the effects paint on the frames they claim and not otherwise", () => {
     expect(drew("sideB", 16), "no hammer while it is cocked").toBeGreaterThan(5);
     expect(drew("sideB", 26), "no hammer on the contact frame").toBeGreaterThan(5);
     expect(drew("sideB", 27), "no hammer on the second active frame").toBeGreaterThan(5);
-    expect(drew("sideB", 50), "hammer still out long after the swing").toBe(0);
+    // Put away on the script's frame, the move's last (Plan 6, Task 35), not faded out by 45.
+    expect(drew("sideB", 68), "no hammer before it is put away").toBeGreaterThan(5);
+    expect(drew("sideB", 69), "hammer still out after it is put away").toBe(0);
   });
 
   it("only flames the hammer when it is charged, because only a charged one burns", () => {
@@ -1136,5 +1139,29 @@ describe("nothing an effect paints disappears into the rim", () => {
       }
     }
     expect([...new Set(offenders)]).toEqual([]);
+  });
+});
+
+describe("Hammer Flip's hammer and flame (Plan 6, Task 35)", () => {
+  const hammer = def.moves.sideB!.specialCharge!;
+  const at = (frame: number, charge: number) => runPainter(fx.sideB!, def, { frame, total: 69, f: { action: "special", move: "sideB", charge } });
+
+  it("puts the hammer away on the move's last frame, 69: the swing's 54 after the 15-frame wind-up", () => {
+    // rubendal 13.0.1 `game_specials`: `ArticleModule::remove_exist(…HAMMER)` on its frame 54, its hit on
+    // 11; the move's hit is on 26 (`kirby.ts`), so the swing starts after the loop frame, 15.
+    expect(hammerVisible(68, 0, hammer)).toBe(true);
+    expect(hammerVisible(69, 0, hammer)).toBe(false);
+    // `game_specialsmax`: 56, past the move's end, so a full charge keeps it to the last frame.
+    expect(hammerVisible(69, hammer.frames, hammer)).toBe(true);
+    expect(at(68, 0).calls.length).toBeGreaterThan(0);
+    expect(at(69, 0).calls).toHaveLength(0);
+  });
+
+  it("lights the hammer only from 30 charge frames (SmashWiki)", () => {
+    expect(HAMMER_FLAME_FROM).toBe(30);
+    expect(hammerLit(29)).toBe(false);
+    expect(hammerLit(30)).toBe(true);
+    // The painter's flame: more drawn at 30 charge frames than at 29.
+    expect(at(30, 30).calls.length).toBeGreaterThan(at(30, 29).calls.length);
   });
 });

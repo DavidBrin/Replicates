@@ -33,8 +33,10 @@ import { Btn, type InputFrame } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { bakedContext } from "@/game/bake";
 import { STAGES } from "@/stages";
-import { makeFighter } from "../../testFixtures";
-import { createMockContext, type MockContext } from "../../mockContext";
+import { makeFighter, runPainter } from "../../testFixtures";
+import { countOf, createMockContext, type MockContext } from "../../mockContext";
+import { emptyCombat } from "@/engine/combat";
+import { storedChargeTell } from "./fx";
 
 const rig = getCharacterRig("samus");
 
@@ -1293,5 +1295,17 @@ describe("the Morph Ball bomb's timer", () => {
     // FIRE (#FF8A2A) at 0.35 + 0.3 × the part of the 72 frames run.
     expect(glow(0)).toEqual(["rgba(255, 138, 42, 0.35)"]);
     expect(glow(72)).toEqual([`rgba(255, 138, 42, ${0.35 + 0.3})`]);
+  });
+});
+
+describe("a stored full Charge Shot shows (Plan 6, Task 35)", () => {
+  const tell = (storedCharge: number, action: "stand" | "run" = "stand") =>
+    runPainter(storedChargeTell, samus, { frame: 0, f: { action, combat: { ...emptyCombat(), storedCharge } } });
+
+  it("pulses a ring on the arm cannon in any action while a full charge is stored, and nothing short of full", () => {
+    const full = samus.moves.neutralB!.specialCharge!.frames;
+    expect(countOf(tell(full), "arc")).toBeGreaterThan(0);
+    expect(countOf(tell(full, "run"), "arc")).toBeGreaterThan(0);
+    expect(countOf(tell(full - 1), "arc")).toBe(0);
   });
 });

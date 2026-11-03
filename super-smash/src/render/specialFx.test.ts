@@ -54,6 +54,15 @@ describe("the effect table", () => {
     expect(covered.size).toBeGreaterThanOrEqual(FIGHTERS.length / 2);
   });
 
+  it("draws a fighter's own always-on effect with no move running: Samus's stored Charge Shot (Plan 6, Task 35)", () => {
+    const samus = byId.get("samus")!;
+    const stored = makeFighter({ defId: "samus", action: "stand", move: null });
+    stored.combat.storedCharge = samus.moves.neutralB!.specialCharge!.frames;
+    const ctx = createMockContext();
+    drawMoveFx(ctx, samus, stored, cam, 13, 0, 0, { lastHit: [], frame: 40 });
+    expect(ctx.calls.length).toBeGreaterThan(0);
+  });
+
   it("draws nothing for a fighter who is not doing a special", () => {
     const ctx = createMockContext();
     const before = ctx.calls.length;

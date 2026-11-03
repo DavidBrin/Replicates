@@ -24,7 +24,8 @@ import { emptyEvents } from "@/engine/types";
 import { emptyCombat } from "@/engine/combat";
 import { emptyKinetic } from "@/engine/kinetic";
 import { createCamera } from "./camera";
-import type { FxContext } from "./fxKit";
+import type { FxContext, FxFn } from "./fxKit";
+import { createMockContext, type MockContext } from "./mockContext";
 
 export function makeFighter(over: Partial<FighterState> = {}): FighterState {
   return {
@@ -265,4 +266,19 @@ export function makeFxContext(over: Partial<FxContext> & { ctx: CanvasRenderingC
     over: (paint) => paint(),
     ...over,
   };
+}
+
+/**
+ * Run one move painter on a mock canvas, with `makeFxContext`'s match context, the given
+ * fighter (`def`, and `f` over a fighter of that id), and `over` on top (Plan 6, Tasks 35-37).
+ */
+export function runPainter(
+  paint: FxFn,
+  def: FighterDef,
+  over: Omit<Partial<FxContext>, "ctx" | "def" | "f"> & { readonly f?: Partial<FighterState> } = {},
+): MockContext {
+  const ctx = createMockContext();
+  const { f, ...rest } = over;
+  paint(makeFxContext({ ctx, def, f: makeFighter({ defId: def.id, ...f }), ...rest }));
+  return ctx;
 }

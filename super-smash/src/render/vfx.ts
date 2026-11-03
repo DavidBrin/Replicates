@@ -20,6 +20,7 @@
 import { toFloat } from "@/engine/fixed";
 import { PERFECT_SHIELD_WINDOW, SMASH_CHARGE_MAX } from "@/engine/constants";
 import { STRONG_COUNTER_DAMAGE } from "@/engine/counter";
+import { withCopyAbility } from "@/engine/inhale";
 import type { FighterDef, FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
 import { moveTimingFor, poseTimeFor, type PosedFighter } from "./poses";
@@ -891,7 +892,7 @@ export type ChargeDefs = readonly (Pick<FighterDef, "moves"> | null | undefined)
  * move whose frame has passed its hold (`MoveTiming.chargeHold`) is swinging,
  * not charging, and glows no more. Without them, any charge glows.
  */
-export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs): void {
+export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs, fighterOf?: (id: string) => FighterDef | undefined): void {
   for (const f of state.fighters) {
     if (f.action !== "attack" && f.action !== "special") continue;
     if (f.charge <= 0) continue;
@@ -899,13 +900,19 @@ export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs
     // Kirby's Inhale, `MoveDef.holdLoop`): no charge, no glow. Not for a Kirby with
     // a Copy Ability: `defs` are the fighters' own, and his neutral special is then
     // the copied one, which may charge (fix round 2).
-    if (f.move !== null && f.combat.copy === "" && defs?.[f.port]?.moves[f.move]?.holdLoop !== undefined) continue;
-    const hold = moveTimingFor(defs?.[f.port], f.move)?.chargeHold;
+    // The definition the fighter runs (Plan 6, Task 35): a Kirby with a Copy Ability runs
+    // the copy's neutral special (`withCopyAbility`), so its hold and its full charge are the
+    // copy's. Without `fighterOf` the copy is unknown, and only its loop is ruled out.
+    const own = defs?.[f.port];
+    const copy = f.combat.copy !== "" ? fighterOf?.(f.combat.copy) : undefined;
+    const runs = own != null && copy !== undefined ? withCopyAbility(own as FighterDef, copy) : own;
+    if (f.move !== null && (f.combat.copy === "" || copy !== undefined) && runs?.moves[f.move]?.holdLoop !== undefined) continue;
+    const hold = moveTimingFor(runs, f.move)?.chargeHold;
     if (hold !== undefined && f.actionFrame > hold) continue;
     if (v.frame % 2 !== 0) continue;
     // The hue ramps over the move's own full charge: a special's (Plan 5:
     // Charge Shot 112, Hammer Flip 120), else a smash's 60.
-    const full = (f.move === null ? undefined : defs?.[f.port]?.moves[f.move]?.specialCharge?.frames) ?? SMASH_CHARGE_MAX;
+    const full = (f.move === null ? undefined : runs?.moves[f.move]?.specialCharge?.frames) ?? SMASH_CHARGE_MAX;
     const a = rand(v) * Math.PI * 2;
     const r = 9 + rand(v) * 5;
     push(v, {
@@ -1028,12 +1035,20 @@ export function trackSwings(v: VfxState, state: GameState): void {
   }
 }
 
-export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState, defs?: ChargeDefs, shift?: readonly number[]): void {
+export function stepVfx(
+  v: VfxState,
+  events: StepEvents | null,
+  state: GameState,
+  defs?: ChargeDefs,
+  shift?: readonly number[],
+  /** Each fighter's definition by id, for a Copy Ability's (Plan 6, Task 35). */
+  fighterOf?: (id: string) => FighterDef | undefined,
+): void {
   trackSwings(v, state);
   if (events) ingestEvents(v, events, state, shift);
   trackGroundFx(v, state, events);
   trackLaunchTrails(v, state);
-  trackChargeGlow(v, state, defs);
+  trackChargeGlow(v, state, defs, fighterOf);
   trackDamageSmoke(v, state);
   updateVfx(v);
 }

@@ -20,12 +20,15 @@ import {
   spawnDust,
   spawnHitSpark,
   stepVfx,
+  trackChargeGlow,
   footPlanted,
   trackGroundFx,
   trackLaunchTrails,
   updateVfx,
 } from "./vfx";
 import { makeDef, makeEvents, makeFighter, makeProjectile, makeStage, makeState } from "./testFixtures";
+import { getFighter } from "@/fighters";
+import { mixHex } from "./rigKit";
 import type { ProjectileContext } from "./fxKit";
 
 const stage = makeStage();
@@ -463,6 +466,26 @@ describe("continuous effects", () => {
     copying.combat.copy = "samus";
     for (let i = 0; i < 8; i++) stepVfx(v, null, makeState({ fighters: [copying] }), defs);
     expect(v.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
+  });
+
+  it("times and colours a copied charge by the copy's move: a copied bow glows held, not let go, and a copied Charge Shot ramps over its 112 (Plan 6, Task 35)", () => {
+    const kirby = getFighter("kirby")!;
+    const copying = (copy: string, actionFrame: number) => {
+      const f = makeFighter({ defId: "kirby", action: "special", move: "neutralB", actionFrame, charge: 20 });
+      f.combat.copy = copy;
+      return makeState({ fighters: [f] });
+    };
+    const motes = (state: ReturnType<typeof makeState>) => {
+      const v = createVfx();
+      for (let i = 0; i < 4; i++) trackChargeGlow(v, state, [kirby], getFighter);
+      return v.particles.filter((p) => p.kind === "chargeMote");
+    };
+    // The bow holds on its loop frame − 1 (`MoveTiming.chargeHold`), Kirby's own Inhale on none.
+    const bowHold = getFighter("link")!.moves.neutralB!.specialCharge!.loopFrame - 1;
+    expect(motes(copying("link", bowHold)).length).toBeGreaterThan(0);
+    expect(motes(copying("link", bowHold + 2))).toHaveLength(0);
+    // 20 of Charge Shot's 112 frames, where Kirby's own (no charge) would have said 20 of 60.
+    expect(motes(copying("samus", 12))[0].colour).toBe(mixHex("#FFE873", "#FF7A2A", 20 / 112));
   });
 
   it("ramps the motes' colour over the move's own full charge, not a smash's 60 frames", () => {

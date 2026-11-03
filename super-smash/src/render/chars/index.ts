@@ -66,6 +66,8 @@ export function getCharacterRig(id: string | null | undefined): CharacterRig {
 interface FxModule {
   readonly fx: Partial<Record<MoveSlot, FxFn>>;
   readonly projectiles?: Readonly<Record<string, ProjectilePainter>>;
+  /** Painted on every frame, before any move's: a state the fighter carries, such as a stored charge (Plan 6, Task 35). */
+  readonly always?: FxFn;
 }
 
 const FX_MODULES: Readonly<Record<string, FxModule>> = {
@@ -107,6 +109,11 @@ export function fxFor(id: string | null | undefined, slot: MoveSlot): FxFn | und
   if (!mine) return undefined;
   const fallback = FX_FALLBACK[slot];
   return mine[slot] ?? (fallback ? mine[fallback] : undefined);
+}
+
+/** What this fighter paints on every frame, whatever it is doing (`FxModule.always`; Plan 6, Task 35). */
+export function alwaysFxFor(id: string | null | undefined): FxFn | undefined {
+  return FX_MODULES[charKey(id)]?.always;
 }
 
 /**

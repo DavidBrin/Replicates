@@ -8,6 +8,7 @@
 
 import {
   NOTHING,
+  circle,
   crescent,
   glow,
   polygon,
@@ -75,6 +76,30 @@ function sweepArc(
   }
   ctx.stroke();
 }
+
+/**
+ * A stored full Giant Punch, shown in every action (Plan 6, Task 35; `FxModule.always`):
+ * steam puffing off his near fist, a puff every 24 frames of the match's clock, rising and
+ * fading, while `CombatState.storedCharge` holds a full charge. UNVERIFIED (cosmetic):
+ * Ultimate's own tell is his arm's glow and a sound; the shape is by eye.
+ */
+export const storedChargeTell: FxFn = ({ ctx, f, def, x, y, u, dir, height, frame }) => {
+  const full = def.moves.neutralB?.specialCharge?.frames;
+  if (full === undefined || f.combat.storedCharge < full) return NOTHING;
+  const fistX = x + dir * u * height * 0.3;
+  const fistY = y - u * height * 0.12;
+  ctx.save();
+  for (let i = 0; i < 2; i++) {
+    const k = ((frame + i * 12) % 24) / 24;
+    ctx.fillStyle = `rgba(235,235,235,${(0.55 * (1 - k)).toFixed(3)})`;
+    circle(ctx, fistX + dir * u * 0.4 * k, fistY - u * height * 0.18 * k, u * (0.5 + 0.9 * k));
+  }
+  ctx.restore();
+  return NOTHING;
+};
+
+/** Painted on every frame, before any move's (`FxModule.always`). */
+export const always: FxFn = storedChargeTell;
 
 export const fx: Partial<Record<MoveSlot, FxFn>> = {
   /**
