@@ -3,7 +3,7 @@ import { DoubleSide, Vector3, type BufferAttribute, type MeshBasicMaterial } fro
 
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { runScript, scheduleOf } from "@/engine/acmd/interpreter";
-import { gameScriptFor } from "@/engine/acmd/legacy";
+import { THROW_SLOTS, gameScriptFor } from "@/engine/acmd/legacy";
 import type { AttackParams } from "@/engine/acmd/types";
 import { activeHitboxes, actionFrameOf } from "@/engine/hitbox";
 import { fx, toFloat } from "@/engine/fixed";
@@ -48,8 +48,6 @@ describe("sword and kick trails (Plan 6, Task 34)", () => {
     expect(boneAt("link", "ftilt", 16)).toBe("sword2");
     expect(boneAt("marth", "fsmash", 10)).toBe("sword1");
     expect(boneAt("kirby", "ftilt", 5)).toBe("footl");
-    // Link's up throw slashes upward with his sword: a swing, trailed like any other.
-    expect(boneAt("link", "uthrow", 26)).toBe("sword2");
     // Marth's jab and down air list an `armr` box first; the blade reaches farther.
     expect(boneAt("marth", "jab1", 5)).toBe("sword1");
     expect(boneAt("marth", "jab2", 4)).toBe("sword1");
@@ -61,6 +59,21 @@ describe("sword and kick trails (Plan 6, Task 34)", () => {
     expect(trailBoxesOf(def("link"), "jab1", bake.bones)).toBeNull();
     expect(trailBoxesOf(def("mario"), "pummel", bake.bones)).toBeNull();
     expect(trailBoxesOf(def("marth"), "grab", bake.bones)).toBeNull();
+  });
+
+  /**
+   * The final wave (final review item 37; Task 34's ruling): trails are for sword and kick
+   * attacks, and a throw draws none. Mario's back throw trailed a constant ribbon off his hip
+   * for its 27 live frames; Link's throws trailed his knee and his sword.
+   */
+  it("draws no trail for any throw", () => {
+    expect(trailBoxesOf(def("mario"), "bthrow", bake.bones)).toBeNull();
+    expect(trailBoxesOf(def("link"), "uthrow", bake.bones)).toBeNull();
+    const trailed = FIGHTERS.flatMap((base) => {
+      const d = def(base.id);
+      return [...THROW_SLOTS].filter((slot) => d.moves[slot] !== undefined && trailBoxesOf(d, slot, bake.bones) !== null).map((slot) => `${d.id} ${slot}`);
+    });
+    expect(trailed).toEqual([]);
   });
 
   /**
@@ -105,7 +118,8 @@ describe("sword and kick trails (Plan 6, Task 34)", () => {
       for (const slot of Object.keys(d.moves) as MoveSlot[]) {
         const script = gameScriptFor(d, slot);
         const table = trailBoxesOf(d, slot, bake.bones);
-        if (script === null) continue;
+        // A throw draws none, whatever its boxes ride (the test above).
+        if (script === null || THROW_SLOTS.has(slot)) continue;
         if (table !== null) trailed++;
         let last = 0;
         for (const e of scheduleOf(script).fire) if (e > last) last = e;

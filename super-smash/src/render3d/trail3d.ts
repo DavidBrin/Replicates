@@ -20,7 +20,7 @@ import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial } 
 import type { BoneTable } from "@/engine/acmd/bones";
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { runScript, scheduleOf } from "@/engine/acmd/interpreter";
-import { gameScriptFor } from "@/engine/acmd/legacy";
+import { THROW_SLOTS, gameScriptFor } from "@/engine/acmd/legacy";
 import type { AttackParams } from "@/engine/acmd/types";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, MoveSlot } from "@/engine/types";
@@ -63,9 +63,12 @@ function boxOffset(a: AttackParams): { far: number; second: boolean } {
  * own bone, plus its radius), placed as the sim places it (`scriptHitboxes`, through
  * `bones`). Only boxes on a limb count, so not the root and not a box on its bone; a grab's
  * `CATCH`es are not attacks. An entry is null on a frame with no such box. The result is
- * null for a move that never has one: a root-bone move, a grab, or a pummel.
+ * null for a move that never has one: a root-bone move, a grab, or a pummel. A throw draws
+ * none (final wave, item 37; Task 34's ruling): trails are for sword and kick attacks, and
+ * Mario's back throw, a spin, trailed off his hip for all 27 of its live frames.
  */
 export function trailBoxesOf(def: FighterDef, slot: MoveSlot, bones: BoneTable): readonly (TrailBox | null)[] | null {
+  if (THROW_SLOTS.has(slot)) return null;
   const script = gameScriptFor(def, slot);
   if (script === null) return null;
   let last = 0;
