@@ -1252,6 +1252,8 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     readonly credit: number;
     /** The victim's height, ground and jumps spent after every step. */
     readonly trail: readonly { y: number; grounded: boolean; jumpsUsed: number }[];
+    /** On the step the jabs land: the victim's freeze left, whether a launch is still parked, and whether it stands on the floor. */
+    readonly contact: { readonly hitlag: number; readonly parked: boolean; readonly grounded: boolean };
   }
 
   /**
@@ -1274,6 +1276,7 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     let prev: InputFrame[] = [hold, 0, 0];
     let hitstun = -1;
     let credit = -1;
+    let contact = { hitlag: -1, parked: false, grounded: true };
     const trail: { y: number; grounded: boolean; jumpsUsed: number }[] = [];
     for (let i = 0; i < 40; i++) {
       const now: InputFrame[] = [hitstun < 0 ? hold : after, 0, 0];
@@ -1288,11 +1291,12 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
       if (hitstun < 0 && s.fighters[0].damage > 0) {
         hitstun = s.fighters[0].hitstun;
         credit = tracker.lastHitBy[0];
+        contact = { hitlag: s.fighters[0].hitlag, parked: s.fighters[0].pendingFacing !== 0, grounded: s.fighters[0].grounded };
       }
       trail.push({ y: s.fighters[0].y, grounded: s.fighters[0].grounded, jumpsUsed: s.fighters[0].jumpsUsed });
     }
     const v = s.fighters[0];
-    return { side: Math.sign(v.x), hitstun, damage: v.damage, x: v.x, y: v.y, grounded: v.grounded, jumpsUsed: v.jumpsUsed, credit, trail };
+    return { side: Math.sign(v.x), hitstun, damage: v.damage, x: v.x, y: v.y, grounded: v.grounded, jumpsUsed: v.jumpsUsed, credit, trail, contact };
   }
 
   it("from both sides with equal launches, the attacker further left sets the direction, whichever ports", () => {
@@ -1338,9 +1342,17 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     for (const after of [Btn.Down, Btn.Up]) {
       const [weakFirst, snapFirst] = [sandwich(1, 2, { rightId: "bigsnap", after }), sandwich(2, 1, { rightId: "bigsnap", after })];
       expect(snapFirst.side).toBe(-1);
+      // It fired on the contact step in both: no freeze, nothing parked, off the floor.
+      const fired = { hitlag: 0, parked: false, grounded: false };
+      expect([weakFirst.contact, snapFirst.contact]).toEqual([fired, fired]);
       expect(weakFirst.trail).toEqual(snapFirst.trail);
       expect([weakFirst.x, weakFirst.hitstun]).toEqual([snapFirst.x, snapFirst.hitstun]);
     }
+  });
+
+  it("a lone launch with no freeze fires on its contact step (fix round 3)", () => {
+    // The snap jab alone, lifting at 45°: no freeze, nothing parked, off the floor.
+    expect(sandwich(1, 2, { leftId: "snap", rightJabs: false }).contact).toEqual({ hitlag: 0, parked: false, grounded: false });
   });
 
   it("the kill credit goes to the attacker whose launch stands, whichever ports (fix round 1)", () => {

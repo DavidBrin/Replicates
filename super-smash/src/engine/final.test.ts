@@ -414,6 +414,45 @@ describe("the trapped (Plan 5, Task 14)", () => {
     expect(toFloat(states[states.length - 1].fighters[1].damage)).toBeCloseTo(21 * 1.05, 2);
   });
 
+  it("stay still in the trap's freeze when a launch landed on them earlier the same step (Plan 6, Task 17 fix round 3)", () => {
+    // A jab that passes through the trap box (no clank) from the right, and the trap from
+    // the left, on the victim (port 1) on the same step; the victim mashes Left (SDI). The
+    // jab resolves first (port 0), so its launch waits for the step's end (`settleLaunches`)
+    // when the trap lands. The other order is no trap at all: the jab, judged before the
+    // trap landed, reaches the newly trapped and ends the trap (as before Task 17).
+    const jabber = defWith({ ...MOVES, jab1: { ...JAB, hitboxes: [box({ startFrame: 2, endFrame: 3, transcendent: true })] } });
+    const ctx: SimContext = { fighter: (id) => (id === "jabber" ? jabber : DEF), stage: () => STAGE };
+    const layout = (trapper: number, jabbing: number) => {
+      const ids = [0, 1, 2].map((port) => (port === jabbing ? "jabber" : "t"));
+      const s = createInitialState("s", ids.map((defId) => ({ defId })), RULES, 1, ctx);
+      const at = (port: number, x: number, facing: number) => Object.assign(s.fighters[port], { action: "stand", actionFrame: 0, grounded: true, platform: 0, facing, intangible: 0, x, y: 0 });
+      at(trapper, fx(-10), 1);
+      at(1, 0, -1);
+      at(jabbing, fx(10), -1);
+      s.fighters[trapper].finalSmashReady = FINAL_SMASH_READY;
+      const { states } = run(
+        s,
+        30,
+        (i) => {
+          const now: InputFrame[] = [0, i % 2 === 0 ? Btn.Left : 0, 0];
+          if (i === 0) now[trapper] = Btn.Special;
+          if (i === 3) now[jabbing] = Btn.Attack;
+          return now;
+        },
+        ctx,
+      );
+      const caught = states.findIndex((st) => st.fighters[1].action === "finalTrapped");
+      return { caught, damaged: states[caught]?.fighters[1].damage ?? 0, frozen: states.filter((st) => st.fighters[1].action === "finalTrapped" && st.fighters[1].hitlag > 0).map((st) => [st.fighters[1].x, st.fighters[1].combat.victimFreeze]) };
+    };
+    const jabFirst = layout(2, 0);
+    // The jab and the trap land together on the step the trap catches the victim...
+    expect(jabFirst.caught).toBeGreaterThan(0);
+    expect(toFloat(jabFirst.damaged)).toBeGreaterThan(10);
+    expect(jabFirst.frozen.length).toBeGreaterThan(1);
+    // ...and the trapped takes the trap's freeze without SDI: it does not move in it.
+    expect(new Set(jabFirst.frozen.map(([x, vf]) => `${x} ${vf}`))).toEqual(new Set([`${jabFirst.frozen[0][0]} false`]));
+  });
+
   it("are let go by a KO, which clears `trappedBy`", () => {
     const { states } = run(ready(), 12, USE);
     const at = states.findIndex((st) => st.fighters[1].action === "finalTrapped");

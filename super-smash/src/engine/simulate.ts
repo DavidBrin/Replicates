@@ -2483,8 +2483,9 @@ function applyInvincibleHit(
  * fighter's position and this decides their velocity. `step` has already
  * applied the automatic SDI shift, kept the shifts out of the stage and
  * re-checked the ground by then (phase 3), so the position and `grounded` read
- * here are where the victim really is. A hit with no freeze calls it on
- * contact, with nothing shifted.
+ * here are where the victim really is. A launch with no freeze is fired on its
+ * contact step too, once the step's hits and throws are in (`settleLaunches`),
+ * with nothing shifted.
  *
  * Everything is in attacker-relative space, so the stick is mirrored by the
  * facing the launch was authored against before it is read.
@@ -2495,8 +2496,9 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   // of its hitstun (Task 7) is not the hop's, and deals 1x, not 0.85x (Plan 3
   // final wave; the final review's Minor 3). Here, as the launch fires, not on
   // contact: in a trade the fighter's own aerial lands on the same frame and is
-  // still the short hop's, whichever port the hit phase reaches first (a hit with
-  // no freeze fires its launch on contact, so a trade of two of those does not).
+  // still the short hop's, whichever port the hit phase reaches first. A launch with
+  // no freeze fires only once the step's hits are in (`settleLaunches`, Plan 6, Task
+  // 17 fix round 2), so a trade of two of those keeps both short hops as well.
   f.shortHop = false;
   if (f.combat.autolink) {
     releaseAutolink(f);
@@ -3138,7 +3140,11 @@ function applyHit(
   if ((c.final === "trap" && !trapsStone) || c.final === "hold" || onTrapped) {
     applyHeldHit(s, attacker, victim, c, contact, events);
     if (c.final === "trap") {
+      // A launch that landed earlier this step goes with it, its freeze included: the
+      // trapped take the trap's freeze without SDI, which `settleLaunches` would turn on
+      // again (Plan 6, Task 17 fix round 3).
       clearPendingLaunch(victim);
+      launches.delete(victim.port);
       if (victim.ledge !== null) victim.ledgeLockout = LEDGE_REGRAB_LOCKOUT_FRAMES;
       victim.ledge = null;
       trapVictim(attacker, victim, s.fighters);
@@ -3614,19 +3620,21 @@ function applyHit(
   // UNVERIFIED: SmashWiki "Smash directional influence" says ASDI also applies
   // to projectiles with a hitlag multiplier of 0, which have no freeze. Here it
   // takes a freeze: the shift is clamped to the stage where the freeze ends
-  // (`clampShiftToStage`), and a zero-lag release happens in this function,
-  // which has no stage to clamp against.
+  // (`clampShiftToStage`), and a zero-lag release happens once the step's hits are
+  // in (`settleLaunches`), which has no stage to clamp against.
   // Only a freeze with a frame after the hit's has a last frame to shift on (one
-  // of 0 or 1 releases on contact, `settleLaunches`, which clears the flag again).
+  // of 0 or 1 is released on its contact step by `settleLaunches`, which clears
+  // the flag again).
   victim.combat.asdi = framesAfterHit(lag) > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
   parkAutolink(victim, hb, c, attacker);
   // Which way the launch goes, for the spark: the un-DI'd direction (DI is
   // sampled on the last frame of hitlag, so this is the launch as the *hit* set
   // it, right for a graphic that fires on the contact frame). Fixed now, because
-  // a hit with no freeze fires (and clears) the parked launch below — as every
-  // published throw but one does: `Hitlag=0.0` (Plan 5, Task 7; before it, such
-  // a hit reported 0°). An autolink points along its own vector, as it stands at
+  // a hit with no freeze has its parked launch fired (and cleared) on this same
+  // step, once the step's hits are in (`settleLaunches`) — as every published
+  // throw but one does: `Hitlag=0.0` (Plan 5, Task 7; before it, such a hit
+  // reported 0°). An autolink points along its own vector, as it stands at
   // contact (the victim may SDI before it is computed for real).
   const link = victim.combat.autolink ? autolinkVector(parkedAutolink(victim.combat), victim.x, victim.y) : null;
   const sparkAngle = link !== null ? vectorWorldAngle(link.vx, link.vy, sourceFacing) : launchWorldAngle(victim.pendingAngle, victim.pendingFacing);
