@@ -12,8 +12,9 @@ import { PadOptions } from "./PadOptions";
 /** Pads the test presses buttons on, behind `navigator.getGamepads`. */
 let pressed = new Set<number>();
 let pressedOnSecond = new Set<number>();
+let pressedOnThird = new Set<number>();
 function fakePad(index = 0): Gamepad {
-  const down = index === 0 ? pressed : pressedOnSecond;
+  const down = [pressed, pressedOnSecond, pressedOnThird][index] ?? new Set<number>();
   return {
     index,
     connected: true,
@@ -30,6 +31,7 @@ beforeEach(() => {
   useMatchConfig.getState().reset();
   pressed = new Set();
   pressedOnSecond = new Set();
+  pressedOnThird = new Set();
   slots = () => [fakePad(0), fakePad(1)];
   vi.useFakeTimers();
   Object.defineProperty(navigator, "getGamepads", { configurable: true, value: () => slots() });
@@ -163,6 +165,48 @@ describe("PadOptions listens by connection order", () => {
     pressedOnSecond = new Set([3]);
     poll();
     expect(padOf(0).buttons.attack).toEqual([3]);
+  });
+});
+
+/**
+ * The final wave (seam review I-1): the capture hears the pad that drives the seat in the
+ * match (`padIndexForSeat`), a pad that pressed to join included, not the seat's place
+ * among the humans.
+ */
+describe("PadOptions listens to the pad that drives the seat", () => {
+  it("hears a joined pad for its seat, and the next unjoined pad for the human after it", () => {
+    // P1 and P3 human, P2 a CPU, pads 0-2: pads 0 and 1 drive P1 and P3 by connection
+    // order, so pad 2 presses A on the select screen and takes P2.
+    slots = () => [fakePad(0), fakePad(1), fakePad(2)];
+    const config = useMatchConfig.getState();
+    config.addPlayer();
+    config.setPlayerKind(1, "cpu");
+    config.setPlayerKind(2, "human");
+    config.seatPad(2);
+    expect(useMatchConfig.getState().players.map((p) => [p.kind, p.joinedPad])).toEqual([
+      ["human", null],
+      ["human", 2],
+      ["human", null],
+    ]);
+    render(<PadOptions />);
+    fireEvent.click(screen.getByRole("button", { name: "P2 attack: A" }));
+    pressedOnSecond = new Set([3]);
+    poll();
+    expect(padOf(1).buttons.attack).toEqual([0]);
+    pressedOnThird = new Set([2]);
+    poll();
+    expect(padOf(1).buttons.attack).toEqual([2]);
+
+    pressedOnSecond = new Set();
+    pressedOnThird = new Set();
+    fireEvent.click(screen.getByRole("button", { name: "P3 attack: A" }));
+    pressedOnThird = new Set([3]);
+    poll();
+    expect(padOf(2).buttons.attack).toEqual([0]);
+    pressedOnSecond = new Set([1]);
+    poll();
+    expect(padOf(2).buttons.attack).toEqual([1]);
+    expect(padOf(0)).toEqual(DEFAULT_PAD_SETTINGS);
   });
 });
 

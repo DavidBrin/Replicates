@@ -17,16 +17,25 @@ export interface SeatOfPad {
 }
 
 /**
- * The indices of the pads that already drive a seat: each joined pad, and the pads nobody
- * joined that connection order gives the human seats nobody joined, one each, lowest index
- * first, as `/play` maps them (`padPortMap` over the unjoined humans).
+ * The `Gamepad.index` of the pad that drives `seats[seat]`, or null: the one rule for which
+ * pad plays whom (final wave, seam review I-1), as `/play`'s `GamepadInput` maps them
+ * (`portForPadIndex` for the joined, `padPortMap` over the unjoined humans). A joined seat
+ * is its own pad's, connected or not, and no other pad takes it. The k-th human seat nobody
+ * joined is the k-th connected pad nobody joined, lowest index first. A CPU seat has none.
+ * `seats` is in port order, so `seat` is the port.
  */
+export function padIndexForSeat(pads: readonly (Gamepad | null)[], seats: readonly SeatOfPad[], seat: number): number | null {
+  const own = seats[seat];
+  if (own === undefined || own.kind !== "human") return null;
+  if (own.joinedPad !== null) return own.joinedPad;
+  const joined = new Set(seats.flatMap((s) => (s.joinedPad === null ? [] : [s.joinedPad])));
+  const before = seats.slice(0, seat).filter((s) => s.kind === "human" && s.joinedPad === null).length;
+  return padsInOrder(pads).filter((pad) => !joined.has(pad.index))[before]?.index ?? null;
+}
+
+/** The indices of the pads that already drive a seat (`padIndexForSeat`), joined or by connection order. */
 export function drivingPads(pads: readonly (Gamepad | null)[], seats: readonly SeatOfPad[]): Set<number> {
-  const driving = new Set(seats.flatMap((seat) => (seat.joinedPad === null ? [] : [seat.joinedPad])));
-  const open = seats.filter((seat) => seat.kind === "human" && seat.joinedPad === null).length;
-  const unjoined = padsInOrder(pads).filter((pad) => !driving.has(pad.index));
-  for (const pad of unjoined.slice(0, open)) driving.add(pad.index);
-  return driving;
+  return new Set(seats.flatMap((_, seat) => padIndexForSeat(pads, seats, seat) ?? []));
 }
 
 /**

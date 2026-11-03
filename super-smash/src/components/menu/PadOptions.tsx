@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   DEFAULT_PAD_SETTINGS,
@@ -14,6 +14,7 @@ import {
   type PadSettings,
   type RightStickMode,
 } from "@/input/gamepad";
+import { padIndexForSeat } from "@/input/padJoin";
 import { portColour, portTag, useMatchConfig } from "@/lib/matchConfig";
 import { setOwnPad, useOnlineStore } from "@/lib/onlineStore";
 import { ROLE_PORT } from "@/net/signalProtocol";
@@ -35,8 +36,12 @@ const STICK_NAMES: Readonly<Record<RightStickMode, string>> = {
 /** How often the capture looks at the pads: once a frame. */
 const CAPTURE_POLL_MS = 16;
 
-/** The pads a capture hears: one, by its place in connection order (`padsInOrder`), or every pad. */
-type PadSource = number | "every";
+/**
+ * The pads a capture hears: the one that drives a seat, named by the seat's port, or every
+ * pad. The seat's pad is asked of `padIndexForSeat` on each poll, so a pad plugged in while
+ * the capture waits is heard as the match would seat it.
+ */
+type PadSource = { readonly port: number } | "every";
 
 function padsSupported(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.getGamepads === "function";
@@ -54,12 +59,14 @@ function noSubscription(): () => void {
  */
 function buttonsDown(source: PadSource): Set<number> {
   const down = new Set<number>();
-  padsInOrder(navigator.getGamepads()).forEach((pad, ordinal) => {
-    if (source !== "every" && ordinal !== source) return;
+  const pads = navigator.getGamepads();
+  const own = source === "every" ? null : padIndexForSeat(pads, useMatchConfig.getState().players, source.port);
+  for (const pad of padsInOrder(pads)) {
+    if (source !== "every" && pad.index !== own) continue;
     pad.buttons.forEach((b, i) => {
       if (b.pressed && i < PAD_BUTTON_LIMIT) down.add(i);
     });
-  });
+  }
   return down;
 }
 
@@ -97,8 +104,10 @@ function useButtonCapture(source: PadSource | null, onPick: (button: number) => 
  * nothing. Kept on the player's slot; the match's `GamepadInput` reads it
  * through `padMappingOf`.
  *
- * Offline every human has a row, and a capture hears only that human's own
- * pad: the first connected pad is the first human's (`padPortMap`). Online
+ * Offline every human has a row, and a capture hears only the pad that drives
+ * that human in the match (`padIndexForSeat`): a pad that pressed to join on the
+ * select screen drives its own seat, and the rest go in connection order to the
+ * humans nobody joined (Plan 6, Task 30). Online
  * (ruling R-T20a) only this machine's port has a row, the host P1 and the
  * guest P2; every pad on this machine drives it, so a capture hears them all,
  * and a change is kept for after the session (`setOwnPad`).
@@ -119,8 +128,11 @@ export function PadOptions() {
   // The server render assumes support; the browser says, without a mismatch.
   const supported = useSyncExternalStore(noSubscription, padsSupported, () => true);
 
-  const ordinal = capturing === null ? -1 : humans.findIndex((p) => p.port === capturing.port);
-  const source: PadSource | null = capturing === null ? null : online ? "every" : ordinal < 0 ? null : ordinal;
+  const capturePort = capturing?.port ?? null;
+  const source = useMemo<PadSource | null>(
+    () => (capturePort === null ? null : online ? "every" : { port: capturePort }),
+    [capturePort, online],
+  );
   useButtonCapture(source, (button) => {
     if (capturing === null) return;
     const slot = useMatchConfig.getState().players.find((p) => p.port === capturing.port);
@@ -187,7 +199,9 @@ export function PadOptions() {
         ))}
       </ul>
       <p className="mt-2 text-xs text-white/45">
-        {online ? "Every pad on this machine plays as you." : "The first pad connected plays as the first human, and each next pad as the next human."} A
+        {online
+          ? "Every pad on this machine plays as you."
+          : "The first pad connected plays as the first human, and each next pad as the next human; a pad that pressed A to join on the character select plays the seat it took."} A
         d-pad button given an action no longer moves you. A flick of the right stick is a smash attack, or a special, in
         its direction.
       </p>
