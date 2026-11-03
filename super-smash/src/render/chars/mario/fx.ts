@@ -558,7 +558,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * wants to be behind him. It is the graphic that tells you which special he
    * threw from the very first frame, long before any water exists.
    */
-  downB: ({ ctx, def, x, y, u, dir, frame, total, over, projectilesOut }) => {
+  downB: ({ ctx, def, x, y, u, dir, frame, total, over, launchRefused }) => {
     const muzzle = muzzleOf(def);
     if (muzzle === null) return NOTHING;
     const appear = Math.min(1, frame / 5);
@@ -642,11 +642,12 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     });
 
     // Spatter at the muzzle while it pumps: from the first pump on frame 21
-    // (SmashWiki: "Pumps 21-32, …") to the last one's leaving on 51, and only while
-    // a pump of its own is out (Plan 6, Task 36): one refused inside a wall sprays nothing.
+    // (SmashWiki: "Pumps 21-32, …") to the last one's leaving on 51, unless its pump
+    // is refused (Plan 6, Task 36 fix round 1): one that would spawn inside a wall
+    // sprays nothing. One spent on a body at the nozzle the step it came out still sprays.
     const pump = def.moves.downB?.projectiles?.[0]?.id;
-    const pumped = pump === undefined || projectilesOut === undefined || projectilesOut(pump) > 0;
-    if (pumped && frame >= muzzle.first && frame <= muzzle.last) over(() => {
+    const refused = pump !== undefined && launchRefused?.(pump) === true;
+    if (!refused && frame >= muzzle.first && frame <= muzzle.last) over(() => {
       ctx.save();
       ctx.globalAlpha = 0.45 * alpha;
       ctx.fillStyle = "#EAF6FF";

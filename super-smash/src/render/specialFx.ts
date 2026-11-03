@@ -40,7 +40,9 @@
  * entry is already the cheap path.
  */
 
-import type { FighterDef, FighterState, ProjectileState } from "@/engine/types";
+import type { FighterDef, FighterState, GameState, StageDef } from "@/engine/types";
+import { insideSolidBody } from "@/engine/physics";
+import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import type { Camera } from "./camera";
 import { fxContextFor, struckWithFor, DREW_NOTHING, type MoveFxResult } from "./fxKit";
 import { alwaysFxFor, fxFor } from "./chars";
@@ -74,6 +76,19 @@ const DRAWS_ITS_MOVE: Partial<Record<FighterState["action"], true>> = {
 };
 
 /**
+ * Would `f`'s projectile `id`, launched now, be refused: does it spawn inside the
+ * stage's solid body, the engine's own test on the engine's own spawn point
+ * (`spawnDueProjectiles`; Plan 6, Task 36 fix round 1)? Pure: it reads the state and
+ * keeps nothing.
+ */
+function launchRefused(def: FighterDef, f: FighterState, id: string, stage: StageDef, stageFrame: number): boolean {
+  const pd = findProjectileDef(def, id);
+  if (pd === undefined) return false;
+  const p = spawnProjectile(pd, f, 0);
+  return insideSolidBody(stage, stageFrame, p.x, p.y);
+}
+
+/**
  * Paint whatever the fighter's current move paints.
  *
  * Under the figure by default; anything the effect handed to `over` comes back
@@ -93,8 +108,8 @@ export function drawMoveFx(
   struck?: {
     lastHit: ({ hitboxId: number; frame: number } | null)[];
     frame: number;
-    /** The projectiles in flight, for `FxContext.projectilesOut` (Plan 6, Task 36). */
-    projectiles?: readonly ProjectileState[];
+    /** The match as it stands, for `FxContext.launchRefused` (Plan 6, Task 36 fix round 1). */
+    world?: { readonly stage: StageDef; readonly state: GameState };
   },
 ): MoveFxResult {
   // A state the fighter carries is drawn whatever it is doing (Plan 6, Task 35: a stored
@@ -122,12 +137,8 @@ export function drawMoveFx(
     struck ? struckWithFor(struck.lastHit, f) : undefined,
     (paint) => over.push(paint),
   );
-  const flying = struck?.projectiles;
-  const result = fn(
-    flying === undefined
-      ? context
-      : { ...context, projectilesOut: (id) => flying.reduce((n, p) => (p.owner === f.port && p.defId === id ? n + 1 : n), 0) },
-  );
+  const world = struck?.world;
+  const result = fn(world === undefined ? context : { ...context, launchRefused: (id) => launchRefused(def, f, id, world.stage, world.state.stageFrame) });
   // Not `result ?? DREW_NOTHING`: an effect that returns `{ hideFigure: true }`
   // returns a `SpecialFxResult`, which carries no queue, and taking it whole
   // would throw away every paint it had just deferred. Kirby's Stone is exactly

@@ -808,13 +808,13 @@ describe("Mario Finale's flames (Plan 5, Task 17 fix round 2, ruling R-T17g)", (
   });
 });
 
-describe("F.L.U.D.D.'s spray (Plan 6, Task 36)", () => {
-  const pumping = (out?: number) =>
-    runPainter(fx.downB!, mario, { frame: 30, total: 67, f: { action: "special", move: "downB" }, ...(out === undefined ? {} : { projectilesOut: () => out }) });
+describe("F.L.U.D.D.'s spray (Plan 6, Task 36; fix round 1)", () => {
+  const pumping = (refused?: boolean) =>
+    runPainter(fx.downB!, mario, { frame: 30, total: 67, f: { action: "special", move: "downB" }, ...(refused === undefined ? {} : { launchRefused: () => refused }) });
 
-  it("sprays at the nozzle only while a pump of its own is out: a refused pump (inside a wall) leaves it dry", () => {
-    expect(countOf(pumping(1), "fill")).toBeGreaterThan(countOf(pumping(0), "fill"));
-    // With no count to read (the animation lab), as before.
-    expect(countOf(pumping(), "fill")).toBe(countOf(pumping(1), "fill"));
+  it("sprays at the nozzle unless its pump is refused (spawning inside a wall), which leaves it dry", () => {
+    expect(countOf(pumping(false), "fill")).toBeGreaterThan(countOf(pumping(true), "fill"));
+    // With no stage to ask (the animation lab), as before.
+    expect(countOf(pumping(), "fill")).toBe(countOf(pumping(false), "fill"));
   });
 });

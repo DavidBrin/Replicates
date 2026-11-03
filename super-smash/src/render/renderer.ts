@@ -530,7 +530,7 @@ function drawOneFighter(ctx: CanvasRenderingContext2D, state: RenderState, cam: 
     drawMoveFx(ctx, d.def, f, cam, height, screen.x, screen.y, {
       lastHit: state.vfx.lastHit,
       frame: state.current.frame,
-      projectiles: state.current.projectiles,
+      world: { stage: state.stage, state: state.current },
     }),
   );
 

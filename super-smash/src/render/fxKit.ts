@@ -94,12 +94,14 @@ export interface FxContext {
    */
   readonly struckWith?: number | null;
   /**
-   * How many of this fighter's own projectiles of def id `defId` are out now (Plan 6,
-   * Task 36): a painter that animates a launcher reads what actually came out, so a
-   * pump refused inside a wall leaves F.L.U.D.D. dry. Absent where no match runs (the
-   * animation lab): the painter draws as if it came out.
+   * Would this fighter's projectile of def id `defId`, launched now, be refused (Plan 6,
+   * Task 36 fix round 1)? The engine never launches one that would spawn inside the
+   * stage's solid body (`insideSolidBody`), so a painter that animates a launcher
+   * leaves F.L.U.D.D. dry against a wall. Not whether one is still out: a pump that
+   * meets a body at the nozzle is spawned, hits and is gone in the same step. Absent
+   * where no match runs (the animation lab): the painter draws as if it came out.
    */
-  readonly projectilesOut?: (defId: string) => number;
+  readonly launchRefused?: (defId: string) => boolean;
   /**
    * Paint this *after* the figure instead of under it.
    *

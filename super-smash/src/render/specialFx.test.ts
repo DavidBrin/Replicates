@@ -10,13 +10,19 @@
 
 import { describe, expect, it } from "vitest";
 import { FIGHTERS } from "@/fighters";
-import type { FighterState, MoveSlot } from "@/engine/types";
+import { Btn, type FighterState, type GameState, type InputFrame, type MoveSlot } from "@/engine/types";
+import { fx as q12 } from "@/engine/fixed";
+import { moveFrameOf } from "@/engine/hitbox";
+import { createInitialState, step } from "@/engine/simulate";
+import { bakedContext } from "@/game/bake";
+import { readBakeFromDisk } from "@/game/bakeNode";
+import { STAGES } from "@/stages";
 import { createCamera } from "./camera";
-import { createMockContext, countOf } from "./mockContext";
+import { assignmentsTo, createMockContext, countOf } from "./mockContext";
 import { MOVE_FX_KEYS, drawMoveFx } from "./specialFx";
 import { fxContextFor } from "./fxKit";
 import { fxFor } from "./chars";
-import { makeFighter, makeProjectile, makeStage } from "./testFixtures";
+import { makeFighter, makeStage } from "./testFixtures";
 
 const cam = createCamera(makeStage());
 const byId = new Map(FIGHTERS.map((f) => [f.id, f]));
@@ -61,20 +67,6 @@ describe("the effect table", () => {
     const ctx = createMockContext();
     drawMoveFx(ctx, samus, stored, cam, 13, 0, 0, { lastHit: [], frame: 40 });
     expect(ctx.calls.length).toBeGreaterThan(0);
-  });
-
-  it("counts the fighter's own projectiles of an id for its painter: Mario's water (Plan 6, Task 36)", () => {
-    const mario = byId.get("mario")!;
-    const f = makeFighter({ defId: "mario", action: "special", move: "downB", actionFrame: 29 });
-    const water = makeProjectile({ owner: 0, defId: mario.moves.downB!.projectiles![0].id });
-    const theirs = makeProjectile({ owner: 1, defId: water.defId });
-    const fills = (projectiles: ReturnType<typeof makeProjectile>[]) => {
-      const ctx = createMockContext();
-      const fx = drawMoveFx(ctx, mario, f, cam, 13, 0, 0, { lastHit: [], frame: 30, projectiles });
-      for (const paint of fx.over) paint();
-      return countOf(ctx, "fill");
-    };
-    expect(fills([water])).toBeGreaterThan(fills([theirs]));
   });
 
   it("draws nothing for a fighter who is not doing a special", () => {
@@ -330,5 +322,71 @@ describe("painting over the figure", () => {
       ),
     ];
     for (const p of paths) expect(Array.isArray(p.over)).toBe(true);
+  });
+});
+
+describe("F.L.U.D.D.'s spray in a match: dry only when its pump is refused (Plan 6, Task 36 fix round 1)", () => {
+  const FD = STAGES.find((st) => st.id === "finalDestination")!;
+  const sim = bakedContext({ fighter: (id) => byId.get(id)!, stage: (id) => STAGES.find((st) => st.id === id)! }, readBakeFromDisk());
+  const mario = byId.get("mario")!;
+  const pumps = mario.moves.downB!.projectiles!.map((p) => p.spawnFrame);
+  const [first, last] = [Math.min(...pumps), Math.max(...pumps)];
+
+  /**
+   * Mario storing a full F.L.U.D.D. and firing it from the store, as the renderer
+   * draws him: each pump frame's spray at the nozzle, and how many pumps of his are out.
+   * Kirby stands `gap` ahead; or, with `wall`, Mario hangs facing Final Destination's
+   * side 3 past its edge and 20 under its floor, so every pump spawns inside its body.
+   */
+  function pumping(gap: number, wall = false): { frame: number; spray: boolean; out: number }[] {
+    let s: GameState = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 6, sim);
+    const edge = FD.platforms[0].x + FD.platforms[0].halfWidth;
+    const at = wall ? { grounded: false, platform: -1, action: "fall", x: edge + q12(3), y: FD.platforms[0].y - q12(20), facing: -1 } : { grounded: true, platform: 0, action: "stand", x: q12(-20), y: 0, facing: 1 };
+    Object.assign(s.fighters[0], at);
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: q12(-20 + gap), y: 0, facing: -1 });
+    let prev: InputFrame[] = [0, 0];
+    const rows: { frame: number; spray: boolean; out: number }[] = [];
+    for (let i = 0; i < 260; i++) {
+      const held = i < 120 || i === 130 || i === 131 ? Btn.Down | Btn.Special : 0;
+      const now: InputFrame[] = [held, 0];
+      // Hung where it stands by the wall, so its own fall is no part of it.
+      if (wall) Object.assign(s.fighters[0], { x: at.x, y: at.y, vx: 0, vy: 0 });
+      s = step(s, now, { prevInputs: prev, ctx: sim }).state;
+      prev = now;
+      const f = s.fighters[0];
+      if (i < 130 || f.action !== "special" || f.move !== "downB") continue;
+      const ctx = createMockContext();
+      const fx = drawMoveFx(ctx, mario, f, cam, 13, 0, 0, { lastHit: [], frame: s.frame, world: { stage: FD, state: s } });
+      for (const paint of fx.over) paint();
+      const out = s.projectiles.filter((p) => p.owner === 0 && p.defId === "water").length;
+      rows.push({ frame: moveFrameOf(f.actionFrame), spray: assignmentsTo(ctx, "fillStyle").includes("#EAF6FF"), out });
+    }
+    return rows;
+  }
+  const pumpFrames = (rows: ReturnType<typeof pumping>, to = last) => rows.filter((r) => r.frame >= first && r.frame <= to);
+
+  it("keeps spraying into an adjacent opponent, whose pumps are spawned, hit and gone in one step (gaps 8 and 12, frames 21-34)", () => {
+    const dry: Record<number, number[]> = {};
+    for (const gap of [8, 12]) {
+      const rows = pumpFrames(pumping(gap), 34);
+      expect(rows.length, `gap ${gap}`).toBe(34 - first + 1);
+      // The water is out of the state on some of them: it hit Kirby the step it came out.
+      expect(rows.some((r) => r.out === 0), `gap ${gap}`).toBe(true);
+      dry[gap] = rows.filter((r) => !r.spray).map((r) => r.frame);
+    }
+    expect(dry).toEqual({ 8: [], 12: [] });
+  });
+
+  it("sprays on every pump frame into the open (gap 80), as before", () => {
+    const rows = pumpFrames(pumping(80));
+    expect(rows.length).toBe(last - first + 1);
+    expect(rows.filter((r) => !r.spray).map((r) => r.frame)).toEqual([]);
+  });
+
+  it("stays dry when its pumps spawn inside the stage's body: the engine refuses every one", () => {
+    const rows = pumpFrames(pumping(80, true));
+    expect(rows.length).toBe(last - first + 1);
+    expect(rows.every((r) => r.out === 0)).toBe(true);
+    expect(rows.filter((r) => r.spray).map((r) => r.frame)).toEqual([]);
   });
 });
