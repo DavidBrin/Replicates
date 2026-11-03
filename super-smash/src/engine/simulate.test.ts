@@ -1143,6 +1143,29 @@ describe("presses during a KO's freeze (Plan 6, Task 13; SmashWiki \"Buffer\")",
     expect(states[KO_FREEZE_FRAMES].fighters[0].action).toBe("stand");
   });
 
+  // The direction counter runs through the freeze (`updateInputTracking` in the freeze loop;
+  // Task 41's fix wave, final review item 31), both ways.
+  it("a direction pressed before the freeze and Attack pressed after it are a tilt, not a smash", () => {
+    const s = standing();
+    s.freezeFrames = KO_FREEZE_FRAMES;
+    // Right was pressed on the step before the KO, and is held through the freeze.
+    Object.assign(s.fighters[0], { lastDirPressed: Btn.Right, framesSinceDirPress: 0 });
+    const states = stepEach(s, Array.from({ length: KO_FREEZE_FRAMES + 1 }, (_, i) => (i === KO_FREEZE_FRAMES ? Btn.Right | Btn.Attack : Btn.Right)));
+    expect(states[KO_FREEZE_FRAMES].fighters[0].move).toBe("ftilt");
+  });
+
+  it("a direction and Attack both pressed inside the freeze are a smash, buffered as one", () => {
+    const s = standing();
+    s.freezeFrames = KO_FREEZE_FRAMES;
+    const press = KO_FREEZE_FRAMES - 4;
+    const states = stepEach(
+      s,
+      Array.from({ length: KO_FREEZE_FRAMES + 1 }, (_, i) => (i === press ? Btn.Right | Btn.Attack : i > press - 2 ? Btn.Right : 0)),
+    );
+    expect(states[KO_FREEZE_FRAMES - 1].fighters[0].bufferedAction).toMatchObject({ kind: "attack", smashX: 1 });
+    expect(states[KO_FREEZE_FRAMES].fighters[0].move).toBe("fsmash");
+  });
+
   it("the freeze still moves nobody", () => {
     const s = standing();
     s.freezeFrames = 3;
