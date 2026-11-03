@@ -15,6 +15,7 @@ import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { SLOT_MOTION } from "./legacy";
 import {
+  IDLE_PHASE,
   MOTION_OF_ACTION,
   OPEN_ENDED_FRAMES,
   SCALED_FRAMES,
@@ -151,10 +152,9 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
     expect(poseIndexOf(DEF, fighter({ action: "tumbleFall", actionFrame: 15 }), 0, c)?.frame).toBe((15 * SCALED_FRAMES) / OPEN_ENDED_FRAMES + 1);
   });
 
-  it("loops idle on the match clock, offset per port, so four fighters do not breathe in step", () => {
+  it("loops idle on the match clock, the same on every port: a standing body is the same whoever stands in it (Plan 6, Task 18)", () => {
     const c = clocks({ status_stand: { kind: "idle", frames: 30 } });
-    expect(poseIndexOf(DEF, fighter({ port: 0 }), 31, c)?.frame).toBe(2);
-    expect(poseIndexOf(DEF, fighter({ port: 1 }), 31, c)?.frame).toBe(((31 + 27) % 30) + 1);
+    expect([0, 1, 2, 3].map((port) => poseIndexOf(DEF, fighter({ port }), 31, c)?.frame)).toEqual(Array(4).fill(((31 + IDLE_PHASE) % 30) + 1));
   });
 
   it("loops any other cycle on the state's own frame", () => {

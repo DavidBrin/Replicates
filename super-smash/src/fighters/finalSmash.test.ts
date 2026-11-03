@@ -1962,3 +1962,39 @@ describe("Final Smash boxes keep a record of their own, and three ends hit the w
     expect(criticalHitWithBystander().bystanderHit).toBe(true);
   });
 });
+
+describe("Final Smash scenes are the same whichever ports the fighters are on (Plan 6, Task 18)", () => {
+  /**
+   * `user` with the Smash Ball's power standing at 0 on Final Destination, facing right,
+   * `other` standing `gap` from it (behind when negative) facing `otherFacing`, the user on
+   * port `userPort`; Special on the first step. The other's x, damage and action after
+   * `frames` steps.
+   */
+  function scene(user: string, other: string, userPort: number, gap: number, otherFacing: number, frames: number): [number, number, string] {
+    const ids = userPort === 0 ? [user, other] : [other, user];
+    let s = createInitialState("finalDestination", ids.map((defId) => ({ defId })), RULES, 5, GAME);
+    Object.assign(s.fighters[userPort], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: 0, y: 0, facing: 1, intangible: 0, finalSmashReady: FINAL_SMASH_READY });
+    Object.assign(s.fighters[1 - userPort], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(gap), y: 0, facing: otherFacing, intangible: 0 });
+    let prev: InputFrame[] = [0, 0];
+    for (let i = 0; i < frames; i++) {
+      const now: InputFrame[] = [0, 0];
+      if (i === 0) now[userPort] = Btn.Special;
+      s = step(s, now, { prevInputs: prev, ctx: GAME }).state;
+      prev = now;
+    }
+    const o = s.fighters[1 - userPort];
+    return [o.x, o.damage, o.action];
+  }
+
+  it("Kirby's Ultra Sword takes Donkey Kong standing 3 behind him, facing away, the same as port 0 or port 1", () => {
+    expect(scene("kirby", "donkeyKong", 1, -3, -1, 60)).toEqual(scene("kirby", "donkeyKong", 0, -3, -1, 60));
+  });
+
+  it("Zero Laser's start reaches Donkey Kong standing 8 behind Samus the same as port 0 or port 1", () => {
+    expect(scene("samus", "donkeyKong", 1, -8, 1, 60)).toEqual(scene("samus", "donkeyKong", 0, -8, 1, 60));
+  });
+
+  it("Volt Tackle's sparks push Mario standing 6 ahead the same distance as port 0 or port 1 (a pin: port-free since Tasks 9 and 11)", () => {
+    expect(scene("pikachu", "mario", 1, 6, -1, 46)).toEqual(scene("pikachu", "mario", 0, 6, -1, 46));
+  });
+});

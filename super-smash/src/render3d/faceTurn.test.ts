@@ -13,6 +13,7 @@
 import { Matrix4, MeshStandardMaterial, Quaternion, Vector3, type Bone, type Object3D } from "three";
 import { describe, expect, it } from "vitest";
 
+import { IDLE_PHASE } from "@/engine/acmd/poseClock";
 import { fx, toFloat } from "@/engine/fixed";
 import type { FighterState } from "@/engine/types";
 import { FIGHTERS, FIGHTER_IDS } from "@/fighters";
@@ -57,9 +58,9 @@ function fighterOf(id: string, turned: boolean, model: "glb" | "standIn"): Fight
 }
 
 /** Every bone of the fighter's rig, by name, after `state` is drawn. */
-function bonesAfter(fighter: Fighter3D, id: string, state: Partial<FighterState>): Map<string, Object3D> {
+function bonesAfter(fighter: Fighter3D, id: string, state: Partial<FighterState>, frame = 100): Map<string, Object3D> {
   const f = makeFighter({ defId: id, x: fx(12), y: fx(3), ...state });
-  fighter.update({ f, x: toFloat(f.x), y: toFloat(f.y), frame: 100, blends: null, hitFlash: 0, hidden: false });
+  fighter.update({ f, x: toFloat(f.x), y: toFloat(f.y), frame, blends: null, hitFlash: 0, hidden: false });
   const out = new Map<string, Object3D>();
   fighter.placement.traverse((o) => {
     if ((o as Bone).isBone) out.set(o.name, o);
@@ -174,8 +175,10 @@ describe("the turn is toward the camera, facing either way, and a turn, not a mi
     const on = fighterOf(id, true, "glb");
     const off = fighterOf(id, false, "glb");
     for (const facing of [1, -1] as const) {
-      const a = bonesAfter(on, id, { action: "stand", actionFrame: 0, facing });
-      const b = bonesAfter(off, id, { action: "stand", actionFrame: 0, facing });
+      // The idle pose it always sampled (Plan 6, Task 18: the idle clock now stands
+      // `IDLE_PHASE` on for every port, where port 0's stood at the match clock).
+      const a = bonesAfter(on, id, { action: "stand", actionFrame: 0, facing }, 100 - IDLE_PHASE);
+      const b = bonesAfter(off, id, { action: "stand", actionFrame: 0, facing }, 100 - IDLE_PHASE);
       for (const t of FACE_TURNS[id] ?? []) {
         const delta = a.get(t.bone)!.getWorldQuaternion(new Quaternion()).multiply(b.get(t.bone)!.getWorldQuaternion(new Quaternion()).invert());
         const forward = new Vector3(facing, 0, 0).applyQuaternion(delta);

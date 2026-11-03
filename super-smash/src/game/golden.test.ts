@@ -487,6 +487,17 @@ const MATCHES: readonly Match[] = [
  * the 1901-2000 sample), and the match no longer reaches `downed` or `getUp`; mario-fox
  * and the states lab reach `downed`, the states lab `getUp`. The four CPU matches reach 42
  * between them, down from 43. All 60 are visited.
+ * Plan 6, Task 18 (a standing fighter's body is the same on every port: the idle clock
+ * stands on one shared phase, `IDLE_PHASE`, the old port 1's) adds no action. Port 0's
+ * standing body moves where a hit, the ledge or the CPU reads it: mario-fox-battlefield
+ * (from 2001-2100), donkeyKong-pikachu-finalDestination (201-300),
+ * kirby-marth-pokemonStadium2 (701-800), the scripted match (101-200), the states and
+ * contact labs (1-100), the beams lab (601-700) and the ball-on CPU match (1701-1800)
+ * move; link-samus-smashville and the other traces are byte-identical. Every lab pin
+ * holds. donkeyKong-pikachu no longer KOs (1 before) and lands a sixth shield hit (5), so
+ * it no longer reaches `dead` or `respawnPlatform`, which link-samus and kirby-marth do,
+ * and reaches `downed` and `runBrake`; the four CPU matches still reach the same 42
+ * between them. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

@@ -2,7 +2,7 @@
   "mario jab2": {
     "measured": "F: best 7.4 -> 10.8 (x1.46)",
     "class": "size",
-    "reason": "a clip-placed limb (armr) reaching 7.4 -> 10.8, x1.46, within 1.25 x mario's size ratio 1.23 (cap 1.53): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (armr) reaching 7.4 -> 10.8, x1.46, within 1.25 x mario's size ratio 1.23 (cap 1.54): the SSBU-sized body (D57)"
   },
   "mario jab3": {
     "measured": "F: best 8.9 -> 17.3 (x1.94)",
@@ -12,27 +12,27 @@
   "mario utilt": {
     "measured": "U: best 14.8 -> 21.6 (x1.46)",
     "class": "size",
-    "reason": "a clip-placed limb (arml) reaching 14.8 -> 21.6, x1.46, within 1.25 x mario's size ratio 1.23 (cap 1.53): the SSBU-sized body (D57). Task 13b: the spinning uppercut now on the left arm the script names"
+    "reason": "a clip-placed limb (arml) reaching 14.8 -> 21.6, x1.46, within 1.25 x mario's size ratio 1.23 (cap 1.54): the SSBU-sized body (D57). Task 13b: the spinning uppercut now on the left arm the script names"
   },
   "donkeyKong bair": {
     "measured": "B: best 13.5 -> 20.1 (x1.49)",
     "class": "size",
-    "reason": "a clip-placed limb (footl) reaching 13.5 -> 20.1, x1.49, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57). Task 13b: the back kick now on the left leg the script names"
+    "reason": "a clip-placed limb (footl) reaching 13.5 -> 20.1, x1.49, within 1.25 x donkeyKong's size ratio 1.80 (cap 2.25): the SSBU-sized body (D57). Task 13b: the back kick now on the left leg the script names"
   },
   "donkeyKong fair": {
     "measured": "F: best 14.0 -> 26.5 (x1.89)",
     "class": "size",
-    "reason": "a clip-placed limb (arml) reaching 14.0 -> 26.5, x1.89, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (arml) reaching 14.0 -> 26.5, x1.89, within 1.25 x donkeyKong's size ratio 1.80 (cap 2.25): the SSBU-sized body (D57)"
   },
   "donkeyKong jab1": {
     "measured": "F: best 11.5 -> 19.4 (x1.68)",
     "class": "size",
-    "reason": "a clip-placed limb (handl) reaching 11.5 -> 19.4, x1.68, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57). Task 13b: the hook is left-handed, so the box rides the fist that punches; before, the furthest box was the root's (15.5)"
+    "reason": "a clip-placed limb (handl) reaching 11.5 -> 19.4, x1.68, within 1.25 x donkeyKong's size ratio 1.80 (cap 2.25): the SSBU-sized body (D57). Task 13b: the hook is left-handed, so the box rides the fist that punches; before, the furthest box was the root's (15.5)"
   },
   "donkeyKong jab2": {
     "measured": "F: best 11.0 -> 21.4 (x1.94)",
     "class": "size",
-    "reason": "a clip-placed limb (handr) reaching 11.0 -> 21.4, x1.94, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (handr) reaching 11.0 -> 21.4, x1.94, within 1.25 x donkeyKong's size ratio 1.80 (cap 2.25): the SSBU-sized body (D57)"
   },
   "donkeyKong nair": {
     "measured": "F: best 11.0 -> 25.6 (x2.33)",
@@ -47,7 +47,7 @@
   "link ftilt": {
     "measured": "F: best 13.5 -> 21.2 (x1.57)",
     "class": "size",
-    "reason": "a clip-placed limb (sword2 (on handr)) reaching 13.5 -> 21.2, x1.57, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts); before it, the blade pointed up and the arc's first frame fell short (a sweep)"
+    "reason": "a clip-placed limb (sword2 (on handr)) reaching 13.5 -> 21.2, x1.57, within 1.25 x link's size ratio 1.45 (cap 1.81): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts); before it, the blade pointed up and the arc's first frame fell short (a sweep)"
   },
   "link jab3": {
     "measured": "F: best 11.3 -> 22.6 (x2.00)",
@@ -57,7 +57,7 @@
   "link nair": {
     "measured": "F: best 9.5 -> 13.7 (x1.44)",
     "class": "size",
-    "reason": "a clip-placed limb (kneer) reaching 9.5 -> 13.7, x1.44, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (kneer) reaching 9.5 -> 13.7, x1.44, within 1.25 x link's size ratio 1.45 (cap 1.81): the SSBU-sized body (D57)"
   },
   "link upB": {
     "measured": "SWEEP F: best 12.0 -> 18.9 (x1.57)",
@@ -72,7 +72,7 @@
   "samus bair": {
     "measured": "B: best 11.5 -> 18.3 (x1.59)",
     "class": "size",
-    "reason": "a clip-placed limb (kneer) reaching 11.5 -> 18.3, x1.59, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (kneer) reaching 11.5 -> 18.3, x1.59, within 1.25 x samus's size ratio 1.77 (cap 2.21): the SSBU-sized body (D57)"
   },
   "samus dsmash": {
     "measured": "SWEEP F: best 11.5 -> 18.6 (x1.62)",
@@ -87,12 +87,12 @@
   "samus fair": {
     "measured": "F: best 10.5 -> 18.1 (x1.72)",
     "class": "size",
-    "reason": "a clip-placed limb (armr) reaching 10.5 -> 18.1, x1.72, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (armr) reaching 10.5 -> 18.1, x1.72, within 1.25 x samus's size ratio 1.77 (cap 2.21): the SSBU-sized body (D57)"
   },
   "samus jab2": {
     "measured": "F: best 10.5 -> 13.8 (x1.32)",
     "class": "size",
-    "reason": "a clip-placed limb (armr) reaching 10.5 -> 13.8, x1.32, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (armr) reaching 10.5 -> 13.8, x1.32, within 1.25 x samus's size ratio 1.77 (cap 2.21): the SSBU-sized body (D57)"
   },
   "samus nair": {
     "measured": "SWEEP F: best 9.5 -> 16.0 (x1.69)",
@@ -102,7 +102,7 @@
   "samus utilt": {
     "measured": "U: best 19.0 -> 31.9 (x1.68)",
     "class": "size",
-    "reason": "a clip-placed limb (kneer) reaching 19.0 -> 31.9, x1.68, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (kneer) reaching 19.0 -> 31.9, x1.68, within 1.25 x samus's size ratio 1.77 (cap 2.21): the SSBU-sized body (D57)"
   },
   "kirby dtilt": {
     "measured": "F: best 6.0 -> 13.5 (x2.25)",
@@ -122,27 +122,27 @@
   "kirby uair": {
     "measured": "U: best 11.4 -> 17.1 (x1.50)",
     "class": "size",
-    "reason": "a clip-placed limb (footr) reaching 11.4 -> 17.1, x1.50, within 1.25 x kirby's size ratio 1.43 (cap 1.79): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (footr) reaching 11.4 -> 17.1, x1.50, within 1.25 x kirby's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
   },
   "fox bair": {
     "measured": "B: best 10.1 -> 15.7 (x1.56)",
     "class": "size",
-    "reason": "a clip-placed limb (kneer) reaching 10.1 -> 15.7, x1.56, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (kneer) reaching 10.1 -> 15.7, x1.56, within 1.25 x fox's size ratio 1.51 (cap 1.89): the SSBU-sized body (D57)"
   },
   "fox ftilt": {
     "measured": "F: best 9.6 -> 13.3 (x1.39)",
     "class": "size",
-    "reason": "a clip-placed limb (kneer) reaching 9.6 -> 13.3, x1.39, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (kneer) reaching 9.6 -> 13.3, x1.39, within 1.25 x fox's size ratio 1.51 (cap 1.89): the SSBU-sized body (D57)"
   },
   "fox nair": {
     "measured": "F: best 7.2 -> 10.5 (x1.46)",
     "class": "size",
-    "reason": "a clip-placed limb (kneel) reaching 7.2 -> 10.5, x1.46, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57). Task 13b: the flying kick now on the left leg the script names"
+    "reason": "a clip-placed limb (kneel) reaching 7.2 -> 10.5, x1.46, within 1.25 x fox's size ratio 1.51 (cap 1.89): the SSBU-sized body (D57). Task 13b: the flying kick now on the left leg the script names"
   },
   "fox uair": {
     "measured": "U: best 16.0 -> 22.5 (x1.41)",
     "class": "size",
-    "reason": "a clip-placed limb (footr) reaching 16.0 -> 22.5, x1.41, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (footr) reaching 16.0 -> 22.5, x1.41, within 1.25 x fox's size ratio 1.51 (cap 1.89): the SSBU-sized body (D57)"
   },
   "pikachu bair": {
     "measured": "B: best 6.4 -> 10.2 (x1.59); below 0.8x on 6 of 12 shared frames, worst g9 6.0 -> 4.3",
@@ -157,7 +157,7 @@
   "pikachu dashAttack": {
     "measured": "F: best 6.6 -> 11.7 (x1.78)",
     "class": "size",
-    "reason": "a clip-placed limb (neck) reaching 6.6 -> 11.7, x1.78, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (neck) reaching 6.6 -> 11.7, x1.78, within 1.25 x pikachu's size ratio 1.66 (cap 2.08): the SSBU-sized body (D57)"
   },
   "pikachu pummel": {
     "measured": "F: best 3.0 -> 15.0 (x5.01)",
@@ -167,12 +167,12 @@
   "pikachu uair": {
     "measured": "U: best 10.4 -> 17.7 (x1.70)",
     "class": "size",
-    "reason": "a clip-placed limb (tail4 (on hip)) reaching 10.4 -> 17.7, x1.70, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (tail4 (on hip)) reaching 10.4 -> 17.7, x1.70, within 1.25 x pikachu's size ratio 1.66 (cap 2.08): the SSBU-sized body (D57)"
   },
   "pikachu utilt": {
     "measured": "U: best 10.6 -> 16.4 (x1.55)",
     "class": "size",
-    "reason": "a clip-placed limb (tail4 (on hip)) reaching 10.6 -> 16.4, x1.55, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (tail4 (on hip)) reaching 10.6 -> 16.4, x1.55, within 1.25 x pikachu's size ratio 1.66 (cap 2.08): the SSBU-sized body (D57)"
   },
   "marth dtilt": {
     "measured": "F: best 13.2 -> 18.4 (x1.39)",
@@ -182,26 +182,26 @@
   "marth ftilt": {
     "measured": "F: best 13.4 -> 18.2 (x1.36)",
     "class": "size",
-    "reason": "a clip-placed limb (sword1 (on handr)) reaching 13.4 -> 18.2, x1.36, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 13.4 -> 18.2, x1.36, within 1.25 x marth's size ratio 1.47 (cap 1.84): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
   },
   "marth jab2": {
     "measured": "F: best 13.4 -> 17.6 (x1.31)",
     "class": "size",
-    "reason": "a clip-placed limb (sword1 (on handr)) reaching 13.4 -> 17.6, x1.31, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 13.4 -> 17.6, x1.31, within 1.25 x marth's size ratio 1.47 (cap 1.84): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
   },
   "marth uair": {
     "measured": "U: best 19.4 -> 34.9 (x1.80)",
     "class": "size",
-    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.4 -> 34.9, x1.80, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.4 -> 34.9, x1.80, within 1.25 x marth's size ratio 1.47 (cap 1.84): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
   },
   "marth usmash": {
     "measured": "U: best 19.6 -> 35.2 (x1.79)",
     "class": "size",
-    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.6 -> 35.2, x1.79, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Plan 5 Task 13 frees it (ruling P5-R17, U); the blade the model holds lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.6 -> 35.2, x1.79, within 1.25 x marth's size ratio 1.47 (cap 1.84): the SSBU-sized body (D57). Plan 5 Task 13 frees it (ruling P5-R17, U); the blade the model holds lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
   },
   "marth utilt": {
     "measured": "U: best 18.4 -> 33.7 (x1.83)",
-    "class": "clip-gain",
-    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 18.4 -> 33.7, x1.83 against a size cap of 1.80 (D57)"
+    "class": "size",
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 18.4 -> 33.7, x1.83, within 1.25 x marth's size ratio 1.47 (cap 1.84): the SSBU-sized body (D57). Was a clip-gain (the controller's ruling on the grip's clip-gains) against the 1.80 cap; Plan 6, Task 18's shared idle phase measures Marth's standing body 19.2 high, not 18.8"
   }
 }

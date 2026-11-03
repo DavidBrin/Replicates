@@ -85,8 +85,15 @@ export interface MotionClock {
 export const SCALED_FRAMES = 60;
 /** World units one walk or run cycle covers (was `render/poses/timing.ts` STRIDE). */
 export const STRIDE_UNITS = 36;
-/** Idle is offset per port so four fighters do not breathe in lockstep. */
-export const IDLE_PORT_OFFSET = 27;
+/**
+ * Where on the match clock the idle cycle stands, the same for every port (Plan 6, Task
+ * 18): the idle pose is the body the sim hits and stands on, so a per-port offset (the
+ * old `IDLE_PORT_OFFSET`, 27 a port) made a hit on a standing fighter land or miss by
+ * its port. 27 is the old port 1's phase, so a port 1 stands as it always did. Cost:
+ * fighters standing still breathe in step (the 2D canvas renderer keeps its own offset,
+ * `render/poses/timing.ts`, which no hurtbox reads).
+ */
+export const IDLE_PHASE = 27;
 /** A non-looping state with no length of its own is drawn across this many frames. */
 export const OPEN_ENDED_FRAMES = 30;
 
@@ -333,7 +340,7 @@ export function poseIndexOf(def: FighterDef, f: ClockedFighter, globalFrame: num
     case "loop":
       return { motion, frame: wrap(af, clock.frames) };
     case "idle":
-      return { motion, frame: wrap(globalFrame + f.port * IDLE_PORT_OFFSET, clock.frames) };
+      return { motion, frame: wrap(globalFrame + IDLE_PHASE, clock.frames) };
     case "paced": {
       const speed = f.vx < 0 ? -f.vx : f.vx;
       return { motion, frame: wrap(Math.floor((af * speed * clock.frames) / (STRIDE_UNITS * ONE)), clock.frames) };
