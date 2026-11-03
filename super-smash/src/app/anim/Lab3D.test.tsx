@@ -533,17 +533,23 @@ describe("the playback cell (Plan 6, Task 39)", () => {
     const playback = getByLabelText("Playback") as HTMLCanvasElement;
     const side = CELL * PLAYBACK_SCALE;
     expect([playback.width, playback.height]).toEqual([side, side]);
-    /** Each copy into the playback cell: its source rectangle and where it lands. */
-    const copies = () => ctx.calls.filter((c) => c.method === "drawImage").map((c) => c.args.slice(1).map(Number));
-    // The model's cell, then the boxes' cell: frame 4 is the first row's fifth.
+    /** Each copy into the playback cell: the canvas it copies from, its source rectangle and where it lands. */
+    const copies = () => ctx.calls.filter((c) => c.method === "drawImage").map((c) => [c.args[0], ...c.args.slice(1).map(Number)]);
+    // The sheet's two canvases: the model's (WebGL, its background opaque) and the boxes' overlay.
+    const [model, boxes] = Array.from(getByLabelText("Contact sheet").querySelectorAll("canvas"));
+    // The model's cell, then the boxes' cell over it (the final wave, item 38: the other way
+    // round, the model's opaque background would paint over the boxes): frame 4 is the first row's fifth.
     expect(copies().slice(-2)).toEqual([
-      [4 * CELL, 0, CELL, CELL, 0, 0, side, side],
-      [4 * CELL, 0, CELL, CELL, 0, 0, side, side],
+      [model, 4 * CELL, 0, CELL, CELL, 0, 0, side, side],
+      [boxes, 4 * CELL, 0, CELL, CELL, 0, 0, side, side],
     ]);
     expect(playback.dataset.frame).toBe("4");
     rerender(<Lab3D options={o} total={FTILT_FRAMES} frame={13} />);
     // 13: the second row's second cell.
-    expect(copies().slice(-1)).toEqual([[CELL, CELL, CELL, CELL, 0, 0, side, side]]);
+    expect(copies().slice(-2)).toEqual([
+      [model, CELL, CELL, CELL, CELL, 0, 0, side, side],
+      [boxes, CELL, CELL, CELL, CELL, 0, 0, side, side],
+    ]);
     expect(playback.dataset.frame).toBe("13");
     expect(gl.FakeGL.all).toHaveLength(1);
   });
