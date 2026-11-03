@@ -2084,3 +2084,15 @@ describe("a hit reports which hitbox won it", () => {
     expect(Math.max(...sour) - Math.min(...sour)).toBeLessThan(0.01);
   });
 });
+
+describe("how long the Smash Ball's power has been held (Plan 6, Task 24)", () => {
+  it("counts every step the power is held, and is 0 without it", () => {
+    const s = standing();
+    s.fighters[0].finalSmashReady = 1;
+    const after = run(s, [0, 0], 30);
+    expect(after.fighters[0].combat.standbyFrames).toBe(30);
+    expect(after.fighters[1].combat.standbyFrames).toBe(0);
+    after.fighters[0].finalSmashReady = 0;
+    expect(run(after, [0, 0], 1).fighters[0].combat.standbyFrames).toBe(0);
+  });
+});

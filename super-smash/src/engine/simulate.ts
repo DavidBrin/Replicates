@@ -187,7 +187,7 @@ import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { LEGACY_BAKE, type BakeTables } from "./acmd/bakeTables";
 import { bakedEcb, fighterHurtboxes, restEcb } from "./acmd/hurtboxes";
 import { launchBefore, techOrBounce, updateTechInput } from "./tech";
-import { SINCE_ATTACK_CAP, cloneCombat, emptyCombat } from "./combat";
+import { SINCE_ATTACK_CAP, STANDBY_FRAMES_CAP, cloneCombat, emptyCombat } from "./combat";
 import type { CombatState } from "./combat";
 import {
   attackerShieldPushback,
@@ -1294,6 +1294,9 @@ export function step(
   }
   // What a lost Copy Ability spawned vanishes with it (Plan 5, Task 9).
   dropLostCopies(s);
+
+  // How long each fighter has held the Smash Ball's power (Plan 6, Task 24).
+  for (const f of s.fighters) f.combat.standbyFrames = f.finalSmashReady > 0 ? Math.min(f.combat.standbyFrames + 1, STANDBY_FRAMES_CAP) : 0;
 
   /* -- 10. is the match over? ---------------------------------------------- */
 

@@ -282,6 +282,12 @@ export interface CombatState {
    */
   controls: number;
   /**
+   * Plan 6, Task 24: steps the Smash Ball's power has been held (`finalSmashReady`), 0
+   * without it, up to `STANDBY_FRAMES_CAP`. What a CPU reads to stop holding it forever
+   * (D58's M2), so `cpuInput` stays a function of the state.
+   */
+  standbyFrames: number;
+  /**
    * The record of a Final Smash's scene boxes (`hold`, and a scene end's `launch`) and a
    * start's strikes (Plan 6, Task 9), apart from the swing's `hitThisMove`, so a start's
    * strike leaves its trap free to catch (ruling R-T15j). Entries as `hitThisMove`'s
@@ -299,6 +305,9 @@ export interface CombatState {
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
 export const SINCE_ATTACK_CAP = 999;
+
+/** `CombatState.standbyFrames`' cap (Plan 6, Task 24): far past the CPU's time limit (`FINAL_SMASH_HOLD_LIMIT`, 1,200). */
+export const STANDBY_FRAMES_CAP = 1 << 20;
 
 export function emptyCombat(): CombatState {
   return {
@@ -350,6 +359,7 @@ export function emptyCombat(): CombatState {
     turned: false,
     trappedBy: -1,
     controls: 0,
+    standbyFrames: 0,
     sceneHits: [],
     slowRate: 0,
     slowFrames: 0,
@@ -407,6 +417,7 @@ export function cloneCombat(c: CombatState): CombatState {
     turned: c.turned,
     trappedBy: c.trappedBy,
     controls: c.controls,
+    standbyFrames: c.standbyFrames,
     sceneHits: c.sceneHits.slice(),
     slowRate: c.slowRate,
     slowFrames: c.slowFrames,

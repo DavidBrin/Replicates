@@ -222,6 +222,44 @@ export function finalReach(move: MoveDef): number {
 }
 
 /**
+ * UNVERIFIED (CPU judgement; ruling D10): after holding the Smash Ball's power this long, a
+ * CPU fires its travelling Final Smash at any target in its path from a standstill
+ * (`fireFinalSmash`), whiff or not, so no Smash Ball is held back from everybody for good
+ * (D58's M2). 1,200 frames, the one Final Smash limit published, the FS Meter's (SmashWiki
+ * "Final Smash": "a charged FS Meter now has a time limit of 20 seconds"); the Smash Ball's
+ * own standby has none (R-FW2m).
+ */
+export const FINAL_SMASH_HOLD_LIMIT = 1200;
+
+/**
+ * How many more frames `f` cannot act, as its own state says (Plan 6, Task 24): a hold's
+ * remaining grab time, its hitstun (a reel, a tumble, a broken shield's stun), a landing's
+ * remaining lag. 0 when it can act, or when the state does not say (lying down, whose end
+ * is the player's).
+ */
+export function holdLeft(f: Pick<FighterState, "action" | "hitstun" | "grabTimer" | "charge" | "actionFrame">): number {
+  if (f.action === "grabbed" || f.action === "cargoHeld") return f.grabTimer;
+  if (f.hitstun > 0) return f.hitstun;
+  if (f.action === "landingLag" || f.action === "specialLanding") return Math.max(0, f.charge - f.actionFrame);
+  return 0;
+}
+
+/**
+ * The move frame on which `fs`'s first trap reaches a target `ahead` in front from a
+ * standstill (Plan 6, Task 24): its earliest trapping box's frame within the move's reach
+ * (`finalReach`), else the dash's first window's frame plus the frames its speed needs for
+ * the distance past that reach.
+ */
+export function connectFrame(fs: MoveDef, ahead: number): number {
+  const traps = fs.hitboxes.filter((h) => h.trap !== false);
+  const first = traps.length === 0 ? 1 : Math.min(...traps.map((h) => h.startFrame));
+  const reach = finalReach(fs);
+  const dash = fs.momentum?.[0];
+  if (ahead <= reach || dash === undefined || dash.x === 0) return first;
+  return Math.max(first, dash.frame) + Math.ceil((ahead - reach) / abs(dash.x));
+}
+
+/**
  * Is anybody's Final Smash out: a fighter in one, or a projectile one launched? The
  * engine's own rule (`final.ts`'s `finalSmashActive`), its projectiles told by the
  * match's definitions as `step()` tells them (`isFinalProjectile`).
@@ -269,6 +307,10 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    committed was not enough: Volt Tackle's startup sparks knocked an aerial one
  *    behind Pikachu; nor was a run, or a stand still sliding from one: its speed slid
  *    Pikachu past the target in the windup, and the dash went on alone.)
+ *  - a travelling one that ignores the edge also fires, whiff or not, at a target the view
+ *    has seen held until it lands, beyond point blank (`holdLeft`, `connectFrame`),
+ *    stopping first if it is moving (Plan 6, Task 24), or once the power has been held
+ *    `FINAL_SMASH_HOLD_LIMIT` frames (ruling D10).
  *
  * It turns to face the target first (a grounded turn is an input), at point blank with
  * the press that does not carry it past (ruling R-FW1a: `pressToward`; the review's I1:
@@ -292,12 +334,32 @@ function fireFinalSmash(ctx: BehaviourContext): BehaviourResult {
   const ahead = abs(dx);
   const committed = COMMITTED.includes(targetAction);
   const travel = dashTravel(fs);
+  // A travelling one that will connect needs no whiff check (Plan 6, Task 24), and after the
+  // time limit none is wanted (ruling D10).
+  let whiffFree = false;
   if (travel > 0) {
     if (!self.grounded || abs(dy) > VERTICAL_REACH || ahead > Math.min(travel, FINAL_SMASH_DASH_RANGE)) return NOTHING;
     if (!roomAhead(ctx, dx >= 0 ? 1 : -1, FINAL_SMASH_EDGE_ROOM)) return NOTHING;
     const still = (self.action === "stand" || self.action === "crouch") && self.vx === 0;
     const held = still && target.grounded && CANNOT_ACT_SOON.includes(targetAction);
-    const safe = fs.dashEnd?.edge === true || (ahead <= FINAL_SMASH_RANGE && held);
+    // Proven held (Plan 6, Task 24): its hold, once the view has seen it (`targetActionAge`),
+    // outlasts the reaction and the frames until the trap reaches it. Not at point blank, where
+    // the startup's sparks hit it first, and a hit ends its stun: there R-T19d's `held` rule
+    // stands, with its whiff check. Conservative under a slowdown: a slowed target's hold lasts
+    // longer than its state reads.
+    const proven = still && target.grounded && ctx.view.targetActionAge >= 0 && ahead > FINAL_SMASH_RANGE && holdLeft(target) > ctx.tuning.reactionFrames + connectFrame(fs, ahead);
+    const overdue = still && self.combat.standbyFrames >= FINAL_SMASH_HOLD_LIMIT;
+    // On the move at a target seen held: stop now, to fire from the standstill, where the hold
+    // outlasts the stop too and the slide (`slideToward`, its own braking) leaves the target
+    // beyond point blank (Plan 6, Task 24: the CPU is seldom still when a hold begins). Not one
+    // that stops at the edge (Critical Hit), which fires from a run as before (R-P6-15).
+    if (fs.dashEnd?.edge !== true && !still && target.grounded && ctx.view.targetActionAge >= 0) {
+      const slide = slideToward(ctx, dx >= 0 ? 1 : -1);
+      const stopFrames = Math.ceil(abs(self.vx) / fighterParams(ctx.fighterDef!).ground_brake);
+      if (ahead - slide > FINAL_SMASH_RANGE && holdLeft(target) > ctx.tuning.reactionFrames + stopFrames + connectFrame(fs, ahead - slide)) return { score: 880, input: 0 };
+    }
+    whiffFree = proven || overdue;
+    const safe = fs.dashEnd?.edge === true || (ahead <= FINAL_SMASH_RANGE && held) || whiffFree;
     if (!safe) return NOTHING;
   } else if (fs.final?.trap === true) {
     if (abs(dy) > VERTICAL_REACH || ahead > finalReach(fs) || !committed || isOffstage(self, ctx.stage)) return NOTHING;
@@ -309,7 +371,7 @@ function fireFinalSmash(ctx: BehaviourContext): BehaviourResult {
   // fix round 1, ruling R-FW2n): one that travels (`dashTravel`) and does not stop at the
   // edge is fired only where its whiff ends somewhere it comes back from (`whiffComesBack`).
   // The target is judged on the view as above (R-T19d); the user's own position is not delayed.
-  if (travel > 0 && !(fs.dashEnd?.edge === true && self.grounded) && !whiffComesBack(ctx)) return NOTHING;
+  if (travel > 0 && !whiffFree && !(fs.dashEnd?.edge === true && self.grounded) && !whiffComesBack(ctx)) return NOTHING;
   return { score: 900, input: pulse(ctx.view.frame, self.port, 2, 1) ? Btn.Special : 0 };
 }
 

@@ -51,8 +51,11 @@ import {
   CARGO_CARRY_FRAMES,
   REFLECT_AIM,
   carriesOff,
+  connectFrame,
   counter,
   dashTravel,
+  FINAL_SMASH_HOLD_LIMIT,
+  FINAL_SMASH_RANGE,
   finalSmashSpotFor,
   firingBands,
   recoversFrom,
@@ -61,6 +64,7 @@ import {
   whiffEnd,
   finalSmash,
   framesToMeet,
+  holdLeft,
   holding,
   mash,
   mashPeriod,
@@ -135,6 +139,46 @@ describe("the Final Smash", () => {
   const tackle = (speed: number): FighterDef => ({
     ...pikachu,
     moves: { ...pikachu.moves, finalSmash: { ...pikachu.moves.finalSmash!, momentum: pikachu.moves.finalSmash!.momentum!.map((m) => ({ ...m, x: fx(speed) })) } },
+  });
+
+  it("fires Volt Tackle from anywhere at a target proven held until it lands (Plan 6, Task 24)", () => {
+    // Final Destination's centre, where a whiff never comes back (R-FW2q): a target 40 ahead,
+    // tumbling for 120 frames and seen doing it, is caught on move frame 54.
+    const s = fd(0);
+    s.fighters[1] = makeFighter({ port: 1, x: fx(40), action: "tumble", actionFrame: 20, hitstun: 120, grounded: true });
+    expect(fire(s, pikachu)).toBe(true);
+  });
+
+  it("does not when the hold ends first, at point blank, or before the view has seen the hold", () => {
+    const at = (x: number, over: Partial<FighterState>) => {
+      const s = fd(0);
+      s.fighters[1] = makeFighter({ port: 1, x: fx(x), action: "tumble", actionFrame: 20, hitstun: 120, grounded: true, ...over });
+      return fire(s, pikachu);
+    };
+    expect(at(40, { action: "hitstun", hitstun: 30 }), "free before the trap").toBe(false);
+    expect(at(20, {}), "point blank: R-T19d's rule, with its whiff check").toBe(false);
+    expect(at(40, { actionFrame: 2 }), "a tumble the view has not seen yet").toBe(false);
+  });
+
+  it("reads a target's hold from its state", () => {
+    expect(holdLeft(makeFighter({ action: "hitstun", hitstun: 17 }))).toBe(17);
+    expect(holdLeft(makeFighter({ action: "grabbed", grabTimer: 90 }))).toBe(90);
+    expect(holdLeft(makeFighter({ action: "landingLag", charge: 24, actionFrame: 4 }))).toBe(20);
+    expect(holdLeft(makeFighter({ action: "stand" }))).toBe(0);
+  });
+
+  it("times the tackle's contact from its data: its first trap, then the dash past its reach", () => {
+    const fs = pikachu.moves.finalSmash!;
+    expect(connectFrame(fs, fx(4))).toBe(47);
+    expect(connectFrame(fs, fx(40))).toBe(54);
+  });
+
+  it("after holding the power FINAL_SMASH_HOLD_LIMIT frames, fires at a free target in its path (ruling D10)", () => {
+    const s = ready(30, { x: 0, defId: "pikachu" });
+    s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT - 1;
+    expect(fire(s, pikachu)).toBe(false);
+    s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT;
+    expect(fire(s, pikachu)).toBe(true);
   });
 
   it("is used at once when it needs no aim, and only in reach when it traps", () => {
@@ -487,46 +531,82 @@ describe("the Final Smash", () => {
     expect(left).toEqual([]);
   });
 
-  it.each(STAGES.map((x) => x.id))("goes past a dizzy Mario to its spot on %s, turns, and fires Volt Tackle from there, trapping him; with no spot, never fires it (rulings R-FW2n, R-FW2q)", (id) => {
+  // Plan 6, Task 24: a dizzy Mario held 400 frames is proven held from anywhere in the tackle's
+  // range, so Pikachu no longer goes to a spot for him: it stops where it is, once the view has
+  // seen the dizziness, and fires from the standstill, on every stage. (Before Task 24 it went
+  // to its spot on Pokémon Stadium 2 and, with no spot, never fired: rulings R-FW2n, R-FW2q.)
+  it.each(STAGES.map((x) => x.id))("stops and fires Volt Tackle where it stands at a dizzy Mario held 400 frames, and traps him, on %s (Plan 6, Task 24)", (id) => {
     const view = stageViewFromDef(STAGES.find((x) => x.id === id)!);
-    // Mario 12 in front of the inner end of the stage's left band, dizzy for 400 frames;
-    // Pikachu in the middle, facing away from him. On a stage with no band (all but
-    // Pokémon Stadium 2 since ruling R-FW2q), Mario 20 inside its left ledge: no spot, and
-    // the whiff comes back from nowhere on the main floor, so Pikachu never fires.
-    const band = firingBands(pikachu, view).right.at(-1);
-    const inner = band === undefined ? null : band[1];
-    const marioX = inner === null ? view.leftLedge + fx(20) : inner + fx(12);
-    const spot = finalSmashSpotFor(firingBands(pikachu, view), view, 0, marioX);
-    if (inner === null) expect(spot).toBeNull();
-    else expect(spot).toMatchObject({ x: inner, dir: 1, to: inner });
     const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
     Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: view.groundY, facing: -1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
-    Object.assign(s.fighters[1], { action: "shieldBroken", actionFrame: 0, grounded: true, platform: 0, x: marioX, y: view.groundY, facing: 1, hitstun: 400, shieldHealth: 0, intangible: 0, invincible: 0 });
+    Object.assign(s.fighters[1], { action: "shieldBroken", actionFrame: 0, grounded: true, platform: 0, x: view.leftLedge + fx(20), y: view.groundY, facing: 1, hitstun: 400, shieldHealth: 0, intangible: 0, invincible: 0 });
     const world = cpuWorldFromDef(pikachu, view, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
     let st = s;
     let prev: InputFrame[] = [0, 0];
     let seed = 3;
-    let fired: GameState | null = null;
-    let before: GameState = s;
-    for (let i = 0; i < 300 && fired === null; i++) {
+    let before: GameState | null = null;
+    for (let i = 0; i < 60 && before === null; i++) {
       const d = decideCpu(st, 0, 9, seed, world);
       seed = d.seed;
       const out = step(st, [d.input, 0], { prevInputs: prev });
-      if (out.events.finalSmashes.includes(0)) fired = out.state;
-      before = st;
+      if (out.events.finalSmashes.includes(0)) before = st;
       st = out.state;
       prev = [d.input, 0];
     }
-    if (inner === null) {
-      expect(fired).toBeNull();
-      return;
+    expect(before, "fired within 60 frames").not.toBeNull();
+    const at = before!.fighters[0];
+    expect([at.vx, at.facing]).toEqual([0, -1]);
+    expect(at.x - before!.fighters[1].x).toBeGreaterThan(FINAL_SMASH_RANGE);
+    let trapped = false;
+    for (let i = 0; i < 80 && !trapped; i++) {
+      st = step(st, [0, 0], { prevInputs: prev }).state;
+      prev = [0, 0];
+      trapped = st.fighters[1].action === "finalTrapped";
     }
+    expect(trapped).toBe(true);
+  });
+
+  // Ruling R-FW2n's spot, still used for a target busy but not held (here, shielding): Pikachu
+  // goes past him to its spot on Pokémon Stadium 2, turns, and when the shield breaks there,
+  // fires from the spot and traps him (the held point-blank rule, R-T19d, with its whiff check).
+  it("goes past a shielding Mario to its spot on Pokémon Stadium 2, turns, and fires Volt Tackle from there once the shield breaks (rulings R-FW2n, R-FW2q)", () => {
+    const view = PS2;
+    const inner = firingBands(pikachu, view).right.at(-1)![1];
+    const marioX = inner + fx(12);
+    const spot = finalSmashSpotFor(firingBands(pikachu, view), view, 0, marioX)!;
+    expect(spot).toMatchObject({ x: inner, dir: 1, to: inner });
+    const s = createInitialState("pokemonStadium2", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+    Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: view.groundY, facing: -1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
+    Object.assign(s.fighters[1], { action: "shield", actionFrame: 30, grounded: true, platform: 0, x: marioX, y: view.groundY, facing: 1, intangible: 0, invincible: 0 });
+    const world = cpuWorldFromDef(pikachu, view, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
+    let st = s;
+    let prev: InputFrame[] = [0, Btn.Shield];
+    let seed = 3;
+    let broken = false;
+    let fired: GameState | null = null;
+    let before: GameState = s;
+    for (let i = 0; i < 300 && fired === null; i++) {
+      const p = st.fighters[0];
+      // At its spot, facing him: the shield breaks.
+      if (!broken && p.facing === 1 && p.vx === 0 && p.x >= spot.from && p.x <= inner) {
+        Object.assign(st.fighters[1], { action: "shieldBroken", actionFrame: 30, hitstun: 400, shieldHealth: 0 });
+        broken = true;
+      }
+      const d = decideCpu(st, 0, 9, seed, world);
+      seed = d.seed;
+      const now: InputFrame[] = [d.input, broken ? 0 : Btn.Shield];
+      const out = step(st, now, { prevInputs: prev });
+      if (out.events.finalSmashes.includes(0)) fired = out.state;
+      before = st;
+      st = out.state;
+      prev = now;
+    }
+    expect(broken, "reached its spot facing him").toBe(true);
     expect(fired).not.toBeNull();
     const at = before.fighters[0];
     expect(at.facing).toBe(1);
-    expect(at.x).toBeGreaterThanOrEqual(spot!.from);
+    expect(at.x).toBeGreaterThanOrEqual(spot.from);
     expect(at.x).toBeLessThanOrEqual(inner);
-    expect(fired!.fighters[1].action).toBe("shieldBroken");
     let trapped = false;
     for (let i = 0; i < 80 && !trapped; i++) {
       st = step(st, [0, 0], { prevInputs: prev }).state;

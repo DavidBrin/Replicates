@@ -221,6 +221,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.turned);
   x = mixInt(x, c.trappedBy);
   x = mixInt(x, c.controls);
+  x = mixInt(x, c.standbyFrames);
   // Plan 6, Task 9: a Final Smash scene's own record.
   x = mixInt(x, c.sceneHits.length);
   for (const e of c.sceneHits) x = mixInt(x, e);
