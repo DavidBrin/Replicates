@@ -681,7 +681,7 @@ describe("who cannot be stood on (Plan 5 review)", () => {
     const D = "DISABLE";
     expect(TREADED_KIND_OF_ACTION).toEqual({
       stand: E, walk: E, dashStart: E, run: E, runBrake: E, turnaround: E, crouchStart: E, crouch: E, crouchEnd: E, crawl: E,
-      jumpSquat: E, jump: E, fall: E, land: E, landingLag: E, specialFall: E, specialLanding: E,
+      jumpSquat: E, jump: E, fall: E, land: E, landingLag: E, specialFall: E, specialLanding: E, edgeSlip: E,
       attack: N, special: N, grab: E, grabHold: D, pummel: D, throw: N,
       shieldStart: N, shield: N, shieldRelease: N, shieldStun: N, shieldBroken: E, spotDodge: D, roll: D, airDodge: E,
       hitstun: E, rebound: E, tumble: E, tumbleFall: E, grabbed: D, thrown: D, downed: E, getUp: E,

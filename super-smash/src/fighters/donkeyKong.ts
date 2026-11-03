@@ -51,6 +51,8 @@ const legacy: FighterDef = {
     // the few fighters for whom that is true.
     airJumpVelocity: fx(2.457),
     jumps: 2,
+    // SmashWiki "Edge slipping" (https://www.ssbwiki.com/Edge_slipping), Ultimate: 25 (Plan 6, Task 7).
+    edgeSlipFrames: 25,
     canWallJump: false,
     width: fx(HALF_WIDTH),
     height: fx(HEIGHT),

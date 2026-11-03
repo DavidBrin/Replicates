@@ -162,6 +162,8 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   specialLanding: "ENABLE",
   // UNVERIFIED: helpless is a fall.
   specialFall: "ENABLE",
+  // UNVERIFIED (Plan 6, Task 7): the edge slip is a fall.
+  edgeSlip: "ENABLE",
   // SmashWiki: "a footstool cannot cancel out an opponent's move that is in
   // progress, regardless of if they're grounded or not"; WuBor `attack/attack.rs`,
   // `attack_3.rs`, `attack_4.rs`, `attack_100.rs` (NO_REAC). A throw let go of

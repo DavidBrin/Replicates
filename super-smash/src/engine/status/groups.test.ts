@@ -131,6 +131,8 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   inhaleHold: "WALK",
   swallowed: "NONE",
   spatStar: "NONE",
+  // Plan 6, Task 7: the edge slip drifts like a fall.
+  edgeSlip: "FALL",
 };
 
 /** Every action migrated so far; each status-group task extends this list first. */
@@ -210,6 +212,8 @@ const MIGRATED = [
   "inhaleHold",
   "swallowed",
   "spatStar",
+  // Plan 6, Task 7
+  "edgeSlip",
 ];
 
 describe("migrated statuses", () => {

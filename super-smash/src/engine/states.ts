@@ -40,6 +40,8 @@ import {
   AIR_DODGE_LANDING_SLIDE_MAX,
   BUFFER_FRAMES,
   DASH_THRESHOLD_FRAMES,
+  EDGE_SLIP_DRIFT_FRAME,
+  EDGE_SLIP_FRAMES,
   LEDGE_JUMP_VELOCITY,
   LEDGE_TRUMPED_FRAMES,
   PERFECT_SHIELD_WINDOW,
@@ -1004,6 +1006,11 @@ export function endsHelpless(f: FighterState, move: MoveDef): boolean {
   return h.aerialOnly !== true || begunInAir(f);
 }
 
+/** How many frames `def`'s edge slip locks it out (`FighterAttributes.edgeSlipFrames`; Plan 6, Task 7). */
+export function edgeSlipFrames(def: FighterDef): number {
+  return def.attributes.edgeSlipFrames ?? EDGE_SLIP_FRAMES;
+}
+
 /** The `HelplessDef` of the move that left `f` helpless, or undefined when it is not. */
 export function helplessOf(f: FighterState, def: FighterDef): HelplessDef | undefined {
   const slot = f.combat.helplessMove;
@@ -1472,7 +1479,8 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   // replaces the step's gravity with its move's (`FighterStatus.exec`; ruling R-FW2j).
   const gravityBefore = f.kinetic.gravityY;
   kineticExec(f, type, {
-    stickX: phase?.noControl === true ? 0 : intent.x,
+    // An edge slip drifts only after its eighth frame (Plan 6, Task 7).
+    stickX: phase?.noControl === true || (f.action === "edgeSlip" && f.actionFrame <= EDGE_SLIP_DRIFT_FRAME) ? 0 : intent.x,
     stickMag: intent.soft ? ONE >> 1 : ONE,
     params: moving,
     ...(phase?.ground !== undefined ? { groundControl: phase.ground } : {}),
@@ -1595,7 +1603,11 @@ export function onLanded(f: FighterState, ctx: StateContext, fromAir: boolean = 
   // A tumble that reaches the floor lies down: in hitstun, one too slow to
   // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
   // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").
-  if (f.action === "tumble" || f.action === "tumbleFall") {
+  // An edge slip that reaches the floor lies down too (Plan 6, Task 7). UNVERIFIED for
+  // Ultimate: SmashWiki "Edge slipping" says it of Brawl ("they will always end up in
+  // their knocked down state"), and of Ultimate only that "teching is possible"
+  // (`techOrBounce`).
+  if (f.action === "tumble" || f.action === "tumbleFall" || f.action === "edgeSlip") {
     f.hitstun = 0;
     kineticSetX(f, 0, "stop");
     startAction(f, "downed");
@@ -1695,6 +1707,16 @@ export function onLeftGround(f: FighterState): void {
   // reels and the rest. A cliff-stop status gets here only by rising off the ground
   // (`resolveCollision`'s rising branch), and keeps itself.
   const exit = GROUND_EXIT[f.action];
+  // Knocked off backward while on its feet: the edge slip (Plan 6, Task 7; SmashWiki
+  // "Edge slipping"). On its feet is a `fall` row, or a grounded attack pushed off
+  // (`stopUnlessPushed`); off an edge, not lifted (`vy` not rising); knocked off is the
+  // push on the DAMAGE energy (a windbox's, a knockback's slide), pointing behind it.
+  // Its own walk never takes it backward.
+  const onFeet = (exit === "fall" || exit === "stopUnlessPushed") && f.vy <= 0;
+  if (onFeet && f.kinetic.damageX * f.facing < 0) {
+    startAction(f, "edgeSlip");
+    return;
+  }
   if (exit === "fall" || exit === "tumbleFall") startAction(f, exit);
   // A grounded attack's own movement stops at the edge (`stopsAtEdge`), so one that
   // leaves the ground was pushed off: the ledge cancel, a fall (fix round 3, ruling

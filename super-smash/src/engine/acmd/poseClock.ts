@@ -124,6 +124,8 @@ function airDodgeSuffix(charge: number): string {
 export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>>> = {
   rebound: "stand",
   specialFall: "fall",
+  // Plan 6, Task 7: the edge slip falls on the fall's clip until it has one of its own.
+  edgeSlip: "fall",
   specialLanding: "landingLag",
   cargoCarry: "walk",
   cargoHeld: "grabbed",

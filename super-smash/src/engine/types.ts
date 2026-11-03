@@ -129,6 +129,8 @@ export type ActionState =
   // helpless after a recovery move, and its landing (Plan 5, Task 4b)
   | "specialFall"
   | "specialLanding"
+  // knocked off the ground backward while on its feet (Plan 6, Task 7)
+  | "edgeSlip"
   // offence
   | "attack"
   | "special"
@@ -1259,6 +1261,12 @@ export interface FighterAttributes {
    * https://www.ssbwiki.com/Crawling: of the eight, Pikachu). Absent: cannot.
    */
   readonly canCrawl?: boolean;
+  /**
+   * How many frames an edge slip locks the fighter out (Plan 6, Task 7; SmashWiki "Edge
+   * slipping", https://www.ssbwiki.com/Edge_slipping, its Ultimate table). Absent: 26,
+   * the table's value for Mario, Link, Samus, Kirby, Fox and Marth.
+   */
+  readonly edgeSlipFrames?: number;
   /** Half-width and height of the fighter's hurtbox, fixed. */
   readonly width: number;
   readonly height: number;

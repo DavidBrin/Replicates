@@ -31,12 +31,12 @@
  * - `keep`: the status carries on as itself: it is airborne already, a special, a reel,
  *   held by someone, on a ledge, or has its own published rule (each row says).
  *
- * Not modelled (UNVERIFIED): the edge slip itself. The same page: a fighter that
- * "edge slips in the reverse direction they were looking [...] will enter their
- * edge slip animation, and be unable to perform any action for a certain amount of
- * frames" (Ultimate: 24 to 30 by fighter, 25 or 26 for the eight here). Here it
- * falls free to act, as one facing forward does; the replica has no edge-slip
- * status.
+ * The edge slip itself (Plan 6, Task 7): a fighter on its feet knocked off backward
+ * becomes `edgeSlip` in `onLeftGround`, not `fall`; forward, it falls free to act. The
+ * same page: one that "edge slips in the reverse direction they were looking [...] will
+ * enter their edge slip animation, and be unable to perform any action for a certain
+ * amount of frames" (Ultimate: 25 or 26 for the eight here). UNVERIFIED, left as it was:
+ * a grounded flinch slid off keeps its hitstun (a `keep` row).
  */
 
 import type { ActionState, FighterState } from "./types";
@@ -71,6 +71,8 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   landingLag: "lag",
   specialFall: "keep",
   specialLanding: "lag",
+  // Plan 6, Task 7: airborne already.
+  edgeSlip: "keep",
   // A grounded attack stops at the edge against its own movement (ruling R-T12g).
   // SmashWiki "Dash attack" (https://www.ssbwiki.com/Dash_attack, revision 2049916):
   // "Kirby's dash attack in Melee is the only one in the series that can carry the

@@ -293,6 +293,8 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     // Helpless (Plan 5, Task 4b) has no clip of its own: the fall's, as the
     // bake's motion is (`MOTION_OF_ACTION`), and its landing the landing lag's.
     case "specialFall":
+    // The edge slip (Plan 6, Task 7) too, until it has a clip of its own.
+    case "edgeSlip":
       return f.fastFalling ? "fastFall" : "fall";
     case "land":
       return "land";

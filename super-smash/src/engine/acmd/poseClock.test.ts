@@ -94,6 +94,8 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
     expect(MOTION_OF_ACTION).toEqual({
       rebound: "stand",
       specialFall: "fall",
+      // Plan 6, Task 7: the edge slip falls on the fall's clip.
+      edgeSlip: "fall",
       specialLanding: "landingLag",
       cargoCarry: "walk",
       cargoHeld: "grabbed",
@@ -252,10 +254,11 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
     // landing lag's; Plan 5 Task 8's carry and carried, the walk's and the
     // grab's; Task 9's mouthful, swallowed and spat, the walk's and the
     // tumble's; Task 13c's rebound, the stand's; Task 14's trapped, the grab's;
-    // Task 11's footstooled and Task 12's crawl have their own since Task 17),
+    // Task 11's footstooled and Task 12's crawl have their own since Task 17;
+    // Plan 6, Task 7's edge slip, the fall's),
     // the second jump, two fast falls, five directional air dodges and the back roll.
     expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
-    expect(ACTIONS.length).toBe(59);
+    expect(ACTIONS.length).toBe(60);
   });
 
   it.each(FIGHTERS.map((d) => [d.id, d] as const))("%s: spot dodge, rolls, air dodges and techs last the engine's own lengths", (_id, def) => {

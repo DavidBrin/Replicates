@@ -52,6 +52,9 @@ export const SOFT_DROP: Readonly<Record<ActionState, SoftDrop>> = {
   landingLag: "stay",
   // SmashWiki "Helpless": "holding down to drop through them".
   specialFall: "drop",
+  // UNVERIFIED (Plan 6, Task 7): SmashWiki "Edge slipping", the slip is "unable to affect
+  // the vertical momentum of their fall or perform any other action", so it lands.
+  edgeSlip: "stay",
   specialLanding: "stay",
   // The page: "Characters performing aerial attacks [...] cannot fall through".
   attack: "stay",

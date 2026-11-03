@@ -30,12 +30,13 @@ import { FINAL_LAB } from "./goldenFinalLab";
 import { BEAM_LAB } from "./goldenBeamLab";
 import { DASH_LAB } from "./goldenDashLab";
 import { CONTACT_LAB } from "./goldenContactLab";
+import { SLIP_LAB } from "./goldenSlipLab";
 import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./projectilePaths";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Fifteen matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Sixteen matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, a fifth with the Smash Ball on
  * (Plan 5 final wave, ruling R-FW1e: the CPU's Smash Ball and Final Smash decisions,
  * last in `MATCHES`), one scripted timed match
@@ -65,9 +66,11 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * Task 16 fix round 4): Pikachu whiffs Volt Tackle in the air, held through its
  * startup, then tackles, carries on and falls off the side blast line, and Fox whiffs
  * Team Star Fox in the air, held through its start; and a 200-frame contact lab
- * (`goldenContactLab.ts`, Plan 5 final wave, part 3), last in `MATCHES`: Mario's and
+ * (`goldenContactLab.ts`, Plan 5 final wave, part 3): Mario's and
  * Donkey Kong's jabs clank and both rebound, Donkey Kong's jab stuns Mario's shield,
- * and he grabs Mario out of it, pummels him and throws him.
+ * and he grabs Mario out of it, pummels him and throws him; and a 120-frame slip lab
+ * (`goldenSlipLab.ts`, Plan 6, Task 7), last in `MATCHES`: Mario's F.L.U.D.D. pushes
+ * Donkey Kong backward off Battlefield's top platform, and he edge-slips.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -243,10 +246,19 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => CONTACT_LAB.inputs(frame);
     },
   },
+  // Plan 6, Task 7: the edge slip, which no match reaches and none can on Final
+  // Destination (`goldenSlipLab.ts`); appended, so every other trace stays as it was.
+  {
+    ...SLIP_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => SLIP_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the fifteen matches must visit between them: all 59. A `Record`
+ * Every `ActionState` the sixteen matches must visit between them: all 60. A `Record`
  * rather than a list, so a new state is a compile error here until somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
@@ -429,6 +441,10 @@ const MATCHES: readonly Match[] = [
  * Part 3 adds the contact lab, a second match for `rebound`, `shieldStun` and `pummel`
  * (`expectContacts`), which the script and the projectile lab reach as before. All 59
  * are visited.
+ * Plan 6, Task 7 adds `edgeSlip`. No match reaches it, and none can on Final
+ * Destination (a slip off a ledge-bearing edge hangs on the step it leaves the ground),
+ * so the slip lab (`goldenSlipLab.ts`) does, on Battlefield; the fifteen other traces are
+ * byte-identical. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -448,6 +464,7 @@ const MUST_VISIT: Record<ActionState, true> = {
   landingLag: true,
   specialFall: true,
   specialLanding: true,
+  edgeSlip: true,
   attack: true,
   special: true,
   grab: true,
@@ -1423,6 +1440,12 @@ describe("engine golden trace", () => {
     expect([lab.hits, lab.shieldHits, lab.kos], "the pummel and the down throw, the jab on the shield, no KO").toEqual([2, 1, 0]);
   }
 
+  // Plan 6, Task 7: the slip lab is there to reach the edge slip (`goldenSlipLab.ts`); a
+  // re-tuned step that stops it shows here.
+  function expectSlip(): void {
+    expect(played.get(SLIP_LAB.name)!.actions.has("edgeSlip"), "the slip lab's edge slip").toBe(true);
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -1437,6 +1460,7 @@ describe("engine golden trace", () => {
   it("whiffs a dash and a cinematic Final Smash in the air in the dash lab", expectDashes);
   it("breaks the Smash Ball and uses a Final Smash in the ball-on CPU match", expectCpuFinalSmash);
   it("clanks, stuns a shield and pummels in the contact lab", expectContacts);
+  it("slips off a platform's end backward in the slip lab", expectSlip);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
@@ -1451,6 +1475,7 @@ describe("engine golden trace", () => {
       expectDashes();
       expectCpuFinalSmash();
       expectContacts();
+      expectSlip();
       expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;

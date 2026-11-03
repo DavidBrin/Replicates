@@ -351,6 +351,11 @@ export const DASH_THRESHOLD_FRAMES = 3;
 /** Ultimate's input buffer: an early press still fires when it becomes legal. */
 export const BUFFER_FRAMES = 9;
 
+/** An edge slip's lockout where the fighter gives none (SmashWiki "Edge slipping", Ultimate: 26 for six of the eight). */
+export const EDGE_SLIP_FRAMES = 26;
+/** An edge slip drifts with the stick only after this frame ("able to DI the fall left or right after the eighth frame"). */
+export const EDGE_SLIP_DRIFT_FRAME = 8;
+
 /**
  * A direction pressed within this many frames of the attack button makes the
  * attack a smash rather than a tilt. Ultimate resolves this from stick velocity;

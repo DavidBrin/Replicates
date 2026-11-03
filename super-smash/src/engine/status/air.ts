@@ -1,7 +1,7 @@
 /**
  * Jump and landing statuses: JUMP_SQUAT, JUMP, FALL, LANDING,
- * LANDING_ATTACK_AIR (Plan 2, Task 11), and the helpless FALL_SPECIAL and its
- * LANDING_FALL_SPECIAL (Plan 5, Task 4b).
+ * LANDING_ATTACK_AIR (Plan 2, Task 11), the helpless FALL_SPECIAL and its
+ * LANDING_FALL_SPECIAL (Plan 5, Task 4b), and the edge slip MISS_FOOT (Plan 6, Task 7).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim.
  */
@@ -15,6 +15,7 @@ import { tryWallJump } from "../wallJump";
 import {
   LANDING_ANIMATION_FRAMES,
   bufferPress,
+  edgeSlipFrames,
   endStatus,
   handleActionable,
   landFromSpecialFall,
@@ -194,6 +195,27 @@ export const STATUS_LANDING_FALL_SPECIAL: FighterStatus = {
   end: forgetHelplessMove,
 };
 
+/**
+ * MISS_FOOT, the edge slip (Plan 6, Task 7): knocked off the ground backward while on its
+ * feet (`onLeftGround`). SmashWiki "Edge slipping": "unable to perform any action for a
+ * certain amount of frames" (`edgeSlipFrames`), "able to DI the fall left or right after
+ * the eighth frame" (`applyMovement`), "In Ultimate, teching is possible" (`techOrBounce`).
+ * Entered on contact (phase 5), so it ends as a landing does (`endStatus`): on its last
+ * frame, keeping a press made there, and the fighter acts on the next. A press inside it is
+ * kept for the fall it hands off to. It may take a ledge on any frame (the page: "If the
+ * edge is grabbable, then they will always grab it"), and has no fast fall: it cannot
+ * "affect the vertical momentum".
+ */
+export const STATUS_MISS_FOOT: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_MISS_FOOT",
+  action: "edgeSlip",
+  kineticType: "FALL",
+  main(f, intent, ctx) {
+    if (f.actionFrame >= edgeSlipFrames(ctx.def)) endStatus(f, "fall", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
+  },
+};
+
 export const AIR_STATUSES: readonly FighterStatus[] = [
   STATUS_JUMP_SQUAT,
   STATUS_JUMP,
@@ -202,4 +224,5 @@ export const AIR_STATUSES: readonly FighterStatus[] = [
   STATUS_LANDING_ATTACK_AIR,
   STATUS_FALL_SPECIAL,
   STATUS_LANDING_FALL_SPECIAL,
+  STATUS_MISS_FOOT,
 ];

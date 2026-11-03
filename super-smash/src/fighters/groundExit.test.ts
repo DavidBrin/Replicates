@@ -41,7 +41,7 @@ const K = "keep";
 const PINNED: Readonly<Record<ActionState, GroundExit>> = {
   stand: F, walk: F, dashStart: F, run: F, runBrake: F, turnaround: F,
   crouchStart: F, crouch: F, crouchEnd: F, crawl: F,
-  jumpSquat: K, jump: K, fall: K, land: L, landingLag: L, specialFall: K, specialLanding: L,
+  jumpSquat: K, jump: K, fall: K, land: L, landingLag: L, specialFall: K, specialLanding: L, edgeSlip: K,
   attack: S, special: K, grab: C, grabHold: C, pummel: C, throw: C,
   shieldStart: C, shield: C, shieldRelease: C, shieldStun: C, shieldBroken: L, spotDodge: C, roll: C, airDodge: K,
   hitstun: K, rebound: L, tumble: K, tumbleFall: K, grabbed: K, thrown: K, downed: T, getUp: F,
@@ -400,11 +400,16 @@ describe("a grounded attack at the edge (ruling R-T12g)", () => {
   // the fighter off a ledge during their attack, with nearly all grounded attacks [...]
   // being cancelable in this way"; SmashWiki "Windbox" (rev 2056119): windboxes "can
   // push them off edges".
-  it("pushed off the edge by F.L.U.D.D.'s water mid-attack, it is cancelled: it falls", () => {
+  // Plan 6, Task 7: the cancel is the edge slip when the push is behind the attacker
+  // (SmashWiki "Edge slipping"), and the fall when it faces the edge.
+  it.each([
+    [1, "fall"],
+    [-1, "edgeSlip"],
+  ] as const)("pushed off the edge by F.L.U.D.D.'s water mid-attack, facing %i, it is cancelled: %s", (facing, after) => {
     // Mario 24 to Fox's left on Battlefield's right platform, Fox 1.92 short of its end.
     const s = createInitialState("battlefield", [{ defId: "mario" }, { defId: "fox" }], { ...RULES, oneOnOne: true }, 5);
     Object.assign(s.fighters[0], { action: "stand", actionFrame: 0, grounded: true, platform: 3, x: fx(33.5), y: PLAT_Y(), facing: 1, intangible: 0 });
-    Object.assign(s.fighters[1], { action: "stand", actionFrame: 0, grounded: true, platform: 3, x: fx(57.5), y: PLAT_Y(), facing: -1, intangible: 0 });
+    Object.assign(s.fighters[1], { action: "stand", actionFrame: 0, grounded: true, platform: 3, x: fx(57.5), y: PLAT_Y(), facing, intangible: 0 });
     let st = s;
     let prev: InputFrame[] = [0, 0];
     const fox: FighterState[] = [];
@@ -421,6 +426,6 @@ describe("a grounded attack at the edge (ruling R-T12g)", () => {
     const off = fox.findIndex((f) => !f.grounded);
     expect(off).toBeGreaterThan(pushed);
     expect(fox[off - 1].action).toBe("attack");
-    expect(fox[off].action).toBe("fall");
+    expect(fox[off].action).toBe(after);
   });
 });

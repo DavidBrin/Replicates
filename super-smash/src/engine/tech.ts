@@ -66,6 +66,8 @@ export interface LaunchBefore {
   readonly tumbleFall: boolean;
   /** In the first 15 frames (0-14) of an air dodge that began out of a tumble. */
   readonly dodgeTech: boolean;
+  /** In `edgeSlip`: Ultimate lets it tech a floor (Plan 6, Task 7; SmashWiki "Edge slipping"). */
+  readonly slipping: boolean;
   readonly jumpsUsed: number;
   readonly airTime: number;
   readonly ledgeLockout: number;
@@ -80,6 +82,7 @@ export function launchBefore(f: FighterState): LaunchBefore {
     tumbling: f.action === "tumble",
     tumbleFall: f.action === "tumbleFall",
     dodgeTech: f.action === "airDodge" && f.combat.tumbleDodge && f.actionFrame < AIR_DODGE_TECH_FRAMES,
+    slipping: f.action === "edgeSlip",
     jumpsUsed: f.jumpsUsed,
     airTime: f.airTime,
     ledgeLockout: f.ledgeLockout,
@@ -114,11 +117,11 @@ export function techOrBounce(
   wallSide = 0,
 ): "tech" | "bounce" | null {
   const reeling = before.tumbling && f.hitstun > 0;
-  if (!reeling && !before.tumbleFall && !before.dodgeTech) return null;
+  if (!reeling && !before.tumbleFall && !before.dodgeTech && !before.slipping) return null;
   const floor = surface === "floor";
   // After the hitstun a wall or ceiling is a plain stop: nothing to tech
   // (SmashWiki "Tech": the character "must be in hitstun"), nothing to bounce.
-  if (before.tumbleFall && !floor) return null;
+  if ((before.tumbleFall || before.slipping) && !floor) return null;
   // The air dodge is the tech input, at any launch and whatever the lockout: a
   // neutral dodge keeps the launch it began with (Task 20b), a directional one
   // keeps it through its slingshot (Task 20c), and the reimplementations of the

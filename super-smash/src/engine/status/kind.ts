@@ -42,6 +42,8 @@ export type StatusKind =
   | "FIGHTER_STATUS_KIND_LANDING_ATTACK_AIR"
   | "FIGHTER_STATUS_KIND_FALL_SPECIAL"
   | "FIGHTER_STATUS_KIND_LANDING_FALL_SPECIAL"
+  // Plan 6, Task 7: the edge slip (rubendal 13.0.1 motion `miss_foot`).
+  | "FIGHTER_STATUS_KIND_MISS_FOOT"
   | "FIGHTER_STATUS_KIND_ATTACK"
   | "FIGHTER_STATUS_KIND_SPECIAL"
   | "FIGHTER_STATUS_KIND_CATCH"
@@ -117,6 +119,8 @@ export const STATUS_KIND_OF_ACTION: Readonly<Record<ActionState, StatusKind>> = 
   landingLag: "FIGHTER_STATUS_KIND_LANDING_ATTACK_AIR",
   specialFall: "FIGHTER_STATUS_KIND_FALL_SPECIAL",
   specialLanding: "FIGHTER_STATUS_KIND_LANDING_FALL_SPECIAL",
+  // Plan 6, Task 7: the edge slip (rubendal 13.0.1 motion `miss_foot`).
+  edgeSlip: "FIGHTER_STATUS_KIND_MISS_FOOT",
   attack: "FIGHTER_STATUS_KIND_ATTACK",
   special: "FIGHTER_STATUS_KIND_SPECIAL",
   grab: "FIGHTER_STATUS_KIND_CATCH",
