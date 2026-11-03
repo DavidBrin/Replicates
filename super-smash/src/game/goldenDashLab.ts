@@ -25,14 +25,15 @@
  *   of Fox, and from there on nothing holds him: his end sets him going at 3 on 84
  *   (`game_finalairdashend`'s SET_SPEED_EX(3, 0), part 2's fix round 1, the re-review's
  *   M3), and he carries on to the right and falls, passing the stage's right edge on 107,
- *   4.6 above the floor, his move ending on 138 past it at (165.0, -43.5), and is KO'd off
- *   the side blast line on 169 (SmashWiki "Volt Tackle", https://www.ssbwiki.com/Volt_Tackle:
+ *   4.6 above the floor, his move ending on 138 past it at (165.0, -40.2), and is KO'd off
+ *   the side blast line on 191 (SmashWiki "Volt Tackle", https://www.ssbwiki.com/Volt_Tackle:
  *   "it is fairly easy to self-destruct off the side blast line if the player misses";
- *   off the bottom one on 221 before R-FW2q). He starts at -140 since fix round 1 (from
- *   -150 the slower end then landed him on the far edge).
+ *   off the bottom one on 221 before R-FW2q; on 169 before Team Star Fox's start slowed
+ *   him from 158, its `SLOW_OPPONENT(4, 30)`, Plan 6, Task 11). He starts at -140 since
+ *   fix round 1 (from -150 the slower end then landed him on the far edge).
  * - Team Star Fox, in the air: Fox jumps on 140, jumps again on 152, and presses it on
  *   158, 50.45 up. Its trap box finds nobody, and it holds him there through its start
- *   (ruling R-T16j), which Pikachu's KO's freeze (169-183) stretches to 256; it ends
+ *   (ruling R-T16j), which Pikachu's KO's freeze (191-205) stretches to 256; it ends
  *   with his midair jump back (`jumpsUsed` 2 → 1, ruling R-T16b) and lifts him by his
  *   short hop (`finalHeightBoost`, Plan 6, Task 10), and he is still falling, 7.0 up,
  *   when the lab ends on 300: he never lands (he landed on 284 before Task 10). His
@@ -58,7 +59,7 @@ const J = Btn.Jump;
 
 const STEPS: readonly ScriptStep[] = [
   [1, B, 0], //                    1: Volt Tackle in the air, held to 46; the tackle 47-83
-  [138, 0, 0], //                     carries Pikachu on; he falls, off the side blast line on 169
+  [138, 0, 0], //                     carries Pikachu on; he falls, off the side blast line on 191
   [4, 0, J], //                  140: Fox's full hop
   [8, 0, 0],
   [1, 0, J], //                  152: his midair jump

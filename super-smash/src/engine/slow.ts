@@ -10,6 +10,28 @@
  * beyond that), a press waits in the buffer as in a KO's freeze, and a dodge's or a
  * move's intangible frames hold as in hitlag. Fighters only: projectiles and the stage
  * run at full speed.
+ *
+ * The reading's other choices (Plan 6, Task 11 fix round 1):
+ * - D5's corroboration: every fighter's `GenesisFire` calls `SlowModule::set_whole(4, 0)` and
+ *   `clear_whole()` five frames later (rubendal 13.0.1 `data.json`, read by the Task 11
+ *   review), a small integer rate and then a length, 0 for "until cleared".
+ * - UNVERIFIED-simplified: stepped, not smooth. The page has slowdown work "without reducing
+ *   the rate at which these factors are recalculated", and a slowed limb's hitbox out "for
+ *   multiple frames"; here a slowed fighter steps whole on one step in `rate` and stands
+ *   still on the rest, its boxes live only on its running steps.
+ * - UNVERIFIED: a Final Smash's scene stands a bystander's slow still with it (the count
+ *   sits after `step`'s scene branch), so a bystander leaves a long scene still slowed; a
+ *   trapped fighter is in the scene, and its slow counts on.
+ * - A KO ends the slow with the stock (`step`'s KO block), so the respawn's countdown runs at
+ *   full speed.
+ * - A press on a still step waits in the buffer as it was made: a stick smash stays a smash,
+ *   and a smash-input special keeps its smash version (`bufferPress`; UNVERIFIED, the
+ *   controller's ruling, for every buffered press). One older than the buffer's nine frames
+ *   when the fighter next runs has expired, so under rates over 9 an early press is lost.
+ * - Not modelled: the start scripts' own `SlowModule` calls, a slowing of the whole match:
+ *   Donkey Kong's `game_finalstart` `set_whole(30, 0)` on its frame 15, cleared on 16; Fox's
+ *   `FinalLockOn` `set_whole(2, 0)` from 5 to 25 (read by the review in `data.json`) and his
+ *   `game_finalstart` `clear_whole()` on 5.
  */
 
 import type { FighterState, GameState } from "./types";

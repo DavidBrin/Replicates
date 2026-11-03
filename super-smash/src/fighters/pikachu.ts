@@ -1081,8 +1081,8 @@ const legacy: FighterDef = {
     // game's are status-driven and unpublished.
     // rubendal 13.0.1 `game_final`: SLOW_OPPONENT(9, 45), the slowing of the other fighters
     // through the startup, read as (rate, frames) (Plan 6, Task 11; decision D5, UNVERIFIED).
-    //   With it a fighter beside Pikachu is slowed by 9 through the sparks, as in the game,
-    //   and has barely moved by the initial hit's frame 47.
+    //   With it a fighter beside Pikachu is slowed by 9 through the sparks, as the game's slow
+    //   would (UNVERIFIED, D5), and has barely moved by the initial hit's frame 47.
     // UNVERIFIED-simplified: `game_final2`'s 0% push on its frames 1-2 is not
     // modelled (an end box launches the trapped, so it would end the scene before
     // the blast). The blast's box is a world box, as in its script ("anyone within range

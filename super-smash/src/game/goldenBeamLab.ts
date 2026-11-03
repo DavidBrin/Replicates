@@ -23,19 +23,22 @@
  * has spent its own or has none, so no hit drops a standby (`dropSmashBall`):
  * - Zero Laser (fix round 1: its start, its scripted clears and its fringe beams,
  *   rulings R-T16c to R-T16e; fix round 4: on the muzzle's axis, 15 up, ruling
- *   R-T16o): the start's charge strikes Donkey Kong on 48, 58 and 68 (1%) and its
- *   pulls draw him in; the muzzle on 70 (1%); then the beam (1.5%, 13 hits) from 81 and
- *   the fringe beams (0.5%; 16 above, 15 below) from 92, each on its own record, carry
- *   him along the floor; the end and both blasts on 412 (5.5% and 2.5% twice): 51
- *   hits, 52.0%. He tumbles off to the right and is KO'd on 593. The fringe beams pass
+ *   R-T16o): the start's charge strikes Donkey Kong on 48 and 59 (1%) and its pulls
+ *   draw him in; the muzzle on 70 and 77 (1% and 2%); then the beam (1.5%, 13 hits) from
+ *   81 and the fringe beams (0.5%; 16 above, 15 below) from 92, each on its own record,
+ *   carry him along the floor; the end and both blasts on 417 (5.5% and 2.5% twice): 51
+ *   hits, 53.0%. He tumbles off to the right and is KO'd on 666. The fringe beams pass
  *   under the top platform (the upper one, 29 up, reaches the lower platforms, where
  *   Link and Mario stood before fix round 1), and Samus's Final Smash is over on
- *   480.
+ *   485. Donkey Kong, Link and Mario are slowed by its start's `SLOW_OPPONENT(5, 50)`
+ *   (Plan 6, Task 11; before it the charge struck on 48, 58 and 68, the end landed on
+ *   412 and the KO came on 593).
  * - Mario Finale, in the air (ruling R-T16b): Mario drops through the top platform on
- *   480 and presses it on 513, 10 up, where it holds him until 673; its flames are out
- *   on 517 and strike Samus on 632 and 644 (3.0%, the mid stage: 50°, a launch to the
+ *   480 and presses it on 513, 10 up, where it holds him until 659; its flames are out
+ *   on 517 and strike Samus, slowed by its start (Plan 6, Task 11), on 617 and 629
+ *   (3.0%, the mid stage: 50°, a launch to the
  *   left, so 130° in the world, then the air box's 23°, 157°), until she is off the
- *   stage's left edge; she falls and is KO'd on 762. Its end lifts Mario by his short
+ *   stage's left edge; she falls and is KO'd on 761. Its end lifts Mario by his short
  *   hop (`finalHeightBoost`, Plan 6, Task 10), and he lands on 719; the flames are gone
  *   on 751.
  * - The Ancient Bow and Arrow, in the air: Link drops through the top platform on 780
@@ -65,15 +68,15 @@ const D = Btn.Down;
 type Step = readonly [frames: number, samus: InputFrame, link: InputFrame, donkeyKong: InputFrame, mario: InputFrame];
 
 const STEPS: readonly Step[] = [
-  [1, B, 0, 0, 0], //                 1: Zero Laser; its charge strikes Donkey Kong on 48,
-  [478, 0, 0, 0, 0], //                  58 and 68, the muzzle on 70, the beam from 81 and
-  //                                     the fringe beams from 92, the end on 412; over on
-  //                                     480; he is KO'd on 593
+  [1, B, 0, 0, 0], //                 1: Zero Laser; its charge strikes Donkey Kong on 48
+  [478, 0, 0, 0, 0], //                  and 59, the muzzle on 70 and 77, the beam from 81 and
+  //                                     the fringe beams from 92, the end on 417; over on
+  //                                     485; he is KO'd on 666
   [3, 0, 0, 0, D], //               480: Mario drops through the top platform
   [30, 0, 0, 0, 0],
-  [1, 0, 0, 0, B], //               513: Mario Finale in the air, held there until 673; the
-  [266, 0, 0, 0, 0], //                  flames out on 517 strike Samus on 632 and 644, until
-  //                                     she is off the stage; she is KO'd on 762
+  [1, 0, 0, 0, B], //               513: Mario Finale in the air, held there until 659; the
+  [266, 0, 0, 0, 0], //                  flames out on 517 strike Samus on 617 and 629, until
+  //                                     she is off the stage; she is KO'd on 761
   [3, 0, D, 0, 0], //               780: Link drops through the top platform
   [27, 0, 0, 0, 0],
   [1, 0, B, 0, 0], //               810: the Ancient Bow and Arrow in the air, after the
