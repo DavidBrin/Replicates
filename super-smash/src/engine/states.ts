@@ -1057,7 +1057,15 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
       return true;
     }
     if (p.special && beginSpecial(f, ctx, specialSlot(aim), aim.x, aim, specialFlick(intent))) return true;
-    if (p.attack && beginAttack(f, ctx, groundAttackSlot(f, aimAttack))) return true;
+    if (p.attack) {
+      const slot = groundAttackSlot(f, aimAttack);
+      // A forward smash pressed toward the fighter's back turns it round first (Plan 6,
+      // Task 6; SmashWiki "Forward smash": the stick tapped "in a horizontal direction",
+      // or the C-stick tilted "in a horizontal direction"). UNVERIFIED: instant, as a
+      // standing fighter's turn is (`groundMain`). Only a smash: a tilt never turns here.
+      if (slot === "fsmash" && aimAttack.smash && aimAttack.smashX !== 0 && aimAttack.smashX !== f.facing) f.facing = aimAttack.smashX;
+      if (beginAttack(f, ctx, slot)) return true;
+    }
     if (p.jump) {
       startAction(f, "jumpSquat");
       return true;

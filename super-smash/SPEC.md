@@ -225,7 +225,7 @@ timing instead:
 | Distinction | Rule |
 |---|---|
 | Step vs. dash | A tap is a small step; a held direction dashes and then runs. With Tilt held, it walks. |
-| Tilt vs. smash | Attack within 5 frames of a *fresh* direction press is a smash; otherwise a tilt. With Tilt held, never a smash. |
+| Tilt vs. smash | Attack within 5 frames of a *fresh* direction press is a smash in that direction: pressed behind a grounded fighter, it turns round first. Otherwise a tilt. With Tilt held, never a smash. |
 | Smash side special | A side special within the move's own window of a *fresh* direction press is its smash version (Samus 5 frames, Link 8); otherwise, or with Tilt held, the ordinary one. |
 | Dash attack | Attack while already at run speed. |
 | Short vs. full hop | Jump released within the 3-frame jumpsquat is a short hop. |
