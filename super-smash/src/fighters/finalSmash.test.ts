@@ -1108,7 +1108,8 @@ describe("the three's boxes carry their scripts' numbers", () => {
   // Fix round 1 (rulings R-T16c to R-T16e): `game_finalstart`'s charge (1%, `Rehit=10`,
   // electric) and its two pulls (0%, FKB 30, flinchless: 18° from 15 behind, radius 20,
   // and 366° 17 ahead, radius 30, loaded at 367, P5-R18's stand-in), each pull a frame
-  // at a time on 48, 58 and 68, its `Rehit=10`; then the laser from the move's 70, its
+  // at a time on 48, 58 and 68, its `Rehit=10` (until Plan 6, Task 14: each now spans
+  // 48-68 on the shared record, below); then the laser from the move's 70, its
   // muzzle `Rehit=8`, its end none; `samus_laser2`'s two fringe beams (0.5%, `Rehit=8`,
   // 325° above and 45° below, FKB 20 and 24, radius 6) from the laser's 17 and their
   // blasts (2.5%, 45°, KBG 183, BKB 95, radius 12.5, electric, `set_force_reaction`) on

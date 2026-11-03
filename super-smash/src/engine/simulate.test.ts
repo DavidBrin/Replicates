@@ -1160,9 +1160,10 @@ describe("a windbox keeps the swing's record; a catch reads none of it (Plan 6, 
   // reach and each push it makes is counted, never one lost to the victim sliding away.
   const PULSE = hitbox({ id: 0, startFrame: 5, endFrame: 5, damage: 0, windbox: true, baseKnockback: 0, knockbackGrowth: 0, angle: 0, rehit: 10 });
 
-  /** Step the tester `frames` times, port 0 pressing `press` on the first step (or holding it throughout); the steps on which port 0 pushed someone. */
-  function swing(ctx: SimContext, press: InputFrame, frames: number, hold = false): { s: GameState; pushes: number[] } {
+  /** Step the tester `frames` times, port 0 pressing `press` on the first step (or holding it throughout), after `prep`; the steps on which port 0 pushed someone. */
+  function swing(ctx: SimContext, press: InputFrame, frames: number, hold = false, prep?: (s: GameState) => void): { s: GameState; pushes: number[] } {
     let s = standing();
+    prep?.(s);
     let prev: InputFrame[] = [0, 0];
     const pushes: number[] = [];
     for (let i = 0; i < frames; i++) {
@@ -1183,6 +1184,17 @@ describe("a windbox keeps the swing's record; a catch reads none of it (Plan 6, 
   it("but not a catch: pulled on 5, caught on 6", () => {
     const { s } = swing(withMove("grab", { hitboxes: [PULSE, hitbox({ id: 1, startFrame: 6, endFrame: 6, grabbing: true, damage: 0 })] }), Btn.Grab, 8);
     expect(s.fighters[1].action).toBe("grabbed");
+  });
+
+  it("a grab that meets an invincible fighter is not spent on them (D59)", () => {
+    // A catch keeps none of the record (`recordHit`), so it is not spent on an invincible
+    // fighter (`applyInvincibleHit`). A grab still out when the invincibility ends takes
+    // them; and a catch that met them leaves the same part's later hit free.
+    const invincible = (frames: number) => (s: GameState) => void (s.fighters[1].invincible = frames);
+    const grab = withMove("grab", { hitboxes: [hitbox({ id: 0, startFrame: 5, endFrame: 12, grabbing: true, damage: 0 })] });
+    expect(swing(grab, Btn.Grab, 14, false, invincible(8)).s.fighters[1].action).toBe("grabbed");
+    const caughtThenHit = withMove("jab1", { hitboxes: [hitbox({ id: 0, startFrame: 5, endFrame: 5, grabbing: true, damage: 0 }), hitbox({ id: 1, startFrame: 9, endFrame: 9, damage: fx(10) })] });
+    expect(swing(caughtThenHit, Btn.Attack, 12, false, invincible(6)).s.fighters[1].damage).toBeGreaterThan(0);
   });
 
   it("and the pull pushes again after its rehit, not before", () => {

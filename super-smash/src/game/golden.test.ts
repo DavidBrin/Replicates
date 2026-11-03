@@ -462,6 +462,15 @@ const MATCHES: readonly Match[] = [
  * a smash-input special its smash version); and a KO ends a slow. Three CPU matches
  * (donkeyKong-pikachu-finalDestination, link-samus-smashville, kirby-marth-pokemonStadium2)
  * and the ball-on CPU match move, and nothing else. All 60 are visited.
+ * Plan 6, Task 13 (presses during a KO's freeze go into the buffer) adds no action. The
+ * traces with a KO freeze move, each first differing right after its first freeze: the
+ * scripted match, the tech lab, the beams lab, link-samus-smashville,
+ * kirby-marth-pokemonStadium2, donkeyKong-pikachu-finalDestination (from 3401-3500) and
+ * the ball-on CPU match (from 3201-3300). The dash lab's freeze (191) moves nothing: its
+ * living fighter's direction counter is already at its 1000 cap. All 60 are visited.
+ * Plan 6, Task 14 (a windbox keeps the swing's record; a catch reads none of it) adds no
+ * action. Only the beams lab moves: Zero Laser's pull holds Donkey Kong on 58, so the
+ * charge strikes him again on 68, not 59, and the lab's 54 hits hold. All 60 are visited.
  * Plan 6, Task 15 (the projectile stages: the Boomerang's late hit from frame 10 of its
  * flight, its clean box 4.0; the Bomb's blast 7.38, then 4.9 and 2.5) adds no action. Only
  * the projectile lab and link-samus-smashville move. In the lab the smash-thrown Boomerang

@@ -1986,6 +1986,8 @@ function resolveHits(
       if (c.hitbox.grabbing === true && isInhale(defs[c.attacker], c) && !inhaleMayCatch(s.fighters[c.attacker], victim, defs[v])) continue;
       // A catch is the CatchModule's, and reads none of the swing's attack record (Plan 6,
       // Task 14): a pull that marked its victim leaves the catch free to take them.
+      // SmashWiki "Hitbox" (https://www.ssbwiki.com/Hitbox): "Both grabs and inert
+      // hitboxes are separate objects in Brawl and Smash 4" (`recordHit`).
       if (c.final === "strike" ? sceneRecordHolds(s, c, victim.port) : c.hitbox.grabbing !== true && recordSaysAlreadyHit(s, c, victim.port)) continue;
       // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
       // holds alone, and hits anyone else it reaches. SmashWiki "Throw"
@@ -2261,9 +2263,13 @@ function recordSaysAlreadyHit(s: GameState, c: Candidate, port: number): boolean
 }
 
 function recordHit(c: Candidate, attacker: FighterState, port: number): void {
-  // A catch keeps none of the attack record (Plan 6, Task 14; SSBU's CatchModule). So a
-  // grab that meets an invincible fighter (`applyInvincibleHit`) is not spent on them:
-  // a box still out when the invincibility ends takes them (UNVERIFIED; D59).
+  // A catch keeps none of the attack record (Plan 6, Task 14; SSBU's CatchModule). SmashWiki
+  // "Hitbox" (https://www.ssbwiki.com/Hitbox) lists "Grab collision" as its own command,
+  // "Creates a grabbox. In Smash 64 and Melee, grabs used a normal hitbox with a grab
+  // effect", and "Both grabs and inert hitboxes are separate objects in Brawl and Smash 4"
+  // (Ultimate's own split, by its module names, UNVERIFIED as a record rule). So a grab
+  // that meets an invincible fighter (`applyInvincibleHit`) is not spent on them: a box
+  // still out when the invincibility ends takes them (UNVERIFIED; D59).
   if (c.hitbox.grabbing === true) return;
   // A Final Smash's scene and strike boxes record in a list of their own (Plan 6, Task
   // 9: `CombatState.sceneHits`), which leaves the start's trap free to catch whom a

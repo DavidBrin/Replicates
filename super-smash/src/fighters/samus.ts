@@ -1181,8 +1181,11 @@ const legacy: FighterDef = {
     //   FKB 30, flinchless, `DisableHitlag=true` (the start's only boxes that set it):
     //   18° at radius 20, 15 behind, and 366° at radius 30, 17 ahead,
     //   loaded at 367 (ruling P5-R18's stand-in; `windboxPush`). Each pull spans 48-68 and
-    //   keeps the swing's record, so it pushes on 48, 58 and 68, its `Rehit=10` (Plan 6,
-    //   Task 14). `clear_all` on 69. UNVERIFIED: the start's length, its last
+    //   keeps the swing's record, the charge's `Part=0`, so it pushes on its `Rehit=10`:
+    //   on 48, 58 and 68 for a fighter the charge does not reach. One the charge reaches
+    //   shares that record with it, so each of the three frames goes to one box or the
+    //   other (the beams lab's Donkey Kong: charged on 48, pulled on 58, charged on 68;
+    //   Plan 6, Task 14). `clear_all` on 69. UNVERIFIED: the start's length, its last
     //   scripted event (69; `final_start` publishes no CancelFrame).
     // - The muzzle, `game_final`, from the move's 70 (the laser's frame f is the move's
     //   69 + f): 1%, angle 20, KBG 100, FKB 22, radius 13, 15 up and 20 ahead on `top`,

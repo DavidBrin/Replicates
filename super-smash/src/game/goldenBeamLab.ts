@@ -23,8 +23,10 @@
  * has spent its own or has none, so no hit drops a standby (`dropSmashBall`):
  * - Zero Laser (fix round 1: its start, its scripted clears and its fringe beams,
  *   rulings R-T16c to R-T16e; fix round 4: on the muzzle's axis, 15 up, ruling
- *   R-T16o): the start's charge strikes Donkey Kong on 48 and 59 (1%) and its pulls
- *   draw him in; the muzzle on 70 and 77 (1% and 2%); then the beam (1.5%, 13 hits) from
+ *   R-T16o): the start's charge strikes Donkey Kong on 48 and 68 (1%), and a pull draws
+ *   him in on 58, holding him against the charge until its `Rehit=10` is up (Plan 6,
+ *   Task 14; before it the charge struck on 48 and 59 and the pulls on 58 and 68); the
+ *   muzzle on 70 and 77 (1% and 2%); then the beam (1.5%, 13 hits) from
  *   81 and the fringe beams (0.5%; 16 above, 15 below) from 92, each on its own record,
  *   carry him along the floor; the end and both blasts on 417 (5.5% and 2.5% twice): 51
  *   hits, 53.0%. He tumbles off to the right and is KO'd on 666. The fringe beams pass
@@ -69,7 +71,7 @@ type Step = readonly [frames: number, samus: InputFrame, link: InputFrame, donke
 
 const STEPS: readonly Step[] = [
   [1, B, 0, 0, 0], //                 1: Zero Laser; its charge strikes Donkey Kong on 48
-  [478, 0, 0, 0, 0], //                  and 59, the muzzle on 70 and 77, the beam from 81 and
+  [478, 0, 0, 0, 0], //                  and 68, the muzzle on 70 and 77, the beam from 81 and
   //                                     the fringe beams from 92, the end on 417; over on
   //                                     485; he is KO'd on 666
   [3, 0, 0, 0, D], //               480: Mario drops through the top platform
