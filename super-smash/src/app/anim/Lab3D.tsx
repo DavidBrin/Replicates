@@ -40,6 +40,12 @@ import { fighterAt, gameFighterFor, type Options } from "./page";
 /** One cell's side in pixels and the cells per row (the 2D contact sheet's, which this replaced in Plan 4). */
 export const CELL = 150;
 export const COLUMNS = 12;
+/**
+ * The playback cell's size against a sheet cell's (Plan 6, Task 39): 300 px, inside a
+ * phone's 390 (`e2e/anim.spec.ts`), and copied from the sheet, not drawn again, so the
+ * lab keeps its one renderer.
+ */
+export const PLAYBACK_SCALE = 2;
 
 /** The least height a cell shows, in world units: a standing Mario with room round him. UNVERIFIED (cosmetic): by eye. */
 const MIN_VIEW = 22;
@@ -193,6 +199,7 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
   const gl = useRef<HTMLCanvasElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
+  const playback = useRef<HTMLCanvasElement>(null);
   const stage = useRef<Stage | null>(null);
   const { tables: bake, error: bakeError } = useBake();
   const [built, setBuilt] = useState<Built | null>(null);
@@ -299,6 +306,26 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
     };
   }, [built, bake, options, total]);
 
+  // The playback cell (Plan 6, Task 39): the scrubber's frame, its sheet cell copied at
+  // `PLAYBACK_SCALE` with its boxes over it, again whenever the scrubber or the sheet moves.
+  // After the sheet's effect, which draws what it copies.
+  useEffect(() => {
+    const out = playback.current;
+    const canvas = gl.current;
+    const over = overlay.current;
+    if (!out || !canvas || !over || sheet.current?.getAttribute("data-drawn") !== "true") return;
+    const ctx = out.getContext("2d");
+    if (!ctx) return;
+    const i = Math.min(Math.max(0, frame), total - 1);
+    const sx = (i % COLUMNS) * CELL;
+    const sy = Math.floor(i / COLUMNS) * CELL;
+    const side = CELL * PLAYBACK_SCALE;
+    ctx.clearRect(0, 0, side, side);
+    ctx.drawImage(canvas, sx, sy, CELL, CELL, 0, 0, side, side);
+    ctx.drawImage(over, sx, sy, CELL, CELL, 0, 0, side, side);
+    out.dataset.frame = String(i);
+  }, [built, bake, options, total, frame]);
+
   // The one renderer, freed when the sheet leaves the page.
   useEffect(
     () => () => {
@@ -321,6 +348,14 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
       <div style={{ color: "#7C8896", fontSize: 12, margin: "6px 0" }}>
         contact sheet — {status}; red: hitboxes, yellow: hurtboxes (the sim&apos;s own) — frame {frame}
       </div>
+      {/* The scrubber's frame, large (Plan 6, Task 39): never wider than the page, a phone's included. */}
+      <canvas
+        ref={playback}
+        aria-label="Playback"
+        width={CELL * PLAYBACK_SCALE}
+        height={CELL * PLAYBACK_SCALE}
+        style={{ display: "block", width: "100%", maxWidth: CELL * PLAYBACK_SCALE, height: "auto", background: "#12151a", margin: "0 0 6px" }}
+      />
       {/* The sheet is 150 px a cell, 1800 px across: its own scroll container, so a narrow window does not scroll the page. */}
       <div style={{ maxWidth: "100%", overflowX: "auto" }}>
         {/* `data-drawn` once every cell is drawn, `data-error` with why when it cannot be (`scripts/animsheet.mjs` waits for either). */}

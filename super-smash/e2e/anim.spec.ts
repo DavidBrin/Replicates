@@ -168,3 +168,13 @@ test("the lab fits a phone's width: only the sheet scrolls sideways", async ({ p
   await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]')).toBeAttached({ timeout: 30_000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+/** Plan 6, Task 39: the playback cell follows the scrubber, which steps at 60 Hz while playing. */
+test("the playback cell plays the action: its frame moves on while the lab plays", async ({ page }) => {
+  await page.goto("/anim");
+  await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]')).toBeAttached({ timeout: 30_000 });
+  const playback = page.getByLabel("Playback", { exact: true });
+  const first = await playback.getAttribute("data-frame");
+  expect(first).not.toBeNull();
+  await expect.poll(() => playback.getAttribute("data-frame"), { timeout: 5_000 }).not.toBe(first);
+});

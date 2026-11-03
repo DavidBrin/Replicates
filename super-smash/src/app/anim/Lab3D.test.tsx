@@ -27,7 +27,7 @@ import { fighterPoser } from "@/render3d/bake/bake";
 import { armatureModel } from "@/render3d/armatureModel";
 import { drawnPose } from "@/render3d/fighterPose";
 import { SKELETONS } from "@/render3d/skeletons";
-import { boxExtent, CELL, COLUMNS, Lab3D, labBoxes, modelExtent, sheetView } from "./Lab3D";
+import { boxExtent, CELL, COLUMNS, Lab3D, labBoxes, modelExtent, PLAYBACK_SCALE, sheetView } from "./Lab3D";
 import { fighterAt, type Options } from "./page";
 
 /* ------------------------------------------------------------------ fakes -- */
@@ -521,5 +521,30 @@ describe("Lab3D frees what the GPU holds of a model it drew", () => {
     await waitFor(() => expect(gl.FakeGL.all[0].draws).toHaveLength(FTILT_FRAMES + 20));
     expect(freed.geometry).not.toHaveBeenCalled();
     expect(freed.texture).not.toHaveBeenCalled();
+  });
+});
+
+describe("the playback cell (Plan 6, Task 39)", () => {
+  it("shows the scrubber's frame twice a cell's size, its sheet cell copied with the boxes over it, following the scrubber on one renderer", async () => {
+    // One options object throughout, as the page keeps it while only the scrubber moves.
+    const o = opts();
+    const { getByLabelText, rerender } = render(<Lab3D options={o} total={FTILT_FRAMES} frame={4} />);
+    await waitFor(() => expect(getByLabelText("Contact sheet")).toHaveAttribute("data-drawn", "true"));
+    const playback = getByLabelText("Playback") as HTMLCanvasElement;
+    const side = CELL * PLAYBACK_SCALE;
+    expect([playback.width, playback.height]).toEqual([side, side]);
+    /** Each copy into the playback cell: its source rectangle and where it lands. */
+    const copies = () => ctx.calls.filter((c) => c.method === "drawImage").map((c) => c.args.slice(1).map(Number));
+    // The model's cell, then the boxes' cell: frame 4 is the first row's fifth.
+    expect(copies().slice(-2)).toEqual([
+      [4 * CELL, 0, CELL, CELL, 0, 0, side, side],
+      [4 * CELL, 0, CELL, CELL, 0, 0, side, side],
+    ]);
+    expect(playback.dataset.frame).toBe("4");
+    rerender(<Lab3D options={o} total={FTILT_FRAMES} frame={13} />);
+    // 13: the second row's second cell.
+    expect(copies().slice(-1)).toEqual([[CELL, CELL, CELL, CELL, 0, 0, side, side]]);
+    expect(playback.dataset.frame).toBe("13");
+    expect(gl.FakeGL.all).toHaveLength(1);
   });
 });
