@@ -1171,15 +1171,17 @@ export function step(
   const trappedBefore = s.fighters.map((f) => (f.action === "finalTrapped" ? f.combat.trappedBy : -1));
   const facingBefore = s.fighters.map((f) => f.facing);
   // The launch each fighter took this step, for the next to weigh against (Plan 6, Task
-  // 17: `launchOutranks`), across the hits and the throws.
-  const launches = new Map<number, LaunchRank>();
+  // 17: `launchOutranks`), across the hits and the throws, and the freeze it sets
+  // (`StepLaunch`, `settleLaunches`).
+  const launches = new Map<number, StepLaunch>();
   // How each fighter stood as the step's hits began, what every launch of the step is
   // reckoned from, as the percent is (ruling R-FW2c): a first launch ends a crouch and
   // may lift its victim off the floor, and the next is still the step's (Task 17 fix
   // round 1, `HitStance`).
   const stances = s.fighters.map(hitStance);
-  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents, stances, launches);
-  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents, stances, launches);
+  resolveHits(s, defs, bake, bones, candidates, events, destroyed, finalOut, percents, stances, launches);
+  resolveThrows(s, defs, frozen, beforeActionFrame, events, finalOut, percents, stances, launches);
+  settleLaunches(s, launches, intents);
   for (const user of s.fighters) {
     const held = s.fighters.filter((v) => v.action === "finalTrapped" && v.combat.trappedBy === user.port);
     if (held.some((v) => trappedBefore[v.port] !== user.port)) faceTrapped(user, held, facingBefore[user.port]);
@@ -1904,13 +1906,12 @@ function resolveHits(
   bake: BakeTables,
   bones: BoneTable,
   candidates: readonly Candidate[],
-  intents: readonly Intent[],
   events: StepEvents,
   destroyed: Set<number>,
   finalOut: () => boolean,
   percents: readonly number[],
   stances: readonly HitStance[],
-  launches: Map<number, LaunchRank>,
+  launches: Map<number, StepLaunch>,
 ): void {
   for (let v = 0; v < s.fighters.length; v++) {
     const victim = s.fighters[v];
@@ -2088,7 +2089,7 @@ function resolveHits(
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
-        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut, percents, stances, launches);
+        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, events, finalOut, percents, stances, launches);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
         // on contact, whatever else the hit does: a launch, a launch it cannot
         // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
@@ -2159,12 +2160,11 @@ function resolveThrows(
   defs: readonly FighterDef[],
   frozen: readonly boolean[],
   beforeActionFrame: readonly number[],
-  intents: readonly Intent[],
   events: StepEvents,
   finalOut: () => boolean,
   percents: readonly number[],
   stances: readonly HitStance[],
-  launches: Map<number, LaunchRank>,
+  launches: Map<number, StepLaunch>,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -2193,7 +2193,7 @@ function resolveThrows(
       const v = victim.port;
       const at = { x: victim.x, y: victim.y };
       const own = f.hitlag;
-      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut, percents, stances, launches);
+      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, events, finalOut, percents, stances, launches);
       f.hitlag = own;
     }
     for (const flash of run.state.flashed) {
@@ -2667,21 +2667,48 @@ function sdiDistance(f: FighterState): number {
 /**
  * How a fighter stood as the step's hits began (Plan 6, Task 17 fix round 1): every
  * launch of the step is reckoned from it, as every hit's knockback is from the percent
- * the step began with (ruling R-FW2c). A first launch ends a crouch (`startAction`), and
- * one with no freeze fires on contact and may lift its victim off the floor, spending its
- * ground jump (`leaveGroundIfLifted`). Read live, the next launch would lose its crouch
- * cancel and its grounded angle, so the port that resolved second would rank and fly on
- * other terms than the first.
+ * the step began with (ruling R-FW2c). A first launch ends a crouch (`startAction`), so
+ * read live, the next would lose its crouch cancel, and the port that resolved second
+ * would rank and fly on other terms than the first. The ground is the step's too: no
+ * launch fires before the step's hits are in (`settleLaunches`, fix round 2), so nothing
+ * lifts the fighter in between, and the rank reads it from here all the same.
  */
 interface HitStance {
   readonly crouching: boolean;
   readonly grounded: boolean;
-  readonly platform: number;
-  readonly jumpsUsed: number;
 }
 
 function hitStance(f: FighterState): HitStance {
-  return { crouching: isCrouching(f), grounded: f.grounded, platform: f.platform, jumpsUsed: f.jumpsUsed };
+  return { crouching: isCrouching(f), grounded: f.grounded };
+}
+
+/**
+ * What the step's hits left a fighter with (Plan 6, Task 17 fix round 2): the launch
+ * that stands (`rank`; `null` if none does, only hits that launched nothing new, kept
+ * or armoured through) and the freeze the fighter takes for them, the standing launch's
+ * own or else the longest of those hits'.
+ */
+interface StepLaunch {
+  readonly rank: LaunchRank | null;
+  readonly lag: number;
+}
+
+/**
+ * Once the step's hits and throws are in (Plan 6, Task 17 fix round 2; D9, UNVERIFIED:
+ * no source covers two hits on one fighter on one frame): each fighter they reached
+ * freezes for the launch that stands, not for an outranked hit, so the step's strongest
+ * launch decides the freeze as it decides the direction, whichever port resolved first.
+ * Then a launch with no frame of freeze after its contact (a freeze of 0 or 1) fires now:
+ * it has no window to react in, so its DI is decided on the contact frame, the same rule
+ * as at the end of a freeze (phase 3) at length zero. A freeze the fighter was already in
+ * holds it, as `freezeFighter` keeps the longer.
+ */
+function settleLaunches(s: GameState, launches: ReadonlyMap<number, StepLaunch>, intents: readonly Intent[]): void {
+  for (const [port, taken] of launches) {
+    const f = s.fighters[port];
+    freezeVictim(f, taken.lag);
+    if (taken.rank !== null && f.hitlag === 0) releasePendingLaunch(f, intents[port]);
+  }
 }
 
 /**
@@ -3078,12 +3105,11 @@ function applyHit(
   victimDef: FighterDef,
   c: Candidate,
   contact: Point,
-  victimIntent: Intent,
   events: StepEvents,
   finalOut: () => boolean,
   percents: readonly number[],
   stances: readonly HitStance[],
-  launches: Map<number, LaunchRank>,
+  launches: Map<number, StepLaunch>,
 ): void {
   const hb = c.hitbox;
   const fromProjectile = c.projectile !== null;
@@ -3520,8 +3546,9 @@ function applyHit(
   // D9): this hit's damage and freeze land, and nothing of its launch does, so the step's
   // strongest launch sets the direction and the reaction whichever port resolves first.
   const rank: LaunchRank = { kb, rise: launchRise(hitAngle(hb, stance.grounded, kb)), x: c.projectile !== null ? c.projectile.x : attacker.x, side: sourceFacing >= 0 ? 1 : -1 };
-  const earlier = launches.get(victim.port);
-  const outranked = earlier !== undefined && !launchOutranks(rank, earlier);
+  const taken = launches.get(victim.port);
+  const earlier = taken?.rank ?? null;
+  const outranked = earlier !== null && !launchOutranks(rank, earlier);
   const verdict = outranked
     ? "outranked"
     : victim.combat.launchSource === source
@@ -3540,7 +3567,11 @@ function applyHit(
       kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
     }
     victim.combat.comboHits += 1;
-    freezeVictim(victim, lag);
+    // The victim's freeze waits for the step's launches to settle (`settleLaunches`): a
+    // launch that stands sets it, and an outranked hit's freeze lands on no one but its
+    // attacker (Task 17 fix round 2; UNVERIFIED, as D9). With no launch standing, the
+    // step's longest freeze holds, as `freezeFighter` keeps.
+    if (earlier === null) launches.set(victim.port, { rank: null, lag: Math.max(taken?.lag ?? 0, lag) });
     if (!fromProjectile) freezeFighter(attacker, lag);
     events.hits.push({
       attacker: attacker.port,
@@ -3561,15 +3592,7 @@ function applyHit(
     });
     return;
   }
-  // This launch replaces one the fighter took earlier this step, so it starts from where
-  // that one found the fighter: on the floor it may have lifted it off, its ground jump
-  // unspent (Task 17 fix round 1). Everything below reads the ground from here.
-  if (earlier !== undefined) {
-    victim.grounded = stance.grounded;
-    victim.platform = stance.platform;
-    victim.jumpsUsed = stance.jumpsUsed;
-  }
-  launches.set(victim.port, rank);
+  launches.set(victim.port, { rank, lag });
   victim.combat.launchSource = source;
   victim.combat.comboHits += 1;
 
@@ -3594,7 +3617,7 @@ function applyHit(
   // (`clampShiftToStage`), and a zero-lag release happens in this function,
   // which has no stage to clamp against.
   // Only a freeze with a frame after the hit's has a last frame to shift on (one
-  // of 0 or 1 releases on contact below, which clears the flag again).
+  // of 0 or 1 releases on contact, `settleLaunches`, which clears the flag again).
   victim.combat.asdi = framesAfterHit(lag) > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
   parkAutolink(victim, hb, c, attacker);
@@ -3623,7 +3646,8 @@ function applyHit(
   // it a few frames later with its hitstun cut). One too weak to tumble does not
   // bounce: the victim flinches where it stands (SmashWiki "Meteor smash").
   victim.combat.launchBounce = victim.grounded && tumbles;
-  freezeVictim(victim, lag);
+  // The victim's freeze is this launch's if it stands, set once the step's hits and
+  // throws are in (`settleLaunches`, Task 17 fix round 2).
   victim.intangible = 0;
   // A hit that knocks a hanging fighter off the ledge locks the ledge out, as
   // letting go does; a hit anywhere else leaves the lockout alone.
@@ -3635,10 +3659,6 @@ function applyHit(
   // a party to it — freezing Link when his arrow connects across the stage would
   // give the opponent a free frame every time they walked into one.
   if (!fromProjectile) freezeFighter(attacker, lag);
-  // A hit with no frame of freeze after its own (a freeze of 0 or 1) has no
-  // window to react in, so its DI is decided on the contact frame after all —
-  // which is the same rule, at length zero.
-  if (victim.hitlag === 0) releasePendingLaunch(victim, victimIntent);
 
   // Taking a hit ends any grab this fighter is part of, at *either* end. Being
   // launched out of a captor's hands is the obvious half; the half that is easy

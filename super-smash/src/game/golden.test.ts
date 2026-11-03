@@ -508,6 +508,16 @@ const MATCHES: readonly Match[] = [
  * reaches `downed`, `getUp`, `roll` and `turnaround`. The ball-on match lands 65 hits (27)
  * and 2 KOs (1), and no longer reaches `pummel`. The four CPU matches reach 44 between
  * them, up from 42. All 60 are visited.
+ * Plan 6, Task 17's fix round 2 (of a step's launches on one fighter, the one that stands
+ * sets the freeze too: the hits' freezes and a no-freeze launch's release wait for the
+ * step's hits and throws, `settleLaunches`) adds no action. Only the two traces with a
+ * swing whose later part replaces an earlier, longer-frozen one in the same step move:
+ * the beams lab (from 401-500: Zero Laser's end and both blasts on Donkey Kong on 417,
+ * the strongest freezing him 11 frames, not the first's 14) and the ball-on CPU match
+ * (3301-3400: two parts of a Samus swing on Kirby on 3355, 6 frames, not 7). Samus, who
+ * still takes each hit's freeze, stays frozen the longer. The other fourteen traces are
+ * byte-identical and every lab pin holds; both traces keep their hits, KOs, Final Smashes
+ * and actions (54, 2, 3 and 65, 2, 2). All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

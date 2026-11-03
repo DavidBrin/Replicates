@@ -1221,7 +1221,10 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
   // the floor (`releasePendingLaunch`), and the strong one sending flat (fix round 1).
   const SNAP: FighterDef = { ...WEAK, id: "snap", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, hitlagMultiplier: 0 })] }) } };
   const FLAT: FighterDef = { ...WEAK, id: "flat", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, baseKnockback: fx(44), angle: 0 })] }) } };
-  const BY_ID: Record<string, FighterDef> = { strong: STRONG, snap: SNAP, flat: FLAT };
+  // A far stronger jab with no freeze (BKB 120): its launch stands over the weak jab's, which
+  // has a freeze (fix round 2).
+  const BIGSNAP: FighterDef = { ...WEAK, id: "bigsnap", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, baseKnockback: fx(120), hitlagMultiplier: 0 })] }) } };
+  const BY_ID: Record<string, FighterDef> = { strong: STRONG, snap: SNAP, flat: FLAT, bigsnap: BIGSNAP };
   const DUO: SimContext = { fighter: (id) => BY_ID[id] ?? WEAK, stage: () => STAGE };
 
   interface Layout {
@@ -1233,6 +1236,8 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     readonly crouch?: boolean;
     /** The right attacker jabs too (default); without it, the left jab lands alone. */
     readonly rightJabs?: boolean;
+    /** What the victim holds from the step after the jabs land (DI, LSI). */
+    readonly after?: InputFrame;
   }
 
   interface Outcome {
@@ -1245,6 +1250,8 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     readonly jumpsUsed: number;
     /** Who the kill credit names for the victim after the step the jabs land on. */
     readonly credit: number;
+    /** The victim's height, ground and jumps spent after every step. */
+    readonly trail: readonly { y: number; grounded: boolean; jumpsUsed: number }[];
   }
 
   /**
@@ -1254,7 +1261,7 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
    * kill credit names after that step (`trackFrame`).
    */
   function sandwich(left: number, right: number, layout: Layout = {}): Outcome {
-    const { leftId = "tester", rightId = "tester", crouch = false, rightJabs = true } = layout;
+    const { leftId = "tester", rightId = "tester", crouch = false, rightJabs = true, after = 0 } = layout;
     const ids = [0, 1, 2].map((port) => (port === right ? rightId : port === left ? leftId : "tester"));
     let s = createInitialState("flat", ids.map((defId) => ({ defId })), RULES, 12345, DUO);
     const place = (port: number, x: number, facing: number, action: "stand" | "crouch") =>
@@ -1267,8 +1274,9 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     let prev: InputFrame[] = [hold, 0, 0];
     let hitstun = -1;
     let credit = -1;
+    const trail: { y: number; grounded: boolean; jumpsUsed: number }[] = [];
     for (let i = 0; i < 40; i++) {
-      const now: InputFrame[] = [hold, 0, 0];
+      const now: InputFrame[] = [hitstun < 0 ? hold : after, 0, 0];
       if (i === 0) {
         now[left] = Btn.Attack;
         if (rightJabs) now[right] = Btn.Attack;
@@ -1281,9 +1289,10 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
         hitstun = s.fighters[0].hitstun;
         credit = tracker.lastHitBy[0];
       }
+      trail.push({ y: s.fighters[0].y, grounded: s.fighters[0].grounded, jumpsUsed: s.fighters[0].jumpsUsed });
     }
     const v = s.fighters[0];
-    return { side: Math.sign(v.x), hitstun, damage: v.damage, x: v.x, y: v.y, grounded: v.grounded, jumpsUsed: v.jumpsUsed, credit };
+    return { side: Math.sign(v.x), hitstun, damage: v.damage, x: v.x, y: v.y, grounded: v.grounded, jumpsUsed: v.jumpsUsed, credit, trail };
   }
 
   it("from both sides with equal launches, the attacker further left sets the direction, whichever ports", () => {
@@ -1321,6 +1330,17 @@ describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFI
     const pick = (o: Outcome) => ({ x: o.x, y: o.y, grounded: o.grounded, jumpsUsed: o.jumpsUsed, hitstun: o.hitstun });
     expect(flatFirst.side).toBe(-1);
     expect(pick(snapFirst)).toEqual(pick(flatFirst));
+  });
+
+  it("a launch with no freeze that stands fires on contact, whichever ports: the outranked hit's freeze does not hold it (fix round 2)", () => {
+    // Held Down from the step after contact: a launch held back to the end of the weak
+    // jab's freeze would read it as DI and LSI, one fired on contact does not.
+    for (const after of [Btn.Down, Btn.Up]) {
+      const [weakFirst, snapFirst] = [sandwich(1, 2, { rightId: "bigsnap", after }), sandwich(2, 1, { rightId: "bigsnap", after })];
+      expect(snapFirst.side).toBe(-1);
+      expect(weakFirst.trail).toEqual(snapFirst.trail);
+      expect([weakFirst.x, weakFirst.hitstun]).toEqual([snapFirst.x, snapFirst.hitstun]);
+    }
   });
 
   it("the kill credit goes to the attacker whose launch stands, whichever ports (fix round 1)", () => {
