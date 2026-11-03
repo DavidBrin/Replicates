@@ -51,7 +51,8 @@ import {
 
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { toFloat } from "@/engine/fixed";
-import type { FighterDef, FighterState, GameState, StageDef } from "@/engine/types";
+import { activeHitboxes, moveFrameOf } from "@/engine/hitbox";
+import type { FighterDef, FighterState, GameState, MoveSlot, StageDef } from "@/engine/types";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
 import { interpolatePosition, sceneShiftAt, type RenderState } from "@/render/renderer";
 import { hitFlashAmount } from "@/render/vfx";
@@ -62,6 +63,7 @@ import { NO_WEBGL } from "./webgl";
 import type { ModelCache } from "./models/loader";
 import type { SkeletonFile } from "./skeleton/skeleton";
 import { createStage3D } from "./stage3d";
+import { createTrails3D, trailBoneOf, trailSample, type TrailBone } from "./trail3d";
 import { createVfx3D, shieldLook, type ShieldLook } from "./vfx3d";
 
 /** The part of `WebGLRenderer` the presenter uses — a fake in jsdom tests. */
@@ -287,8 +289,25 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   shadows.frustumCulled = false;
   shadows.instanceMatrix.setUsage(DynamicDrawUsage);
 
+  // Sword and kick trails (Plan 6, Task 34): one ribbon for every fighter, and each
+  // fighter's trail bone per move, found once.
+  const trails = createTrails3D(opts.defs.length);
+  const trailBones: ReadonlyMap<string, TrailBone>[] = opts.defs.map(
+    (d) =>
+      new Map(
+        d === null
+          ? []
+          : Object.keys(d.moves).flatMap((slot) => {
+              const bone = trailBoneOf(d, slot as MoveSlot);
+              return bone === null ? [] : [[slot, bone] as const];
+            }),
+      ),
+  );
+  /** The sim frame each port last sampled its trail on: once a sim frame, however often it paints. */
+  const trailFrames: number[] = opts.defs.map(() => -1);
+  const tip = new Vector3();
   /** Every layer but the fighters, whose matrices `paint` builds; each fighter builds its own (`Fighter3D.update`). */
-  const fixed: Object3D[] = [hemisphere, ambient, sun, stage.group, shadows, vfx.group];
+  const fixed: Object3D[] = [hemisphere, ambient, sun, stage.group, shadows, vfx.group, trails.mesh];
   scene.add(...fixed);
 
   const fighters: (Fighter3D | null)[] = opts.defs.map(() => null);
@@ -393,6 +412,14 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
           hitFlash: hitFlashAmount(rs.vfx, f.port),
           hidden: hidden[f.port] ?? false,
         });
+        // A trail along the blade its move's boxes ride, a sample a sim frame (Plan 6, Task 34).
+        if (trailFrames[f.port] !== game.frame) {
+          trailFrames[f.port] = game.frame;
+          const bone = f.move === null || f.action === "dead" ? undefined : trailBones[f.port]?.get(f.move);
+          const move = f.move === null ? undefined : def.moves[f.move];
+          const live = bone !== undefined && move !== undefined && fighter.bonePosition(bone.bone, tip);
+          trails.push(f.port, live ? trailSample(bone, activeHitboxes(move, moveFrameOf(f.actionFrame)), pos.x, pos.y, f.facing, { x: tip.x, y: tip.y, z: tip.z }) : null);
+        }
         // The sim's bubble, centre and radius, carried to where its fighter is drawn between frames.
         const look: ShieldLook | null = shieldLook(f, def, rs.vfx.parryFlash[f.port] ?? 0);
         if (look !== null) {
@@ -415,6 +442,7 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
       }
       shadows.count = shadowCount;
       shadows.instanceMatrix.needsUpdate = true;
+      trails.update();
       vfx.update(rs.vfx, shields);
       for (let i = 0; i < fixed.length; i++) fixed[i].updateMatrixWorld();
       gl.render(scene, camera);
@@ -457,6 +485,7 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
       shadowGeometry.dispose();
       shadowMaterial.dispose();
       shadows.dispose();
+      trails.dispose();
       for (const r of drawn) r.removeEventListener("dispose", freed);
       // ...and the rest is shared — the model cache's geometry and textures, the
       // toon ramp — but its GPU copy (and the listener three hung on it) is this

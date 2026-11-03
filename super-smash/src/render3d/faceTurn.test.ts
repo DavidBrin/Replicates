@@ -144,7 +144,8 @@ describe("a face turned toward the camera moves no box", () => {
 
 describe("the turn is toward the camera, facing either way, and a turn, not a mirror", () => {
   /** A bone's transform in the model group's space: its pose, before the clip's scale and squash and the facing turn. */
-  const inModel = (fighter: Fighter3D, bone: Object3D) => new Matrix4().copy(fighter.placement.children[0].matrixWorld).invert().multiply(bone.matrixWorld);
+  // The model's frame: the root's group, under the landing squash's (Plan 6, Task 34).
+  const inModel = (fighter: Fighter3D, bone: Object3D) => new Matrix4().copy(fighter.placement.children[0].children[0].matrixWorld).invert().multiply(bone.matrixWorld);
 
   it.each(FIGHTER_IDS)("%s: a turned bone is the unturned one turned about the vertical, toward the camera, by the table's angle", (id) => {
     const on = fighterOf(id, true, "glb");

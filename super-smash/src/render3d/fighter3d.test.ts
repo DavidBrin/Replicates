@@ -25,7 +25,7 @@ import { PORT_COLOURS } from "@/render/rigKit";
 import { makeFighter } from "@/render/testFixtures";
 import { fighterPoser } from "./bake/bake";
 import { armatureModel } from "./armatureModel";
-import { createFighter3D, simWorldX, type Fighter3D } from "./fighter3d";
+import { createFighter3D, landingSquash, simWorldX, type Fighter3D } from "./fighter3d";
 import { parseSkeletonFile } from "./skeleton/skeleton";
 import { bonesFromRig } from "./threeRig";
 import type { ToonMaterial } from "./toon";
@@ -371,3 +371,27 @@ describe("a fighter with a glb", () => {
   });
 });
 
+describe("the landing squash on the model (Plan 6, Task 34)", () => {
+  it("squashes a landing for six frames, the same across x and z, and nothing else", () => {
+    const at0 = landingSquash({ action: "land", actionFrame: 0, hitlag: 0 });
+    expect([at0.x, at0.y]).toEqual([expect.closeTo(1.22, 9), expect.closeTo(0.8, 9)]);
+    const at3 = landingSquash({ action: "landingLag", actionFrame: 3, hitlag: 0 });
+    expect([at3.x, at3.y]).toEqual([expect.closeTo(1.11, 9), expect.closeTo(0.9, 9)]);
+    expect(landingSquash({ action: "land", actionFrame: 6, hitlag: 0 })).toEqual({ x: 1, y: 1 });
+    expect(landingSquash({ action: "stand", actionFrame: 0, hitlag: 8 })).toEqual({ x: 1, y: 1 });
+    expect(landingSquash({ action: "jumpSquat", actionFrame: 1, hitlag: 0 })).toEqual({ x: 1, y: 1 });
+  });
+
+  it("scales a group between the placement and the root, so the placement keeps its scale and the feet stay down", () => {
+    const fighter = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "standIn", reason: "test" } });
+    fighter.update(frameOf(makeFighter({ action: "land", actionFrame: 0, grounded: true })));
+    const squash = fighter.placement.children[0];
+    expect(squash.scale.y).toBeCloseTo(0.8, 9);
+    expect(squash.scale.x).toBeCloseTo(1.22, 9);
+    expect(squash.scale.z).toBe(squash.scale.x);
+    expect(fighter.placement.scale.toArray()).toEqual([1, 1, 1]);
+    fighter.update(frameOf(makeFighter({ action: "stand", grounded: true })));
+    expect(squash.scale.toArray()).toEqual([1, 1, 1]);
+    fighter.dispose();
+  });
+});

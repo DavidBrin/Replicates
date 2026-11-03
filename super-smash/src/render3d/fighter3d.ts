@@ -36,7 +36,7 @@ import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, FighterState } from "@/engine/types";
 import type { PoseBlend } from "@/render/blend";
-import { hitlagShake } from "@/render/characterArt";
+import { hitlagShake, squashFor } from "@/render/characterArt";
 import { intangibleAlpha } from "@/render/renderer";
 import { PORT_COLOURS } from "@/render/rigKit";
 import type { FighterPoser } from "./bake/bake";
@@ -149,15 +149,30 @@ export interface Fighter3DOptions {
   readonly faceTurns?: readonly FaceTurn[];
 }
 
+/**
+ * The landing's squash on the model (Plan 6, Task 34): `squashFor`'s landing branch, the
+ * 2D figure's (`characterArt.ts`, whose note says the landing clip was authored with it
+ * multiplied in), x across and y up; 1, 1 for anything else. Render only: no box moves.
+ */
+export function landingSquash(f: Pick<FighterState, "action" | "actionFrame" | "hitlag">): { x: number; y: number } {
+  if (f.action !== "land" && f.action !== "landingLag") return { x: 1, y: 1 };
+  const s = squashFor(f);
+  return { x: s.scaleX, y: s.scaleY };
+}
+
 export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
   const { poser } = opts;
   const inputs: FighterPoseInputs = poseInputs(poser, opts.def, opts.bake);
   const built = opts.model.kind === "glb" ? glbModel(opts.model.scene) : standInModel(poser, opts.port);
   const rootGroup = new Group();
   rootGroup.add(built.root);
+  // The landing squash (Plan 6, Task 34), scaled across x and z alike so the facing turn
+  // does not matter, from the placement's origin at the feet so they stay on the floor.
+  const squashGroup = new Group();
+  squashGroup.add(rootGroup);
   const placement = new Group();
   placement.name = `fighter:${opts.port}:${opts.def.id}`;
-  placement.add(rootGroup);
+  placement.add(squashGroup);
   const bones = bindBones(poser.rig3, built.root);
   if (opts.model.kind === "glb") hangBonesAsRig(poser.rig3, bones, built.root);
   const turner = faceTurner(poser.rig3, bones, rootGroup, opts.faceTurns ?? FACE_TURNS[opts.def.id] ?? []);
@@ -177,6 +192,8 @@ export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
       const pose = drawnPose(inputs, f, fr.frame, fr.blends);
       applyLocalPose(bones, pose.local);
       applyRoot(rootGroup, pose.root);
+      const squash = landingSquash(f);
+      squashGroup.scale.set(squash.x, squash.y, squash.x);
       turner.apply(f.facing);
       const alpha = intangibleAlpha(f, opts.def);
       if (alpha !== opacity || fr.hitFlash !== flash) {

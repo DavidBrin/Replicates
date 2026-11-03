@@ -14,7 +14,8 @@ export const MAX_FIGHTER_PRIMITIVES = 12;
 /**
  * The draw calls a frame spends besides the stage and the fighters: one per
  * batch, however many are up — the sparks and bursts, the shields, the blob
- * shadows (`renderer3d.ts`). `renderer3d.test.ts` holds the scene to exactly
+ * shadows (`renderer3d.ts`), and the sword and kick trails (Plan 6, Task 34;
+ * drawn only while one is out). `renderer3d.test.ts` holds the scene to exactly
  * this many batches, and `e2e/render3d.spec.ts` reads it rather than a copy.
  */
-export const BATCH_CALLS = 3;
+export const BATCH_CALLS = 4;

@@ -45,14 +45,14 @@ import { P1, ROUTES, pauseMatch, simFrame, simStageId, startFromTitle, startMatc
  *
  * A frame's draw calls are known by construction (`renderer3d.ts`): one per
  * stage mesh (each platform, and Battlefield's decorative underside, Plan 6
- * Task 33), one batch each for the sparks and bursts, the shields and the blob
- * shadows (`BATCH_CALLS`), and the fighters: a stand-in is one mesh per hurt
- * capsule of its skeleton, a glb one per primitive of the file the server
- * sends. So a fighter is seen to draw by a bound on calls that nothing else
- * reaches (`callRange`): with the capsules never attached a match is the stage
- * and its batches, 8 calls on Battlefield, and a bare `calls > 0` is met by
- * that alone. The ceiling is the batches' 3 above the floor, so any fighter
- * whose parts are drawn twice is over it.
+ * Task 33), one batch each for the sparks and bursts, the shields, the blob
+ * shadows and the sword trails (`BATCH_CALLS`; Task 34), and the fighters: a
+ * stand-in is one mesh per hurt capsule of its skeleton, a glb one per primitive
+ * of the file the server sends. So a fighter is seen to draw by a bound on calls
+ * that nothing else reaches (`callRange`): with the capsules never attached a
+ * match is the stage and its batches, 9 calls on Battlefield at most, and a bare
+ * `calls > 0` is met by that alone. The ceiling is the batches' 4 above the
+ * floor, so any fighter whose parts are drawn twice is over it.
  */
 
 type FighterKind = "glb" | "standIn" | "loading";
@@ -581,7 +581,7 @@ test.describe("four fighters", () => {
       expect(stepped.hitFrames).toBeGreaterThan(0);
       expect(stepped.shieldFrames).toBeGreaterThan(0);
       // ...and the fighters were drawn, each once: more than the stage and the batches alone can reach (stand-ins
-      // that draw nothing are 8 calls on Battlefield), and no more than the parts allow (a fighter drawn twice is over).
+      // that draw nothing are 9 calls on Battlefield at most), and no more than the parts allow (a fighter drawn twice is over).
       expect(worst.calls, "the fighters are drawn").toBeGreaterThanOrEqual(range.min);
       expect(worst.calls, "no part is drawn twice").toBeLessThanOrEqual(range.max);
       expect(worst.calls).toBeLessThan(MAX_DRAW_CALLS);

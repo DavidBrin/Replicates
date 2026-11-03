@@ -29,6 +29,7 @@ import {
 } from "three";
 
 import { fx, toFloat } from "@/engine/fixed";
+import { actionFrameOf } from "@/engine/hitbox";
 import { platformCentreX } from "@/engine/physics";
 import { shieldBubble } from "@/engine/shield";
 import { createInitialState } from "@/engine/simulate";
@@ -52,6 +53,7 @@ import { CONTEXT_RESTORE_WAIT_MS, NO_WEBGL, bufferSizeFor, createRenderer3D, typ
 import { SKELETONS } from "./skeletons";
 import { bonesFromRig } from "./threeRig";
 import { HIT_FLASH_GAIN, type ToonMaterial } from "./toon";
+import { TRAIL_SAMPLES } from "./trail3d";
 import { MAX_SHIELDS, MAX_SPRITES } from "./vfx3d";
 
 const bake = readBakeFromDisk();
@@ -247,9 +249,11 @@ describe("the 3D presenter", () => {
     const { calls, triangles } = presenter.info();
     expect(calls).toBeGreaterThanOrEqual(4 * MAX_FIGHTER_PRIMITIVES + BATCH_CALLS);
     expect(calls).toBeLessThan(MAX_DRAW_CALLS);
-    // The batches are the scene's only instanced meshes, and there are BATCH_CALLS of them (sparks, shields, shadows).
+    // The batches are the scene's three instanced meshes (sparks, shields, shadows) and the
+    // trails' one ribbon (Plan 6, Task 34): BATCH_CALLS of them.
     expect([...resourcesOf(scene).instanced].map((m) => m.name).sort()).toEqual(["shadows", "shields", "sparks"]);
-    expect(resourcesOf(scene).instanced.size).toBe(BATCH_CALLS);
+    expect(scene.getObjectByName("trails")).toBeDefined();
+    expect(resourcesOf(scene).instanced.size + 1).toBe(BATCH_CALLS);
     expect(triangles).toBeGreaterThanOrEqual(4 * MAX_TRIANGLES);
     expect(triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
     // One skeleton per fighter, however many parts it has: one bone texture to upload, not twelve (Task 17 carry).
@@ -268,8 +272,9 @@ describe("the 3D presenter", () => {
     expect(parts).toHaveLength(4 * MAX_FIGHTER_PRIMITIVES);
     expect(parts.every((m) => m.transparent && m.side === DoubleSide)).toBe(true);
     // One pass each: 4 × 12, Battlefield's 4 platforms and its decorative underside (Plan 6,
-    // Task 33), and the 3 batches. Two passes each would be 4 × 12 × 2 + 8 = 104.
-    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + stage.platforms.length + 1 + BATCH_CALLS);
+    // Task 33), and the 3 instanced batches; with no swing out, the trails' ribbon (Task 34)
+    // draws nothing. Two passes each would be 4 × 12 × 2 + 8 = 104.
+    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + stage.platforms.length + 1 + 3);
     expect(presenter.info().calls).toBeLessThanOrEqual(MAX_DRAW_CALLS);
     expect(presenter.info().triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
   });
@@ -377,6 +382,29 @@ describe("the 3D presenter", () => {
       expect(shadow.y - toFloat(state.fighters[port].y)).toBeGreaterThan(0);
       expect(shadow.y - toFloat(state.fighters[port].y)).toBeLessThan(0.1);
     }
+  });
+
+  it("draws a kick's trail along Kirby's foot while its boxes are out, one sample a sim frame however often it paints (Plan 6, Task 34)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    const ftilt = defs[2].moves.ftilt!;
+    const first = Math.min(...ftilt.hitboxes.map((h) => h.startFrame));
+    const trails = () => gl().scene!.getObjectByName("trails") as Mesh;
+    presenter.paint(rs, createCamera(stage), 1, []);
+    expect(trails().visible).toBe(false);
+    for (let k = 0; k < 2; k++) {
+      state.frame += 1;
+      state.fighters[2] = { ...state.fighters[2], action: "attack", move: "ftilt", actionFrame: actionFrameOf(first) + k };
+      presenter.paint(rs, createCamera(stage), 1, []);
+      // Painted again on the same sim frame, as a 120 Hz display does: no second sample.
+      presenter.paint(rs, createCamera(stage), 1, []);
+    }
+    expect(trails().visible).toBe(true);
+    // Port 2's stretch of the ribbon: two samples, each an inner and an outer vertex, shown.
+    const colour = trails().geometry.getAttribute("color");
+    const shown = [...Array(colour.count).keys()].filter((i) => colour.getW(i) > 0);
+    expect(shown).toEqual([0, 1, 2, 3].map((i) => 2 * TRAIL_SAMPLES * 2 + i));
   });
 
   it("tips each shadow disc toward the camera, so the level side camera sees it under the feet (Plan 6, Task 33)", async () => {
