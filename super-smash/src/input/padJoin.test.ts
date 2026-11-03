@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { joinPresses } from "./padJoin";
+import { drivingPads, joinPresses } from "./padJoin";
 
 /** A connected pad at `index` with `pressed` buttons down. */
 const pad = (index: number, pressed: number[]): Gamepad =>
@@ -19,5 +19,19 @@ describe("press-to-join (Plan 6, Task 30)", () => {
     const last = new Map<number, boolean>();
     const gone = { ...pad(4, [0]), connected: false } as unknown as Gamepad;
     expect(joinPresses([null, pad(1, [0]), gone], new Set([1]), last)).toEqual([]);
+  });
+});
+
+describe("the pads that already drive a seat (Plan 6, Task 30, fix round 1)", () => {
+  const human = (joinedPad: number | null) => ({ kind: "human" as const, joinedPad });
+  const cpu = { kind: "cpu" as const, joinedPad: null };
+
+  it("counts each joined pad, and the unjoined pads connection order gives the human seats nobody joined", () => {
+    // A lone pad plays P1 by connection order: it drives a seat without having joined.
+    expect([...drivingPads([pad(0, [])], [human(null), cpu])]).toEqual([0]);
+    // Pad 0 joined P2, so P1 goes to the first pad nobody joined, pad 1; pad 2 is free.
+    expect([...drivingPads([pad(0, []), pad(1, []), pad(2, [])], [human(null), human(0)])].sort()).toEqual([0, 1]);
+    // Connection order is index order, over connected pads only; a CPU seat takes none.
+    expect([...drivingPads([null, pad(3, []), pad(1, [])], [human(null), cpu])]).toEqual([1]);
   });
 });

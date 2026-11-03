@@ -286,7 +286,42 @@ test("a Tilt key rebound on /controls plays the match: the new key holds up shor
   expect(statesOf(onOld).some((a) => jumping.test(a)), `the old Tilt key still softened up: ${statesOf(onOld).join(", ")}`).toBe(true);
 });
 
-test("a pad that presses A on the character select takes the CPU's seat, never P1's, and plays it (Plan 6, Task 30)", async ({ page }) => {
+/** Plug in a second fake pad, index 1, after the first: it holds `__pad2Pressed`, its buttons in the standard mapping. */
+async function plugSecondPad(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __pad2Pressed: number[] };
+    w.__pad2Pressed = [];
+    const first = navigator.getGamepads;
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => [
+        ...first.call(navigator),
+        {
+          index: 1,
+          id: "e2e pad 2",
+          connected: true,
+          mapping: "standard",
+          axes: [0, 0, 0, 0],
+          buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: w.__pad2Pressed.includes(i), touched: false, value: w.__pad2Pressed.includes(i) ? 1 : 0 })),
+        },
+      ],
+    });
+  });
+}
+
+/** Hold exactly these buttons on the second pad (`plugSecondPad`). */
+async function setPad2Buttons(page: Page, buttons: readonly number[]): Promise<void> {
+  await page.evaluate((b) => {
+    (window as unknown as { __pad2Pressed: number[] }).__pad2Pressed = [...b];
+  }, buttons);
+}
+
+/** Let the page draw two animation frames, so the select screen's pad poll has run. */
+async function twoFrames(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+}
+
+test("a lone pad's A on the character select keeps the CPU opponent; a second pad's takes the CPU's seat, never P1's, and plays it (Plan 6, Task 30)", async ({ page }) => {
   await startFromTitle(page);
   await page.getByRole("button", { name: /smash/i }).first().click();
   await page.waitForURL(`**${ROUTES.rules}`);
@@ -296,11 +331,23 @@ test("a pad that presses A on the character select takes the CPU's seat, never P
   await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
   await page.waitForURL(`**${ROUTES.fighters}`);
 
-  // The fake pad (index 0) presses A: it takes P2, the CPU's seat made human, and never
-  // P1, the keyboard player's (ruling R-P6-11).
-  await setPadButtons(page, [0]);
+  // The lone fake pad (index 0) already plays P1 by connection order, so its A and Start
+  // take no seat: the solo player keeps the CPU opponent (fix round 1's ruling).
+  for (const button of [0, 9]) {
+    await setPadButtons(page, [button]);
+    await twoFrames(page);
+    await setPadButtons(page, []);
+    await twoFrames(page);
+  }
+  await expect(page.getByRole("button", { name: "CPU for P2", exact: true, pressed: true })).toBeVisible();
+  await expect(page.getByText("Pad", { exact: true })).toHaveCount(0);
+
+  // A second pad presses A: it takes P2, the CPU's seat made human, and never P1, the
+  // keyboard player's (ruling R-P6-11).
+  await plugSecondPad(page);
+  await setPad2Buttons(page, [0]);
   await expect(page.locator("[data-port='1']").getByText("Pad", { exact: true })).toBeVisible();
-  await setPadButtons(page, []);
+  await setPad2Buttons(page, []);
   await expect(page.getByRole("button", { name: "HMN for P2", exact: true, pressed: true })).toBeVisible();
   await expect(page.locator("[data-port='0']").getByText("Pad", { exact: true })).toHaveCount(0);
 
@@ -314,16 +361,16 @@ test("a pad that presses A on the character select takes the CPU's seat, never P
   await stepToFrame(page, READY_FRAME);
   await expectBothStanding(page);
 
-  // The pad's A is P2's jab; P1, on the keyboard, is given nothing.
-  await setPadButtons(page, [0]);
+  // The second pad's A is P2's jab; P1, on the keyboard and the first pad, is given nothing.
+  await setPad2Buttons(page, [0]);
   let move: string | null = null;
   for (let i = 0; i < 6 && move === null; i++) {
     await stepFrames(page, 1);
     const [p1, p2] = await readFighters(page);
     const [p1Input] = await readInputs(page);
-    expect([p1.action, p1Input], "P1 was given the pad's press").toEqual(["stand", 0]);
+    expect([p1.action, p1Input], "P1 was given the second pad's press").toEqual(["stand", 0]);
     move = p2.move;
   }
-  await setPadButtons(page, []);
+  await setPad2Buttons(page, []);
   expect(move, "the joined pad's A did not reach P2").toBe("jab1");
 });

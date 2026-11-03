@@ -152,9 +152,16 @@ describe("CharacterSelect, online", () => {
 
   it("leaves the seats alone when a pad presses A: joining is local only (Plan 6, Task 30)", async () => {
     vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    // Three pads: the first two would play the two seats by connection order, so the third,
+    // pressing A, is one that could join anywhere but online.
     Object.defineProperty(navigator, "getGamepads", {
       configurable: true,
-      value: () => [{ index: 0, connected: true, buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: i === 0, value: i === 0 ? 1 : 0 })) }],
+      value: () =>
+        [0, 1, 2].map((index) => ({
+          index,
+          connected: true,
+          buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: index === 2 && i === 0, value: index === 2 && i === 0 ? 1 : 0 })),
+        })),
     });
     try {
       goOnline("guest");

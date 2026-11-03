@@ -30,7 +30,7 @@ import {
   type PlayerSlot,
 } from "@/lib/matchConfig";
 import { buildStartConfig, newMatchSeed } from "@/game/onlineConfig";
-import { joinPresses } from "@/input/padJoin";
+import { drivingPads, joinPresses } from "@/input/padJoin";
 import { LINKING_STATUS, leaveOnline, sendLobby, sendOwnPick, useOnlineStore } from "@/lib/onlineStore";
 import { ROLE_PORT } from "@/net/signalProtocol";
 
@@ -191,17 +191,18 @@ export function CharacterSelect() {
     return () => window.removeEventListener("keydown", onKey);
   }, [activePort, addPlayer, assign, entries, focusTile, gridIndex, onlinePort, players.length, removePlayer, setFighter]);
 
-  // Press-to-join (Plan 6, Task 30; ruling R-P6-11): a pad that is not seated presses A or
-  // Start to take a seat. Polled once an animation frame while the screen is up; the store
-  // refuses a seat online, where each machine has its one.
+  // Press-to-join (Plan 6, Task 30; ruling R-P6-11): a pad that drives no seat yet presses A
+  // or Start to take one. A pad that already drives a seat, joined or by connection order
+  // (a lone pad plays P1), takes no other (fix round 1). Polled once an animation frame
+  // while the screen is up; the store refuses a seat online, where each machine has its one.
   useEffect(() => {
     if (typeof navigator.getGamepads !== "function") return;
     const last = new Map<number, boolean>();
     let raf = 0;
     const tick = () => {
       const { players: seats, seatPad } = useMatchConfig.getState();
-      const seated = new Set(seats.flatMap((p) => (p.joinedPad === null ? [] : [p.joinedPad])));
-      for (const index of joinPresses([...navigator.getGamepads()], seated, last)) seatPad(index);
+      const pads = [...navigator.getGamepads()];
+      for (const index of joinPresses(pads, drivingPads(pads, seats), last)) seatPad(index);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
