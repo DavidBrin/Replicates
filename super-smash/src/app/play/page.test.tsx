@@ -777,6 +777,35 @@ describe("a /play with no match set up (Plan 6, Task 29)", () => {
     expect(routerMock.push).toHaveBeenCalledWith("/menu");
     expect(useMatchConfig.getState().armed).toBe(false);
   });
+
+  // The file's `beforeEach` arms every match, but an online start never arms one: the
+  // flag is local-only. These disarm after it, which is the state a real online start
+  // is in, so `unarmed`'s `online === null` and `!matchConfig.online` terms are pinned.
+  it("plays an online match started with the config disarmed, and never sends it to the menu", async () => {
+    goOnline("host");
+    useMatchConfig.getState().disarm();
+    await renderPage();
+    expect(only(mocks.runners).options.players).toEqual(runnerSlotsFor(CONFIG));
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it("plays a started online match whatever the seats' own online flag says, disarmed", async () => {
+    goOnline("guest");
+    useMatchConfig.setState({ online: false });
+    useMatchConfig.getState().disarm();
+    await renderPage();
+    expect(only(mocks.runners).options.players).toEqual(runnerSlotsFor(CONFIG));
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it("sends a stranded online /play, disarmed, back to the lobby and not to the menu", async () => {
+    useMatchConfig.getState().configureOnline();
+    useMatchConfig.getState().disarm();
+    await renderPage();
+    expect(mocks.runners).toEqual([]);
+    expect(routerMock.replace).toHaveBeenCalledWith("/online");
+    expect(routerMock.replace).not.toHaveBeenCalledWith("/menu");
+  });
 });
 
 describe("the play page, local", () => {
