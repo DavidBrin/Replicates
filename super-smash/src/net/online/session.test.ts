@@ -224,7 +224,9 @@ describe("OnlineSession", () => {
     });
 
     it("with the link already failed, the room is lost at once", async () => {
-      const { signalling, events, fail } = await negotiatingHost();
+      const { signalling, channel, events, fail } = await negotiatingHost();
+      // One that had opened: a first link failing is no direct link (Plan 6, Task 40b), below.
+      channel.open();
       fail();
       expect(errors(events)).toEqual([]);
       signalling.deliver(ROOM_DROP);
@@ -586,25 +588,91 @@ describe("OnlineSession", () => {
       return h;
     }
 
-    it("sends the host's first connect, unopened after the deadline, into the retry path", async () => {
+    /**
+     * Plan 6, Task 40b. David's testers on separate networks sat on "Opening a
+     * direct connection…" for about 50 s and were then told the room was lost:
+     * the re-offers meant for a channel that dropped ran for one that had never
+     * opened. A first link that cannot open now ends at its deadline, in its
+     * own words, and the other side is told why before this one leaves.
+     */
+    it("ends the host's first connect, unopened after the deadline, as no direct link: no re-offer, not the room lost", async () => {
       const h = await hostMeetingGuest();
       await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
-      expect(h.session.transport.status).toBe("negotiating");
-      await vi.advanceTimersByTimeAsync(1);
-      expect(h.session.transport.status).toBe("waiting");
-      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
-      expect(h.offers()).toBe(2);
       expect(errors(h.events)).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(errors(h.events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
+      expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "no-direct-link" } });
+      expect(h.signalling.closed).toBe(true);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1);
+      expect(errors(h.events)).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(0);
     });
 
-    it("says the room is lost once every retry has timed out too", async () => {
-      const h = await hostMeetingGuest();
-      for (const delay of REOFFER_DELAYS_MS) {
-        await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS + delay);
-        expect(errors(h.events)).toEqual([]);
-      }
-      expect(h.offers()).toBe(1 + REOFFER_DELAYS_MS.length);
+    it("ends a guest's first answer, unopened after the deadline, as no direct link, without asking for another offer", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      expect(errors(g.events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
+      expect(g.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "renegotiate")).toEqual([]);
+      expect(g.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "no-direct-link" } });
+      expect(g.signalling.closed).toBe(true);
+    });
+
+    it("ends a first connect whose link fails as no direct link, at once", async () => {
+      const { events, fail } = await negotiatingHost();
+      fail();
+      expect(events.slice(-2)).toEqual([
+        { type: "link", status: "failed" },
+        { type: "error", reason: "no-direct-link" },
+      ]);
+    });
+
+    /**
+     * The side whose deadline runs out first leaves the room, and the room then
+     * says it left, a moment before the other side's own deadline: told first,
+     * that side says no direct link too, not that the other player left.
+     */
+    it("says no direct link when the other side says it first, and does not say it back", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 50);
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "no-direct-link" } });
+      g.signalling.deliver({ t: "peer-left", peerId: "h1" });
+      expect(errors(g.events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
+      expect(g.events.filter((e) => e.type === "lobby")).toEqual([]);
+      expect(g.signalling.sent.filter((m) => m.t === "lobby")).toEqual([]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(g.events)).toHaveLength(1);
+      expect(g.signalling.closed).toBe(true);
+    });
+
+    it("calls a player who leaves during the first negotiation gone, not no direct link", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(5_000);
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(h.events)).toEqual([]);
+      expect(h.events.at(-1)).toEqual({ type: "peer", present: false });
+      expect(h.signalling.closed).toBe(false);
+    });
+
+    /** A channel that had opened and dropped is a reconnect, not a first link: its re-offers stand. */
+    it("says the room is lost once every re-offer to a channel that had opened has timed out too", async () => {
+      const h = await hostMeetingGuest();
+      h.channels[0].open();
+      h.channels[0].drop();
+      for (const [i, delay] of REOFFER_DELAYS_MS.entries()) {
+        expect(errors(h.events)).toEqual([]);
+        await vi.advanceTimersByTimeAsync(delay);
+        expect(h.offers()).toBe(i + 2);
+        // The fresh connection's deadline passes too.
+        await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      }
       expect(errors(h.events)).toEqual([{ type: "error", reason: "room-lost" }]);
       await vi.advanceTimersByTimeAsync(60_000);
       expect(h.offers()).toBe(1 + REOFFER_DELAYS_MS.length);
@@ -633,17 +701,21 @@ describe("OnlineSession", () => {
       expect(h.offers()).toBe(1);
     });
 
-    it("sends a guest whose answer never opens back to waiting for its host's next offer", async () => {
+    it("sends a guest whose re-answer never opens back to waiting for its host's next offer", async () => {
       vi.useFakeTimers();
       const g = await opened("join");
       g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[0].open();
+      g.channels[0].drop();
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
       await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
       expect(g.session.transport.status).toBe("waiting");
       // Its host's own deadline passed too, and it offers again.
-      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o3" } });
       await vi.advanceTimersByTimeAsync(0);
-      g.channels[1].open();
+      g.channels[2].open();
       await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
       expect(g.session.transport.status).toBe("open");
       expect(errors(g.events)).toEqual([]);

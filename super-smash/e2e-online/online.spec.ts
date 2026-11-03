@@ -48,16 +48,16 @@ async function netStats(page: Page) {
   return page.evaluate(() => (window as unknown as { __smashNet?: NetHandle }).__smashNet?.stats() ?? null);
 }
 
-async function createRoom(host: Page): Promise<string> {
-  await host.goto(LOBBY);
+async function createRoom(host: Page, lobby = LOBBY): Promise<string> {
+  await host.goto(lobby);
   await host.getByRole("button", { name: /create room/i }).click();
   const box = host.getByTestId("room-code");
   await expect(box).toHaveText(/^[A-Z]{4}$/, { timeout: 15_000 });
   return (await box.textContent())!.trim();
 }
 
-async function joinRoom(page: Page, code: string): Promise<void> {
-  await page.goto(LOBBY);
+async function joinRoom(page: Page, code: string, lobby = LOBBY): Promise<void> {
+  await page.goto(lobby);
   // Typed the way people type a code they were read: in lowercase.
   await page.getByLabel("Room code", { exact: true }).fill(code.toLowerCase());
   await page.getByRole("button", { name: /join room/i }).click();
@@ -218,6 +218,52 @@ test("a peer on the same build with other combat rules is refused at the hello, 
     .poll(() => consoleLines.some((line) => line.includes(`its engine rules are ${OTHER_RULES}`)), { timeout: 10_000 })
     .toBe(true);
   await expect(host).not.toHaveURL(new RegExp(`${ROUTES.stage}$`));
+});
+
+/**
+ * What David's testers on separate networks met (Plan 6, Task 40b): both in the
+ * room, and the direct connection never opening. They waited about 50 s on
+ * "Opening a direct connection…", to be told the room was lost. Now each side
+ * says why within one negotiation deadline (15 s). Forcing the relay with no
+ * TURN to relay through stands in for networks that block peer-to-peer; where
+ * the server offers TURN (a SMASH_FORCE_RELAY=1 run against a deploy), the
+ * relay connects and the first test proves it, so this one has nothing to show.
+ */
+const NO_DIRECT_LINK =
+  "Couldn't connect directly to the other player — one of your networks may be blocking it. Try another network, or try again.";
+
+test("a direct connection that cannot open is said on both screens within seconds, not as a lost room", async ({ browser, request }) => {
+  const ice = (await (await request.get("/api/ice")).json()) as { turn?: unknown };
+  test.skip(ice.turn === true, "the server offers a TURN relay, so a forced relay connects");
+  const host = await player(browser);
+  const guest = await player(browser);
+  // The host's offer reaches the guest 3 s late, as it can between two networks:
+  // the host's deadline then runs out first, and the room says it left before
+  // the guest's own deadline does. The guest must still read why.
+  await guest.routeWebSocket(/\/ws\/room\//, (socket) => {
+    const room = socket.connectToServer();
+    socket.onMessage((message) => room.send(message));
+    room.onMessage((message) => {
+      const frame = typeof message === "string" ? (JSON.parse(message) as { t?: unknown; payload?: { kind?: unknown } }) : null;
+      if (frame?.t === "signal" && frame.payload?.kind === "offer") setTimeout(() => socket.send(message), 3_000);
+      else socket.send(message);
+    });
+  });
+
+  const code = await createRoom(host, "/online?ice=relay");
+  await joinRoom(guest, code, "/online?ice=relay");
+  await expect(host.getByRole("status")).toHaveText("They are in. Opening a direct connection…", { timeout: 15_000 });
+
+  // filter: Next's route announcer is also role=alert.
+  await Promise.all(
+    [host, guest].map((page) =>
+      expect(page.getByRole("alert").filter({ hasText: "connect directly" })).toHaveText(NO_DIRECT_LINK, { timeout: 25_000 }),
+    ),
+  );
+  for (const page of [host, guest]) {
+    await expect(page.getByText("Lost the room", { exact: false })).toHaveCount(0);
+    await expect(page).toHaveURL(/\/online\?ice=relay$/);
+  }
 });
 
 test("a third browser is turned away from a full room", async ({ browser }) => {

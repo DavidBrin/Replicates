@@ -21,9 +21,12 @@ import { useMatchConfig, type StageForm } from "./matchConfig";
 /**
  * `connected` means the channel is open, the other side has said it runs this
  * build, and nothing has gone wrong. It is the only status a match may start
- * from, so the select screens gate on it.
+ * from, so the select screens gate on it. `loading` is the lobby waiting on the
+ * game data (the bake) before it opens a room, and `connecting` its wait for
+ * the room itself (Plan 6, Task 40b): on a slow connection the first is the
+ * long one.
  */
-export type OnlineStatus = "idle" | "connecting" | "waiting" | "linking" | "connected" | "error";
+export type OnlineStatus = "idle" | "loading" | "connecting" | "waiting" | "linking" | "connected" | "error";
 /**
  * "engine-mismatch": the other player runs another build (Plan 2 Task 27).
  * "unreadable-start": a start from this very build that its parser cannot read
@@ -134,6 +137,8 @@ function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
       return "The match could not be sent to the other player. Leave the room and start again.";
     case "link-failed":
       return "The direct connection could not be opened. Try again; strict networks need the TURN relay.";
+    case "no-direct-link":
+      return "Couldn't connect directly to the other player — one of your networks may be blocking it. Try another network, or try again.";
     case "engine-mismatch":
       return "The other player is running a different version. Both reload the page.";
     case "unreadable-start":

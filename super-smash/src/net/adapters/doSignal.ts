@@ -49,7 +49,9 @@ export type DoSignalStatus = "waiting" | "negotiating" | "open" | "closed" | "fa
  * How long a new peer connection gets to open its channel. A healthy one opens
  * in seconds, even through TURN; ICE that hangs rather than fails would
  * otherwise leave both players on "Connecting…" for good. Missing it counts as
- * the channel lost before it opened, which the session retries.
+ * the channel lost before it opened: the session retries a channel that had
+ * opened before, and calls a first one that never did no direct link (Plan 6,
+ * Task 40b).
  */
 export const NEGOTIATION_TIMEOUT_MS = 15_000;
 

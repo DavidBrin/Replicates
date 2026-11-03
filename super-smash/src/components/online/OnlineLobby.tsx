@@ -94,7 +94,7 @@ export function OnlineLobby({
     const mine = (live.current += 1);
     // Everything a room leaves on the store goes, so a new one starts clean.
     useOnlineStore.getState().patch({
-      status: "connecting",
+      status: "loading",
       roomCode: code,
       role: null,
       error: null,
@@ -117,7 +117,8 @@ export function OnlineLobby({
     // build's engine fingerprint, and the first `hello` the session says must
     // already carry the bake's, or the other side refuses this one for good. One
     // that cannot load is this screen's error, in its own sentence; no room is
-    // opened.
+    // opened. Until it is in, the status line says so (`loading`): on a slow
+    // connection this download is the long wait, not the room (Plan 6, Task 40b).
     try {
       await ensureBakeInstalled();
     } catch (e) {
@@ -126,6 +127,7 @@ export function OnlineLobby({
       return;
     }
     if (live.current !== mine) return;
+    useOnlineStore.getState().patch({ status: "connecting" });
     // `?ice=relay` forces TURN, so a test can prove the relay works.
     const forceRelay = new URLSearchParams(window.location.search).get("ice") === "relay";
     try {
@@ -166,7 +168,7 @@ export function OnlineLobby({
   };
 
   const status: OnlineStatus = tried === null ? "idle" : storeStatus;
-  const busy = status === "connecting" || status === "waiting" || status === "linking" || status === "connected";
+  const busy = status === "loading" || status === "connecting" || status === "waiting" || status === "linking" || status === "connected";
   const showCode = busy && role === "host" && status !== "connected";
   // A taken code is only ever shown once the quiet retries have run out.
   const storeMessage = tried === null ? null : errorReason === "taken" ? NO_FREE_CODE : storeError;
@@ -308,6 +310,8 @@ function statusText(status: OnlineStatus, role: Role | null, roomCode: string | 
       return role === "host" ? "Read it to the other player. Waiting for them to join…" : connecting(roomCode);
     case "linking":
       return role === "host" ? "They are in. Opening a direct connection…" : "Opening a direct connection…";
+    case "loading":
+      return "Loading game data…";
     case "connecting":
     case "connected":
       return connecting(roomCode);

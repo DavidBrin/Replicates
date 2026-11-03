@@ -21,10 +21,13 @@ import { parseLobbyMessage, type LobbyMessage, type ReceivedLobbyMessage } from 
  * room ever answered; "room-lost" when the room's socket dropped while the
  * session still needed it (to negotiate, or to carry the lobby); "bad-start"
  * when this side built a `start` the other side would refuse or read
- * differently, so it was never sent. Every one of them, and a link that
- * fails, is final: the session leaves the room right after reporting it.
+ * differently, so it was never sent; "no-direct-link" when both players are
+ * in the room but the first channel between them never opens (Plan 6, Task
+ * 40b: a network that blocks peer-to-peer, with no TURN relay to fall back
+ * on). Every one of them, and a link that fails, is final: the session leaves
+ * the room right after reporting it.
  */
-export type SessionError = RoomError | "unreachable" | "room-lost" | "bad-start";
+export type SessionError = RoomError | "unreachable" | "room-lost" | "bad-start" | "no-direct-link";
 
 /**
  * How long a negotiation under way when the room drops gets to open the
@@ -39,7 +42,9 @@ export const ROOM_LOST_GRACE_MS = 15_000;
  * The host's waits before each fresh offer once the lobby channel is lost
  * with both players still in the room: three tries, backing off, and then the
  * room is lost. Nobody joins or leaves in that case, so without these nothing
- * would ever offer again (see `reconnectAfter`).
+ * would ever offer again (see `reconnectAfter`). Only for a channel that had
+ * opened: a first one that never does is no direct link, at once (Plan 6,
+ * Task 40b).
  */
 export const REOFFER_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
 
@@ -49,6 +54,15 @@ export const REOFFER_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
  * for the host to notice the loss itself, which can trail this side's.
  */
 export const GUEST_REOFFER_WAIT_MS = 10_000;
+
+/**
+ * The lobby payload a side sends through the room when its first channel to
+ * the other never opened, just before it leaves (Plan 6, Task 40b). Whichever
+ * deadline runs out first, the other side then hears why, rather than only
+ * that the other player left. The room passes lobby payloads on unread, and a
+ * build from before this drops the kind, as it drops any it does not know.
+ */
+const NO_DIRECT_LINK = "no-direct-link";
 
 export type SessionEvent =
   | { readonly type: "joined"; readonly role: Role }
@@ -116,6 +130,12 @@ export class OnlineSession implements OnlineSessionLike {
   private started = false;
   /** The last link status, to tell a lost channel from a peer that never connected. */
   private link: DoSignalStatus = "waiting";
+  /**
+   * Whether the channel has opened since the room seated the current peer: a
+   * channel lost after that is a reconnect, with re-offers; one that never
+   * opened is no direct link (`reconnectAfter`).
+   */
+  private linked = false;
   /** Fresh offers the host has left for this outage; see `REOFFER_DELAYS_MS`. */
   private reoffersLeft = REOFFER_DELAYS_MS.length;
   /** The host's next fresh offer, or the guest's wait for one. */
@@ -147,11 +167,13 @@ export class OnlineSession implements OnlineSessionLike {
         case "peer-joined":
           // A newcomer gets the transport's ordinary offer, not the old seat's retries.
           this.seatedPeer = event.peer.id;
+          this.linked = false;
           this.resetReconnect();
           this.events.emit({ type: "peer", present: true });
           break;
         case "peer-left":
           this.seatedPeer = null;
+          this.linked = false;
           this.resetReconnect();
           // A start that went to (or came from) the player who left is
           // withdrawn: whoever takes the seat meets a lobby again.
@@ -162,6 +184,11 @@ export class OnlineSession implements OnlineSessionLike {
           this.events.emit({ type: "peer", present: false });
           break;
         case "lobby": {
+          // The other side's first channel never opened, and it is leaving the room.
+          if (event.payload.kind === NO_DIRECT_LINK) {
+            if (!this.started) this.failWith("no-direct-link");
+            break;
+          }
           const message = parseLobbyMessage(event.payload);
           // The guest follows the host into the match: the channel is the match's from here.
           if (message?.kind === "start" && this.role === "guest") this.holdForMatch();
@@ -266,9 +293,14 @@ export class OnlineSession implements OnlineSessionLike {
   private linkChanged(status: DoSignalStatus): void {
     const before = this.link;
     this.link = status;
+    if (status === "open") this.linked = true;
     this.events.emit({ type: "link", status });
     // The direct connection could not be made: as final as any session error.
-    if (status === "failed") this.leaveSoon();
+    // A first one, with the room still there to say so, is no direct link.
+    if (status === "failed") {
+      if (!this.linked && !this.roomGone) this.noDirectLink();
+      else this.leaveSoon();
+    }
     if (!this.roomGone) this.reconnectAfter(before, status);
     if (!this.roomGone || this.closed || status === "negotiating") return;
     if (status === "open") this.endGrace();
@@ -283,6 +315,16 @@ export class OnlineSession implements OnlineSessionLike {
    * asks it to (`renegotiate`: only its own side may have closed), waits for
    * that offer, and calls the room lost if none comes. A failed link is an
    * error of its own, and mid-match the link monitor decides.
+   *
+   * A first channel that never opened is not a reconnect (Plan 6, Task 40b).
+   * Its negotiation ran its whole deadline (`NEGOTIATION_TIMEOUT_MS`), and the
+   * same networks would block a fresh offer just as long: re-offering kept
+   * David's testers on "Opening a direct connection…" for about 50 s, to be
+   * told the room was lost. It is no direct link, said within a deadline. The
+   * verdict waits for the rest of this delivery: when the transport let the
+   * negotiation go because the room says the peer left, the session's own
+   * `peer-left` follows in the same delivery, and the seat it empties says the
+   * peer went, not the link.
    */
   private reconnectAfter(before: DoSignalStatus, status: DoSignalStatus): void {
     if (this.closed || this.started) return;
@@ -293,6 +335,13 @@ export class OnlineSession implements OnlineSessionLike {
     this.cancelReconnect();
     const lost = status === "waiting" && (before === "open" || before === "negotiating");
     if (!lost || this.seatedPeer === null) return;
+    if (!this.linked) {
+      const peer = this.seatedPeer;
+      queueMicrotask(() => {
+        if (this.seatedPeer === peer && !this.linked && this.link === "waiting") this.noDirectLink();
+      });
+      return;
+    }
     if (this.role === "guest") {
       // The host may still think its side open, and only it can offer: ask.
       this.signalling.send({ t: "signal", payload: { kind: "renegotiate" } });
@@ -339,6 +388,17 @@ export class OnlineSession implements OnlineSessionLike {
     this.failWith("room-lost");
     // A negotiation left running could still open the channel and report "open" over the loss.
     if (this.transport.status === "negotiating") this.transport.close();
+  }
+
+  /**
+   * The first channel to the seated peer never opened. The other side hears
+   * why through the room before this one leaves it: its own deadline may be a
+   * moment behind, and the room's `peer-left` would otherwise reach it first.
+   */
+  private noDirectLink(): void {
+    if (this.closed) return;
+    if (!this.roomGone) this.signalling.send({ t: "lobby", payload: { kind: NO_DIRECT_LINK } });
+    this.failWith("no-direct-link");
   }
 
   /**

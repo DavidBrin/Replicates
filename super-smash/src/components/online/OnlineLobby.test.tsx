@@ -156,17 +156,22 @@ describe("OnlineLobby, the bake first (Plan 4)", () => {
    * Installing the bake changes this build's engine fingerprint. The first
    * `hello` a session says must carry the bake's, or the other side refuses
    * this build for good, so no room opens until it is in.
+   *
+   * On a slow connection that download is the wait (Plan 6, Task 40b): the
+   * status line says so, rather than naming a room no socket has asked for yet.
    */
-  it("opens the room only once the bake is installed, showing it is connecting meanwhile", async () => {
+  it("opens the room only once the bake is installed, saying it is loading the game data meanwhile", async () => {
     let install!: () => void;
     bake.next = new Promise<void>((resolve) => (install = resolve));
-    const { openSession } = harness();
+    const { opened, openSession } = harness();
     await create();
-    expect(useOnlineStore.getState().status).toBe("connecting");
-    expect(screen.getByRole("status")).toHaveTextContent(/Connecting to room/);
+    expect(useOnlineStore.getState().status).toBe("loading");
+    expect(screen.getByRole("status")).toHaveTextContent(/^Loading game data…$/);
     expect(openSession).not.toHaveBeenCalled();
     await act(async () => install());
     expect(openSession).toHaveBeenCalledOnce();
+    expect(useOnlineStore.getState().status).toBe("connecting");
+    expect(screen.getByRole("status")).toHaveTextContent(`Connecting to room ${opened[0].code}…`);
   });
 
   it("says the bake's own sentence when it cannot load, and opens no room", async () => {

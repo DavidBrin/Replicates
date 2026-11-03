@@ -305,7 +305,7 @@ let installing: Promise<BakeTables> | null = null;
  *
  * So the online lobby waits for it (ruling R2, Task 20): `OnlineLobby.tsx`'s
  * `connect()` awaits `ensureBakeInstalled()` before `openSession`, in its
- * "connecting" status, and shows a rejection's message as the lobby's error,
+ * "loading" status, and shows a rejection's message as the lobby's error,
  * so the first `hello` already carries the bake.
  */
 export function ensureBakeInstalled(fetchFn?: FetchLike): Promise<BakeTables> {
