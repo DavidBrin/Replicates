@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
-import { DataUtils, HalfFloatType, Light, MeshStandardMaterial, type Camera, type WebGLRenderTarget } from "three";
+import { describe, expect, it, vi } from "vitest";
+import { DataUtils, Group, HalfFloatType, Light, MeshStandardMaterial, WebGLRenderTarget, type Camera } from "three";
 
 import { FIGHTERS } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
@@ -76,6 +76,34 @@ describe("a portrait from the loaded model (Plan 6, Task 38)", () => {
     expect([...put[0].data.slice(0, 4)]).toEqual([188, 188, 188, 255]);
     // The fighter is handed back as it was.
     expect(fighter.placement.rotation.y).toBe(turned);
+  });
+
+  /**
+   * The portrait takes the fighter out of the match's scene to light it alone, and a target is a
+   * GPU allocation per fighter per match (final wave, item 33): the fighter must be back in the
+   * scene the match draws, or it vanishes at frame 0, and the target freed.
+   */
+  it("puts the fighter back in the match's scene, and disposes its target", () => {
+    const fighter = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene: armatureModel(poser.rig3, [new MeshStandardMaterial()]) } });
+    const matchScene = new Group();
+    matchScene.add(fighter.placement);
+    const dispose = vi.spyOn(WebGLRenderTarget.prototype, "dispose");
+    try {
+      const { gl, drawn } = fakePortraitGL([0.5, 0.5, 0.5, 1]);
+      const { canvas } = fakeCanvas();
+      expect(renderPortrait(gl, fighter, createLights(), () => canvas)).toBe(canvas);
+      // It was drawn in a scene of its own, not the match's.
+      expect(drawn).toHaveLength(1);
+      expect(drawn[0].fighters).toBe(1);
+      // Back where it was: the match's scene holds it again.
+      expect(fighter.placement.parent).toBe(matchScene);
+      expect(matchScene.children).toContain(fighter.placement);
+      // The one target it made is the one it freed.
+      expect(dispose).toHaveBeenCalledTimes(1);
+      expect(dispose.mock.contexts[0]).toBe(drawn[0].target);
+    } finally {
+      dispose.mockRestore();
+    }
   });
 
   it("makes none for a stand-in, or without the renderer's read-back (the 2D head stays)", () => {

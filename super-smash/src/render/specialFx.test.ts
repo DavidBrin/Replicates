@@ -69,6 +69,20 @@ describe("the effect table", () => {
     expect(ctx.calls.length).toBeGreaterThan(0);
   });
 
+  it("draws Donkey Kong's stored Giant Punch with no move running, and nothing short of full (final wave, item 32)", () => {
+    const dk = byId.get("donkeyKong")!;
+    const full = dk.moves.neutralB!.specialCharge!.frames;
+    const paint = (storedCharge: number) => {
+      const stored = makeFighter({ defId: "donkeyKong", action: "stand", move: null });
+      stored.combat.storedCharge = storedCharge;
+      const ctx = createMockContext();
+      drawMoveFx(ctx, dk, stored, cam, 13, 0, 0, { lastHit: [], frame: 40 });
+      return ctx.calls.length;
+    };
+    expect(paint(full)).toBeGreaterThan(0);
+    expect(paint(full - 1)).toBe(0);
+  });
+
   it("draws nothing for a fighter who is not doing a special", () => {
     const ctx = createMockContext();
     const before = ctx.calls.length;

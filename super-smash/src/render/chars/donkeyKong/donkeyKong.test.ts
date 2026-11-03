@@ -25,6 +25,7 @@ import { emptyCombat } from "@/engine/combat";
 import { countOf } from "../../mockContext";
 import { runPainter } from "../../testFixtures";
 import { storedChargeTell } from "./fx";
+import { alwaysFxFor } from "../index";
 import type { BoneName } from "../../skeleton";
 import { resolve } from "../../skeleton";
 import { rotationPivot } from "../../characterArt";
@@ -777,5 +778,12 @@ describe("a stored full Giant Punch shows (Plan 6, Task 35)", () => {
     expect(countOf(tell(full), "arc")).toBeGreaterThan(0);
     expect(countOf(tell(full, "walk"), "arc")).toBeGreaterThan(0);
     expect(countOf(tell(full - 1), "arc")).toBe(0);
+  });
+
+  // The painter above is called directly; this is the wiring that makes the renderer call it
+  // (final wave, item 32): the fighter's `always` entry, under either spelling of its key.
+  it("is the always-on effect the effect table has for Donkey Kong, under both of his keys", () => {
+    expect(alwaysFxFor("donkeyKong")).toBe(storedChargeTell);
+    expect(alwaysFxFor("dk")).toBe(storedChargeTell);
   });
 });

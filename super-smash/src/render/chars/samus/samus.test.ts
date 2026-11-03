@@ -23,7 +23,7 @@ import { samplePose, type PoseClip } from "../../poses/clip";
 import { resolve, type Skeleton } from "../../skeleton";
 import { poses } from "./poses";
 import { fx, projectiles } from "./fx";
-import { fxFor } from "../index";
+import { alwaysFxFor, fxFor } from "../index";
 import { clipFor } from "../poses";
 import { poseNameFor } from "../../poses/timing";
 import { localHurtboxes } from "@/engine/acmd/hurtboxes";
@@ -1314,6 +1314,10 @@ describe("a stored full Charge Shot shows (Plan 6, Task 35)", () => {
     expect(countOf(tell(full), "arc")).toBeGreaterThan(0);
     expect(countOf(tell(full, "run"), "arc")).toBeGreaterThan(0);
     expect(countOf(tell(full - 1), "arc")).toBe(0);
+  });
+
+  it("is the always-on effect the effect table has for Samus (final wave, item 32)", () => {
+    expect(alwaysFxFor("samus")).toBe(storedChargeTell);
   });
 });
 
