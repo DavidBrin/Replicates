@@ -575,11 +575,13 @@ export interface ProjectileDef {
    * boxes are `hitbox` (for fighters on the ground) and `air` (for fighters in the air),
    * each over its `hitbox`, then each of `stages` from its age. Meeting a surface sets its
    * age to 0 and its life to `life` ("its hitbox duration always starts from the
-   * beginning"). One fired from a fighter on the ground runs from its first frame.
+   * beginning"), but never past `maxLife` frames from its firing (`ProjectileState.lived`).
+   * One fired from a fighter on the ground runs from its first frame.
    */
   readonly crawl?: {
     readonly speed: number;
     readonly life: number;
+    readonly maxLife: number;
     readonly hitbox: ChargedHitbox;
     readonly air: ChargedHitbox;
     readonly stages?: readonly { readonly from: number; readonly hitbox: ChargedHitbox; readonly air?: ChargedHitbox }[];
@@ -1694,14 +1696,21 @@ export interface ProjectileState {
   /**
    * What it is doing (Plan 5, Task 13c): `"fly"`, its own flight; `"lodged"`,
    * stuck in the stage (`ProjectileDef.lodge`); `"knocked"`, sent off by a clank
-   * it lost (`ProjectileDef.clash`). Lodged or knocked it has no hitbox.
+   * it lost (`ProjectileDef.clash`); `"crawl"`, running round a platform's outline
+   * (`ProjectileDef.crawl`, Plan 6, Task 16: the Thunder Jolt's wave). Lodged or knocked
+   * it has no hitbox; running, its boxes are its wave's (`projectileHitboxes`).
    */
   mode: ProjectileMode;
-  /** Frames left lodged or knocked, this one included; 0 in flight. Plan 5, Task 13c. */
+  /**
+   * Frames left lodged, knocked or running, this one included; 0 in flight (Plan 5, Task
+   * 13c). Running, its wave's, from where it landed or was reflected (Plan 6, Task 16); a
+   * spark that falls off a soft platform's end leaves the rest behind, 0 again.
+   */
   life: number;
   /**
    * The platform it rests on and is carried by, a settled bomb or an arrow lodged
-   * in it (its index in `StageDef.platforms`), or −1. Plan 5, Task 13c.
+   * in it, or that it runs round (`mode` `"crawl"`; Plan 6, Task 16), as its index in
+   * `StageDef.platforms`; or −1. Plan 5, Task 13c.
    */
   ground: number;
   /**
@@ -1710,6 +1719,12 @@ export interface ProjectileState {
    * clockwise (rightward on the top), −1 the other way. −1 otherwise.
    */
   face: number;
+  /**
+   * Frames since it was fired, in every mode, never renewed (Plan 6, Task 16 fix round
+   * 1): what holds a running projectile to its `crawl.maxLife` however often it lands.
+   * `age` is renewed by a landing or a reflection; this is not.
+   */
+  lived: number;
   /**
    * The move it stales as (Plan 5 final wave 2, ruling R-FW2b): the slot that launched
    * it, as the stale queue keys it (`staleSlot`), until its first connection queues it on

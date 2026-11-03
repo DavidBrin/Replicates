@@ -14,6 +14,7 @@ import { hashState } from "@/engine/hash";
 import { insideSolidBody, platformCentreX } from "@/engine/physics";
 import { COPY_DAMAGE, COPY_GRACE_FRAMES } from "@/engine/inhale";
 import { advanceProjectile, findProjectileDef, projectileHitbox, projectileHitboxActive, projectileHitboxes, spawnProjectile } from "@/engine/projectile";
+import { reflectProjectile } from "@/engine/reflect";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, MoveSlot, ProjectileDef, ProjectileState, StepEvents } from "@/engine/types";
@@ -974,11 +975,14 @@ describe("Thunder Jolt runs along surfaces (Plan 6, Task 16; SmashWiki \"Thunder
       if (s.projectiles[0] !== undefined) trail.push(s.projectiles[0]);
     }
     expect(trail.length).toBeGreaterThan(2);
+    // A spark from the frame it appears (Task 16 review, Minor 4): no frame of a wave
+    // floating past the platform's end.
+    expect(trail[0].mode).toBe("fly");
     expect(trail[1].mode).toBe("fly");
     expect(trail.every((q, i) => i === 0 || q.x >= trail[i - 1].x), "never back toward the platform").toBe(true);
   });
 
-  it("on a wall it launches what it hits away from the wall, whichever way it runs (UNVERIFIED: `lr` position)", () => {
+  it("on a wall it launches what it hits the way the wave faces, as on the floor (rubendal `FacingRestrict=ATTACK_LR_CHECK_F`)", () => {
     const wall = FLOOR.x + FLOOR.halfWidth;
     const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "mario" }], RULES, 5);
     Object.assign(s.fighters[0], { action: "stand", grounded: true, platform: 0, x: -fx(40), y: FLOOR.y, facing: 1, intangible: 0 });
@@ -990,6 +994,106 @@ describe("Thunder Jolt runs along surfaces (Plan 6, Task 16; SmashWiki \"Thunder
     const { states, events } = run(s, 8, () => [0, 0]);
     const at = events.findIndex((e) => e.hits.some((h) => h.attacker === 0 && h.victim === 1));
     expect(at).toBeGreaterThanOrEqual(0);
+    // Forward, the way the wave faces, here into the wall (Task 16 fix round 1, ruling I-1).
+    expect(states[at].fighters[1].pendingFacing).toBe(climbing.facing);
+  });
+
+  // Task 16 fix round 1 (the review's Important 1-2 and Minors 3-6).
+
+  it("launches a grounded opponent inside its spawn offset forward, away from Pikachu (rubendal `ATTACK_LR_CHECK_F`)", () => {
+    const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "fox" }], RULES, 5);
+    Object.assign(s.fighters[0], { action: "stand", grounded: true, platform: 0, x: 0, y: FLOOR.y, facing: 1, intangible: 0 });
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: fx(4), y: FLOOR.y, facing: -1, intangible: 0, invincible: 0 });
+    const { states, events } = run(s, 25, (i) => [i === 0 ? Btn.Special : 0, 0]);
+    const at = events.findIndex((e) => e.hits.some((h) => h.attacker === 0 && h.victim === 1));
+    expect(at).toBeGreaterThanOrEqual(0);
+    // Inside the 6.5 offset the wave appears at, Pikachu at 0.
+    expect(states[at].fighters[1].x).toBeLessThan(fx(6.5));
     expect(states[at].fighters[1].pendingFacing).toBe(1);
+  });
+
+  it("reflected while running, it has its wave's life times the reflector's multiplier left, its phases renewed with it (reflect.ts)", () => {
+    const { fighters } = duel("pikachu", "fox", 0, 40);
+    const reflector = (fighter: string, slot: MoveSlot) => fighterDef(fighter).moves[slot]!.reflector!;
+    // Late in its wave: age 80, 16 frames left (the review's probe).
+    const late = (): ProjectileState => ({ ...spawnProjectile(JOLT(), fighters[0], 1), age: 80, life: 16 });
+    const byFox = late();
+    reflectProjectile(byFox, JOLT(), fighters[1], reflector("fox", "downB"));
+    expect([byFox.mode, byFox.age, byFox.life]).toEqual(["crawl", 0, 96]);
+    const byCape = late();
+    reflectProjectile(byCape, JOLT(), fighters[1], reflector("mario", "sideB"));
+    expect([byCape.mode, byCape.age, byCape.life]).toEqual(["crawl", 24, 72]);
+  });
+
+  it("heads along its face at the wave's speed from the frame it starts running (the CPU's `framesToMeet` reads it)", () => {
+    const ground = jolt(0, FLOOR.y, 1, 2);
+    expect([ground[0].vx, ground[0].vy]).toEqual([fx(1.8), 0]);
+    const air = jolt(0, FLOOR.y + fx(30), 1, 60);
+    const landed = air.findIndex((p) => p.mode === "crawl");
+    expect([air[landed].vx, air[landed].vy]).toEqual([fx(1.8), 0]);
+  });
+
+  it("fired nearer a solid edge than its offset, it appears at the corner, already on the wall", () => {
+    const edge = FLOOR.x + FLOOR.halfWidth;
+    const trail = jolt(edge - fx(2), FLOOR.y, 1, 3);
+    expect([trail[0].mode, trail[0].face, trail[0].x, trail[0].y]).toEqual(["crawl", 1, edge, FLOOR.y]);
+    expect([trail[0].vx, trail[0].vy]).toEqual([0, -fx(1.8)]);
+  });
+
+  it("lives at most SmashWiki's 193 frames however often it lands, and falls with no wave life left over", () => {
+    const bf = STAGES.find((st) => st.id === "battlefield")!;
+    const top = bf.platforms.findIndex((p) => p.soft && p.y > fx(30));
+    const s = createInitialState("battlefield", [{ defId: "pikachu" }, { defId: "fox" }], RULES, 5);
+    // Neither fighter can be hit, so nothing ends it but its life.
+    Object.assign(s.fighters[0], { action: "stand", grounded: true, platform: 0, x: -fx(40), y: 0, facing: 1, intangible: 1000 });
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: -fx(60), y: 0, intangible: 1000 });
+    // A spark 90 frames old, about to land on the top platform and run off its right end.
+    const spark: ProjectileState = {
+      ...spawnProjectile(JOLT(), s.fighters[0], s.nextProjectileId, "pikachu"),
+      mode: "fly", ground: -1, face: -1, life: 0, facing: 1,
+      x: 0, y: bf.platforms[top].y + fx(2), vx: JOLT().vx, vy: JOLT().vy, age: 90, lived: 90,
+    };
+    s.projectiles.push(spark);
+    s.nextProjectileId += 1;
+    const { states } = run(s, 250, () => [0, 0]);
+    const trail = states.map((st) => st.projectiles.find((p) => p.instanceId === spark.instanceId)).filter((p) => p !== undefined);
+    expect(new Set(trail.filter((p) => p.mode === "crawl").map((p) => p.ground)).size, "it lands more than once").toBeGreaterThan(1);
+    const firstLanding = trail.findIndex((p) => p.mode === "crawl");
+    expect(trail.slice(firstLanding).filter((p) => p.mode === "fly").every((p) => p.life === 0), "a falling spark has no wave life").toBe(true);
+    // Its 91st frame is the crafted one; every state after it is one more.
+    expect(91 + trail.length).toBe(193);
+  });
+
+  it("a spark meeting a wall runs down it, then along the underside (`meetSide`)", () => {
+    const wall = FLOOR.x - FLOOR.halfWidth;
+    const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "fox" }], RULES, 5);
+    Object.assign(s.fighters[0], { action: "stand", grounded: true, platform: 0, x: fx(40), y: FLOOR.y, facing: 1, intangible: 0 });
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: fx(60), y: FLOOR.y, intangible: 0 });
+    const spark: ProjectileState = {
+      ...spawnProjectile(JOLT(), s.fighters[0], s.nextProjectileId, "pikachu"),
+      mode: "fly", ground: -1, face: -1, life: 0, facing: 1,
+      x: wall - fx(5), y: FLOOR.y - fx(10), vx: JOLT().vx, vy: JOLT().vy, age: 20,
+    };
+    s.projectiles.push(spark);
+    s.nextProjectileId += 1;
+    const { states } = run(s, 60, () => [0, 0]);
+    const trail = states.map((st) => st.projectiles[0]).filter((p) => p !== undefined);
+    expect([...new Set(trail.filter((p) => p.mode === "crawl").map((p) => p.face))].slice(0, 2)).toEqual([3, 2]);
+    const onWall = trail.filter((p) => p.face === 3);
+    expect(onWall[0].x).toBe(wall);
+    expect(onWall[1].y, "running down the wall").toBeLessThan(onWall[0].y);
+  });
+
+  it("its boxes ride one ground radius off the face it runs on, outside the body, either way round", () => {
+    const owner = duel("pikachu", "fox", 0, 40).fighters[0];
+    const r = fx(3);
+    const outward = [[0, 0, r], [1, r, 0], [2, 0, -r], [3, -r, 0]] as const;
+    for (const facing of [1, -1]) {
+      for (const [face, dx, dy] of outward) {
+        const p: ProjectileState = { ...spawnProjectile(JOLT(), owner, 1), mode: "crawl", ground: 0, face, facing };
+        // Offsets are facing-relative (`appendProjectileCandidates`): the world's is facing × x.
+        for (const hb of projectileHitboxes(p, JOLT())) expect([(facing >= 0 ? hb.x : -hb.x) + 0, hb.y + 0], `face ${face}, facing ${facing}`).toEqual([dx, dy]);
+      }
+    }
   });
 });

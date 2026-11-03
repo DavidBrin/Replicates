@@ -104,6 +104,7 @@ import {
   projectileHitboxActive,
   projectileHitboxes,
   projectilesOut,
+  settleCrawlSpawn,
   spawnProjectile,
 } from "./projectile";
 import { chargedHitbox } from "./specialCharge";
@@ -1545,6 +1546,9 @@ function spawnDueProjectiles(
       // source says. Kirby's spit then has no star, and its fighter comes out at him
       // (`resolveInhaleReleases`).
       if (insideSolidBody(stage, s.stageFrame, p.x, p.y)) continue;
+      // A wave fired past its platform's end is placed on the frame it appears (Plan 6,
+      // Task 16 fix round 1).
+      settleCrawlSpawn(p, def, stage, s.stageFrame);
       s.nextProjectileId += 1;
       s.projectiles.push(p);
       prev.set(p.instanceId, { x: p.x, y: p.y });

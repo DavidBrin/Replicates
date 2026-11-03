@@ -76,7 +76,15 @@ export function reflectProjectile(p: ProjectileState, def: ProjectileDef, by: Fi
   p.chargeScale = mul(p.chargeScale, r.damage);
   // Lifetime ×m: it has `lifetime · m` frames left from here. UNVERIFIED
   // reading of SmashWiki's "Lifetime multiplier" — it renews the clock.
-  p.age = def.lifetime - Math.trunc((def.lifetime * r.lifetime) / ONE);
+  // A running wave (Plan 6, Task 16 fix round 1) renews its own: its wave's life ×m
+  // left (`ProjectileState.life`), and its age, its phase clock (`crawl.stages`), set as
+  // every other projectile's is from the lifetime it runs on. UNVERIFIED: no source
+  // covers a reflected wave. It runs back the other way round (`facing`, below).
+  const crawling = p.mode === "crawl" && def.crawl !== undefined;
+  const lifetime = crawling ? def.crawl!.life : def.lifetime;
+  const left = Math.trunc((lifetime * r.lifetime) / ONE);
+  p.age = lifetime - left;
+  if (crawling) p.life = left;
   p.hitPorts.length = 0;
   // UNVERIFIED: a reflected boomerang starts its flight over, so it slows from
   // its reflected speed, turns, and comes back to the reflector, its owner now,

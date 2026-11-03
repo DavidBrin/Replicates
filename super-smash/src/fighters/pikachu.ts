@@ -638,8 +638,9 @@ const legacy: FighterDef = {
       // frame and 4% from its 67th ("Clean hit 19-52", "Mid hit 53-85", "Late hit
       // 86-114"), BK 18, KS 20, size 3.0 on fighters on the ground, and 1% less, BK 13,
       // size 1.8 on fighters in the air (rubendal 13.0.1 `pikachu_dengeki` `Regular`, IDs
-      // 0 and 1, `COLLISION_SITUATION_MASK_G` and `_A`). Off a soft platform's end it
-      // falls as a spark again. Reflectable and absorbable; every phase uses the Sakurai
+      // 0 and 1, `COLLISION_SITUATION_MASK_G` and `_A`), both launching forward, the way
+      // the wave faces (`FacingRestrict=ATTACK_LR_CHECK_F`), on walls and the underside
+      // too. Off a soft platform's end it falls as a spark again. Reflectable and absorbable; every phase uses the Sakurai
       // angle with low knockback: pressure and combo tool, never a kill.
       // UNVERIFIED: the wave's 1.8 a frame ("Movement speed multiplier 0.9" against the
       // aerial's 2; the page's phase lengths, 34 and 33, are also the script's
@@ -666,6 +667,10 @@ const legacy: FighterDef = {
           crawl: {
             speed: fx(1.8),
             life: 96,
+            // "This allows the projectile's effective duration to be considerably
+            // lengthened, with a possible maximum of 193 frames" (the aerial's 97 before it
+            // lands, and the wave's 96): a later landing renews no more than that.
+            maxLife: 193,
             hitbox: { damage: fx(6.0), baseKnockback: fx(18), knockbackGrowth: fx(20), radius: fx(3.0) },
             air: { damage: fx(5.0), baseKnockback: fx(13), knockbackGrowth: fx(20), radius: fx(1.8) },
             stages: [

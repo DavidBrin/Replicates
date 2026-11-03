@@ -27,6 +27,7 @@ import type {
   Hitbox,
   MoveDef,
   MoveSlot,
+  Platform,
   ProjectileDef,
   ProjectileState,
   StageDef,
@@ -167,6 +168,7 @@ export function spawnProjectile(
     life: 0,
     ground: -1,
     face: -1,
+    lived: 0,
     staleAs: stale.as,
     staleDamage: stale.damage,
     staleKnockback: stale.knockback,
@@ -321,6 +323,7 @@ export function advanceProjectile(
   // spawn frame (Mario's "Lifetime 70 frames" Fireball is "17-86"; Plan 5,
   // Task 6 fix round 1). Lodged or knocked, its own count runs instead (Task 13c).
   p.age += 1;
+  p.lived += 1;
   if (p.mode !== "fly") {
     p.life -= 1;
     if (p.life <= 0) return { alive: false, prevX, prevY };
@@ -412,8 +415,15 @@ function carryOnGround(p: ProjectileState, stage: StageDef, frame: number): void
   if (plat?.motion) p.x += platformCentreX(plat, frame) - platformCentreX(plat, frame - 1);
 }
 
-/** Start running on face `face` of platform `i` at (x, y), clockwise for `dir` +1 (Plan 6, Task 16). */
-function startCrawl(p: ProjectileState, c: NonNullable<ProjectileDef["crawl"]>, i: number, face: number, dir: number, x: number, y: number): void {
+/**
+ * Start running on face `face` of platform `i` at (x, y), clockwise for `dir` +1 (Plan 6,
+ * Task 16): its phases from the start, and its wave's life, but no more of it than its
+ * `maxLife` from its firing leaves (fix round 1: SmashWiki "Pikachu (SSBU)/Neutral
+ * special", "a possible maximum of 193 frames"). Returns false when none is left: it is
+ * gone on the surface. UNVERIFIED: that a later landing renews at all (the page names
+ * only the aerial jolt's landing), up to that maximum.
+ */
+function startCrawl(p: ProjectileState, c: NonNullable<ProjectileDef["crawl"]>, i: number, face: number, dir: number, x: number, y: number): boolean {
   p.mode = "crawl";
   p.ground = i;
   p.face = face;
@@ -421,7 +431,30 @@ function startCrawl(p: ProjectileState, c: NonNullable<ProjectileDef["crawl"]>, 
   p.x = x;
   p.y = y;
   p.age = 0;
-  p.life = c.life;
+  p.life = Math.min(c.life, c.maxLife - p.lived);
+  crawlHeading(p, c.speed);
+  return p.life > 0;
+}
+
+/**
+ * Which way it runs along its face (+1 toward +x or +y): clockwise, rightward on the top,
+ * down the right wall, leftward on the underside, up the left wall (Plan 6, Task 16).
+ */
+function crawlWay(p: ProjectileState): number {
+  const cw = p.facing > 0;
+  return p.face === 0 || p.face === 3 ? (cw ? 1 : -1) : cw ? -1 : 1;
+}
+
+/**
+ * `vx`/`vy` of a running projectile: along its face at its speed (Plan 6, Task 16 fix
+ * round 1), from the frame it starts running, so the CPU's `framesToMeet` and a painter's
+ * heading read the wave's and not the spark's it was.
+ */
+function crawlHeading(p: ProjectileState, speed: number): void {
+  const along = crawlWay(p) * speed;
+  const alongX = p.face === 0 || p.face === 2;
+  p.vx = alongX ? along : 0;
+  p.vy = alongX ? 0 : along;
 }
 
 /**
@@ -432,27 +465,41 @@ function startCrawl(p: ProjectileState, c: NonNullable<ProjectileDef["crawl"]>, 
  * top: past its end the projectile falls, flying again. One already past its face's end
  * (fired nearer the end than its spawn offset) is never walked back: off a soft platform
  * it falls from where it is, and on a solid one it starts down the wall from the corner
- * (UNVERIFIED: no source places a jolt fired at an edge). `vx`/`vy` are left as this
- * frame's step, for a painter's heading.
+ * (UNVERIFIED: no source places a jolt fired at an edge). `vx`/`vy` are its heading on
+ * the face it ends on (`crawlHeading`).
  */
 function crawlStep(p: ProjectileState, def: ProjectileDef, stage: StageDef, frame: number): boolean {
-  const c = def.crawl!;
   const plat = stage.platforms[p.ground];
   if (plat === undefined) return false;
   if (plat.motion) p.x += platformCentreX(plat, frame) - platformCentreX(plat, frame - 1);
-  const cx = platformCentreX(plat, frame);
+  crawlAlong(p, def, plat, platformCentreX(plat, frame), def.crawl!.speed);
+  return true;
+}
+
+/**
+ * A running projectile just fired (Plan 6, Task 16 fix round 1, the review's Minor 4):
+ * one that appears past its platform's end is placed by `crawlStep`'s rule on the frame
+ * it appears, not a frame later, so no frame of it floats past the edge: at a solid
+ * platform's corner, on its wall; past a soft one's end, a spark falling from there.
+ */
+export function settleCrawlSpawn(p: ProjectileState, def: ProjectileDef, stage: StageDef, frame: number): void {
+  if (p.mode !== "crawl" || def.crawl === undefined) return;
+  const plat = stage.platforms[p.ground];
+  if (plat !== undefined) crawlAlong(p, def, plat, platformCentreX(plat, frame), 0);
+}
+
+/** `d` round platform `plat` (centred at `cx` this frame), from where it is: `crawlStep`'s rule. */
+function crawlAlong(p: ProjectileState, def: ProjectileDef, plat: Platform, cx: number, d: number): void {
+  const c = def.crawl!;
   const left = cx - plat.halfWidth;
   const right = cx + plat.halfWidth;
   const top = plat.y;
   const bottom = plat.y - HARD_PLATFORM_DEPTH;
-  const x0 = p.x;
-  const y0 = p.y;
-  let d = c.speed;
-  for (let corners = 0; corners < 4 && d > 0; corners++) {
+  for (let corners = 0; corners < 4; corners++) {
     const cw = p.facing > 0;
     const alongX = p.face === 0 || p.face === 2;
     // Which way it runs along this face (+1 toward +x or +y), and where the face ends that way.
-    const way = p.face === 0 || p.face === 3 ? (cw ? 1 : -1) : cw ? -1 : 1;
+    const way = crawlWay(p);
     const end = alongX ? (way > 0 ? right : left) : way > 0 ? top : bottom;
     const at = alongX ? p.x : p.y;
     // How far to the face's end: none for one already past it.
@@ -460,28 +507,28 @@ function crawlStep(p: ProjectileState, def: ProjectileDef, stage: StageDef, fram
     if (d < room) {
       if (alongX) p.x = at + way * d;
       else p.y = at + way * d;
-      d = 0;
       break;
     }
     d -= room;
     if (plat.soft) {
       // Off a soft platform's end: no wall to wrap to. It falls, an aerial spark again, on
-      // the spark's own flight forward (UNVERIFIED: its aerial life counts on from here).
+      // the spark's own flight forward (UNVERIFIED: its aerial life counts on from here),
+      // leaving its wave's life behind (`ProjectileState.life`: 0 in flight).
       if (room > 0) p.x = end;
       p.mode = "fly";
       p.ground = -1;
       p.face = -1;
+      p.life = 0;
       p.vx = p.facing >= 0 ? def.vx : -def.vx;
       p.vy = def.vy;
-      return true;
+      return;
     }
     if (alongX) p.x = end;
     else p.y = end;
     p.face = (p.face + (cw ? 1 : 3)) % 4;
+    if (d <= 0) break;
   }
-  p.vx = p.x - x0;
-  p.vy = p.y - y0;
-  return true;
+  crawlHeading(p, c.speed);
 }
 
 /**
@@ -490,16 +537,18 @@ function crawlStep(p: ProjectileState, def: ProjectileDef, stage: StageDef, fram
  * `Regular`: ID 0 `COLLISION_SITUATION_MASK_G`, ID 1 `COLLISION_SITUATION_MASK_A`), each
  * over its `hitbox`, then the latest of `crawl.stages` its age has reached. Both sit on one
  * point, as the script's two sit on one bone, the ground box's radius off the face it runs
- * on (UNVERIFIED: the page's "hops" are drawn, not timed). Each launches away from the
- * wave (`lr` position; UNVERIFIED), so one climbing a wall never launches into it. Offsets
+ * on (UNVERIFIED: the page's "hops" are drawn, not timed). Each launches forward, the way
+ * the wave faces (no `lr`), on every face, walls and underside included (fix round 1,
+ * ruling I-1: the script's `FacingRestrict=ATTACK_LR_CHECK_F` on IDs 0 and 1 in every
+ * phase; `ProjectileState.facing` is its clockwise sense, kept round the outline). Offsets
  * are facing-relative, as every projectile box's are (`appendProjectileCandidates`).
  * They are built each frame for a running jolt only; if a frame-time trace ever shows it,
  * cache them per age band.
  */
 function crawlHitboxes(p: ProjectileState, def: ProjectileDef): readonly Hitbox[] {
   const c = def.crawl!;
-  let ground: Hitbox = { ...def.hitbox, ...c.hitbox, situation: "ground", lr: "position" };
-  let air: Hitbox = { ...def.hitbox, ...c.air, id: 1, situation: "air", lr: "position" };
+  let ground: Hitbox = { ...def.hitbox, ...c.hitbox, situation: "ground" };
+  let air: Hitbox = { ...def.hitbox, ...c.air, id: 1, situation: "air" };
   for (const st of c.stages ?? []) {
     if (p.age < st.from) continue;
     ground = { ...ground, ...st.hitbox };
@@ -653,8 +702,7 @@ function lodgeAt(p: ProjectileState, frames: number, i: number, x: number, y: nu
 
 function meetFloor(p: ProjectileState, rule: SurfaceRule, i: number, y: number, soft: boolean): boolean {
   if (rule.crawl !== undefined) {
-    startCrawl(p, rule.crawl, i, 0, p.vx, p.x, y);
-    return true;
+    return startCrawl(p, rule.crawl, i, 0, p.vx, p.x, y);
   }
   if (rule.lodge !== undefined) {
     lodgeAt(p, rule.lodge, i, p.x, y);
@@ -722,8 +770,7 @@ function meetSide(p: ProjectileState, rule: SurfaceRule, i: number, x: number): 
     // moving right, its left wall (face 3), which runs down the other way.
     const rightWall = p.vx < 0;
     const down = p.vy <= 0;
-    startCrawl(p, rule.crawl, i, rightWall ? 1 : 3, rightWall === down ? 1 : -1, x, p.y);
-    return true;
+    return startCrawl(p, rule.crawl, i, rightWall ? 1 : 3, rightWall === down ? 1 : -1, x, p.y);
   }
   if (rule.lodge !== undefined) {
     lodgeAt(p, rule.lodge, i, x, p.y);
@@ -752,8 +799,7 @@ function meetSide(p: ProjectileState, rule: SurfaceRule, i: number, x: number): 
  */
 function meetUnderside(p: ProjectileState, rule: SurfaceRule, i: number, y: number): boolean {
   if (rule.crawl !== undefined) {
-    startCrawl(p, rule.crawl, i, 2, -p.vx, p.x, y);
-    return true;
+    return startCrawl(p, rule.crawl, i, 2, -p.vx, p.x, y);
   }
   if (rule.lodge !== undefined) {
     lodgeAt(p, rule.lodge, i, p.x, y);
@@ -844,6 +890,7 @@ export function cloneProjectile(p: ProjectileState): ProjectileState {
     life: p.life,
     ground: p.ground,
     face: p.face,
+    lived: p.lived,
     staleAs: p.staleAs,
     staleDamage: p.staleDamage,
     staleKnockback: p.staleKnockback,
