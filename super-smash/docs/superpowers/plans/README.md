@@ -18,8 +18,9 @@ Run the plans strictly in this order. Each plan is written against the code the 
 | 3 | [Combat fidelity](2026-10-24-plan-3-combat-fidelity.md) | 21 | D56 | Speed-up hitstun, Sakurai angle, DI/LSI/SDI, shields, perfect shield, staling, KB stacking, tech, glancing blows, grabs, ledge trump, and 38 root-bone scripts live |
 | 4 | [3D renderer](2026-10-24-plan-4-3d-renderer.md) | 23 | D57 | three.js renderer with SSBU models (fetched locally, never committed), clips retargeted, bones baked into integer tables, per-bone hurtboxes, SSBU sizes, and 50 limb-bone slots live (53 planned; D57) |
 | 5 | [Specials, Final Smash, CPU, controls](2026-10-24-plan-5-specials-final-smash-cpu.md) | 23 | D58 | Charge-on-B, Reflector, Cape, Counter, F.L.U.D.D., Cargo Carry, Inhale/Copy, wall jump, footstool, crawl, throws/pummels and smash attacks on their scripts, eight Final Smashes with the Smash Ball, a CPU that techs, escapes, parries and uses specials, Stick Jump and gamepad remap |
+| 6 | [Polish](2026-11-02-plan-6-polish.md) | 42 | D59 | Input never dropped online, the flick's rules, reverse smash, edge slip, air grab, Final Smash records, slowdown and boosts, Thunder Jolt walls, a smarter CPU Final Smash, the online screens, press-to-join, sounds, 3D stage and fighter polish, authored carry and release motions, model portraits, a settled online e2e |
 
-`ENGINE_RULES_VERSION` goes 3 (Plan 3) → 4 (Plan 4) → 5 (Plan 5). Online peers on different versions refuse to play each other, so both players must reload after a deploy.
+`ENGINE_RULES_VERSION` goes 3 (Plan 3) → 4 (Plan 4) → 5 (Plan 5) → 6 (Plan 6). Online peers on different versions refuse to play each other, so both players must reload after a deploy.
 
 ## Steps that stop for David
 
@@ -34,6 +35,7 @@ Every outward or installing step says **STOP: ask David for go** and waits for a
 | 4 / 7 | Download Blender 5.2.2 (346 MB) into the git-ignored `.model-cache/tools/`. If David says no, the game still works, with capsule stand-ins in place of models. |
 | 4 / 23 | Deploy the 3D build. |
 | 5 / 23 | Deploy the finished game (rules version 5) |
+| 6 / 42 | Deploy (rules version 6), on David's go |
 
 Plans 2 and 3 do not deploy. Their changes go live with the next deploy David approves.
 
@@ -54,6 +56,22 @@ Plans 2 and 3 do not deploy. Their changes go live with the next deploy David ap
   - Landing during an aerial cargo throw lets the throw finish (UNVERIFIED).
   - The online engine-version bump went in Plan 5's first gameplay task (Task 2).
 - Stick Jump is saved per port in the browser and travels in the online start config. The gamepad remap is saved per port too, but it is local only: only the packed input frame crosses the wire.
+- Plan 6 rulings, as landed (D59, which records every one with its cost; UNVERIFIED where marked):
+  - A right-stick flick keeps its direction in the buffer; out of shield it rolls, spot-dodges or up-smashes; Attack in shield grabs (SmashWiki "Grab", R-P6-14); in a hold a flick throws its way (UNVERIFIED, D1).
+  - A smash input buffered with its press stays a smash (UNVERIFIED; it reverses Plan 5's "a buffered B is never a smash").
+  - Samus's grab aerial attacks only; her tether recovery is carried (D3).
+  - An aerial Final Smash ends with the fighter's own short hop (UNVERIFIED size, D4).
+  - `SLOW_OPPONENT` is read as (rate, frames), stepped (UNVERIFIED-simplified, D5); a slowed fighter's presses wait in its buffer, which ages only on its own running steps.
+  - The frozen, the trapped and a slowed fighter ride Smashville's platform (UNVERIFIED, D6).
+  - The KO freeze stays, with presses buffered (D7); the Boomerang turns on the spot (D8).
+  - Of two launches on one fighter in one step the stronger stands, whichever ports, and sets the freeze and the KO credit (UNVERIFIED, D9).
+  - Every port stands on one idle phase, so standing fighters breathe in step in 3D.
+  - A CPU holding a travelling Final Smash past 1,200 frames goes to point blank and fires at a catchable target (CPU judgement, UNVERIFIED, D10); the other Final Smashes keep Plan 5's firing rules, Critical Hit included (R-P6-15, R-P6-25).
+  - Fighters are drawn over the stage's front face, the side camera stays, and shadows tip toward it (D11, D12).
+  - Kirby alone is lifted onto the floor (0.57); Mario, Donkey Kong, Pikachu and Fox are carried (D13).
+  - HUD portraits are rendered from the loaded model and never saved (D14).
+  - Press-to-join seats only a pad that drives no seat yet; with a keyboard player and one pad, the pad takes P2 from the menu (R-P6-11).
+  - The online lobby says when it is loading the game data, and a direct link that cannot open fails in about 15 s with its own sentence (Task 40b).
 
 ## Open questions for David
 
@@ -83,6 +101,9 @@ None blocks the start. Each plan follows a stated default until David says other
     - Does the power have no time limit? The plan says none.
     - Is the power lost on a KO? The plan says yes.
   - Should the wall-jump push, footstool reach/stun/push and their windows be play-tested before the deploy? The wall-jump heights are SmashWiki's.
+- **Plan 6:**
+  - Deploy rules version 6? Pushed, not deployed.
+  - A real-gamepad check of the pad remap, the right stick (standing, in the air, shielding, holding someone) and press-to-join.
 
 ## Executing
 

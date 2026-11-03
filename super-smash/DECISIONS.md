@@ -4308,3 +4308,723 @@ startup sparks (0.3 units); a level-9 CPU running at Smashville's ledge with Mar
 which ends on or past the ledge in 12 of 36 runs (the Volt Tackle positioning has no spot
 there). A flick's release frame on a refused online tick, added in part 3, is carried since part 5
 (R-FW3f, refined).
+
+## D59 — Polish: input never dropped, the rules the backlog found missing, a CPU that fires Volt Tackle well and stays on its stage, and the 3D game's rough edges
+
+**Decision.** Plan 6 works through the polish backlog Plans 1-5 carried forward
+(`.superpowers/sdd/POLISH-BACKLOG.md` and D58's "Carried to polish"). It ran 42 tasks and one
+inserted one (40b), from `46e0706` to `c8f5bcd`: 89 commits, pushed after the final wave's gate.
+The rules are SmashWiki's and rubendal's Data Viewer scripts for patch 13.0.1 (`data.json`),
+quoted beside each number in the code; what no source publishes is marked `UNVERIFIED:`. The
+plan was written and every task replayed in a scratch copy at `46e0706` before it ran; its
+planning figures are expectations, and where this record gives a figure it is the run's own,
+unless it says "replay". `ENGINE_RULES_VERSION` went 5 → 6 once, in Task 5. Every decision the
+plan or its execution made on David's behalf is below with its cost if wrong: the plan's
+rulings (R-P6-0 to R-P6-27, D1-D14) and the controller's rulings during execution, which in
+places reverse or extend the plan. The controller's folder
+(`.superpowers/sdd/plan-6-polish-v2/`) holds each task's report and review and the ledger
+(`progress.md`); this is the summary. The plan, as run, is
+`docs/superpowers/plans/2026-11-02-plan-6-polish.md`.
+
+- **Tooling** (Tasks 1-3). The online e2e's server is wrangler's programmatic dev API
+  (`unstable_startWorker`, wrangler 4.146) with `dev.watch: false`, started by
+  `scripts/e2e/wrangler-e2e.mjs`, which prints `E2E-READY` for Playwright to wait on: `wrangler
+  dev` reloaded 3-8 times on `out/`'s file events and dropped the room Durable Object mid-test.
+  Across 11 runs wrangler's own log shows one start-up `reloadStart` a run and no reload. The one
+  "Uncaught Error: Network connection lost" line a run is the full-room test's refused socket
+  (`worker/src/roomDO.ts` closes it after telling the browser why): isolated, tests 1-3 alone log
+  none and the full-room test alone logs one; workerd logs that socket's hang-up as an uncaught
+  error, and it is harmless. It also prints once at shutdown after a green run (Task 3). No worker
+  change. The suite is quiet but for one jsdom line, "Not implemented: HTMLCanvasElement's
+  getContext() method", still printed at Plan 6's end (the act and `window.focus` lines are gone).
+  The buffer's expiry and single fire are pinned per status; a kept attack or pummel cannot fire
+  twice (its move outlasts `BUFFER_FRAMES`), so only the jumps are pinned for a second fire
+  (Task 2). Every e2e locator that means an exact name says `{ exact: true }` (17), and the
+  gameplay e2e's damage test was confirmed frame-stepped (`ad67ccb`).
+- **Online input** (Task 4). A tick the shrinking input delay refuses no longer loses its press:
+  `AdvanceResult.localScheduled` tells the runner, which carries the keyboard's tap and the pad
+  poll's fresh presses into the next frame that goes out. A pad press under an owed flick frame
+  is carried too. Two flicks fired inside one stall: the later one wins (a fire replaces whatever
+  is still owed) and nothing is combined; pinned. A carried press keeps the meaning it had on its
+  own poll: its Soft (tilt) bit, and, when the outgoing frame holds no direction, the soft
+  direction its poll held (the execution rulings, below). Nothing in `step()` changed.
+- **The flick** (Task 5, rules version 6). A buffered right-stick flick keeps its direction with
+  the press (SmashWiki "C-Stick": "Like with any input source, C-Stick inputs can be accidentally
+  buffered"); the page's one exception, a buffered jump aerial using the left stick, holds as
+  before. Its "double jump aerial" half is not modelled: the engine never produces that buffer.
+  Out of shield a flick rolls (sideways) or spot-dodges (down), or up-smashes (up) ("C-Stick":
+  "roll or sidestep out of shield"; "Out of shield": flicked up, "an immediate up smash out of
+  shield"). Attack pressed in shield grabs (R-P6-14; SmashWiki "Grab": "pressing the shield and
+  attack buttons simultaneously"); at `46e0706` it up-smashed. In a hold a flick throws its way
+  (D1, UNVERIFIED). `ENGINE_RULES_VERSION` 6, with `RULES_PIN.version`.
+- **The engine** (Tasks 6-18).
+  - *The reverse smash* (Task 6): a forward smash pressed behind a grounded fighter free to act
+    turns it round first (SmashWiki "Forward smash": "tapping the control stick in a horizontal
+    direction … or by tilting the C-stick in a horizontal direction"). A dash's attack is the dash
+    attack and never turns; a soft back press is a forward tilt and does not turn (unsourced, kept
+    as at `46e0706`, pinned; the final wave added the "never turns a run or a crouch" test).
+  - *Edge slipping* (Task 7): knocked off an edge backward on its feet, a fighter enters
+    `edgeSlip`, locked out 26 frames (25 for Donkey Kong and Pikachu), drifting from frame 8, and
+    can tech (SmashWiki "Edge slipping", its Ultimate table; rubendal's `miss_foot` CancelFrame 27
+    for Samus). Facing the drop it falls free. The golden gained its sixteenth match, Task 7's
+    slip lab (`goldenSlipLab.ts`, Battlefield, 120 frames): a states-lab scene could not reach
+    the slip, because every Final Destination edge has a ledge. `MUST_VISIT` is 60 actions.
+  - *Grab in the air* (Task 8): an air dodge, as Shield (SmashWiki "Air dodge", a Smash 4
+    sentence the Ultimate section leaves alone: UNVERIFIED that it carries over); Samus's grab
+    aerial instead (SmashWiki "Grab aerial"), an attack only (D3: no tether recovery), with its
+    own baked motion `air_catch`, 59 frames.
+  - *Final Smash boxes* (Task 9): scene and strike boxes keep a record of their own, by part
+    (`combat.sceneHits`, cloned and hashed), so a barrage is one box with its rehit, not a row of
+    one-frame boxes. Three end parts hit the world, as their scripts lay them (no
+    `set_catch_only_all`): Donkey Kong's, Marth's and Pikachu's (SmashWiki "Volt Tackle",
+    "Critical Hit"). Spot-checked against rubendal 13.0.1: the Donkey Kong and Marth end boxes,
+    Pikachu's blast, and Jungle Rush's loops (18 and 13, every 4) all match; Donkey Kong's end
+    script's three branches are UNVERIFIED-simplified (hitlag 1.0 used, one branch has 1.6; a 0%
+    push on frame 6 is not modelled).
+  - *The aerial height boost* (Task 10, D4): a Final Smash ending in the air lifts its user by its
+    own short hop (SmashWiki "Final Smash": "a slight boost in height"; the size UNVERIFIED), less
+    one frame of gravity; every one of the eight, the page's "most" not narrowed. R-T14j
+    re-checked: Pikachu's half is published (SmashWiki "Volt Tackle": "the tackle ignores edges,
+    meaning it is fairly easy to self-destruct off the side blast line if the player misses");
+    Donkey Kong's is not ("Jungle Rush" says nothing of edges), and with the boost and his regained
+    jumps his whiff past the edge now ends with a rise, the "aid in recovery" the page names.
+  - *`SLOW_OPPONENT`* (Task 11, D5): a Final Smash's start slows every other fighter for its
+    published (rate, frames): Mario 20/75, Link 30/100, Pikachu 9/45, Donkey Kong 7/30, Samus
+    5/50, Kirby 4/50, Marth 4/45, Fox 4/30 (SmashWiki "Slowdown"). A slowed fighter runs one step
+    in `rate` and stands still on the rest, its hitlag counting on every step (`src/engine/slow.ts`
+    documents each modelling choice); projectiles and the stage run at full speed. A press on a
+    still step waits in the buffer (R-P6-10), and the buffer ages only on the fighter's own running
+    steps (the final wave's fix), so no tap is lost at any rate. A KO ends the slow.
+  - *Smashville's platform* (Task 12, D6): it carries a passenger before judging its edge (so the
+    trailing end keeps a standing passenger), and carries the frozen, the trapped and a slowed
+    fighter's still step, by how far the platform moved this step (zero while a scene pauses the
+    stage, R-T14f). The CPU's floor model (`leavesFloor`) follows the same order.
+  - *The KO freeze* (Task 13, D7): a press made during it goes into the buffer (SmashWiki
+    "Buffer": Ultimate's 9 frames). The direction counter runs through the freeze, so a direction
+    pressed just before a KO and Attack just after it are a tilt. Held-input buffering (the page's
+    "holding an input through the end of an animation") is not modelled anywhere in the replica.
+  - *Windboxes and catches* (Task 14): a windbox keeps the swing's record like any box (SmashWiki
+    "Windbox" is silent; "Hitbox" makes it a hitbox), so Zero Laser's pulls span 48-68 as its
+    script does and Inhale's pulls carry their `Rehit=10`, a held loop's wrap re-arming them
+    (UNVERIFIED). A catch reads none of the swing's record (SSBU's `CatchModule`); one
+    consequence, UNVERIFIED either way: a grab box that meets an invincible fighter is no longer
+    spent on them, so one still out when the invincibility ends takes them.
+  - *Projectile phases* (Task 15): the Boomerang's clean (8.0%, size 4.0) and late (6.0%, angle
+    65: rubendal `link_boomerang` Fly frame 10, SmashWiki "Late hit") hits by age, and the Bomb's
+    blast shrinking 7.38 → 4.9 → 2.5 (SmashWiki "Samus (SSBU)/Down special", rubendal
+    `samus_bomb`), each phase's whole box pinned against the source. The Boomerang's published
+    turning distance is not modelled (D8).
+  - *Thunder Jolt* (Task 16): on meeting a surface the spark becomes a wave that runs along the
+    floor, down walls and under solid platforms, and falls off a soft platform's end (SmashWiki
+    "Thunder Jolt"; "Pikachu (SSBU)/Neutral special"). Every wave box launches forward, the
+    wave's travelling sense (rubendal `pikachu_dengeki`: `FacingRestrict=ATTACK_LR_CHECK_F` on
+    both boxes in every phase). It lives at most 193 frames however it lands, falls or is
+    reflected (the page's maximum; `ProjectileState.lived`, cloned and hashed), and a reflection
+    starts the 193 again. UNVERIFIED, each named in the code: the wave's 1.8 a frame, that a 90°
+    corner is "not too sharp", no gravity on the aerial spark, the boxes riding one radius off the
+    surface, the aerial life counting on after a fall, where a jolt fired at an edge starts.
+  - *Two launches in one step* (Task 17, D9): the strongest stands (the larger knockback, then
+    the larger vertical component, then the hitbox's facing), whichever ports. Every launch is
+    reckoned from how the fighter stood before the step's hits; the standing launch sets the
+    victim's freeze and the kill credit; an outranked hit still deals its damage. The golden
+    reaches this path seven times, all one attacker's multi-part hits in one step, so D9 also
+    covers same-source multi-part hits.
+  - *One idle phase* (Task 18): a standing fighter's sim body was its idle clip offset per port,
+    so a presentation offset decided hits by port (14 scenes, every one a standing Donkey Kong).
+    Every port now stands on `IDLE_PHASE` 27, the old port 1's (0 kept port 0's body and broke the
+    idle-player test's turn limit); after it, 0 of 2,560 Final Smash scenes differ by port order
+    (the review's probe). The 3D drawing reads the same pose; the 2D renderer's own idle offset is
+    drawing only and stays. Cost (a ruling): fighters standing still breathe in step in 3D.
+- **The bodies** (Tasks 19-22, before the CPU baseline).
+  - *Kirby's stance* (Task 19, D13): a lift is the leg hurtboxes' idle sink capped by the mesh's;
+    Kirby alone is lifted, 0.57: his hurtboxes, his ECB top (9.8 → 10.3) and with it his
+    footstool head and ceiling contacts rise by it; his uair reach is 17.6 and his Final Smash
+    scene gaps 8.5/8.5/9.5. One lift for every motion, the idle's (UNVERIFIED, cosmetic). Mario,
+    Donkey Kong, Pikachu and Fox are carried (the execution rulings and the Carried list).
+  - *Motions* (Task 20): Donkey Kong's carry, carried fall and lift have clips of their own; a
+    full (stored) release plays its own motion, and its clip's strike shows on the frame it hits or
+    shoots; Samus's Charge Shot shows its shot on frame 16, when the plasma leaves.
+  - *The dash-off flip* (Task 21): dashing off a platform flips (SmashWiki "Dash": "a short
+    flipping animation"), decided sim-side (`CombatState.dashedOff`, cloned and hashed; one
+    `status_fall_flip` motion a fighter, 20 frames), because the fall's hurtboxes come from its
+    baked motion. The clip's shape is UNVERIFIED. An edge slip never flips.
+  - *Clips* (Task 22): `edgeSlip` (26 frames, 25 for Donkey Kong and Pikachu), `techWall` and
+    `techCeiling` have clips of their own. `tech`, `techRoll`, `tumbleFall` and `ledgeTrumped`
+    keep theirs: each already reads as itself.
+  - Every motion Plan 6 authored (Donkey Kong's carry, carried fall and lift, the full releases'
+    timing, the flip, the slip and the wall and ceiling techs) is the replica's own shape, timed to
+    the published frames: the motion names are published, the animations are not.
+  - The bake: 1,965,143 bytes gzipped at Plan 5's end → 2,033,862 (96.98% of the 2 MiB budget,
+    which was not raised; 33 chunks).
+- **The CPU** (Tasks 23-27). The six-seed sweep harness (`src/game/cpuSweep.ts`, opt-in
+  `CPU_SWEEP=1`, 2,016 matches) is the baseline every later CPU task was judged against, under
+  R-P6-19 and R-P6-24 as amended, one-sided and against the run's own Task 23 (R-P6-26). Volt
+  Tackle's firing bands are built for CPU ports only. CPU Volt Tackle (Task 24, D10): fired at a
+  target proven held until the contact, and past 1,200 frames holding the power (a firm limit)
+  the CPU starts no new attack or aerial, goes to point blank and fires at a level target it can
+  catch (not invincible, intangible, rolling or on the respawn platform). Kong Karry is lifted
+  either way, and a moving target's dash-attack contact is trusted only inside the dash attack's
+  own first active window (`firstWindowEnd`, R-P6-16; Link's and Marth's have one window, so are
+  unchanged; every fighter's can connect, so none is named) (Task 25). At the ledge (Task 26): no
+  CPU slides off its floor's end, the Smash Ball chase never drifts past a ledge to a lost stock,
+  and Kirby's CPU inhales nobody while off the stage; the run-off guard covers the chase and
+  spacing, never the edgeguard's exit, and stands down while the target is off the stage
+  (R-P6-17, R-P6-24). Spacing (Task 27): beyond its own reach the CPU throws only a swing judged
+  to land, measured by the target's baked body (`bodyToward`). The late, narrow Final Smashes keep
+  Plan 5's rule (R-P6-15, R-P6-19, R-P6-25, R-P6-27). The figures are below.
+- **Presentation** (Tasks 28-40).
+  - *The online screens* (Task 28): an unfinished result's message centred in a panel; the guest's
+    select fits a 390-wide phone (a short "Battlefield · 3 stocks" tag); the room code has a Copy
+    button and the line "On the other computer: open <host>, choose Online, and type the code."
+  - *`/play`* (Task 29): with no match to play it leaves at once (SPEC §9, below).
+  - *Press-to-join* (Task 30, R-P6-11): a pad that drives no seat yet presses A or Start on the
+    character select to take the first CPU or empty seat, never a keyboard player's; a pad that
+    already drives one, the lone pad on P1 included, changes nothing; joining is off online. One
+    helper owns the pad-to-seat rule since the final wave (`padIndexForSeat`, used by the pad
+    options and the select screen).
+  - *Sounds and sparks* (Task 31): a glancing blow chiks and sparks orange (Brawl onward); the
+    midair jump, a reflection and a counter's catch have sounds. A shield hit sparks where the box
+    met the shield (`shieldHits[].contactX/Y`, events only; Task 32).
+  - *The 3D stage* (Task 33, D11, D12): the ledge lip, a shaded front face and a decorative
+    underside (Battlefield's theme only; its shape by eye, UNVERIFIED); the stage writes no depth
+    and draws first, so fighters are drawn over its front face; shadows tip 24° toward the camera.
+    A grounded shield's bubble stops at its fighter's floor and a shadow at its surface's ends
+    (`instanceClip.ts`), and the draw order is tested.
+  - *The 3D fighter* (Task 34): a landing squash on the fighter's own clock, and sword and kick
+    trails, anchored each frame on the bone of the farthest-reaching live box; throws draw none.
+  - *Charges* (Task 35): Hammer Flip's flame lights from 30 frames and the hammer goes away on its
+    script's frame; Samus's and Donkey Kong's stored charges show a tell; a copied charge glows by
+    the copy.
+  - *Effect fixes* (Task 36): a refused F.L.U.D.D. pump sprays nothing; the stone's landing step;
+    Zero Laser's mouth fades in; the launch freeze's trap pin re-read (8 frozen, −6.5, unchanged by
+    Task 18).
+  - *Effect scale* (Task 37): every move effect is held to its own hitboxes at the model's size
+    (`fxScale.test.ts`). The 18 outliers re-measured on the real tree matched the replay (Task 18
+    moved none); Samus's fair and nair and Donkey Kong's dair were resized and struck; the other 15
+    are right on the model, each with its reason and its measured figures pinned within 10%.
+  - *Portraits* (Task 38, D14): the HUD's portraits are the loaded model's head, rendered once in
+    memory at match start and never saved (half-float, 4-sample, read back with straight alpha,
+    since the final wave); stand-ins, and a device whose read-back is empty, keep the 2D heads.
+  - *The animation lab* (Task 39) plays the scrubber's frame in one large cell.
+  - *Loading* (Task 40): a timed-out model download is cancelled (`AbortSignal`), and the online
+    model wait counts from the page's mount ("Loading fighters…" at most about 5 s).
+  - *The online lobby* (Task 40b, inserted): below.
+
+**The online finding, and Task 40b.** On 2026-11-02 David reported that his testers' online room
+"doesn't work / hangs waiting for connection". Investigated, with no code changed: signalling
+works (a raw create and join on the live Worker gets `welcome` and `peer-joined` in about 2.5 s),
+and the live online e2e passes 4/4 from one machine, whose two browsers share a network. But
+`/api/ice` answers `{"turn":false}`: the live site has no TURN relay, because its secrets were
+never set. Players on separate networks behind a symmetric NAT or carrier-grade NAT (most mobile
+networks) cannot open a direct WebRTC path, so each waited about 50 s on "Opening a direct
+connection…" and was then told "Lost the room — create or join again." A probe with the direct
+path forced to fail (`?ice=relay`, no TURN) reproduced exactly that; on a throttled link (about
+1.6 Mbps) the 1.97 MB bake download also showed as "Connecting to room…" for about 15 s. The real
+fix is David's: set `TURN_KEY_ID` and `TURN_KEY_API_TOKEN` with `wrangler secret put`; it takes
+effect without a redeploy. Task 40b, inserted before the final wave (the default "with Plan 6",
+since David had not answered hotfix or Plan 6), makes the wait honest and the failure quick:
+- the lobby says "Loading game data…" while the bake downloads;
+- a first direct link that never opens fails one negotiation timeout (15 s) after "Opening a
+  direct connection…", with no re-offers, as `no-direct-link`: "Couldn't connect directly to the
+  other player — one of your networks may be blocking it. Try another network, or try again." The
+  side that times out first tells the other through a lobby payload (`{kind:"no-direct-link"}`,
+  which the Worker passes unread and older builds ignore), so neither is left waiting;
+- a link that opened and later fails keeps today's re-offer path (the final wave made a link that
+  opened, then failed after the peer's room socket left, a failed link, not "no direct link"), and
+  a `no-direct-link` arriving after the start ends nothing (tested);
+- with TURN set, nothing changes. A browser without WebRTC now sees the same sentence, which does
+  not fit it (carried).
+
+**The rulings, R-P6-0 to R-P6-27** (`.superpowers/sdd/plan-6-review/RULINGS.md`). Each made by
+the controller on David's behalf, with its cost if wrong.
+- *R-P6-0*: the draft was fixed in section files, one fixer each, then assembled. Cost: none.
+- *R-P6-1*: every task fixed or written was replayed verbatim at `46e0706`, with red messages
+  marked captured or predicted. Cost: none (planning time).
+- *R-P6-2*: the red-step rule: a test failing for the stated reason proceeds with other numbers;
+  one passing first or failing otherwise stops the task. Cost: none.
+- *R-P6-3*: the order (tooling, online, engine, bodies, CPU, presentation, final wave, record).
+  Cost: none; the bodies ran before the CPU baseline, so their changes were measured once.
+- *R-P6-4*: the final wave: an opus whole-plan review, a seam pass (a second fresh opus while
+  codex had no credits), one fix wave with a scoped re-review, the full gate, stand-in
+  screenshots, the push. Cost: none.
+- *R-P6-5*: implementers never push; the controller pushes after the final wave; deploying waits
+  for David's go. Cost: none.
+- *R-P6-6*: browser work is Playwright only; committed screenshots only from `CAPTURE=1`;
+  real-model captures only in the session scratchpad, viewed and deleted. Cost: the real models
+  are judged by numbers and stand-ins (David's optional look, below).
+- *R-P6-7*: the determinism rule covers `src/ai/**`. Cost: none.
+- *R-P6-8*: D1-D14 are the controller's, each recorded here with its cost; D2 dropped; D7 and D8
+  settled; the only questions for David are the deploy and the real-gamepad check. Cost: a ruling
+  David would have made otherwise ships until he says so.
+- *R-P6-9*: D58's carries (a)-(g) became tasks or named Carried lines. Cost: none.
+- *R-P6-10*: a press on a slowed fighter's still step is buffered; the still step sits after the
+  hitlag block and before the hitstun countdown, and holds intangibility. Cost: none.
+- *R-P6-11*: press-to-join takes a new human seat, never stacks on a keyboard port, never takes a
+  joined pad's seat, and is off online. Cost: see Task 30's trade-off below.
+- *R-P6-12*: the golden convention: lab pins and `MUST_VISIT` hold each task to its change; a new
+  action gets a lab scene, never an exemption. Cost: none.
+- *R-P6-13*: the five Review Focus items, each with its test in its owning task. Cost: none.
+- *R-P6-14*: Attack in shield grabs; an out-of-shield up smash needs Up (stick or flick). Cost:
+  none on the golden (no golden match presses Attack in shield).
+- *R-P6-15*: Critical Hit keeps Plan 5's rule (fires whatever its travel): the planning baseline
+  did not show its misses the worst (seeds 1-3: 61 of 120 against the Ancient Arrow's 143 of
+  207). Cost: Critical Hit's misses stay.
+- *R-P6-16*: the dash-attack trust window is each fighter's own first active window. Cost: none.
+- *R-P6-17*: the ledge run-off guard covers the chase and spacing, never the edgeguard's exit.
+  Cost: an edgeguard can still run off on purpose (it keeps its own recovery check).
+- *R-P6-18* (amended): the ball-on golden seed may step only when that task's sweep passes
+  R-P6-19's test. Cost: none; it stepped once, 606 → 607, at Task 26, whose sweep passed.
+- *R-P6-19* (amended, clarified): CPU tasks are judged against the run's own six-seed Task 23
+  baseline, cumulatively: landed Final Smashes summed fall by at most 10%, each fighter's by at
+  most 25%, the mean hold over all rises by at most 25%. Amended because one fighter's count
+  differs by up to about 30% between seed halves of the same code. Cost: a real per-fighter fall
+  under 25% can pass.
+- *R-P6-20*: before the harness existed, a golden regeneration stopped by `expectCpuFinalSmash`
+  stopped and reported. Cost: none; it never happened.
+- *R-P6-21*: every e2e gate runs with `--trace off`. Cost: none.
+- *R-P6-22*: the final wave's commit blocks; the pre-push scan after the last commit; the fresh
+  clone of the LOCAL repo at HEAD, model-less. Cost: none.
+- *R-P6-23*: a list measured on a replay base is re-measured on the real tree (Task 37's outliers,
+  Task 19's Kirby figures). Cost: none; Task 37's list matched exactly.
+- *R-P6-24* (amended): a CPU task may cut `edgeguardExits` by at most 10% and raise
+  `selfDestructs` by at most 2 or 10% of the baseline, whichever is larger. Task 23's counter was
+  fixed first (a KO is a self-destruct only if the fighter stood on its own, grounded, in no hit's
+  hitlag or hitstun and not held, since the last hit it took). The planning replay's baseline was
+  20 (18 from the Smash Ball chase, 1 in `attack`, 1 in the edgeguard), an expectation; every
+  figure counted the old way, which took grounded hit KOs as self-destructs, is void: fix round
+  2's 504, 507, 511 and 534, R-P6-24's first "504 → 507", and the draft Task 27's first 233, 210
+  and 218. Cost: a CPU change that loses edgeguard exits under 10% passes.
+- *R-P6-25*: a task dropped by a ruling leaves the list; the draft's Task 17 (the judged Final
+  Smashes) was the first, so the plan has 42 tasks. Cost: none.
+- *R-P6-26*: the bounds are one-sided (only the harmful direction counts) and use the run's own
+  baseline. Cost: none.
+- *R-P6-27*: the dropped Task 17's veto form is a candidate for a later plan (below). Cost: its
+  possible gain waits.
+
+**D1-D14, as rulings** (R-P6-8: the controller's, followed as each task amended it).
+- *D1* (Task 5): a flick while holding someone throws in its direction; plain Attack pummels.
+  UNVERIFIED: "C-Stick", "Grab", "Throw" and "Pummel" are silent on which a hold reads first.
+  Cost: a flick that should pummel throws.
+- *D2*: dropped. Each SPEC change went in its own task's commit (below). Cost: none.
+- *D3* (Task 8): Samus's grab aerial ships without its tether recovery (frames 2-4 ledge grab);
+  it waits on carry (a). Cost: Samus cannot tether to a ledge.
+- *D4* (Task 10): the unsized height boost is the fighter's own short hop. UNVERIFIED. Cost: a
+  boost the wrong size.
+- *D5* (Task 11): `SLOW_OPPONENT(a, b)` read as (rate, frames), stepped; corroborated by every
+  fighter's `GenesisFire` (`SlowModule::set_whole(4, 0)`, cleared five frames later). Expiry under
+  rates 20 and 30 is UNVERIFIED-simplified. Cost: slowed fighters move in whole steps, not
+  smoothly.
+- *D6* (Task 12): the frozen and the trapped ride Smashville's platform (UNVERIFIED), and so does
+  a slowed fighter's still step (Task 12's concern: a slowed fighter must not slide off a platform
+  that keeps moving). Cost: none known; a frozen fighter might stay put in SSBU.
+- *D7* (Task 13): settled: the 14-frame KO freeze stays (UNVERIFIED), with presses buffered.
+  Cost: none (the task is right either way).
+- *D8* (Task 15): settled: the Boomerang's "distance spent turning back" (16 tilt, 24 smash) is
+  not modelled: read as travel it cannot fit the published hitbox frames (the returning box starts
+  on age 45, exactly when the out flight reaches its minimum). Cost: it turns on the spot.
+- *D9* (Task 17): two launches on one fighter in one step: the stronger stands (knockback, then
+  vertical component, then the hitbox's facing). UNVERIFIED (no source covers two hits on one
+  frame). Cost: a different launch than SSBU's in a rare double hit.
+- *D10* (Task 24): a time limit on holding a travelling Final Smash, firm at 1,200 frames, CPU
+  judgement only (the engine keeps none). UNVERIFIED. Cost: a CPU fires a Volt Tackle it might
+  have held; the other six keep no limit, so D58's M2 cost stays for them (longest hold at Plan
+  6's end, 1,588 frames).
+- *D11* (Task 33): fighters drawn over the stage's front face (the stage first, no depth); a
+  chamfer would need a 7.39-unit inset and still left fighters beside the face. Cost: an arm
+  pressed into a wall shows over the face.
+- *D12* (Task 33): the side camera stays, shadows tipped 24°; the tilt is carried. Cost: the flat
+  slab still fills the lower screen.
+- *D13* (Task 19): a lift is the leg hurtboxes' idle sink capped by the mesh's; Kirby's 0.57 only.
+  Cost: Mario, Pikachu and Fox are drawn slightly into the floor at idle.
+- *D14* (Task 38): portraits from the loaded model, never saved. Cost: a first-frame render hitch.
+
+**The execution rulings.** Made by the controller during the run (the ledger's "Ruling:" lines),
+grouped by task, each with its cost if wrong. Several reverse or extend the plan; those are marked.
+- *Go*: David's "deploy it", in reply to the plan's presentation, read as the go to execute Plan 6
+  and to deploy at its end, after Task 42's push and pre-push scan, verified as Plans 4 and 5
+  were. Cost: one deploy David did not want, reversible by redeploying `46e0706`.
+- *Process*: one implementer at a time in the main checkout; reviews may run in scratch copies;
+  fix rounds resume the same implementer. Task 18's brief carried the bodies' group intro at its
+  end, ignored by Task 18. Cost: none.
+- *Load*: other sessions kept the machine's load far over 6 (up to about 108) for most of the
+  run. While it was over 6 an implementer's suite ran as `pnpm vitest run --testTimeout=30000`, and
+  from Task 9 on each e2e ran once at whatever load, owed to the final gate (no more bounded
+  waits). Cost: a real red hidden by load is found late; none was (Task 41's gate, at a load under
+  6, cleared all of it).
+- *Task 1*: reload checks count `reloadStart` in wrangler's own log (Playwright 1.62 forwards a web
+  server's stdout only with `stdout: "pipe"`, so the brief's grep was vacuous). Cost: none.
+- *Task 3*: `fightsheet.spec.ts` writes its real-model captures to a fresh `mkdtemp` directory,
+  removed in `finally`, never inside the repo (it ran `fightsheet.mjs` on Mario and left PNGs in
+  `test-results/`, against R-P6-6). Cost: none.
+- *Task 4* (extends the plan): a carried press keeps its Soft bit, for both devices, unless the
+  outgoing frame holds a hard direction (the plan's `PAD_PRESS_BITS` dropped it, so a tilt pressed
+  in a stall landed as a smash). Cost: a carried press might rarely tilt where a smash was meant.
+  Its Minors went in the same round (a pad press on a poll a second flick replaces is carried; cost:
+  none). Round
+  2: a replaced flick fire frame carries only its non-flick presses (it had re-sent a stale hard
+  smash a frame after the later fire), and a carried Attack takes the soft direction its own poll
+  held when the outgoing frame holds none. Cost: a carried attack could take a direction the
+  player had already let go of, the meaning it had when pressed. A carried Attack under a held
+  hard direction goes out alone (a jab where live play may have tilted): re-attaching a hard
+  direction to a later frame could read as a fresh one (a smash). Cost: a rare jab after a stall,
+  never a desync.
+- *Task 9*: the world-end comments corrected and the rubendal spot-check above, in its fix round.
+  Cost: none.
+- *Task 10*: a comments-only follow-up re-measured the dash and beams labs' landing frames. Its
+  commit body (`62dac3f`) omitted two facts, recorded here because history is never rewritten:
+  Pikachu's Volt Tackle also ends in the air (frame 138) and gets the boost (still KO'd, on 169 at
+  that commit; 191 after Task 11), and Fox no longer lands in the dash lab (`land` is still
+  visited by five other labs). Cost: none.
+- *Task 11* (reverses Plan 5): a smash input buffered with its press keeps its smash, for every
+  buffered press, slowed or not, within rules version 6: a fresh direction and Attack pressed on a
+  still step fire the forward smash on the next running step, not the tilt. This reverses Plan
+  5's "a buffered B is never a smash" (`smashSpecial.test.ts` rewritten). SmashWiki "Buffer" and
+  "Smash attack" are silent on it (the re-review's source check: their nearest lines lean toward
+  it, none contradicts), so it stays UNVERIFIED in the code. Cost: a buffered smash where SSBU
+  might give a tilt; four golden traces moved. Also: a KO clears the slow (a fighter KO'd while
+  slowed respawned late: `dead` on 170 under (30, 100) against 74 unslowed), and the stale lab
+  frames were re-measured. Cost: none.
+- *Task 12*: a slowed fighter's still step counts as frozen, so the platform carries it (D6). Cost:
+  none.
+- *Task 14*: the beams lab's Zero Laser frames rewritten to the measured record (charge hits on 48
+  and 68, one pull on 58); a test that a grab meeting an invincible fighter is not spent; every
+  task that moves the golden writes its history paragraph above `MUST_VISIT` (replacing a batch
+  ruling). Cost: none.
+- *Task 15* (fills a plan omission): the late Boomerang stages take angle 65 (both throws), and
+  each phase's whole box is pinned. Cost: none (the source agrees).
+- *Task 16* (reverses the plan's UNVERIFIED `lr: "position"`): every wave box launches forward,
+  as the dump says; "the wave's facing" is `ProjectileState.facing`, its travelling sense, so a
+  wave that wraps a corner launches by its current sense, not its throw (the cost if wrong). A
+  reflected crawling wave renews its life by `reflect.ts`'s rule; the life is capped at 193 frames
+  through landings, falls and reflections (a fallen spark had reached 249). Cost: none.
+- *Task 17* (extends D9): a pre-step snapshot (crouch, ground, platform, jumps used) before the
+  step's hits, so the ranking reads how the fighter stood in both port layouts; the KO credit
+  follows the launch that stands, not the later port; an outranked hit still deals its damage.
+  Round 2: the launch that stands sets the step's freeze, and zero-freeze releases are deferred
+  until the step's hits and throws are in, so a standing launch with no freeze fires the same way
+  in both layouts. Cost: an outranked hit no longer imposes its own hitlag on the victim
+  (UNVERIFIED). The attacker keeps its own hit's freeze even when that hit is outranked (its hit
+  connected), so attacker and victim freezes can differ (Samus 14 against the victim's 11);
+  UNVERIFIED. Cost: an outranked attacker frozen a few frames longer than SSBU would. The
+  snapshot's grounded read stays though no mutant can bite it now (defensive, free). Round 3: a
+  Final Smash trap and a launch on the same victim in one step: the trap drops the deferred launch
+  (round 2 had let the trapped fighter SDI). A trapped victim hit by a same-step launch therefore
+  freezes for the trap's own 8 steps (it was 11 or 22), the launch's freeze dropped with it;
+  UNVERIFIED. Cost: a few frames of freeze.
+- *Task 19* (reverses the plan's figures): the plan's "Pikachu and Fox: no sink" came from
+  planning replays that had no local models. Measured on this tree (the lowest point over the idle
+  cycle): Mario's feet −1.23, Donkey Kong's feet +0.13 and hands −1.17, Link +0.16, Samus +0.35,
+  Kirby −0.57, Fox −0.34, Pikachu −1.25, Marth's feet +0.01 (−0.21 with cape and sheath). The
+  controller first extended D13 to Pikachu (lift 1.23) and Fox (0.12). With them lifted, Review
+  Focus 5 lost 12 hits beyond the half-unit step (Fox: Mario's jab 1 at 3, Donkey Kong's down
+  smash at 0; Pikachu: Mario's jab at 17.5-18, Link's down tilt at 21.5-22.5, Kirby's down smash
+  at 9.5-10.5, Fox's down tilt at 11.5-12), so the fallback stood: Kirby only. Leg sinks
+  re-measured: Kirby −2.573, Pikachu −1.234, Fox −0.120, Mario −0.324; Donkey Kong's legs +0.175,
+  knuckles −1.022. Cost: Pikachu (mesh −1.25) and Fox (−0.34) are still drawn into the floor at
+  idle; their fix is their idle clips' feet (carried).
+- *Task 20*: every full release lands its clip's strike on its hit or shot frame (Samus's motion
+  stood past the strike at the loop frame, so it turns back to it); a full release named by half
+  fails loudly; the commit body records that the golden visits Donkey Kong's carry and lift (its
+  traces are unchanged because no hit reaches him then). Samus's Charge Shot gets `clipStrike` 16,
+  so the shot shows when the plasma leaves (it showed 12 frames early on every Charge Shot). Cost:
+  none beyond a re-bake.
+- *Task 23* (voids the first baseline): the review found the harness mis-measuring: it credited a
+  Final Smash's hits only while its user was still in the move (about 31% of Mario Finale's
+  landed missing), never tallied a Final Smash still running at the 3,600-frame cap (about 10% of
+  landed; Samus −23%), and counted a KO after a shield break as a self-destruct. The harness was
+  fixed (`856f68d`; a footstool counts as a hit taken too) and the baseline re-run on Task 23's
+  CPU; Task 24 was re-judged by it. The first baseline (`c1d0c25`: landed 1,192, mean hold 143.15,
+  edgeguard exits 5,771, self-destructs 21) is void. Pikachu's baseline landed (2) is below the
+  sweep's per-fighter resolution: its bound became "no fall below 2". Cost: one extra sweep.
+- *Task 24* (extends D10): the time limit as built was soft (it lifted safety checks only for a
+  Pikachu already on the ground with the target ahead; against an idle Mario it fired 578-2,116
+  frames late) and the proven-hold rule fired 0 times. Ruled: both rules need the target hittable
+  when the trap arrives (no fire through invincibility); the limit is firm: from 1,200 frames the
+  CPU goes to a firing position and fires as soon as the target is catchable. Round 2: past the
+  limit it starts no new attack, jab loop, smash charge or landing attack (an attack already out
+  finishes), and the six-stage idle-Mario test runs in the game's own baked context. Its deadline is 240 frames after
+  the later of the limit and the target's first catchable frame (a hit before the limit can KO the
+  idle Mario, who respawns invincible). Cost: a CPU near the limit gives up some free hits to fire
+  (intended by D10). A CPU Pikachu that climbs to a target's floor or steers the tackle is carried:
+  CPU Volt Tackle stays rare against moving CPU targets. Cost: CPU-against-CPU matches rarely show
+  it. The airborne half (an airborne CPU past the limit still started aerials) was carried, then
+  closed by Task 26.
+- *Task 26* (un-carries Task 24's gap): past the limit an airborne CPU over the stage holding a
+  travelling Final Smash starts no aerial, special or grab either (its recovery is untouched),
+  found when a Task 24 test failed on Pokémon Stadium 2, seed 6. Cost: a CPU past the limit gives
+  up air hits (intended).
+- *Task 29*: tests that an online start does not redirect and a stranded online `/play` goes to
+  `/online`, so each term of the "unarmed" rule has a failing mutant. Cost: none.
+- *Task 30* (narrows R-P6-11): press-to-join seats only a pad that drives no seat yet; a pad that
+  already drives one, including the lone pad driving P1 by default without having joined, changes
+  nothing (it had taken a solo player's P2 CPU opponent). The trade-off: with a keyboard player on
+  P1 and one pad, the pad also drives P1 and cannot take P2 by pressing; the friend sets P2 to a
+  human in the menu, or a second pad joins. Cost: keyboard plus one pad needs the menu. On
+  David's real-gamepad check.
+- *Task 33*: a grounded shield's bubble is clipped at its fighter's floor in 3D (with the stage
+  writing no depth, its below-floor cap showed over the lip), and a tipped shadow at a ledge's or
+  soft platform's end (it hung in the air past it); draw-order tests. Cost: none. The low camera's
+  lit lip, 4-37 px above standing feet when the camera sits below the floor, is D11's cost.
+- *Task 34*: the trail samples only when the fighter's own clock moves (hitlag, slowdown and a
+  scene freeze hold it) and shakes with it; each frame's ribbon hangs on the bone of that frame's
+  farthest-reaching live box, keyed box to bone from the script (the plan's "first non-root ATTACK
+  bone by id" picked bones scripts reuse); idle trails allocate nothing; throws draw no trail
+  (Mario's back throw trailed off his hip). Cost: Fox's uair, Samus's dtilt and Link's top-bone
+  sword moves draw no trail, and the final wave's throw rule took Link's up-throw slash too
+  (accepted, consistent).
+- *Task 36*: the F.L.U.D.D. spray is gated on the pump being refused (the engine's
+  `insideSolidBody` on the spawn point, via `FxContext.launchRefused`), not on a pump being alive:
+  a pump that hits an adjacent opponent dies the same step, so the spray flickered in the move's
+  main use. Cost: none.
+- *Task 37*: each listed outlier's measured figures pinned within 10%, so an inflated listed
+  effect fails. Cost: a later painter change re-measures its row.
+- *Task 39*: its Important (the Lab3D test dropped each copy's source, so a swapped canvas order
+  passed) was parked into the final wave's fix wave. Cost: none (test only).
+- *Task 40b* (inserted): above. Two of its review's Minors went into the fix wave as must-fix: a
+  test for the "not started" guard on a received `no-direct-link`, and `linked` reset only on
+  `peer-joined`. Cost: a clearer message, one task.
+- *The final wave* (Task 41). The whole-plan review found 0 Critical, 2 Important and 4 Minor;
+  the seam pass 0, 1 and 6. Ruled:
+  - I-1, FIX not accept (the plan's own Review Focus 3): under Mario Finale's (20, 75) and the
+    Ancient Arrow's (30, 100) slowdown a tap on a still step was lost (10 of 19 and 20 of 29 still
+    steps), because the buffer aged by match frames; it now ages only on the fighter's own running
+    steps. Cost if wrong: golden churn in the Final Smash traces (none moved).
+  - I-2: one comments-only commit restored Task 6's golden history paragraph and corrected five
+    others (Tasks 11, 14, 15, 19, 26). Cost: none.
+  - Seam I-1: the gamepad options listened to the wrong pad after a press-to-join (a third copy of
+    the pad-to-seat rule); one helper, `padIndexForSeat`, now owns it. Cost: none.
+  - Seam M-1, M-2 and M-3 are recorded, not changed (below). Cost: none now.
+  - 38 deferred Minors marked must-fix (22 comment, prose and SPEC lines; 13 tests; the portraits'
+    muted look), plus three owed fixes (throws draw no trail, Task 39's test, Task 40b's two), all
+    fixed in 19 commits (`e59efff`..`83c3851`), re-reviewed with no new Critical or Important. The
+    golden now samples every match's last frame, so the slip lab's frames 101-120 are pinned (pin
+    `c5ea40aa` → `ccc446b7`).
+
+**The CPU figures** (six seeds, 2,016 matches, `CPU_SWEEP=1`). The re-run baseline (Task 23's CPU,
+the fixed harness): landed Final Smashes 1,307, mean hold 143.15 frames, edgeguard exits 5,771,
+self-destructs 20 (Final Smash and Inhale self-destructs 0). Per fighter, fired / landed / mean
+hold: Mario 458 / 258 / 98; Donkey Kong 231 / 133 / 107; Link 410 / 166 / 112; Samus 190 / 157 /
+84; Kirby 355 / 223 / 167; Fox 292 / 208 / 134; Pikachu 2 / 2 / 355; Marth 259 / 160 / 116.
+Bounds: landed summed ≥ 1,177, each fighter ≥ 75% of its own (Pikachu ≥ 2), mean hold ≤ 178.94,
+edgeguard exits ≥ 5,194, self-destructs ≤ 22.
+
+| After | Landed | Mean hold | Edgeguard exits | Self-destructs | Pikachu landed |
+|---|---|---|---|---|---|
+| Baseline (`c1d0c25` + `856f68d`'s harness) | 1,307 | 143.15 | 5,771 | 20 | 2 |
+| Task 24, first commit (re-judged at `856f68d`) | 1,313 | 142.72 | 5,770 | 20 | 8 |
+| Task 24, fix round 1 (`6246d9f`) | 1,311 | 142.56 | 5,769 | 20 | 6 |
+| Task 24, fix round 2 (`b0a1fa2`) | 1,312 | 142.29 | 5,767 | 20 | 7 |
+| Task 25 (`2295195`) | 1,307 | 142.35 | 5,783 | 20 | — |
+| Task 26 (`f1aca90`) | 1,397 | 142.15 | 5,541 | 6 | 10 |
+| Task 27 (`77d091b`), the final sweep | 1,370 | 137.70 | 6,011 | 7 | 3 |
+
+At the end, per fighter, landed against the baseline: Mario 281 (+8.9%), Donkey Kong 146 (+9.8%),
+Link 146 (−12.0%, the largest fall), Samus 196 (+24.8%), Kirby 246 (+10.3%), Fox 198 (−4.8%),
+Pikachu 3, Marth 154 (−3.8%). Every bound held at every CPU task. Kong Karry 34 → 43; the
+longest hold 2,255 → 1,588 frames. The ball-on golden seed stepped once, 606 → 607, at Task 26
+(R-P6-18; its sweep passed).
+
+*Pikachu's Volt Tackle stays rare against CPU targets* (carried). Fired and landed: 2 and 2 at the
+baseline (402 holds, 142,611 frames); 7 and 7 after Task 24 (fires by rule: the limit 4, point
+blank 3, proven hold 0); landed 10 after Task 26; 3 and 3 at the end. The firm limit fires at a
+level, catchable target on the ground at point blank; CPU targets move, stand on platforms or are
+in the air, and Pikachu is usually hit off the power before 1,200 frames (a hit that deals hitstun
+drops it). At Task 27 his mean hold fell 338 → 299, so holds reaching the limit fell 19 → 9 (of
+those, 1 fired, 3 ran out the clock and 5 lost the power to a hit): match divergence, not the
+rule undone. The proven-hold rule needs a target held more than 51 frames and never fired.
+Against an idle player, the case D10 exists for, it fires on all six stages and seeds 1-6 within
+240 frames of the limit (the baked test), with no stock lost. A count of 3-10 in 2,016 matches
+cannot resolve a rule change (the scratch sweeps of Tasks 24-26 gave 8, 6, 7, 7, 7 and 10).
+
+*The watch item* (no ruling bounds it): at Task 27 dash attacks thrown rose 8,560 → 10,932
+(+27.7%; the replay had 8,532 → 10,983), the CPU swinging from the edge of the target's body, and
+whiff runs of 8 or more 3 → 9 (Kirby 3 → 5, Samus 0 → 4; nobody else has any). The review traced
+the extra runs to a pre-existing loop at a target in `shieldRelease`, now reachable from the
+spaced band, and an engine oddity: a dash attack at a target shielding mid-swing registers neither
+a hit nor a shield hit. The spaced dash attacks land more often than the in-reach ones.
+
+**The golden through the plan.** `26d4ec66` (Plan 5's end) → `4d52c87e` (Task 6: two CPU
+traces, cross-ups now turning) → `f4ebed88` (Task 7: the slip lab added) → `e0386de3` (Task 10:
+the beams and dash labs) → `1e8e9431` (Task 11: the Final Smash, beams and dash labs and the
+ball-on match) → `7eca5241` (Task 11's fix: the buffered smash, four traces) → `fb56d97f` (Task
+13: seven traces, each from its first KO freeze) → `d9a8e41d` (Task 14: the beams lab) →
+`8be196a1` (Task 15: the projectile lab and link-samus-smashville) → `336ebb55` (Task 15's fix,
+the late angle 65) → `4bc8eacc` (Task 18: eight traces; Donkey Kong-Pikachu loses a KO and gains a
+shield hit) → `36100efc` (Task 19: the two Kirby matches) → `2c95db38` (Task 17's fix round 2:
+the beams lab and ball-on freezes) → `b43b87e9` (Task 22: the tech and slip labs' positions) →
+`4d5f64da` (Task 26: four CPU traces, the ball-on seed 607) → `c5ea40aa` (Task 27: five CPU
+traces) → `ccc446b7` (the final wave: every match's last frame sampled; the beams and slip labs'
+digests appended, the rest byte-identical). Sixteen moves, each with its paragraph above
+`MUST_VISIT`; sixteen traces; `MUST_VISIT` 60 actions; `RULES_PIN = { version: 6, golden:
+"ccc446b7" }`.
+
+**The SPEC changes** (each in its own task's commit, D2 dropped; reported to David):
+- §6, "Tilt vs. smash" (Task 6, `dc58a78`): "Attack within 5 frames of a *fresh* direction press
+  is a smash in that direction: pressed behind a grounded fighter, it turns round first. Otherwise
+  a tilt. With Tilt held, never a smash."
+- §6, a new row "Grab in the air" (Task 8, `4d7c038`): "An air dodge, as Shield; Samus's grab
+  aerial (her Grapple Beam) instead."
+- §9, the `/play` row (Task 29, `2a5410f`; reworded by the final wave, `aa4aadf`, because Task
+  29's "goes to the menu" was broader than the code): "The match itself. With no match to play it
+  leaves at once. Nothing set up (a cold load, or browser Back from the results, or from the menu
+  after a quit) goes to the menu. A seat still held for an online match whose start was withdrawn
+  goes back to the online lobby (`/online`) when no room is left, and otherwise to the room's own
+  select: the host's stage select (`/stage`), the guest's fighter select (`/fighters`)."
+- §10, portraits (Task 38, `7b424a9`): "With them, the HUD's portraits are drawn from the loaded
+  model when the match starts and are never saved; without them, and for the stock icons, the 2D
+  rigs draw them. See DECISIONS D57 and D59."
+
+**Measured on the way.**
+- *The clip-gain reaches* (Task 19, a look in the scratchpad, no change): Donkey Kong's nair,
+  Kirby's nair, Link's and Marth's utilts, Donkey Kong's fair (frames 17-19) and Samus's utilt are
+  on the limb. Not on it: Samus's dtilt (a large box at floor level in front while the clip kicks
+  the leg back) and Link's jab 1 (four hip-height boxes under the blade on its first frames);
+  Kirby's dtilt and ftilt outer boxes sit about a foot-length past the drawn toe; Donkey Kong's
+  fair outer box stays forward of the fist on 20-22. The crouch's and shield's lifted feet are
+  their clips' own poses (a clip-authoring item).
+- *The sampler* (Task 40, Step 5): a 30 s, four-fighter match on a dev server, headless, with
+  stand-ins, input not driven, at a load of 4.3-4.8:
+  `{"fighters":4,"seconds":30,"frames":1797,"minorGCs":52,"minorOver2ms":0,"longestMinorMs":0.4,
+  "majorGCs":7,"percentOfFrames":0}` (the replay's: 1,799 frames, 46 minor GCs, longest 0.496
+  ms). Under 1% of frames, so the reusable sample buffers (Step 6) were not built.
+- *The sweep harness against the engine* (seam M-1, M-2): the harness does not count a windbox
+  push as a hit taken (the game's kill credit does), so a KO after a push off an edge is booked as
+  a self-destruct (measured 0 difference over 864 matches, so the baseline stands); and its hold
+  length counts KO-freeze steps the engine's `standbyFrames` does not, so its longest hold runs
+  long by any freeze inside a hold. Bounds were judged harness to harness.
+- *The CPU's rolls*: `CARGO_CHANCE` 0.5 (and `PUMMEL_CHANCE` before it) compares a float with
+  `ctx.rolls`, floats in [0, 1) from the seeded stream; IEEE-exact and so deterministic. The
+  convention is recorded rather than changed to Q12.
+- *The gate at the end* (Task 41, `83c3851`, a load of 5.3): typecheck and lint 0; `pnpm test`
+  241 files, 8,687 passed, 5 skipped (8,356 at Plan 5's end); the build; `PORT=3107 pnpm test:e2e`
+  45 passed, 7 skipped; `pnpm test:e2e:online` 6 passed, with one start-up `reloadStart`; the
+  model-less fresh clone of the local checkout 8,669 passed, 16 skipped; `CAPTURE=1` 7 passed
+  (`match.png` and `match-2.png`, stand-ins, `c8f5bcd`); the pre-push scan clean over 546 blobs.
+
+**Process incidents.**
+- The task-brief extractor's fence-tracking `awk` glued Task 11's text onto Task 10's brief (1,139
+  lines, from an unbalanced fence in Task 10). Task 10's commit was checked to be Task 10's alone
+  (8 files, no `SLOW_OPPONENT`), and briefs 10-42 were regenerated from heading line ranges; 1-9
+  were checked (3 and 5 carried only their next group's intro lines).
+- The planning replays had no local models, so every model-measured figure in the plan (Task 19's
+  sinks above, Task 37's outliers, the scene gaps) was re-measured on the real tree (R-P6-23);
+  Task 19's were wrong for Pikachu and Fox.
+- Task 23's first baseline was void (the harness, above); the re-run is the baseline.
+- A session restart interrupted Task 4 with edits uncommitted; its implementer was resumed.
+- Codex had no credits through the run; the seam pass was a second fresh opus reviewer, blind to
+  the first (R-P6-4).
+
+**Carried, not in Plan 6.** The plan's list, as run, and everything the run routed here, each
+with its reason.
+- *The captor's `throw` joint* (carry (a)): no source publishes its path, six of eight skeletons
+  have no `Throw` bone, and a fix needs re-extracted skeletons and a clip drive per grab, hold and
+  throw. A held fighter stays beside its captor, a carried one on Donkey Kong's baked top, and
+  Samus's grab and dash grab on Plan 2's table. Her tether recovery (D3) waits on it.
+- *The shield on a bone* (b): no source names the bone, and moving the centre moves every
+  shield-poke outcome, the golden and the CPU's shield judgement after the CPU was measured.
+- *Clips for `tech`, `techRoll`, `tumbleFall` and `ledgeTrumped`* (c, in part): each reads as
+  itself. The ceiling tech plays the wall tech's 5-frame hold.
+- *The Inhale and trapped poses* (d): the mouthful is a mesh shape no bone clip draws, and the
+  carried and trapped hang at the `throw` joint, carry (a).
+- *The 363°, 366° and 368° autolink angles* (f), refused at load: the pages give no rule.
+- *Marth's grounded up special boxes* (g): neither height can be set from a source.
+- *Stances*: Mario (a 0.32 lift is a third of his 1.11 sink and draws Donkey Kong and Fox inside
+  him in their Final Smash scenes), Donkey Kong (his sink is his knuckles), and Pikachu (mesh
+  −1.25, legs −1.23) and Fox (mesh −0.34, legs −0.12), whose lift turned 12 close-range hits into
+  whiffs: their fix is their idle clips' feet. Marth's cape and sheath sit 0.21 under at idle.
+- *Fighters' clips*: Samus's held Charge Shot shows about half its lunge (clip time 0.056; a key
+  change would hold it fully); Samus's dtilt and Link's jab 1 boxes not on the limb (above).
+- *The late, narrow Final Smashes' misses* (the draft's Task 17, dropped, R-P6-25). Two judged
+  firing rules were swept on the planning replay, seeds 1-3, against its baseline (landed; then
+  mean hold in frames):
+
+  | Rule | Jungle Rush | Team Star Fox | Ultra Sword | Ancient Arrow |
+  |---|---|---|---|---|
+  | Fired only at a target proven held until the contact | 55 → 10; 112 → 165 | 72 → 3; 146 → 315 | 78 → 33; 166 → 267 | 64 → 27; 121 → 225 |
+  | Not fired at a target its own state shows free before the contact (a veto) | 55 → 41; 112 → 132 | 72 → 50; 146 → 192 | 78 → 65; 166 → 199 | 64 → 40; 121 → 165 |
+
+  The first form fails R-P6-19 outright (Donkey Kong −82%, Fox −96%, Kirby and Link −58%; holds
+  up 47% to 116%). All four keep Plan 5's rule, as Critical Hit does (R-P6-15). **The later
+  candidate** (R-P6-27): the veto form falls past the per-fighter bound for Fox (−31%) and Link
+  (−38%) and to its edge for Donkey Kong (−25.5%) on a half sweep, within that sweep's noise, so
+  it is not shown to fail; it stays carried, without another round, to be judged on a six-seed
+  sweep in a later plan.
+- *The unjudged swing at `attack`'s end* (Task 25): judging it changes every match. On the
+  planning replay's six-seed sweep it cut Donkey Kong's landed Final Smashes 118 → 95 (−19%) and
+  Fox's 161 → 144 (−11%), which failed R-P6-19's first per-fighter bound; under R-P6-19 as amended
+  it would now pass (landed summed 1,032 → 968, −6.2%; edgeguard exits −0.7%), so it can come
+  back. It stays carried to avoid churn; `cpuIdleHuman.test.ts` bounds a stalled stretch.
+- *A smarter CPU Volt Tackle against moving targets*: a Pikachu that climbs to a target's floor
+  or steers the tackle is a new behaviour with its own sweep risk (Task 24).
+- *The CPU's shield-poke Grab* has no grounded check (`ai/offence.ts`), so since Task 8 an
+  airborne CPU's Grab at a shield air-dodges or zairs; a CPU change after the baseline, it needs a
+  re-sweep, so it waits for the next CPU task.
+- *A slipping opponent as a punish window*: `CANNOT_ACT_SOON` does not list `edgeSlip` (the same
+  reason).
+- *Smaller CPU items*: `framesToMeet` reads the clean radius for every projectile phase (the late
+  Boomerang); `hittable` reads the target's true current action (a roll seen before the CPU's
+  reaction delay; it only holds fire), and the walk to point blank can cross the target and back;
+  the dash-attack loop at a target in `shieldRelease` (the watch item); `spacedSwing` skips
+  `pokingShield` beyond reach and its own gates are untested; the sweep harness's "gone" clause
+  credits a Final Smash whose projectile vanished unhit on the user's own hit step (2 of 1,307);
+  seam M-1 and M-2 (above).
+- *Mario's Cape on a jump's first frame* keeps the jump's rise (a probe on Final Destination
+  peaks at y 61.6, against 45.0 five frames later; a Smashville self-destruct through the top blast
+  line): it needs a source for the Cape's kinetics, so it is an engine item for a later plan.
+- *Port order*: a jab and a Final Smash trap on the same fighter in one step: trapped in one port
+  order, freed by the jab in the other (pre-existing, outside Task 17's ranking; a port-free rule,
+  the trap winning both ways, would need a ruling); hit events' angles keep port order
+  (presentation only). The last known port-order outcomes.
+- *Online and input*: the tilt-in-a-stall edges (a tilt and a hard direction in one stall, and the
+  mirror: a carried hard press joining a soft outgoing frame takes its Soft, following
+  `mergeKeyboardAndPad`'s "keyboard Soft wins"); a carried Attack under a held hard direction goes
+  out alone (a rare jab); an A pressed on the exact poll of a fire a later flick replaces is lost
+  with that fire's own Attack (B likewise in special mode). Shield and Attack on one frame from a
+  standstill raise the shield (SmashWiki "Grab" makes it a grab; R-P6-14 rules only on a shield
+  already up). A browser without WebRTC sees the no-direct-link sentence, which does not fit it;
+  it needs its own sentence, beside `canDrawWorld`.
+- *Pads*: `/play` builds its own pad mapping rather than calling `padIndexForSeat` (it agreed on
+  all 9,069 random seat checks, and a test copies the page's configuration); a replugged pad on a
+  different index can leave a stale seat; the "Pad" badge hides the keyboard scheme still driving
+  that seat; the keyboard-plus-one-pad trade-off (Task 30).
+- *Engine items*: the projectiles' hitlag 0.3 (rubendal) is omitted from the Bomb's blast and the
+  Thunder Jolt's boxes, and the smash-thrown Boomerang's `endFrame` differs from the dump; the
+  Bomb's "Detection hitbox 33-82" (a mechanism that sets it off early, not a phase); `SLOW_OPPONENT`
+  steps whole, and the start scripts' own whole-match `SlowModule` calls (Donkey Kong's frame 15,
+  Fox's `FinalLockOn`) are not modelled; the scene shift's side snaps 16 units when a user dashes
+  past the fighter it traps (Volt Tackle on a slowed Mario: deciding the side by sim positions
+  breaks Marth's case); two release-step minors on Smashville's platform (a frozen passenger's
+  release step judged before the carry, and `outward`/`overEdge` read before it), each within one
+  step's sweep of the trailing end; the boost is not idempotent under `airTotalFrames` (latent).
+- *Presentation*: Samus's grab aerial draws no Grapple Beam (no painter; the `grab` painter times
+  by catch boxes); Kirby holding a stored copied charge shows no tell; the glove over Kirby's front
+  edge on the launch freeze's last frame (a mesh fit); the camera tilt (D12); the low camera's lit
+  lip (D11); Fox's uair, Samus's dtilt, Link's top-bone sword moves and every throw draw no trail;
+  a second look at Pikachu's fsmash orb, Samus's uthrow and Pikachu's fthrow; `paintedBox` counts
+  partial arcs as rings and about 15 painters with no live box are unmeasured; the renderer's
+  "launch refused" check is only the solid-body test (right for F.L.U.D.D., its one caller; seam
+  M-3); the portraits need `EXT_color_buffer_float` (or its half-float form) to read back, and
+  without it the 2D head shows, after one three.js read error per fighter, once; a first-frame
+  render hitch and one frame of the 2D heads at match start; the 2D overlay keeps the old clips
+  for Donkey Kong's carry and the full releases, and the 2D flip runs on a 30-frame clock.
+- *Tooling and tests*: the e2e server's signal handlers are registered after `ready`, and without
+  Playwright's `url` its "port already used" message is gone (wrangler's bind error still fails
+  the run); the jsdom `getContext` line; a test title or two that says more than it asserts; the
+  smaller coverage gaps each review listed (`progress.md`; the final review's "RECORD" list).
+- *D58's "not modelled" list stays out*: the charging, Cape, F.L.U.D.D., hitlag, Inhale, edge,
+  script and projectile, recovery, footstool and bake items D58 names (D58's "Marked, not
+  modelled" and its per-move lists).
+
+**For David.**
+- *Deploy Plan 6* (rules version 6)? Pushed, not deployed. Online peers on version 5 and 6 refuse
+  each other, so both players reload after a deploy.
+- *Set the TURN secrets*: `TURN_KEY_ID` and `TURN_KEY_API_TOKEN` (`wrangler secret put`). Without
+  them players on separate networks cannot connect; Task 40b only makes that fail quickly and say
+  why.
+- *A real-gamepad check*: remap Attack and Special and play a match; flick the right stick each
+  way standing, in the air, shielding (rolls, a spot dodge, an up smash) and holding someone
+  (throws, D1); press A on the select screen with a second pad (Task 30), and with a keyboard
+  player and one pad (the trade-off).
+- *Optional, a local look at the real models*: Kirby's stance, Donkey Kong's carry, lift and full
+  releases, the dash-off flip, the slip and wall-tech clips, the 3D stage, the trails, the effect
+  fixes and outliers, and the portraits.

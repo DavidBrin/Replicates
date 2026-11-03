@@ -48,7 +48,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
-| [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against `wrangler dev` or the deployed Worker |
+| [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against a local Worker that never reloads (`scripts/e2e/wrangler-e2e.mjs`) or the deployed Worker |
 | [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame, with the sim's hit- and hurtboxes |
 | [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — projectile, hit spark, the opponent flinching — by cranking a paused match by hand |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
@@ -86,7 +86,7 @@ one and Join room in the other.
 | `pnpm run test:watch` | The same, watching |
 | `pnpm run test:e2e` | Playwright end-to-end |
 | `pnpm run test:e2e:ui` | The same, with the inspector |
-| `pnpm run test:e2e:online` | Two browsers play an online match against `wrangler dev` |
+| `pnpm run test:e2e:online` | Two browsers play an online match against a local Worker started with wrangler's dev API, watching off |
 | `pnpm run typecheck` | `tsc --noEmit` for the app and for the Worker |
 | `pnpm run lint` | ESLint |
 | `pnpm run deploy` | `models:check`, build and `wrangler deploy` (David's Cloudflare login) |
@@ -210,6 +210,12 @@ smash one (Samus's Super Missile, Link's smash-thrown Boomerang), so the ordinar
 the direction held a moment first (past the move's window: 5 frames for Samus, 8 for Link), or
 the Tilt key held.
 
+**A smash pressed behind you turns you round first**, as in Ultimate: back and Attack together
+from a standstill, or a back flick of the right stick, is a forward smash the other way (a dash's
+attack is still the dash attack, and the Tilt key's back press still a forward tilt). **Grab in
+the air** air-dodges, as Shield does; Samus's is her grab aerial, the Grapple Beam
+([D59](DECISIONS.md#d59--polish-input-never-dropped-the-rules-the-backlog-found-missing-a-cpu-that-fires-volt-tackle-well-and-stays-on-its-stage-and-the-3d-games-rough-edges)).
+
 **Every key is rebindable, per player.** `/controls` assigns a preset to each port and
 rebinds any action in it; the match reads the bindings the player actually chose
 ([D33](DECISIONS.md#d33--a-rebinding-ui-the-match-never-read)).
@@ -224,9 +230,13 @@ tapping ([D58](DECISIONS.md#d58--every-documented-special-the-final-smashes-a-cp
 **A gamepad works too**, in local and online matches (W3C standard mapping: A attack, B special,
 X/Y jump, LB/LT/RT shield, RB grab). In a local match pad 1 is the first human and pad 2 the
 second; online, every connected pad drives your own fighter. Ports follow the browser's pad slot
-order; a pad reconnected into a freed lower slot can take an earlier port. The analog
-stick restores what keys cannot: a partial tilt walks, makes a tilt instead of a smash, and DIs a
-quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
+order; a pad reconnected into a freed lower slot can take an earlier port. A pad can also press to
+join: on the character select, A or Start on a pad that drives no seat yet takes the first CPU (or
+empty) seat, never a keyboard player's; a pad that already plays, the lone pad on P1 included,
+changes nothing, and joining is off online
+([D59](DECISIONS.md#d59--polish-input-never-dropped-the-rules-the-backlog-found-missing-a-cpu-that-fires-volt-tackle-well-and-stays-on-its-stage-and-the-3d-games-rough-edges)).
+The analog stick restores what keys cannot: a partial tilt walks, makes a tilt instead of a smash,
+and DIs a quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 
 **Stick Jump can be turned off, per player** (`/controls`), as in Ultimate: then up only aims,
 and only the jump key jumps. It travels with the match, and online to the other peer.
@@ -312,11 +322,12 @@ the measured round trip) and an 8-frame prediction cap. Your own input is never 
 network; the opponent's is predicted and corrected. Smash Ultimate itself is delay-based, so
 this is the one axis on which the replica is deliberately better than the original.
 
-**Finding each other.** Online → Create room gives a four-letter code (no I or O); the other
-player types it into Join room. The two browsers meet in a Durable Object on this project's own
-Cloudflare Worker, which relays one WebRTC offer, one answer and their ICE candidates — and then
-nothing: inputs go peer to peer over one unordered, unreliable DataChannel. The host picks the
-stage and starts; ping, input delay and rollbacks show in the corner. Where no direct path
+**Finding each other.** Online → Create room gives a four-letter code (no I or O), with a Copy
+button beside it and a line saying how the other player joins (open the site, choose Online, type
+the code); the other player types it into Join room. The two browsers meet in a Durable Object
+on this project's own Cloudflare Worker, which relays one WebRTC offer, one answer and their ICE
+candidates — and then nothing: inputs go peer to peer over one unordered, unreliable
+DataChannel. The host picks the stage and starts; ping, input delay and rollbacks show in the corner. Where no direct path
 exists, Cloudflare TURN relays the same packets; without a TURN key the Worker hands out STUN
 only. The Trystero (Nostr) adapter is still in `src/net/adapters/webrtc.ts`, selectable in code.
 
