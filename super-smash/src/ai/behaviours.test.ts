@@ -42,6 +42,7 @@ import {
   POINT_BLANK,
   approach,
   attack,
+  firstWindowEnd,
   edgeguard,
   platformMove,
   pressToward,
@@ -1562,5 +1563,33 @@ describe("a threat first seen in its attacker's freeze (Plan 5 final wave, rulin
     const decides = (s: GameState) => shield(context(s, L9)).input === Btn.Shield && shield(context(s, L9, rollsWith(ROLL_SHIELD, 0.99))).input === 0;
     const freeze = [3, 2, 1, 0].map((h) => decides(frozen(L9.reactionFrames, h)));
     expect([...freeze, decides(frozen(L9.reactionFrames + 1, 0))]).toEqual([false, false, false, true, false]);
+  });
+});
+
+describe("the CPU's dash attacks at a moving target (Plan 6, Task 25; ruling R-P6-16)", () => {
+  const FOX = getFighter("fox")!;
+  const FDV = stageViewFromDef(STAGES.find((x) => x.id === "finalDestination")!);
+
+  /** `id` (port 0, facing right) and a Fox (port 1) on Final Destination, with `id`'s own definition and reach, as a real CPU world has them. */
+  function judged(self: Partial<FighterState>, target: Partial<FighterState>, frame = 0, id = "mario"): BehaviourContext {
+    const me = getFighter(id)!;
+    const state = gameState([fighter(0, { defId: id, facing: 1, ...self }), fighter(1, { defId: "fox", facing: -1, ...target })], { stageId: "finalDestination", frame });
+    return { ...context(state, L9), stage: FDV, fighterDef: me, matchDefs: [me, FOX], meleeReach: meleeReachFromDef(me) };
+  }
+  /** The presses `attack` makes over one swing beat (frames 0-9), the scene otherwise unchanged. */
+  const beat = (self: Partial<FighterState>, target: Partial<FighterState>) => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((frame) => attack(judged(self, target, frame)).input);
+
+  it("does not dash-attack a moving target that only the dash attack's late hit would reach (ruling R-P6-16)", () => {
+    // Mario running at 2, Fox 6.5 ahead walking away at 0.6: carried on its velocity, Fox is met
+    // only by the late hit, on frame 25, past Mario's first window (frames 6-9).
+    const presses = beat({ x: 0, action: "run", vx: fx(2), framesSinceDirPress: 99 }, { x: fx(6.5), vx: fx(0.6), action: "run" });
+    expect(presses.some((i) => held(i, Btn.Attack))).toBe(false);
+    expect(firstWindowEnd(getFighter("mario")!.moves.dashAttack!)).toBe(9);
+  });
+
+  it("still dash-attacks a moving target its first hit meets, and a standing one", () => {
+    const run = { x: 0, action: "run" as const, vx: fx(1.6), framesSinceDirPress: 99 };
+    expect(beat(run, { x: fx(8), vx: fx(1.6), action: "run" }).some((i) => held(i, Btn.Attack)), "running away at 1.6").toBe(true);
+    expect(beat(run, { x: fx(8) }).some((i) => held(i, Btn.Attack)), "standing").toBe(true);
   });
 });

@@ -1202,6 +1202,14 @@ export const CARGO_EDGE = fx(25);
 export const PUMMEL_CHANCE = 0.5;
 
 /**
+ * UNVERIFIED (tuning): of the grabs that throw rather than pummel, the share a fighter whose
+ * forward throw is a carry (`MoveDef.cargo`: Donkey Kong's Kong Karry) lifts, whichever way it
+ * faces, and carries to the nearer edge (Plan 6, Task 25: in Plan 5's sweep he lifted only when
+ * he had grabbed facing that edge, and never did).
+ */
+export const CARGO_CHANCE = 0.5;
+
+/**
  * With a fighter on its shoulders, in its mouth or in its hands, do something
  * with them before they struggle free:
  *
@@ -1218,7 +1226,8 @@ export const PUMMEL_CHANCE = 0.5;
  *    their neutral special (a Kirby with a Copy Ability has no Inhale until he
  *    loses it: `cpuDef`);
  *  - **a grab**: one decision each time the hold comes back (its first frame):
- *    pummel (`PUMMEL_CHANCE`), or throw toward the nearer edge, forward or back.
+ *    pummel (`PUMMEL_CHANCE`), or throw toward the nearer edge, forward or back;
+ *    a carry's forward throw (`CARGO_CHANCE`) is lifted whichever way it faces.
  *    Decided, so the level's fumble cannot turn a throw into another pummel.
  *    Through the catch, each pummel and the throw it presses nothing, so no other
  *    behaviour's press waits in the buffer to decide for it (a buffered attack is
@@ -1259,6 +1268,9 @@ export const holding: Behaviour = (ctx) => {
   }
   if (self.action === "grabHold") {
     if (ctx.rolls[ROLL_SPECIAL] < PUMMEL_CHANCE && ctx.fighterDef?.moves.pummel !== undefined) return { score: 530, input: Btn.Attack, decided: true };
+    // A carry is lifted forward, whichever way he faces; the carry walks to the edge (Plan 6, Task 25).
+    const lifts = ctx.fighterDef?.moves.fthrow?.cargo === true && ctx.rolls[ROLL_SPECIAL] < PUMMEL_CHANCE + (1 - PUMMEL_CHANCE) * CARGO_CHANCE;
+    if (lifts) return { score: 530, input: self.facing > 0 ? Btn.Right : Btn.Left, decided: true };
     return { score: 530, input: out, decided: true };
   }
   return NOTHING;

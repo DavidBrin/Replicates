@@ -8,7 +8,7 @@
  * (every roll from `ctx.rolls`), and the opponent seen only through `ctx.view`.
  */
 
-import { Btn, type ActionState, type FighterState, type InputFrame } from "@/engine/types";
+import { Btn, type ActionState, type FighterState, type InputFrame, type MoveDef } from "@/engine/types";
 import { cloneFighter } from "@/engine/simulate";
 import { emptyKinetic } from "@/engine/kinetic";
 
@@ -194,7 +194,8 @@ export const attack: Behaviour = (ctx) => {
   const waits = self.action === "attack" || self.action === "landingLag" || self.action === "land" || self.action === "ledgeGetUp";
   if (swinging && (self.grounded || self.action === "ledgeGetUp") && (free(self) || waits)) {
     const swing = (stale ? toward | Btn.Soft : 0) | Btn.Attack;
-    if (waits ? waitedLands(ctx, swing) : swingLands(ctx, swing)) return { score: 400, input: swing };
+    const dashing = self.action === "dashStart" || self.action === "run";
+    if (waits ? waitedLands(ctx, swing) : dashing ? dashLands(ctx, swing) : swingLands(ctx, swing)) return { score: 400, input: swing };
     if (waits) return { score: 400, input: 0 };
     if (self.action === "dashStart" || self.action === "run") return { score: 400, input: 0 };
     const pick = landingSwing(ctx);
@@ -541,7 +542,35 @@ const SWING_LOOKAHEAD_FRAMES = 40;
  * past the frame seen (its pose as it is now).
  */
 function swingLands(ctx: BehaviourContext, input: InputFrame): boolean {
-  return swingRuns(ctx, (k) => (k === 1 ? input : input & ~Btn.Attack), 0);
+  return swingRuns(ctx, (k) => (k === 1 ? input : input & ~Btn.Attack), 0) > 0;
+}
+
+/**
+ * The last move frame of `move`'s first active window (Plan 6, Task 25, ruling R-P6-16): the end
+ * of its earliest striking boxes, from its own data (rubendal 13.0.1 through the import). 0 for a
+ * move with none.
+ */
+export function firstWindowEnd(move: MoveDef): number {
+  const live = move.hitboxes.filter((h) => strikes(h));
+  if (live.length === 0) return 0;
+  const first = Math.min(...live.map((h) => h.startFrame));
+  return Math.max(...live.filter((h) => h.startFrame === first).map((h) => h.endFrame));
+}
+
+/**
+ * `swingLands` for a dash attack (Plan 6, Task 25, ruling R-P6-16): at a moving target, only a
+ * contact inside the fighter's own dash attack's first active window (`firstWindowEnd`). There
+ * the slide still carries its first hit; a later contact is the late hit at a target the
+ * judgement carried on its velocity, and one that turns or stops is not there (Plan 5's sweep:
+ * 3/0/1 runs of 8+ whiffed dash attacks at a moving target). A target standing still is judged
+ * as every swing is.
+ */
+function dashLands(ctx: BehaviourContext, input: InputFrame): boolean {
+  const k = swingRuns(ctx, (j) => (j === 1 ? input : input & ~Btn.Attack), 0);
+  const target = ctx.view.target;
+  const dash = ctx.fighterDef?.moves.dashAttack;
+  const moving = target !== null && target.vx !== 0;
+  return k > 0 && (!moving || dash === undefined || k <= firstWindowEnd(dash));
 }
 
 /**
@@ -551,13 +580,14 @@ function swingLands(ctx: BehaviourContext, input: InputFrame): boolean {
  * comes out on the first airborne frame. The swing is the first move begun after now (a
  * move already in progress is not it). A copy in the air that comes down on a floor of the
  * stage (`landsOn`, where the real fighter lands) has landed, and its swing with it: the
- * copy itself has no floor.
+ * copy itself has no floor. It returns the step on which the swing first reaches the body (1
+ * without the data to judge it), or 0 for none (Plan 6, Task 25: `dashLands` reads the step).
  */
-function swingRuns(ctx: BehaviourContext, held: (k: number) => InputFrame, lead: number): boolean {
+function swingRuns(ctx: BehaviourContext, held: (k: number) => InputFrame, lead: number): number {
   const { self, target } = ctx.view;
   const def = ctx.fighterDef;
   const targetDef = target === null ? undefined : ctx.matchDefs[target.port];
-  if (def === null || target === null || targetDef === undefined) return true;
+  if (def === null || target === null || targetDef === undefined) return 1;
   const f = cloneFighter(self);
   const g = ghostContext(def, ctx.view.frame, f);
   let prev: InputFrame = 0;
@@ -568,12 +598,12 @@ function swingRuns(ctx: BehaviourContext, held: (k: number) => InputFrame, lead:
     g.frame = ctx.view.frame + k;
     ghostStep(f, now, prev, g);
     prev = now;
-    if (f.y < was.y && !f.grounded && landsOn(f.x, was.y, f.y, ctx.stage, ctx.state.stageFrame + k)) return false;
+    if (f.y < was.y && !f.grounded && landsOn(f.x, was.y, f.y, ctx.stage, ctx.state.stageFrame + k)) return 0;
     const fresh = f.action === "attack" && (was.action !== "attack" || f.move !== was.move || f.actionFrame < was.actionFrame);
     begun ||= fresh && (k > 1 || self.action !== "attack" || f.move !== self.move);
     const move = begun && f.action === "attack" && f.move !== null ? def.moves[f.move] : undefined;
     if (move === undefined) {
-      if (begun || k > lead) return false;
+      if (begun || k > lead) return 0;
       continue;
     }
     const moveFrame = f.actionFrame + 1;
@@ -591,10 +621,10 @@ function swingRuns(ctx: BehaviourContext, held: (k: number) => InputFrame, lead:
     for (const hb of live) {
       const box = boxCapsule(f, hb);
       const from = hitboxWorldPos(was.x, was.y, f.facing, hb);
-      if (deepestReach(from.x, from.y, box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, box.r, body).depth >= GLANCING_BLOW_DEPTH) return true;
+      if (deepestReach(from.x, from.y, box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, box.r, body).depth >= GLANCING_BLOW_DEPTH) return k;
     }
   }
-  return false;
+  return 0;
 }
 
 /** UNVERIFIED (CPU judgement): the swings in a row on a shield, one move, that make a loop to break. */

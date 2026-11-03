@@ -70,6 +70,7 @@ import {
   hittable,
   holdLeft,
   holding,
+  PUMMEL_CHANCE,
   mash,
   mashPeriod,
   projectileRange,
@@ -1782,5 +1783,22 @@ describe("the CPU's range for a projectile that runs along the ground (Plan 6, T
     const jolt = pikachu.moves.neutralB!.projectiles![0];
     expect(projectileRange(jolt)).toBe(fx(1.8) * 96);
     expect(projectileRange(jolt, false, false)).toBe(fx(1.0598) * 98);
+  });
+});
+
+describe("Kong Karry (Plan 6, Task 25)", () => {
+  it("Donkey Kong lifts whichever way he faces, on a roll in the cargo band", () => {
+    // Facing away from the nearer edge (he is right of centre facing left).
+    const s = makeState({
+      fighters: [
+        makeFighter({ port: 0, defId: "donkeyKong", x: fx(40), facing: -1, action: "grabHold", actionFrame: 0, grabbing: 1 }),
+        makeFighter({ port: 1, x: fx(30), action: "grabbed", grabbedBy: 0 }),
+      ],
+    });
+    const lift = holding(context(s, donkeyKong, 9, rollsWith(ROLL_SPECIAL, PUMMEL_CHANCE + 0.1)));
+    expect(lift.input).toBe(Btn.Left);
+    // The same roll for a fighter whose forward throw is no carry throws toward the edge.
+    const m = { ...s, fighters: [{ ...s.fighters[0], defId: "mario" }, s.fighters[1]] };
+    expect(holding(context(m, mario, 9, rollsWith(ROLL_SPECIAL, PUMMEL_CHANCE + 0.1))).input).toBe(Btn.Right);
   });
 });
