@@ -88,4 +88,31 @@ describe("Grab in the air (Plan 6, Task 8)", () => {
     const ctx = { def: FIGHTERS.find((d) => d.id === "mario")!, stage: STAGES.find((st) => st.id === "finalDestination")!, frame: s.frame, fighters: s.fighters };
     expect(airActionFirst(f, intent, ctx)).toBe(true);
   });
+
+  // `airActionFirst`'s Grab block, both branches (final wave, item 29). With the air dodge spent, a
+  // fighter without a grab aerial has nothing for Grab to start, so the press must not take the
+  // frame from a wall jump or a footstool; Samus's zair needs no dodge, so it does.
+  describe("airActionFirst's Grab with the air dodge spent", () => {
+    async function claimsTheFrame(who: string, airDodged: boolean): Promise<boolean> {
+      const { airActionFirst, interpretInput } = await import("@/engine/states");
+      const s = airborne(who);
+      const f = s.fighters[0];
+      f.airDodged = airDodged;
+      const intent = interpretInput(f, Btn.Grab, 0);
+      const ctx = { def: FIGHTERS.find((d) => d.id === who)!, stage: STAGES.find((st) => st.id === "finalDestination")!, frame: s.frame, fighters: s.fighters };
+      return airActionFirst(f, intent, ctx);
+    }
+
+    it("Mario, whose dodge is spent: false", async () => {
+      expect(await claimsTheFrame("mario", true)).toBe(false);
+    });
+
+    it("Mario, whose dodge is free: true (control)", async () => {
+      expect(await claimsTheFrame("mario", false)).toBe(true);
+    });
+
+    it("Samus, whose dodge is spent: true, her zair needs none", async () => {
+      expect(await claimsTheFrame("samus", true)).toBe(true);
+    });
+  });
 });

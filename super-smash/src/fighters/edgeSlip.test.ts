@@ -113,6 +113,19 @@ describe("edge slipping (Plan 6, Task 7)", () => {
     expect(states[26].fighters[0].action, "the first frame after").toBe("attack");
   });
 
+  // "Unable to perform any action" (SmashWiki "Edge slipping"; final wave, item 28): a press in
+  // the middle of the lockout starts nothing. Slip frame 10 is the run's state 9.
+  it.each([
+    ["Jump", Btn.Jump],
+    ["Attack", Btn.Attack],
+    ["Special", Btn.Special],
+    ["Grab", Btn.Grab],
+  ] as const)("a press of %s on slip frame 10 leaves it slipping through frame 25", (_name, press) => {
+    const states = run(slipping("mario"), 26, (i) => (i === 9 ? press : 0));
+    for (let i = 0; i <= 24; i++) expect(states[i].fighters[0].action, `slip frame ${i + 1}`).toBe("edgeSlip");
+    expect(states[25].fighters[0].action, "slip frame 26").toBe("fall");
+  });
+
   it("drifts with the stick only after its eighth frame", () => {
     const states = run(slipping("mario"), 12, () => Btn.Left);
     expect(states[7].fighters[0].kinetic.controlX, "slip frame 8").toBe(0);
