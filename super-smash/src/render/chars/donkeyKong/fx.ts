@@ -521,7 +521,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * under the soles and a short downward spike through it, both painted below
    * the figure where the feet already are.
    */
-  dair: ({ ctx, x, y, u, dir, frame }) => {
+  dair: ({ ctx, x, y, u, dir, frame, height }) => {
     const FIRST = 14;
     const LIFE = 12;
     const age = frame - FIRST;
@@ -549,11 +549,14 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       ctx.stroke();
     }
     // The spike itself: a wedge driven straight down, because angle 270 is the
-    // whole point of the move and nothing in the pose says it.
+    // whole point of the move and nothing in the pose says it. Its length is a part
+    // of the body it is drawn on (Plan 6, Task 37): it was 2.4 + 3.4 units, the 2D
+    // rig's, which on the 27-unit model stopped half way to the meteor box under his
+    // soles. At full length it reaches that box's foot, 13 units under them.
     ctx.beginPath();
     ctx.moveTo(x + u * (0.8 - 1.6) * dir, cy);
     ctx.lineTo(x + u * (0.8 + 1.6) * dir, cy);
-    ctx.lineTo(x + u * 0.8 * dir, cy + u * (2.4 + grow * 3.4));
+    ctx.lineTo(x + u * 0.8 * dir, cy + u * height * (0.2 + grow * 0.28));
     ctx.closePath();
     ctx.fillStyle = withAlpha("#EAF2FF", 0.55 * fade);
     ctx.fill();

@@ -465,17 +465,21 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * drawn on every one of those frames. Blasts are spaced along the same
    * downward arc the cannon is travelling.
    */
-  fair: ({ ctx, x, y, u, dir, frame }) => {
+  fair: ({ ctx, x, y, u, dir, frame, height }) => {
     const SHOTS = [6, 12, 18, 24, 30];
     ctx.save();
-    ctx.translate(x, y - u * 7.0);
+    // About her shoulder, at the reach of the muzzle, both as parts of the body it is
+    // drawn on (Plan 6, Task 37). They were 7.0 and 6.6 units, the 2D rig's: on the
+    // 21-unit model that put every blast at her hip, a body's length under the cannon's
+    // boxes. Three quarters and half her height put them on those boxes.
+    ctx.translate(x, y - u * height * 0.75);
     ctx.scale(dir, 1);
     SHOTS.forEach((f0, i) => {
       const k = decay(frame, f0 - 1, 8);
       if (k <= 0) return;
       // From 40° above the horizontal down to 40° below it.
       const a = -0.7 + (i / (SHOTS.length - 1)) * 1.4;
-      const rad = u * 6.6;
+      const rad = u * height * 0.5;
       const big = i === SHOTS.length - 1;
       blast(ctx, Math.cos(a) * rad, Math.sin(a) * rad, u * (big ? 2.8 : 1.9), k, HOT, FIRE);
     });
@@ -550,7 +554,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * the hits run from frame 8 to frame 22 and a spinning kick with no trail is
    * a fighter rotating for no reason.
    */
-  nair: ({ ctx, x, y, u, dir, frame }) => {
+  nair: ({ ctx, x, y, u, dir, frame, height }) => {
     if (frame < 6 || frame > 26) return NOTHING;
     // Full through the multihit, gone six frames after the last hit.
     const k = frame <= 21 ? 1 : Math.max(0.08, 1 - (frame - 21) / 6);
@@ -561,7 +565,10 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     // a grey tab hanging off her ankle. Same schedule, same direction: 0 is
     // straight forward and a quarter turn later both are underneath her.
     const lead = ((frame - 7) / 14) * Math.PI * 2;
-    kickArc(ctx, x, y - u * 4.2, dir, u * 5.4, u * 2.5, lead - 1.5, lead, k);
+    // About the hip the leg turns round, at the leg's reach, as parts of the body it is
+    // drawn on (Plan 6, Task 37). They were 4.2, 5.4 and 2.5 units, the 2D rig's: on the
+    // 21-unit model the arc turned round her knees, under the boxes her boots sweep.
+    kickArc(ctx, x, y - u * height * 0.58, dir, u * height * 0.33, u * height * 0.12, lead - 1.5, lead, k);
     return NOTHING;
   },
 

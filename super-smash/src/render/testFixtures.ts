@@ -282,3 +282,100 @@ export function runPainter(
   paint(makeFxContext({ ctx, def, f: makeFighter({ defId: def.id, ...f }), ...rest }));
   return ctx;
 }
+
+/** A box on the screen, px. */
+export interface PaintedBox {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+}
+
+/**
+ * The box round everything a mock canvas was asked to draw, px (Plan 6, Task 37): every
+ * path point, arc and rectangle, through the transform in force when it was given
+ * (`translate`, `scale`, `rotate`, `transform`, `setTransform`, under `save`/`restore`).
+ * An arc or an ellipse counts its four extremes, which a rotation can only make generous.
+ * Null when nothing was drawn.
+ */
+export function paintedBox(ctx: MockContext): PaintedBox | null {
+  type M = [number, number, number, number, number, number];
+  let m: M = [1, 0, 0, 1, 0, 0];
+  const stack: M[] = [];
+  let box: PaintedBox | null = null;
+  const add = (x: number, y: number) => {
+    const sx = m[0] * x + m[2] * y + m[4];
+    const sy = m[1] * x + m[3] * y + m[5];
+    box = box === null ? { minX: sx, maxX: sx, minY: sy, maxY: sy } : { minX: Math.min(box.minX, sx), maxX: Math.max(box.maxX, sx), minY: Math.min(box.minY, sy), maxY: Math.max(box.maxY, sy) };
+  };
+  const mul = (n: M) => {
+    m = [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+  };
+  for (const c of ctx.calls) {
+    const a = c.args.map(Number);
+    switch (c.method) {
+      case "save":
+        stack.push(m);
+        break;
+      case "restore":
+        m = stack.pop() ?? [1, 0, 0, 1, 0, 0];
+        break;
+      case "translate":
+        mul([1, 0, 0, 1, a[0], a[1]]);
+        break;
+      case "scale":
+        mul([a[0], 0, 0, a[1], 0, 0]);
+        break;
+      case "rotate":
+        mul([Math.cos(a[0]), Math.sin(a[0]), -Math.sin(a[0]), Math.cos(a[0]), 0, 0]);
+        break;
+      case "transform":
+        mul(a.slice(0, 6) as M);
+        break;
+      case "setTransform":
+        m = typeof c.args[0] === "object" ? [1, 0, 0, 1, 0, 0] : (a.slice(0, 6) as M);
+        break;
+      case "resetTransform":
+        m = [1, 0, 0, 1, 0, 0];
+        break;
+      case "moveTo":
+      case "lineTo":
+        add(a[0], a[1]);
+        break;
+      case "quadraticCurveTo":
+        add(a[0], a[1]);
+        add(a[2], a[3]);
+        break;
+      case "bezierCurveTo":
+        add(a[0], a[1]);
+        add(a[2], a[3]);
+        add(a[4], a[5]);
+        break;
+      case "arc":
+      case "arcTo": {
+        const [x, y, r] = c.method === "arc" ? [a[0], a[1], a[2]] : [a[0], a[1], a[4]];
+        add(x - r, y);
+        add(x + r, y);
+        add(x, y - r);
+        add(x, y + r);
+        break;
+      }
+      case "ellipse":
+        add(a[0] - a[2], a[1]);
+        add(a[0] + a[2], a[1]);
+        add(a[0], a[1] - a[3]);
+        add(a[0], a[1] + a[3]);
+        break;
+      case "rect":
+      case "fillRect":
+      case "strokeRect":
+      case "roundRect":
+        add(a[0], a[1]);
+        add(a[0] + a[2], a[1] + a[3]);
+        add(a[0] + a[2], a[1]);
+        add(a[0], a[1] + a[3]);
+        break;
+    }
+  }
+  return box;
+}
