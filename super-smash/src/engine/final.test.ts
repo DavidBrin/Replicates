@@ -1038,7 +1038,7 @@ describe("a start's ordinary hit (Task 15 fix round 1)", () => {
     expect(states.slice(at).some((st) => st.fighters[2].hitstun > 0)).toBe(true);
   });
 
-  it("reads not the swing's hit record either: a fighter the trap met while invincible takes the ordinary hit after", () => {
+  it("does not read the swing's hit record either: a fighter the trap met while invincible takes the ordinary hit after", () => {
     // The trap on 5 lands on an invincible victim and is spent (`applyInvincibleHit`,
     // which records the hit); the ordinary hit on 12, once that is over, still lands.
     const ctx = withStart([...FINAL.hitboxes, { ...STRIKE, startFrame: 12, endFrame: 12 }]);
