@@ -1212,6 +1212,48 @@ describe("a windbox keeps the swing's record; a catch reads none of it (Plan 6, 
   });
 });
 
+describe("two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFIED)", () => {
+  // Jabs that pass through each other's boxes (no clank), and a stronger one (BKB 44 for 40).
+  const WEAK: FighterDef = { ...DEF, moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true })] }) } };
+  const STRONG: FighterDef = { ...WEAK, id: "strong", moves: { ...WEAK.moves, jab1: move("jab1", { hitboxes: [hitbox({ transcendent: true, baseKnockback: fx(44) })] }) } };
+  const DUO: SimContext = { fighter: (id) => (id === "strong" ? STRONG : WEAK), stage: () => STAGE };
+
+  /**
+   * A victim on port 0 standing at 0, the attacker on port `left` 8 to its left and the one
+   * on port `right` 8 to its right (a `rightId`), both jabbing on the same step: which way
+   * the victim flies 40 steps on, and its hitstun on the step the jabs land.
+   */
+  function sandwich(left: number, right: number, rightId = "tester"): { side: number; hitstun: number } {
+    const ids = [0, 1, 2].map((port) => (port === right ? rightId : "tester"));
+    let s = createInitialState("flat", ids.map((defId) => ({ defId })), RULES, 12345, DUO);
+    const place = (port: number, x: number, facing: number) =>
+      Object.assign(s.fighters[port], { action: "stand", actionFrame: 0, grounded: true, platform: 0, x, y: 0, facing, intangible: 0, vx: 0, vy: 0 });
+    place(0, 0, 1);
+    place(left, -fx(8), 1);
+    place(right, fx(8), -1);
+    let prev: InputFrame[] = [0, 0, 0];
+    let hitstun = -1;
+    for (let i = 0; i < 40; i++) {
+      const now: InputFrame[] = i === 0 ? [0, Btn.Attack, Btn.Attack] : [0, 0, 0];
+      s = step(s, now, { prevInputs: prev, ctx: DUO }).state;
+      prev = now;
+      if (hitstun < 0 && s.fighters[0].damage > 0) hitstun = s.fighters[0].hitstun;
+    }
+    return { side: Math.sign(s.fighters[0].x), hitstun };
+  }
+
+  it("from both sides with equal launches, the attacker further left sets the direction, whichever ports", () => {
+    expect([sandwich(1, 2).side, sandwich(2, 1).side]).toEqual([1, 1]);
+  });
+
+  it("the stronger launch sets the direction and the hitstun, even when the weaker resolves after it", () => {
+    const strongLast = sandwich(1, 2, "strong");
+    const strongFirst = sandwich(2, 1, "strong");
+    expect([strongLast.side, strongFirst.side]).toEqual([-1, -1]);
+    expect(strongFirst.hitstun).toBe(strongLast.hitstun);
+  });
+});
+
 describe("registry", () => {
   it("resolves ids through the registered roster and stage list", () => {
     clearRegistry();

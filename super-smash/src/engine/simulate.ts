@@ -1169,8 +1169,11 @@ export function step(
   // whatever order the ports take them in.
   const trappedBefore = s.fighters.map((f) => (f.action === "finalTrapped" ? f.combat.trappedBy : -1));
   const facingBefore = s.fighters.map((f) => f.facing);
-  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents);
-  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents);
+  // The launch each fighter took this step, for the next to weigh against (Plan 6, Task
+  // 17: `launchOutranks`), across the hits and the throws.
+  const launches = new Map<number, LaunchRank>();
+  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed, finalOut, percents, launches);
+  resolveThrows(s, defs, frozen, beforeActionFrame, intents, events, finalOut, percents, launches);
   for (const user of s.fighters) {
     const held = s.fighters.filter((v) => v.action === "finalTrapped" && v.combat.trappedBy === user.port);
     if (held.some((v) => trappedBefore[v.port] !== user.port)) faceTrapped(user, held, facingBefore[user.port]);
@@ -1897,6 +1900,7 @@ function resolveHits(
   destroyed: Set<number>,
   finalOut: () => boolean,
   percents: readonly number[],
+  launches: Map<number, LaunchRank>,
 ): void {
   for (let v = 0; v < s.fighters.length; v++) {
     const victim = s.fighters[v];
@@ -2074,7 +2078,7 @@ function resolveHits(
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
-        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut, percents);
+        applyHit(s, attacker, defs[c.attacker], victim, defs[v], c, contact, intents[v], events, finalOut, percents, launches);
         // `collision_attr_turn` (Mario's Cape, Plan 5): the victim is turned round
         // on contact, whatever else the hit does: a launch, a launch it cannot
         // replace (knockback stacking), armour, a shield. SmashWiki "Reverse"
@@ -2149,6 +2153,7 @@ function resolveThrows(
   events: StepEvents,
   finalOut: () => boolean,
   percents: readonly number[],
+  launches: Map<number, LaunchRank>,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
@@ -2177,7 +2182,7 @@ function resolveThrows(
       const v = victim.port;
       const at = { x: victim.x, y: victim.y };
       const own = f.hitlag;
-      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut, percents);
+      applyHit(s, f, defs[i], victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events, finalOut, percents, launches);
       f.hitlag = own;
     }
     for (const flash of run.state.flashed) {
@@ -2648,6 +2653,38 @@ function sdiDistance(f: FighterState): number {
   return f.combat.comboHits > SDI_COMBO_HITS ? byRatio(SDI_DISTANCE, SDI_COMBO_RATIO) : SDI_DISTANCE;
 }
 
+/**
+ * One launch a fighter took this step, as `launchOutranks` weighs it (Plan 6, Task 17):
+ * its knockback, how much it rises, where its source stood (an attacker's or a projectile's
+ * x) and which way it sends.
+ */
+interface LaunchRank {
+  readonly kb: number;
+  readonly rise: number;
+  readonly x: number;
+  readonly side: number;
+}
+
+/**
+ * Two launches on one fighter in one step (Plan 6, Task 17; D9, UNVERIFIED: no source
+ * rules on simultaneous hits from two attackers; SmashWiki "Knockback" orders stacking for
+ * hits in sequence): the one with more knockback sets the launch; a tie goes to the one
+ * rising more, then to the source further left, then to the one sending right. Every rule
+ * is port-free, so a swap of ports flies the same way; two launches equal in all four go
+ * the same way, so either may stand.
+ */
+function launchOutranks(a: LaunchRank, b: LaunchRank): boolean {
+  if (a.kb !== b.kb) return a.kb > b.kb;
+  if (a.rise !== b.rise) return a.rise > b.rise;
+  if (a.x !== b.x) return a.x < b.x;
+  return a.side > b.side;
+}
+
+/** How much a launch at `angle` rises: its sine, and 0 for an autolink angle, which is not degrees. */
+function launchRise(angle: number): number {
+  return isAutolinkAngle(angle) ? 0 : sinDeg(angle);
+}
+
 /** Is `angle` one of the autolink angles, 365° to 368°: not degrees at all (Plan 3, Task 19)? */
 function isAutolinkAngle(angle: number): boolean {
   return angle >= AUTOLINK_MIN && angle <= AUTOLINK_MAX;
@@ -3011,6 +3048,7 @@ function applyHit(
   events: StepEvents,
   finalOut: () => boolean,
   percents: readonly number[],
+  launches: Map<number, LaunchRank>,
 ): void {
   const hb = c.hitbox;
   const fromProjectile = c.projectile !== null;
@@ -3440,8 +3478,17 @@ function applyHit(
     : victim.pendingFacing !== 0
       ? mul(victim.pendingKnockback, LAUNCH_SPEED_RATIO)
       : victim.launchSpeed;
-  const verdict =
-    victim.combat.launchSource === source ? "replace" : knockbackStack(mul(kb, LAUNCH_SPEED_RATIO), current);
+  // A launch this fighter already took this step outranks this one (Plan 6, Task 17;
+  // D9): this hit's damage and freeze land, and nothing of its launch does, so the step's
+  // strongest launch sets the direction and the reaction whichever port resolves first.
+  const rank: LaunchRank = { kb, rise: launchRise(hitAngle(hb, victim.grounded, kb)), x: c.projectile !== null ? c.projectile.x : attacker.x, side: sourceFacing >= 0 ? 1 : -1 };
+  const earlier = launches.get(victim.port);
+  const outranked = earlier !== undefined && !launchOutranks(rank, earlier);
+  const verdict = outranked
+    ? "outranked"
+    : victim.combat.launchSource === source
+      ? "replace"
+      : knockbackStack(mul(kb, LAUNCH_SPEED_RATIO), current);
   if (verdict !== "replace") {
     if (verdict === "keep" && victim.pendingFacing === 0 && victim.launchSpeed > 0) {
       // A parked launch has no vector yet; it keeps its own, as it was. An
@@ -3465,14 +3512,16 @@ function applyHit(
       y: c.y,
       contactX: contact.x,
       contactY: contact.y,
-      knockback: verdict === "keep" ? kb : 0,
+      knockback: verdict === "armour" ? 0 : kb,
       // A kept launch goes on the way it goes, and the spark says so (Plan 3 final
-      // wave; the Task 8 review's minor). One armoured through launches nothing new.
-      angle: verdict === "keep" ? keptLaunchAngle(victim, sourceFacing) : 0,
+      // wave; the Task 8 review's minor), as does an outranked one's (the step's stronger
+      // launch, Plan 6, Task 17). One armoured through launches nothing new.
+      angle: verdict === "armour" ? 0 : keptLaunchAngle(victim, sourceFacing),
       hitboxId: hb.id,
     });
     return;
   }
+  launches.set(victim.port, rank);
   victim.combat.launchSource = source;
   victim.combat.comboHits += 1;
 
