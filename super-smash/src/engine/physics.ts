@@ -243,6 +243,10 @@ export function resolveCollision(
   if (f.grounded && f.platform >= 0 && f.platform < stage.platforms.length) {
     const p = stage.platforms[f.platform];
     const cx = platformCentreX(p, frame);
+    // A moving platform carries its passenger first, and the edge is judged where the
+    // platform now is (Plan 6, Task 12): judged first, a passenger within its step of the
+    // trailing end mid-sweep was left behind. Smashville is unplayable otherwise.
+    if (p.motion) f.x += cx - platformCentreX(p, frame - 1);
     if (opts.cliffStop === true && abs(f.x - cx) > p.halfWidth) {
       // At the edge: stop on it, not over it, and stay grounded. Only the speed that
       // carried it over stops: an energy pointing back in keeps its speed, a windbox's
@@ -274,8 +278,6 @@ export function resolveCollision(
       f.platform = -1;
       out.leftGround = true;
     } else {
-      // A moving platform carries its passenger; Smashville is unplayable otherwise.
-      if (p.motion) f.x += cx - platformCentreX(p, frame - 1);
       f.y = p.y;
       kineticSetY(f, 0);
       return out;
@@ -366,6 +368,20 @@ export function resolveCollision(
   }
 
   return out;
+}
+
+/**
+ * Carry a fighter that stands on a moving platform but does not move this step: frozen in
+ * hitlag, or trapped by a Final Smash (Plan 6, Task 12; decision D6, UNVERIFIED: SmashWiki
+ * "Hitlag" freezes fighters "in place", and the replica reads the place as the platform's),
+ * by as far as the platform moved from stage frame `from` to `to`: nothing while a scene
+ * stands the stage's clock still (ruling R-T14f). Nothing else changes: no landing, edge or
+ * wall is judged for it this step.
+ */
+export function carryOnPlatform(f: FighterState, stage: StageDef, from: number, to: number): void {
+  if (!f.grounded || f.platform < 0 || f.platform >= stage.platforms.length) return;
+  const p = stage.platforms[f.platform];
+  if (p.motion) f.x += platformCentreX(p, to) - platformCentreX(p, from);
 }
 
 /**

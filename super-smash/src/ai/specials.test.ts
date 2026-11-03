@@ -50,6 +50,7 @@ import { BEHAVIOURS, cpuDef, cpuInput, cpuWorldFromDef, decideCpu, tuningForLeve
 import {
   CARGO_CARRY_FRAMES,
   REFLECT_AIM,
+  carriesOff,
   counter,
   dashTravel,
   finalSmashSpotFor,
@@ -1258,8 +1259,8 @@ describe("carries, mouthfuls and grabs", () => {
     // him off, and he threw in the air.
     // And, carried to a platform's end mid-sweep, where it moves fastest (stage frame 325, its
     // left half; at its turns its speed is 0), the platform swept away under him where he
-    // stood: the engine judges a standing passenger's edge against the platform's new place
-    // before it carries him.
+    // stood: the engine judged a standing passenger's edge against the platform's new place
+    // before it carried him (carried first since Plan 6, Task 12).
     const sv = stageViewFromDef(STAGES.find((x) => x.id === "smashville")!);
     const platform = sv.platforms[0];
     for (const [stageFrame, from] of [[0, 0], [325, -platform.halfWidth + fx(13)]] as const) {
@@ -1272,6 +1273,21 @@ describe("carries, mouthfuls and grabs", () => {
         expect([end.action, end.move?.startsWith("cargo"), end.grounded, end.y], at).toEqual(["throw", true, true, platform.y]);
       }
     }
+  });
+
+  it("reads a carry at the platform's trailing end mid-sweep as the engine carries it: walking on, it stays on (Plan 6, Task 12)", () => {
+    // Smashville's platform at stage frame 0 sweeps right at about 0.47 a frame; Donkey Kong
+    // carrying Kirby 0.1 inside its left, trailing, end. The engine carries a passenger before
+    // it judges its edge (`resolveCollision`), so a step right keeps him on, and the floor
+    // model reads it so: judged before the carry, it read him off and held the press back.
+    const sv = stageViewFromDef(STAGES.find((x) => x.id === "smashville")!);
+    const platform = sv.platforms[0];
+    const s = createInitialState("smashville", [{ defId: "donkeyKong" }, { defId: "kirby" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+    s.stageFrame = 0;
+    const x = platformCentreX(platform, 0) - platform.halfWidth + fx(0.1);
+    Object.assign(s.fighters[0], { action: "cargoCarry", actionFrame: 10, grounded: true, platform: 1, x, y: platform.y, vx: 0, facing: 1, grabbing: 1, intangible: 0 });
+    Object.assign(s.fighters[1], { action: "cargoHeld", actionFrame: 0, grabbedBy: 0, grabTimer: 200, x, y: platform.y, grounded: false, intangible: 0 });
+    expect(carriesOff(context(s, donkeyKong, 9, undefined, sv), Btn.Right)).toBe(false);
   });
 
   it("a level-9 Donkey Kong that grabs facing the nearer edge carries the fighter there and throws them from his shoulders", () => {

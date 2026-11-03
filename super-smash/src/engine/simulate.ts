@@ -143,6 +143,7 @@ import {
   ledgePosition,
   platformCentreX,
   resolveCollision,
+  carryOnPlatform,
 } from "./physics";
 import {
   ENTRY_INTANGIBILITY,
@@ -742,7 +743,9 @@ export function step(
   // runs nothing but the scene.
   const scene = s.cinematic;
   const paused = scene >= 0;
-  // The stage's clock runs only while the match does (ruling R-T14f).
+  // The stage's clock runs only while the match does (ruling R-T14f). Where it was, for
+  // the platform's carry of those who stand still (Plan 6, Task 12: `carryOnPlatform`).
+  const stageFrameBefore = s.stageFrame;
   if (!paused) s.stageFrame += 1;
 
   // Where each hitbox was last frame, for the swept test in phase 6.
@@ -994,11 +997,16 @@ export function step(
 
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
-    if (frozen[i] || f.action === "dead" || f.action === "respawnPlatform") continue;
+    if (f.action === "dead" || f.action === "respawnPlatform") continue;
+    // Frozen, or trapped by a Final Smash: carried by a moving platform as far as it moved,
+    // and nothing more (Plan 6, Task 12: `carryOnPlatform`; nothing while paused).
+    if (frozen[i] || f.action === "finalTrapped") {
+      carryOnPlatform(f, stage, stageFrameBefore, s.stageFrame);
+      continue;
+    }
     if (f.ledge !== null) continue; // hanging: the ledge holds you, not the floor
     if (captorOf(s, f) !== null) continue; // held: the captor's floor is all it touches
     if (f.action === "spatStar") continue; // riding a star: where it flies, it goes
-    if (f.action === "finalTrapped") continue; // trapped: no floor, wall or ledge until it is let go (Task 14)
     if (f.port === scene) continue; // a scene's user: no landing or ledge cuts it short (fix round 1, R-T14d)
 
     const before = launchBefore(f);

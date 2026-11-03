@@ -379,20 +379,17 @@ export function leavesFloor(ctx: BehaviourContext, input: InputFrame): boolean {
     g.frame = ctx.view.frame + k;
     ghostStep(f, now, prev, g);
     prev = now;
+    // A sweeping platform carries it, then its edge is judged where the platform now is, as
+    // the engine does (`resolveCollision`; Plan 6, Task 12: carried first, so a passenger at
+    // rest is never left behind; fix round 3, re-review 3's Minor 1: the copy, standing
+    // still on it, used to stay on where the platform swept the fighter off).
+    if (under?.motion !== undefined) f.x += platformCentreX(under, stageFrame + k) - platformCentreX(under, stageFrame + k - 1);
     const left = under === null ? ctx.stage.leftLedge : platformCentreX(under, stageFrame + k) - under.halfWidth;
     const right = under === null ? ctx.stage.rightLedge : platformCentreX(under, stageFrame + k) + under.halfWidth;
     if (f.x < left || f.x > right) return carrying || !overFloor(def, { ...f, grounded: false, platform: -1 }, ctx.stage, ctx.view.frame + k, stageFrame + k);
-    // Still on it: a sweeping platform carries it, as the engine carries a fighter
-    // standing there after the step's own movement (`resolveCollision`; fix round 3,
-    // re-review 3's Minor 1: Smashville's platform swept the fighter off where the copy,
-    // standing still on it, stayed on).
-    if (under?.motion !== undefined) f.x += platformCentreX(under, stageFrame + k) - platformCentreX(under, stageFrame + k - 1);
-    // At rest it stays, but for a carry on a sweeping platform, followed on standing to the
-    // run's end: the engine judges a standing passenger's edge against the platform's new place
-    // before it carries him, so at an end the platform sweeps away from faster than he stands
-    // inside it he is left behind (part 5, fix round 1: Smashville's, mid-sweep, where it moves
-    // fastest, about 0.40-0.47 a frame; at its turns its speed is 0).
-    if (f.vx === 0 && !(carrying && under?.motion !== undefined)) return false;
+    // At rest it stays: carried with the platform, it never leaves it (Plan 6, Task 12; part
+    // 5's fix round 1 followed a carry on past rest, while the engine judged the edge first).
+    if (f.vx === 0) return false;
   }
   return false;
 }
