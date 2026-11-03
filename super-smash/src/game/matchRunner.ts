@@ -179,6 +179,8 @@ export interface WorldPresenter {
    */
   paint(rs: RenderState, camera: Camera, alpha: number, hidden: readonly boolean[]): void;
   dispose(): void;
+  /** Per port, the HUD's portrait from the loaded model (Plan 6, Task 38); optional, so a test's fake need not carry it. */
+  portraits?(): readonly (CanvasImageSource | null)[];
 }
 
 export interface MatchRunner {
@@ -605,6 +607,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       fighters: defs,
       labels: players.map((p, i) => p.label ?? defs[i]?.name ?? ""),
       cpu: players.map((p) => p.cpuLevel !== null),
+      portraits: presenter?.portraits?.(),
       vfx,
       hud,
       tops,

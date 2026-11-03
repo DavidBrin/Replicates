@@ -330,3 +330,17 @@ describe("the end slate", () => {
     expect(callsOf(ctx, "fillText").map((c) => String(c.args[0]))).toContain("GAME!");
   });
 });
+
+describe("the portrait cell (Plan 6, Task 38)", () => {
+  it("draws the model's portrait in the cell when the scene carries one, and the 2D rig's head when it does not", () => {
+    const portrait = { width: 96, height: 96 } as unknown as CanvasImageSource;
+    const state = makeState();
+    const withPortrait = createMockContext();
+    const info = state.fighters.map((f) => ({ def: makeDef(), label: "Mario", isCpu: f.port === 1, portrait }));
+    drawDamagePanel(withPortrait, scene({ state, info }), state.fighters[0], 0, 0);
+    expect(callsOf(withPortrait, "drawImage").map((c) => c.args[0])).toEqual([portrait]);
+    const plain = createMockContext();
+    drawDamagePanel(plain, scene({ state }), state.fighters[0], 0, 0);
+    expect(countOf(plain, "drawImage")).toBe(0);
+  });
+});

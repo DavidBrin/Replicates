@@ -62,6 +62,7 @@ import { fighterPoser } from "./bake/bake";
 import { applySideCamera, createSideCamera } from "./camera3d";
 import { createFighter3D, type Fighter3D } from "./fighter3d";
 import { NO_BOUND, clipInstances } from "./instanceClip";
+import { renderPortrait, type PortraitGL } from "./portrait3d";
 import { NO_WEBGL } from "./webgl";
 import type { ModelCache } from "./models/loader";
 import type { SkeletonFile } from "./skeleton/skeleton";
@@ -81,6 +82,10 @@ export interface GLLike {
   /** Set by the presenter (three's defaults are the same); optional, so a fake need not carry them. */
   toneMapping?: ToneMapping;
   outputColorSpace?: string;
+  /** The HUD's portraits' read-back (Plan 6, Task 38): three's; a fake without them draws no portraits. */
+  getRenderTarget?: PortraitGL["getRenderTarget"];
+  setRenderTarget?: PortraitGL["setRenderTarget"];
+  readRenderTargetPixels?: PortraitGL["readRenderTargetPixels"];
 }
 
 export interface RenderInfo {
@@ -99,6 +104,11 @@ export interface Presenter3D {
   paint(rs: RenderState, camera: Camera, alpha: number, hidden: readonly boolean[]): void;
   resize(cssWidth: number, cssHeight: number, dpr: number): void;
   info(): RenderInfo;
+  /**
+   * Per port, the HUD's portrait from its loaded model (Plan 6, Task 38): made once, on the
+   * first paint after every model is in; null for a stand-in, before then, or without WebGL's read-back.
+   */
+  portraits(): readonly (HTMLCanvasElement | null)[];
   /**
    * Frees everything it drew, once, and its listeners. The canvas's WebGL
    * context is left usable: the next match's presenter may draw on the same
@@ -327,6 +337,10 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   const shields: (DrawnShield | null)[] = opts.defs.map(() => null);
   const drawnShields: DrawnShield[] = opts.defs.map(() => ({ x: 0, y: 0, radius: 0, alpha: 0, colour: "", floor: -NO_BOUND }));
   let disposed = false;
+  /** Every fighter has its model (or a stand-in): the HUD's portraits can be made (Plan 6, Task 38). */
+  let everyModelIn = false;
+  /** The HUD's portraits, once made. */
+  let portraits: (HTMLCanvasElement | null)[] | null = null;
 
   const ready = Promise.all(
     opts.defs.map(async (def, port) => {
@@ -340,7 +354,9 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
       fighters[port] = fighter;
       scene.add(fighter.placement);
     }),
-  ).then(() => undefined);
+  ).then(() => {
+    everyModelIn = true;
+  });
 
   let lost = false;
   /** Running from a loss until `CONTEXT_RESTORE_WAIT_MS` has passed, or the context is back. */
@@ -472,6 +488,8 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
       shadows.instanceMatrix.needsUpdate = true;
       shadowClip.commit();
       trails.update();
+      // The HUD's portraits (Plan 6, Task 38): once, on the first paint every model is in, each fighter as it stands.
+      if (portraits === null && everyModelIn) portraits = fighters.map((f) => (f === null ? null : renderPortrait(gl, f, createLights())));
       vfx.update(rs.vfx, shields);
       for (let i = 0; i < fixed.length; i++) fixed[i].updateMatrixWorld();
       gl.render(scene, camera);
@@ -490,6 +508,9 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
         buffer,
         fighters: fighters.map((f) => f?.kind ?? "loading"),
       };
+    },
+    portraits() {
+      return portraits ?? fighters.map(() => null);
     },
     dispose() {
       if (disposed) return;

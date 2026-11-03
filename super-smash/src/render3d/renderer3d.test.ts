@@ -960,3 +960,33 @@ describe("the 3D presenter", () => {
     expect(presenter.info().fighters[0]).toBe("loading");
   });
 });
+
+describe("the HUD's portraits from the loaded models (Plan 6, Task 38)", () => {
+  it("makes one per glb, once, on the first paint after every model is in, and none for a stand-in", async () => {
+    const put = vi.fn();
+    const ctx2d = { createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }), putImageData: put };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ctx2d as never);
+    try {
+      const { presenter, rs, gl } = setup({ models: capCache(["mario"]) });
+      const camera = createCamera(rs.stage);
+      expect(presenter.portraits()).toEqual([null, null, null, null]);
+      await presenter.ready;
+      // Three's read-back, which the plain fake lacks.
+      let target: unknown = null;
+      Object.assign(gl(), {
+        getRenderTarget: () => target,
+        setRenderTarget: (t: unknown) => void (target = t),
+        readRenderTargetPixels: (_t: unknown, _x: number, _y: number, w: number, h: number, buffer: Uint8Array) => buffer.fill(255, 0, w * h * 4),
+      });
+      presenter.paint(rs, camera, 0, []);
+      const made = presenter.portraits();
+      expect(made.map((p) => p !== null)).toEqual([true, false, false, false]);
+      presenter.paint(rs, camera, 0, []);
+      expect(presenter.portraits()[0]).toBe(made[0]);
+      expect(put).toHaveBeenCalledTimes(1);
+      presenter.dispose();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});

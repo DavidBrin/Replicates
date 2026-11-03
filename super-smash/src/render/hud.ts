@@ -185,6 +185,8 @@ export interface HudFighterInfo {
   /** Displayed under the percent. Falls back to the fighter's name. */
   readonly label: string;
   readonly isCpu: boolean;
+  /** The portrait drawn from the loaded model (Plan 6, Task 38; `render3d/portrait3d.ts`), in memory only; the 2D rig's head without one. */
+  readonly portrait?: CanvasImageSource | null;
 }
 
 export interface HudScene {
@@ -262,7 +264,10 @@ export function drawDamagePanel(
   ctx.clip();
   ctx.fillStyle = withAlpha(port, 0.14);
   ctx.fillRect(x, y, PANEL_WIDTH + 60, PANEL_HEIGHT);
-  if (info.def) {
+  if (info.portrait) {
+    // The model's own head (Plan 6, Task 38), where the 2D head is centred.
+    ctx.drawImage(info.portrait, x + 26 + portraitW / 2 - 48, y + 34 - 48, 96, 96);
+  } else if (info.def) {
     const rig = getCharacterRig(info.def.id);
     const palette = resolvePalette(info.def, fighter.costume);
     drawHeadPortrait(ctx, rig, palette, x + 26 + portraitW / 2, y + 34, 96, 1);

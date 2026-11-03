@@ -529,3 +529,12 @@ describe("where the port tag sits", () => {
     expect(declaring).toEqual(["pikachu"]);
   });
 });
+
+describe("the HUD's portraits (Plan 6, Task 38)", () => {
+  it("hands each port's model portrait from the render state to its damage panel", () => {
+    const portrait = { width: 96, height: 96 } as unknown as CanvasImageSource;
+    const ctx = createMockContext();
+    render(ctx, { ...renderState(), portraits: [portrait, null] }, null, createCamera(stage), 0);
+    expect(callsOf(ctx, "drawImage").map((c) => c.args[0])).toEqual([portrait]);
+  });
+});

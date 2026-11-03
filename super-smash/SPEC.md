@@ -338,7 +338,9 @@ Load-bearing details, all from the reference screenshots:
   the bones the bake places: the limb the player sees, or the root for the five whose boxes
   hang on `top` or `trans`.
   Without the models each fighter is a stand-in: its own hurtbox capsules, in its port's
-  colour. The 2D rigs still draw the HUD's portraits and stock icons. See DECISIONS D57.
+  colour. With them, the HUD's portraits are drawn from the loaded model when the match
+  starts and are never saved; without them, and for the stock icons, the 2D rigs draw them.
+  See DECISIONS D57 and D59.
 - **The match is 3D, and WebGL is required.** The stage, fighters, shields and hit sparks are
   three.js on WebGL, under a transparent 2D overlay (HUD, tags, move effects, projectiles).
   Without WebGL no match starts, and the game says why in a sentence a player can act on.

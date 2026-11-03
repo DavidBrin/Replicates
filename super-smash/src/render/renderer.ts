@@ -116,6 +116,8 @@ export interface RenderState {
    * rather than in one. Without it, `sceneShiftAt`'s own, uneased.
    */
   readonly sceneShift?: readonly number[];
+  /** Per port, the HUD's portrait from the loaded model, or null (Plan 6, Task 38; the presenter's `portraits`). */
+  readonly portraits?: readonly (CanvasImageSource | null)[];
 }
 
 /** A fighter's head in the 3D world, relative to their feet, in world units. */
@@ -470,6 +472,7 @@ function hudInfo(state: RenderState): HudFighterInfo[] {
       def,
       label: state.labels?.[f.port] ?? def?.name ?? `P${f.port + 1}`,
       isCpu: state.cpu?.[f.port] ?? false,
+      portrait: state.portraits?.[f.port] ?? null,
     };
   });
 }
