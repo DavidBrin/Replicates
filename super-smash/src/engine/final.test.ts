@@ -994,8 +994,9 @@ describe("the scene holds the match still, its user and the stage included (Task
  * https://www.ssbwiki.com/Unblockable_attack: an unblockable attack "cannot be
  * defended against with a shield or a counterattack", and "in Ultimate, all Final
  * Smashes are unblockable"); it reaches its user's trapped wherever they are, for
- * damage only, as the scene's do; and like the scene's it keeps no hit record, so it
- * is one frame long and leaves the start's trap free to catch whom it hit.
+ * damage only, as the scene's do; and like the scene's it keeps a record of its own, not
+ * the swing's, so with no rehit it is one frame long and leaves the start's trap free to
+ * catch whom it hit.
  */
 describe("a start's ordinary hit (Task 15 fix round 1)", () => {
   const STRIKE = box({ id: 1, startFrame: 3, endFrame: 3, damage: fx(4), angle: fx(45), baseKnockback: fx(60), knockbackGrowth: fx(100), trap: false });
@@ -1037,7 +1038,7 @@ describe("a start's ordinary hit (Task 15 fix round 1)", () => {
     expect(states.slice(at).some((st) => st.fighters[2].hitstun > 0)).toBe(true);
   });
 
-  it("reads no hit record either: a fighter the trap met while invincible takes the ordinary hit after", () => {
+  it("reads not the swing's hit record either: a fighter the trap met while invincible takes the ordinary hit after", () => {
     // The trap on 5 lands on an invincible victim and is spent (`applyInvincibleHit`,
     // which records the hit); the ordinary hit on 12, once that is over, still lands.
     const ctx = withStart([...FINAL.hitboxes, { ...STRIKE, startFrame: 12, endFrame: 12 }]);
@@ -1048,7 +1049,7 @@ describe("a start's ordinary hit (Task 15 fix round 1)", () => {
     expect(toFloat(states[19].fighters[1].damage)).toBeCloseTo(4 * 1.05, 2);
   });
 
-  it("keeps no hit record: the trap after it still catches the fighter it hit", () => {
+  it("records apart from the swing's: the trap after it still catches the fighter it hit", () => {
     // A hit that does not move its victim, on 3, then the trap on 5.
     const ctx = withStart([{ ...STRIKE, baseKnockback: 0, knockbackGrowth: 0 }, ...FINAL.hitboxes]);
     const { states } = run(ready(RULES, ctx), 12, USE, ctx);

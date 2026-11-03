@@ -741,8 +741,9 @@ export function step(
   // KO (`KO_FREEZE_FRAMES`), and it is read here as one.
   if (s.freezeFrames > 0) {
     s.freezeFrames -= 1;
-    // A press made during the freeze is kept, as the buffer keeps any press made while a
-    // fighter cannot act (Plan 6, Task 13; SmashWiki "Buffer": Ultimate's 9-frame window).
+    // A press made during the freeze is kept in the buffer, as a slowed fighter's still step
+    // keeps one (Plan 6, Tasks 13 and 11; SmashWiki "Buffer": Ultimate's 9-frame window);
+    // a fighter in hitlag, or stood still by a Final Smash's scene, keeps none (phase 3).
     // Read into each living fighter's buffer and its direction counter; nothing else of
     // the step runs. The counter runs through the freeze, so a direction pressed before a
     // KO and Attack pressed after its freeze are a tilt, not a smash. Holding a button
@@ -1009,7 +1010,8 @@ export function step(
     if (frozen[i] || f.action === "dead") continue;
     // A held fighter has no movement of its own: it is carried (5b below), and a
     // spat one rides its star (phase 6; Plan 5, Task 9). One trapped in a Final
-    // Smash stays where the trap caught it (Task 14: `trapVictim`).
+    // Smash stays where the trap caught it (Task 14: `trapVictim`), but for a moving
+    // platform it stands on, which carries it in phase 5 (`carryOnPlatform`).
     if (captorOf(s, f) !== null || f.action === "spatStar" || f.action === "finalTrapped") continue;
     // So does a Final Smash's user while its scene plays, in the air too, with no
     // gravity or speed of its own (fix round 1, ruling R-T14d): the scene is
@@ -2368,7 +2370,7 @@ function sceneRecordHolds(s: GameState, c: Candidate, port: number): boolean {
 }
 
 /**
- * The frame a scene, strike or end box lets go of its target (Plan 6, Task 9): after its
+ * The frame a scene, strike or scene end box lets go of its target (Plan 6, Task 9): after its
  * rehit; with none, on the next frame, as when the scene's boxes kept no record: each is
  * one frame long, or launches the trapped on its first (`finalSmash.test.ts` pins both).
  */

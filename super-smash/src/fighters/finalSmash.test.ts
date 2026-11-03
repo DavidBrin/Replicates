@@ -1387,7 +1387,8 @@ describe("a Final Smash is out while one of its projectiles is (ruling R-T16a)",
  * since fix round 2 (ruling R-T16j), does a cinematic one's start, whiffed, and since
  * fix round 3 every part (ruling R-T16k); a dash only before its travel (fix round 4,
  * ruling R-T16l, amended); every one that ends in the air gives back the spent midair
- * jumps. The boost is carried: no size is published.
+ * jumps and lifts its user (Plan 6, Task 10: `finalHeightBoost`). The boost's size is
+ * UNVERIFIED: none is published, so the fighter's own short hop stands in.
  */
 describe("a Final Smash in the air (ruling R-T16b)", () => {
   const FD_LEFT = FD_FLOOR.x - FD_FLOOR.halfWidth;

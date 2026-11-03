@@ -28,8 +28,9 @@
  *   (Task 15).
  *
  * A part goes on to the next when it ends, or from its `nextAt` frame (Task 15),
- * with somebody trapped. Scene boxes keep no hit record, so each is authored one
- * frame long and lands once (`fighters/finalKit.ts`).
+ * with somebody trapped. Scene boxes keep a record of their own (`CombatState.sceneHits`),
+ * not the swing's; it lets go of a target on the next frame unless the box has a rehit, so
+ * each published single hit is authored one frame long and lands once (`fighters/finalKit.ts`).
  *
  * While its scene plays, the user is held where it is, in the air too, and a
  * landing never ends a part (fix round 1, ruling R-T14d); the stage's clock stops
@@ -134,8 +135,8 @@ export function finalSmashActive(s: { readonly fighters: readonly FighterState[]
  *
  * UNVERIFIED: the kinetics, no gravity and no movement at all while held (no page gives
  * them), and from a travel window on, the engine's ordinary ones (the window's speed
- * handed on to drift, `applyMoveMomentum`, and gravity); the height boost has no
- * published size and is not modelled.
+ * handed on to drift, `applyMoveMomentum`, and gravity). The boost a Final Smash's end gives
+ * has no published size, and `finalHeightBoost`'s is a stand-in.
  */
 export function holdsAloft(f: FighterState, def: FighterDef): boolean {
   if (f.grounded || f.action !== "special" || f.move === null) return false;
@@ -171,8 +172,9 @@ export function refreshFinalJumps(f: FighterState): void {
  * "When most Final Smashes are performed in the air, upon ending the move, the character
  * gains a slight boost in height and regains their spent midair jumps". UNVERIFIED (decision
  * D4): the size, which no source publishes (rubendal 13.0.1's `game_final*` scripts set no
- * upward speed; the boost is status code): the fighter's own short hop stands in, the
- * smallest jump it has. And "most" is not narrowed: every Final Smash gets it.
+ * upward speed; the boost is status code): the fighter's own short hop stands in
+ * (`mini_jump_y`; a Kirby's last midair jumps are smaller still). And "most" is not
+ * narrowed: every Final Smash gets it.
  */
 export function finalHeightBoost(f: FighterState, def: FighterDef): void {
   if (f.grounded) return;
@@ -207,7 +209,8 @@ export function beginFinalSmash(f: FighterState, ctx: StateContext, neutral: boo
 /**
  * A trap box landed: the victim waits, trapped, for the scene, still where it
  * was caught (`kineticClear`; `step` neither moves nor collides it, nor lets it
- * take a ledge). Anybody it was holding, or being held by, is let go first
+ * take a ledge; a moving platform it stands on still carries it, `carryOnPlatform`).
+ * Anybody it was holding, or being held by, is let go first
  * (`releaseGrab` clears both halves), so nobody is left hanging off a fighter
  * who is in the cutscene. The reel it was in ends: the scene's last blow is
  * what launches it. `step` also drops any launch it had parked.

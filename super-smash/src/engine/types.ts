@@ -354,8 +354,9 @@ export interface Hitbox {
    * instead, as an ordinary box (Plan 5, Task 15 fix round 1, ruling R-T15j):
    * Ultra Sword's 5% swing after its stun, Volt Tackle's startup sparks. It hits
    * the world, unblockable and uncountered, and reaches its user's trapped wherever
-   * they are, for damage only; it keeps no hit record, so it is one frame long
-   * (`fighters/finalKit.ts`). Absent: the part's own rule.
+   * they are, for damage only; it keeps a record of its own, not the swing's
+   * (`CombatState.sceneHits`, with its rehit: `recordHit`, `sceneRecordHolds`), so with no
+   * rehit it is one frame long (`fighters/finalKit.ts`). Absent: the part's own rule.
    */
   readonly trap?: boolean;
   /** This hitbox grabs rather than damages. */

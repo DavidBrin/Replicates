@@ -154,7 +154,8 @@ export const GROUND_EXIT: Readonly<Record<ActionState, GroundExit>> = {
   // does, and ends in a fall (`STATUS_TREAD_DAMAGE`).
   footstooled: "lag",
   // Trapped in a Final Smash (Plan 5, Task 14): held where the trap caught it, it
-  // never meets an edge (`step` neither moves nor collides it). UNVERIFIED: no page
+  // never meets an edge (`step` collides it with nothing, and only a moving platform
+  // carries it). UNVERIFIED: no page
   // names the trapped at an edge; were it ever pushed off, it would stay trapped.
   finalTrapped: "keep",
   // Not on the stage.

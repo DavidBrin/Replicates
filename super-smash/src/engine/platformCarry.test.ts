@@ -74,7 +74,7 @@ describe("Smashville's platform carries what stands on it (Plan 6, Task 12)", ()
     expect(after.fighters[0].x - s.fighters[0].x).toBe(moved);
   });
 
-  it("carries a fighter trapped by a Final Smash, as it carries its user", () => {
+  it("carries a fighter trapped by a Final Smash", () => {
     const s = trapped(false);
     const moved = delta(s);
     const after = step(s, [0, 0], { prevInputs: [0, 0] }).state;

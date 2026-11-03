@@ -372,7 +372,8 @@ export function resolveCollision(
 
 /**
  * Carry a fighter that stands on a moving platform but does not move this step: frozen in
- * hitlag, or trapped by a Final Smash (Plan 6, Task 12; decision D6, UNVERIFIED: SmashWiki
+ * hitlag or on a slowed fighter's still step (Plan 6, Task 11), or trapped by a Final
+ * Smash (Plan 6, Task 12; decision D6, UNVERIFIED: SmashWiki
  * "Hitlag" freezes fighters "in place", and the replica reads the place as the platform's),
  * by as far as the platform moved from stage frame `from` to `to`: nothing while a scene
  * stands the stage's clock still (ruling R-T14f). Nothing else changes: no landing, edge or
