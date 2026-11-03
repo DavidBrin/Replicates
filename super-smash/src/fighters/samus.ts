@@ -705,7 +705,10 @@ const legacy: FighterDef = {
       // Shot": "she will drop all the stored charge"). A stored charge is lost
       // with the stock too: SmashWiki "Charge" (https://www.ssbwiki.com/Charge)
       // notes surviving a KO only for Oil Panic and Wario Waft.
-      specialCharge: { mode: "store", frames: 112, loopFrame: 13, fromStore: { start: "entry", interruptible: 61 } },
+      // Fully charged, the shot is `special_n_f_max` (rubendal 13.0.1 `game_specialnfiremax`:
+      // CancelFrame 48, so 47 frames, shooting on its frame 3), played from the loop frame,
+      // after the 13 entry frames (`special_n_s`, CancelFrame 14): 13 + 48 = 61 (Plan 6, Task 20).
+      specialCharge: { mode: "store", frames: 112, loopFrame: 13, fromStore: { start: "entry", interruptible: 61, motion: "special_n_f_max", fullFrames: 47 } },
       hitboxes: [],
       projectiles: [
         {

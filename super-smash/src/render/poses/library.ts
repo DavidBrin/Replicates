@@ -112,7 +112,11 @@ export type PoseName =
   | "fthrow"
   | "bthrow"
   | "uthrow"
-  | "dthrow";
+  | "dthrow"
+  // Plan 6, Task 20: Donkey Kong's carry, on the ground and in the air, and his lift.
+  | "cargoCarry"
+  | "cargoFall"
+  | "cargoLift";
 
 export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   idle,
@@ -203,4 +207,12 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
    * its beam.
    */
   finalSmash: attacks.neutralB,
+  /**
+   * Kong Karry (Plan 6, Task 20): only Donkey Kong carries, and he draws his own; the
+   * shared defaults are the clips his carry played before, the walk, the fall and the
+   * forward throw.
+   */
+  cargoCarry: walk,
+  cargoFall: fall,
+  cargoLift: attacks.fthrow,
 };

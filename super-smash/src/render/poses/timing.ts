@@ -244,7 +244,7 @@ const DEFAULT_PERIOD = 30;
 const STRIDE = STRIDE_UNITS;
 
 /** Cycles are paced by distance covered, not by frames elapsed. */
-export const PACED_BY_SPEED: Partial<Record<PoseName, true>> = { walk: true, run: true };
+export const PACED_BY_SPEED: Partial<Record<PoseName, true>> = { walk: true, run: true, cargoCarry: true };
 
 /** Normalised position within a cycle, for any real number of cycles. */
 function wrap(cycles: number): number {
@@ -252,7 +252,7 @@ function wrap(cycles: number): number {
   return cycles - Math.floor(cycles);
 }
 
-export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed" | "fastFalling">): PoseName {
+export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed" | "fastFalling"> & Partial<Pick<FighterState, "grounded">>): PoseName {
   switch (f.action) {
     case "stand":
     case "entering":
@@ -343,10 +343,11 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     // Plan 5, Task 11: stood on, under the jumper's feet; its own clip since Task 17.
     case "footstooled":
       return "footstooled";
-    // ...and Donkey Kong carrying: no clip has the carry's raised arms, and his
-    // walk reads as the carry (it walks). Plan 5, Task 9: Kirby walking with a
-    // mouthful, likewise.
+    // Donkey Kong carrying: the load over his head (Plan 6, Task 20), striding on the
+    // ground and held in the air; a state that names no `grounded` is on the ground.
     case "cargoCarry":
+      return f.grounded === false ? "cargoFall" : "cargoCarry";
+    // Plan 5, Task 9: Kirby walking with a mouthful plays the walk.
     case "inhaleHold":
       return "walk";
     // Plan 5, Task 9: inside Kirby, or flying as his star, the fighter tumbles.

@@ -546,7 +546,10 @@ const legacy: FighterDef = {
         // "base damage + 18 * (charge frames / 110), rounded down".
         partial: { kind: "add", total: fx(18), floor: true },
         full: { 0: { damage: fx(28.0) } },
-        fromStore: { start: "loop", interruptible: 48, superArmour: { grounded: [9, 20], aerial: [15, 20] } },
+        // Fully charged, the punch is `special_n_max` (rubendal 13.0.1 `game_specialnmax`:
+        // CancelFrame 48, so 47 frames, its ATTACK on frame 19), played from the loop frame
+        // (Plan 6, Task 20).
+        fromStore: { start: "loop", interruptible: 48, superArmour: { grounded: [9, 20], aerial: [15, 20] }, motion: "special_n_max", fullFrames: 47 },
       },
       hitboxes: [
         {

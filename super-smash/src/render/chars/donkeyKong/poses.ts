@@ -101,7 +101,59 @@ function barrageKeys(): Keyframe[] {
   return keys;
 }
 
+/**
+ * Kong Karry's load, held over his head in both hands (Plan 6, Task 20): the arms the
+ * carry, the carried fall and the lift's last key share. rubendal 13.0.1 names the
+ * game's motions (`shoulder_wait`, `shoulder_walk_*`, `shoulder_fall`, `throw_f`); their
+ * animations are unpublished, so these are the replica's shapes, upright under the load.
+ */
+const CARRY_ARMS = {
+  torso: -4, head: -4,
+  upperArmR: 24, forearmR: -24, handR: 0,
+  upperArmL: 4, forearmL: 22, handL: 0,
+} as const;
+
+/**
+ * The lift (Plan 6, Task 20): 15 frames (rubendal 13.0.1 `throw_f`, CancelFrame 16),
+ * crouched under the load, hoisting it, and standing into the carry's rest. Its own clip,
+ * not his forward throw's, which his carried forward throw still plays (`SLOT_POSE`).
+ */
+const CARGO_LIFT: PoseClip = {
+  loop: false,
+  keys: [
+    { t: 0, pose: P({ torso: 26, head: -20, hip: -4, thighR: 136, shinR: 70, footR: -84, thighL: 150, shinL: 66, footL: -82, upperArmR: 140, forearmR: -10, handR: 0, upperArmL: 160, forearmL: 10, handL: 0 }), offsetY: -0.2 },
+    { t: 0.45, pose: P({ torso: 8, head: -8, hip: -2, thighR: 158, shinR: 30, footR: -86, thighL: 170, shinL: 28, footL: -86, upperArmR: 70, forearmR: -30, handR: 0, upperArmL: 50, forearmL: 30, handL: 0 }), offsetY: -0.1 },
+    { t: 1, pose: P({ ...CARRY_ARMS, thighR: 174, shinR: 10, footR: -88, thighL: 186, shinL: 10, footL: -88 }) },
+  ],
+};
+
 export const poses: Partial<Record<PoseName, PoseClip>> = {
+  /**
+   * Kong Karry walking (Plan 6, Task 20), paced by the ground covered as the walk is
+   * (`PACED_BY_SPEED`): standing still, the carry rests on its first key, so that key
+   * is the passing pose, feet together (the walk's contact key froze him mid-stride).
+   * A heavy, short shuffle under the load, the arms holding it still.
+   */
+  cargoCarry: {
+    loop: true,
+    period: 32,
+    keys: [
+      { t: 0, ease: "linear", pose: P({ ...CARRY_ARMS, thighR: 174, shinR: 10, footR: -88, thighL: 186, shinL: 10, footL: -88 }) },
+      { t: 0.25, ease: "linear", pose: P({ ...CARRY_ARMS, thighR: 160, shinR: 14, footR: -88, thighL: 192, shinL: 28, footL: -98 }), offsetY: -0.2 },
+      { t: 0.5, ease: "linear", pose: P({ ...CARRY_ARMS, thighR: 182, shinR: 10, footR: -88, thighL: 178, shinL: 10, footL: -88 }) },
+      { t: 0.75, ease: "linear", pose: P({ ...CARRY_ARMS, thighR: 192, shinR: 28, footR: -98, thighL: 160, shinL: 14, footL: -88 }), offsetY: -0.2 },
+    ],
+  },
+  /** Carried in the air (Plan 6, Task 20): the load still overhead, the legs paddling a little under it. */
+  cargoFall: {
+    loop: true,
+    period: 40,
+    keys: [
+      { t: 0, pose: P({ ...CARRY_ARMS, thighR: 160, shinR: 40, footR: -100, thighL: 196, shinL: 24, footL: -96 }) },
+      { t: 0.5, pose: P({ ...CARRY_ARMS, thighR: 168, shinR: 34, footR: -98, thighL: 190, shinL: 30, footL: -98 }) },
+    ],
+  },
+  cargoLift: CARGO_LIFT,
   /**
    * Standing — the knuckle lean, and the pose a player looks at longer than any
    * other in the game.

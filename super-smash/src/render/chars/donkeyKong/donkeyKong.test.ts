@@ -41,6 +41,8 @@ const AIRBORNE: ReadonlySet<PoseName> = new Set<PoseName>([
   "uair",
   "dair",
   "upB",
+  // Plan 6, Task 20: carried in the air.
+  "cargoFall",
 ]);
 
 /**
@@ -304,6 +306,8 @@ const SLOT_FOR: Partial<Record<PoseName, keyof typeof donkeyKong.moves>> = {
   bthrow: "bthrow",
   uthrow: "uthrow",
   dthrow: "dthrow",
+  // Plan 6, Task 20: the lift is his forward throw's motion (`MoveDef.cargo`).
+  cargoLift: "fthrow",
   // Plan 5, Task 17 fix round 1: Jungle Rush's barrage and uppercut.
   finalAttack: "finalAttack",
   finalEnd: "finalEnd",
@@ -547,6 +551,23 @@ describe("the shapes round two is actually claiming", () => {
       // hands where they are.
       expect(p.shoulder.x, `spine is not leaning at t=${t.toFixed(2)}`).toBeGreaterThan(3.0);
     }
+  });
+
+  /**
+   * Kong Karry (Plan 6, Task 20): the load is held over his head in both hands
+   * the whole way round the walk, and standing still the carry rests on its
+   * first key, so that key is the walk's passing pose, feet together: Plan 5's
+   * stand-in froze him mid-stride (the walk's contact key).
+   */
+  it("carries the load over his head in both hands, and rests feet together", () => {
+    for (let i = 0; i < 8; i++) {
+      const p = partsAt("cargoCarry", i / 8);
+      const crown = p.head.y + rig.headRadius;
+      expect(p.handR.y, `near hand below the crown at t=${i / 8}`).toBeGreaterThan(crown);
+      expect(p.handL.y, `far hand below the crown at t=${i / 8}`).toBeGreaterThan(crown);
+    }
+    const rest = partsAt("cargoCarry", 0);
+    expect(Math.abs(rest.footR.x - rest.footL.x)).toBeLessThan(1);
   });
 
   /** And the knuckles stay put while the chest breathes over them. */

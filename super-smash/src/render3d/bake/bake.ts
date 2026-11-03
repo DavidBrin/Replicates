@@ -77,6 +77,21 @@ export function attackClipTime(strike: number | undefined, firstActive: number, 
   return frames <= 0 ? 0 : Math.min(1, f / frames);
 }
 
+/**
+ * Normalised clip time on frame `k` (1-based) of a full release's own motion, `frames`
+ * long (Plan 6, Task 20): from `from`, where the move's own motion stood on its loop
+ * frame, to the clip's `strike` on the frame the release first hits (`hit`), and on to
+ * the end; linearly from `from` when the strike is behind it or there is no hit.
+ */
+export function fullReleaseClipTime(from: number, strike: number | undefined, hit: number, frames: number, k: number): number {
+  const f = k - 1;
+  const h = hit - 1;
+  if (strike !== undefined && strike > from && h > 0 && h < frames) {
+    return f <= h ? from + ((strike - from) * f) / h : Math.min(1, strike + ((1 - strike) * (f - h)) / (frames - h));
+  }
+  return frames <= 0 ? from : Math.min(1, from + ((1 - from) * f) / frames);
+}
+
 export interface ScriptTiming {
   /** Motion frames the move lasts. */
   readonly frames: number;
@@ -113,6 +128,8 @@ export interface StatusMotionSpec {
    * (`ROLL_FORWARD`/`ROLL_BACK`). 0 for every other status.
    */
   readonly charge: number;
+  /** On the ground or not: the carry's two motions (Plan 6, Task 20). */
+  readonly grounded: boolean;
 }
 
 /**
@@ -172,10 +189,12 @@ export function statusMotionSpecs(): StatusMotionSpec[] {
   for (const action of Object.keys(STATUS_KIND_OF_ACTION) as ActionState[]) {
     for (const charge of DODGE_CHARGES[action] ?? [0]) {
       for (const v of VARIANTS) {
-        const motion = statusMotion({ action, charge, ...v });
-        if (seen.has(motion)) continue;
-        seen.add(motion);
-        out.push({ motion, action, charge, ...v });
+        for (const grounded of [true, false]) {
+          const motion = statusMotion({ action, charge, ...v, grounded });
+          if (seen.has(motion)) continue;
+          seen.add(motion);
+          out.push({ motion, action, charge, ...v, grounded });
+        }
       }
     }
   }
@@ -288,17 +307,30 @@ export function moveSamplers(def: FighterDef): Map<MotionKind, MotionSampler & {
       continue;
     }
     if (out.has(script.motion)) throw new Error(`bake ${def.id}: slots ${out.get(script.motion)!.slot} and ${slot} share motion ${script.motion}`);
-    const clip = clipFor(def.id, SLOT_POSE[slot]);
+    // Donkey Kong's lift is his forward throw (`MoveDef.cargo`), on a clip of its own
+    // (Plan 6, Task 20): `fthrow`'s stays his throw's, which his carried forward throw plays.
+    const clip = clipFor(def.id, move.cargo === true ? "cargoLift" : SLOT_POSE[slot]);
     const timing = scriptTiming(script, move.totalFrames);
     // A move whose clip strikes elsewhere than its first box (`MoveDef.clipStrike`;
     // Plan 5, Task 17 fix round 1: Zero Laser fires on the laser, not the charge).
     const strikeAt = move.clipStrike === undefined ? timing.firstActive : runScript(script, move.clipStrike).motionFrame;
-    out.set(script.motion, {
-      slot,
-      clip,
-      clock: { kind: "script", frames: timing.frames },
-      time: (k) => attackClipTime(clip.strike, strikeAt, timing.frames, k),
-    });
+    const time = (k: number) => attackClipTime(clip.strike, strikeAt, timing.frames, k);
+    out.set(script.motion, { slot, clip, clock: { kind: "script", frames: timing.frames }, time });
+    // A full release's own motion (Plan 6, Task 20; `fullReleaseIndex`): the same clip,
+    // from where the move's motion stands on the loop frame (game frame loopFrame + 1),
+    // striking on the first game frame after it that hits or shoots.
+    const sc = move.specialCharge;
+    const fullMotion = sc?.mode === "store" ? sc.fromStore.motion : undefined;
+    if (sc?.mode === "store" && fullMotion !== undefined) {
+      const frames = sc.fromStore.fullFrames ?? 1;
+      const from = time(runScript(script, sc.loopFrame + 1).motionFrame);
+      let hit = -1;
+      for (let g = sc.loopFrame + 1; g <= move.totalFrames && hit < 0; g++) if (runScript(script, g).attacks.length > 0) hit = g - sc.loopFrame;
+      const shot = (move.projectiles ?? []).find((p) => p.spawnFrame > sc.loopFrame);
+      if (hit < 0 && shot !== undefined) hit = shot.spawnFrame - sc.loopFrame;
+      if (out.has(fullMotion)) throw new Error(`bake ${def.id}: ${slot}'s full release shares motion ${fullMotion}`);
+      out.set(fullMotion, { slot, clip, clock: { kind: "once", frames }, time: (k) => fullReleaseClipTime(from, clip.strike, hit, frames, k) });
+    }
   }
   return out;
 }
@@ -343,6 +375,8 @@ function dodgeTiming(spec: StatusMotionSpec, poseName: PoseName, def: FighterDef
  * (Pikachu's); the other seven would each bake a copy of their crouch.
  */
 export function bakesStatus(def: FighterDef, spec: Pick<StatusMotionSpec, "action">): boolean {
+  // Plan 6, Task 20: likewise the carry, for the one fighter whose forward throw lifts (`MoveDef.cargo`).
+  if (spec.action === "cargoCarry") return def.moves.fthrow?.cargo === true;
   return spec.action !== "crawl" || def.attributes.canCrawl === true;
 }
 
@@ -351,7 +385,7 @@ export function statusSamplers(def: FighterDef): Map<MotionKind, MotionSampler> 
   const out = new Map<MotionKind, MotionSampler>();
   for (const spec of statusMotionSpecs()) {
     if (!bakesStatus(def, spec)) continue;
-    const poseName = poseNameFor({ action: spec.action, move: null, jumpsUsed: spec.jumpsUsed, fastFalling: spec.fastFalling });
+    const poseName = poseNameFor({ action: spec.action, move: null, jumpsUsed: spec.jumpsUsed, fastFalling: spec.fastFalling, grounded: spec.grounded });
     const clip = clipFor(def.id, poseName);
     const clock = statusClock(clip, poseName, spec, def);
     out.set(spec.motion, { clip, clock, ...(dodgeTiming(spec, poseName, def, clock) ?? { time: (k) => clipTimeOfFrame(clock, k) }) });

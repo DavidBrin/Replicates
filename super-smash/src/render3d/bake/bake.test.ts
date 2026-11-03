@@ -9,6 +9,11 @@ import { dodgeIntangible, groundDodgeOf, ROLL_BACK, ROLL_FORWARD, rollOf } from 
 import { STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
 import type { ActionState, FighterDef } from "@/engine/types";
 import { FIGHTERS, getFighter } from "@/fighters";
+import { bakeTables } from "@/engine/acmd/bakeTables";
+import { localHurtboxes } from "@/engine/acmd/hurtboxes";
+import { moveScriptFrame } from "@/engine/acmd/run";
+import { toFloat } from "@/engine/fixed";
+import { clipFor } from "@/render/chars";
 import { airDodgeClipTime } from "@/render/poses/airDodge";
 import { rollClipTime, rollTurnTime, spotDodgeClipTime } from "@/render/poses/groundDodgeTime";
 import { actionDurationFor, jumpTimingFor, moveTimingFor, poseSpinFor, samplePoseForFighter, type PosedFighter } from "@/render/poses/timing";
@@ -69,12 +74,14 @@ function drawn2d(def: FighterDef, spec: StatusMotionSpec, actionFrame: number) {
 }
 
 describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", () => {
-  it("are every motion statusMotion can name, each once: 59 over the 60 actions, tumbleFall among them", () => {
+  it("are every motion statusMotion can name, each once: 61 over the 60 actions, tumbleFall among them", () => {
     const named = new Set<string>();
     for (const action of ACTIONS) {
       for (let charge = -3; charge <= 20; charge++) {
         for (const jumpsUsed of [0, 1, 2, 3]) {
-          for (const fastFalling of [false, true]) named.add(statusMotion({ action, charge, jumpsUsed, fastFalling }));
+          for (const fastFalling of [false, true]) {
+            for (const grounded of [true, false]) named.add(statusMotion({ action, charge, jumpsUsed, fastFalling, grounded }));
+          }
         }
       }
     }
@@ -90,12 +97,13 @@ describe("the status motions the bake plays (DISPATCH-NOTES 10.3, ruling R4)", (
     // Task 14: one more, the trapped, and no motion more: it plays the grab's.
     // Task 17: two motions more, the footstooled's and the crawl's, their own clips.
     // Plan 6, Task 7: one more, the edge slip, and no motion more: it plays the fall's.
+    // Task 20: the carry leaves the walk's for two of its own, on the ground and in the air.
     expect(ACTIONS).toHaveLength(60);
-    expect(named.size).toBe(59);
+    expect(named.size).toBe(61);
     expect(specs.map((s) => s.motion).sort()).toEqual([...named].sort());
     // Plan 5, Task 4b: the helpless fall and its landing bake nothing of their
     // own; they play the fall's and the landing lag's (`MOTION_OF_ACTION`), as
-    // the carry and the carried play the walk's and the grab's (Task 8).
+    // the carried plays the grab's (Task 8).
     expect(new Set(specs.map((s) => s.action))).toEqual(new Set(ACTIONS.filter((a) => MOTION_OF_ACTION[a] === undefined)));
     expect(specs.map((s) => s.motion)).toContain("status_tumbleFall");
     for (const s of specs) expect(statusMotion(s)).toBe(s.motion);
@@ -269,6 +277,50 @@ describe("a move's clip time (DECISIONS D34, in motion frames)", () => {
     expect(attackClipTime(undefined, 6, 20, 11)).toBe(0.5);
     // A box live on the first frame has no wind-up to stretch.
     expect(attackClipTime(0.4, 1, 20, 11)).toBe(0.5);
+  });
+});
+
+describe("Donkey Kong's carry and lift, and the full releases (Plan 6, Task 20)", () => {
+  it("bake each full release on a motion of its own, its 47 frames, from the loop frame's pose on through the clip", () => {
+    for (const [id, motion] of [["donkeyKong", "special_n_max"], ["samus", "special_n_f_max"]] as const) {
+      const def = fighterOf(id);
+      const moves = moveSamplers(def);
+      const full = moves.get(motion)!;
+      const own = moves.get(gameScriptFor(def, "neutralB")!.motion)!;
+      expect(full, id).toMatchObject({ slot: "neutralB", clock: { kind: "once", frames: 47 } });
+      expect(full.clip).toBe(own.clip);
+      const sc = def.moves.neutralB!.specialCharge!;
+      // Where the move's own motion stands on the loop frame (the press's first frame of the release)…
+      const loopMotionFrame = moveScriptFrame(def, { move: "neutralB", actionFrame: sc.loopFrame })!.state.motionFrame;
+      expect(full.time(1), id).toBeCloseTo(own.time(loopMotionFrame), 12);
+      // …on through the clip, never back, never holding.
+      for (let k = 2; k <= 47; k++) expect(full.time(k), `${id} ${k}`).toBeGreaterThan(full.time(k - 1));
+    }
+    // Donkey Kong's punch strikes on the motion's frame 19, the script's hit (rubendal `game_specialnmax`).
+    const dk = moveSamplers(fighterOf("donkeyKong")).get("special_n_max")!;
+    expect(dk.time(19)).toBeCloseTo(dk.clip.strike!, 12);
+  });
+
+  it("bake the lift (Donkey Kong's forward throw, `cargo`) on the lift clip, and his carried forward throw on the throw's, as before", () => {
+    const dk = fighterOf("donkeyKong");
+    const moves = moveSamplers(dk);
+    expect(moves.get(gameScriptFor(dk, "fthrow")!.motion)!.clip).toBe(clipFor("donkeyKong", "cargoLift"));
+    expect(moves.get(gameScriptFor(dk, "cargoFthrow")!.motion)!.clip).toBe(clipFor("donkeyKong", "fthrow"));
+    expect(clipFor("donkeyKong", "cargoLift")).not.toBe(clipFor("donkeyKong", "fthrow"));
+  });
+
+  it("bake the carry for Donkey Kong alone, both arms over his head in 3D at its rest", () => {
+    for (const def of FIGHTERS) expect(statusSamplers(def).has("status_cargoCarry"), def.id).toBe(def.id === "donkeyKong");
+    const dk = fighterOf("donkeyKong");
+    const tables = bakeTables([bakeFighter({ def: dk, skeleton: SKELETONS.donkeyKong, scriptBones: referenceScriptBones("donkeyKong") })], "dk");
+    const caps = localHurtboxes(dk, { defId: "donkeyKong", action: "cargoCarry", actionFrame: 0, move: null, port: 0, charge: 0, hitstun: 0, jumpsUsed: 0, fastFalling: false, vx: 0, vy: 0, shortHop: false }, 0, tables)!;
+    const bones = tables.hurtboxes("donkeyKong")!.map((h) => h.bone);
+    const top = (bone: string) => {
+      const c = caps[bones.indexOf(bone)];
+      return toFloat(Math.max(c.y1, c.y2));
+    };
+    expect(top("armr")).toBeGreaterThan(top("head"));
+    expect(top("arml")).toBeGreaterThan(top("head"));
   });
 });
 

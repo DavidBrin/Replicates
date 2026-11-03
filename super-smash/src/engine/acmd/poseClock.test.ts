@@ -10,8 +10,8 @@ import { createInitialState, registerFighters, registerStages, step } from "../s
 import { LANDING_ANIMATION_FRAMES } from "../states";
 import { STATUS_KIND_OF_ACTION } from "../status/kind";
 import { Btn } from "../types";
-import type { ActionState, FighterDef, FighterState, GameState, InputFrame, MatchRules } from "../types";
-import { FIGHTERS } from "@/fighters";
+import type { ActionState, FighterDef, FighterState, GameState, InputFrame, MatchRules, StoreCharge } from "../types";
+import { FIGHTERS, donkeyKong, samus } from "@/fighters";
 import { STAGES } from "@/stages";
 import { SLOT_MOTION } from "./legacy";
 import {
@@ -21,6 +21,7 @@ import {
   SCALED_FRAMES,
   STRIDE_UNITS,
   VARIABLE_LENGTH_ACTIONS,
+  fullReleaseIndex,
   poseIndexOf,
   statusDuration,
   statusMotion,
@@ -85,8 +86,8 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
   // Plan 5, Task 4b: the helpless fall plays the fall's motion, fast fall
   // included, and its special landing the landing lag's, on its own lag.
   it("plays the helpless fall as a fall and its landing as landing lag, sharing their motions", () => {
-    // Plan 5, Task 8 fix round 1 (ruling R-T8c): the carry plays the walk's motion
-    // and the carried the grab's, each its own frames byte for byte before.
+    // Plan 5, Task 8 fix round 1 (ruling R-T8c): the carried plays the grab's motion,
+    // its own frames byte for byte before (the carry left the walk's in Plan 6, Task 20).
     // Plan 5, Task 9: Kirby's mouthful plays the walk's, and the swallowed and the
     // spat the tumble's (`poseNameFor`'s own clips, which baked them byte for byte).
     // Task 13c fix round 1: the rebound the stand's (a stand-in); Task 14: the
@@ -98,14 +99,13 @@ describe("the pose clock (which baked frame a fighter's bones are on)", () => {
       // Plan 6, Task 7: the edge slip falls on the fall's clip.
       edgeSlip: "fall",
       specialLanding: "landingLag",
-      cargoCarry: "walk",
       cargoHeld: "grabbed",
       finalTrapped: "grabbed",
       inhaleHold: "walk",
       swallowed: "tumble",
       spatStar: "tumble",
     });
-    expect(statusMotion({ action: "cargoCarry", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_walk");
+    expect(statusMotion({ action: "cargoCarry", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_cargoCarry");
     expect(statusMotion({ action: "cargoHeld", jumpsUsed: 1, fastFalling: false, charge: 0 })).toBe("status_grabbed");
     expect(statusMotion({ action: "finalTrapped", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_grabbed");
     expect(statusMotion({ action: "rebound", jumpsUsed: 0, fastFalling: false, charge: 0 })).toBe("status_stand");
@@ -225,6 +225,41 @@ describe("the pose clock plays a move at its script's motion frame", () => {
 
 /* ------------------------------------------- per-fighter dodges (R4) -- */
 
+describe("Donkey Kong's carry and a full release play motions of their own (Plan 6, Task 20)", () => {
+  it("plays the carry on its own motions, standing or walking and in the air, no longer the walk's", () => {
+    expect(MOTION_OF_ACTION.cargoCarry).toBeUndefined();
+    expect(statusMotion({ action: "cargoCarry", jumpsUsed: 0, fastFalling: false, charge: 0, grounded: true })).toBe("status_cargoCarry");
+    expect(statusMotion({ action: "cargoCarry", jumpsUsed: 1, fastFalling: false, charge: 0, grounded: false })).toBe("status_cargoCarry_air");
+  });
+
+  const store = (def: FighterDef) => def.moves.neutralB!.specialCharge as StoreCharge;
+  const releasing = (def: FighterDef, actionFrame: number, charge = store(def).frames) =>
+    fighter({ defId: def.id, action: "special", move: "neutralB", charge, actionFrame });
+
+  it("plays Samus's full Charge Shot entry on the move's motion, then special_n_f_max from the loop frame to her last frame", () => {
+    const sc = store(samus);
+    expect(fullReleaseIndex(samus, releasing(samus, sc.loopFrame - 1))).toBeNull();
+    expect(fullReleaseIndex(samus, releasing(samus, sc.loopFrame))).toEqual({ motion: "special_n_f_max", frame: 1 });
+    // The shot leaves on the motion's frame 3 (rubendal 13.0.1 `game_specialnfiremax`), the move's 16.
+    expect(fullReleaseIndex(samus, releasing(samus, 15))).toEqual({ motion: "special_n_f_max", frame: 3 });
+    // Her last frame before she acts (Interruptible 61 from the press) is the motion's 47th: nothing held.
+    expect(fullReleaseIndex(samus, releasing(samus, 59))).toEqual({ motion: "special_n_f_max", frame: 47 });
+  });
+
+  it("plays Donkey Kong's full Giant Punch on special_n_max, its hit on the motion's frame 19; a partial one is no full release", () => {
+    const sc = store(donkeyKong);
+    expect(fullReleaseIndex(donkeyKong, releasing(donkeyKong, sc.loopFrame))).toEqual({ motion: "special_n_max", frame: 1 });
+    // rubendal 13.0.1 `game_specialnmax`: ATTACK on frame 19, the press's 19th ("Hitbox 19-20").
+    expect(fullReleaseIndex(donkeyKong, releasing(donkeyKong, sc.loopFrame + 18))).toEqual({ motion: "special_n_max", frame: 19 });
+    expect(fullReleaseIndex(donkeyKong, releasing(donkeyKong, sc.loopFrame + 46))).toEqual({ motion: "special_n_max", frame: 47 });
+    expect(fullReleaseIndex(donkeyKong, releasing(donkeyKong, sc.loopFrame + 18, sc.frames - 1))).toBeNull();
+    // `poseIndexOf` plays it once the bake has it, and the move's own motion without it.
+    const f = releasing(donkeyKong, sc.loopFrame + 18);
+    expect(poseIndexOf(donkeyKong, f, 0, clocks({ special_n_max: { kind: "once", frames: 47 } }))).toEqual({ motion: "special_n_max", frame: 19 });
+    expect(poseIndexOf(donkeyKong, f, 0, clocks({}))).toBeNull();
+  });
+});
+
 describe("each fighter's dodges are motions of their own, per direction (ruling R4)", () => {
   it("names one air-dodge motion per direction class, chosen by the direction charge remembers", () => {
     for (let charge = 0; charge <= 9; charge++) {
@@ -251,8 +286,8 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
         for (const jumpsUsed of [1, 2])
           for (const fastFalling of [false, true]) names.add(statusMotion({ action, jumpsUsed, fastFalling, charge }));
     // 50 actions of their own (the two helpless ones share the fall's and the
-    // landing lag's; Plan 5 Task 8's carry and carried, the walk's and the
-    // grab's; Task 9's mouthful, swallowed and spat, the walk's and the
+    // landing lag's; Plan 5 Task 8's carried, the grab's (the carry has its own
+    // since Plan 6, Task 20); Task 9's mouthful, swallowed and spat, the walk's and the
     // tumble's; Task 13c's rebound, the stand's; Task 14's trapped, the grab's;
     // Task 11's footstooled and Task 12's crawl have their own since Task 17;
     // Plan 6, Task 7's edge slip, the fall's),

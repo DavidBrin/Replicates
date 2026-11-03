@@ -7,7 +7,7 @@
  * marked "frames" is a whole number of 60Hz simulation frames.
  */
 
-import type { AcmdScript } from "./acmd/types";
+import type { AcmdScript, MotionKind } from "./acmd/types";
 import type { CombatState } from "./combat";
 import type { KineticState } from "./kinetic";
 import type { FighterParams } from "./params";
@@ -987,6 +987,12 @@ export interface StoredFullCharge {
   readonly interruptible: number;
   /** Its super armour, first and last frame, on the ground and in the air. */
   readonly superArmour?: { readonly grounded: readonly [number, number]; readonly aerial?: readonly [number, number] };
+  /**
+   * The motion a full release plays from the move's loop frame on, and its length (Plan 6,
+   * Task 20; `fullReleaseIndex`). Both or neither.
+   */
+  readonly motion?: MotionKind;
+  readonly fullFrames?: number;
 }
 
 export interface MoveDef {

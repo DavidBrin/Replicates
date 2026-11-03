@@ -119,7 +119,8 @@ function airDodgeSuffix(charge: number): string {
  * special landing is the landing lag's, scaled across the move's own lag.
  * Task 8 fix round 1 (ruling R-T8c): Donkey Kong's carry is his walk's, and the
  * fighter carried plays the grab's; their own motions baked byte for byte the
- * same frames. An authored carry clip will be a motion of its own. Task 9:
+ * same frames. Plan 6, Task 20 authored the carry, which left for motions of its
+ * own (`status_cargoCarry`, `status_cargoCarry_air`). Task 9:
  * Kirby's mouthful plays the walk's, and the fighter swallowed and the one spat
  * the tumble's (`poseNameFor` gives them those clips). Task 13c fix round 1: a
  * rebound plays the stand's (UNVERIFIED stand-in: no rebound clip is authored;
@@ -134,7 +135,6 @@ export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>
   // Plan 6, Task 7: the edge slip falls on the fall's clip until it has one of its own.
   edgeSlip: "fall",
   specialLanding: "landingLag",
-  cargoCarry: "walk",
   cargoHeld: "grabbed",
   finalTrapped: "grabbed",
   inhaleHold: "walk",
@@ -148,9 +148,12 @@ export const MOTION_OF_ACTION: Readonly<Partial<Record<ActionState, ActionState>
  * (`airDodgeFrames`: a left and a right diagonal last the same; `rollOf`), so
  * each is its own motion, baked once at that length.
  */
-export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling" | "charge">): MotionKind {
+export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling" | "charge"> & Partial<Pick<FighterState, "grounded">>): MotionKind {
   const shared = MOTION_OF_ACTION[f.action];
   if (shared !== undefined) return statusMotion({ ...f, action: shared });
+  // Carried in the air (a jump with the load), not striding (Plan 6, Task 20). A caller
+  // that names no `grounded` is read as on the ground: the sim passes whole states.
+  if (f.action === "cargoCarry" && f.grounded === false) return "status_cargoCarry_air";
   if (f.action === "jump" && f.jumpsUsed >= 2) return "status_jump_aerial";
   if ((f.action === "fall" || f.action === "dead") && f.fastFalling) return `status_${f.action}_fast`;
   if (f.action === "airDodge") return `status_airDodge${airDodgeSuffix(f.charge)}`;
@@ -314,10 +317,28 @@ const clampFrame = (n: number, frames: number): number => (n < 1 ? 1 : n > frame
 const wrap = (n: number, frames: number): number => (((n % frames) + frames) % frames) + 1;
 
 /**
+ * A full release's (motion, frame) (Plan 6, Task 20), or null: a store-mode special at
+ * full charge plays its full motion (`StoredFullCharge.motion`) frame for frame from the
+ * move's loop frame, where the release starts (rubendal 13.0.1: Samus's
+ * `special_n_f_max` after her 13 entry frames, Donkey Kong's `special_n_max` from his
+ * loop frame, which a stored full punch starts on). Before it, the entry plays on the
+ * move's own motion.
+ */
+export function fullReleaseIndex(def: FighterDef, f: Pick<ClockedFighter, "action" | "move" | "charge" | "actionFrame">): PoseIndex | null {
+  if (f.action !== "special" || f.move === null) return null;
+  const sc = def.moves[f.move]?.specialCharge;
+  if (sc?.mode !== "store" || sc.fromStore.motion === undefined || f.charge < sc.frames || f.actionFrame < sc.loopFrame) return null;
+  return { motion: sc.fromStore.motion, frame: clampFrame(f.actionFrame - sc.loopFrame + 1, sc.fromStore.fullFrames ?? 1) };
+}
+
+/**
  * The (motion, frame) a fighter's bones are at, or null when no bake covers it
  * (callers fall back to the legacy single capsule / root bone).
  */
 export function poseIndexOf(def: FighterDef, f: ClockedFighter, globalFrame: number, clockOf: ClockLookup): PoseIndex | null {
+  // A full release plays its own motion (Plan 6, Task 20).
+  const full = fullReleaseIndex(def, f);
+  if (full !== null && clockOf(def.id, full.motion) !== undefined) return full;
   if (f.move !== null && playsMoveScript(f.action)) {
     const run = moveScriptFrame(def, f);
     if (run === null) return null;
