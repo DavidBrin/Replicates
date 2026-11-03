@@ -131,9 +131,9 @@ export class OnlineSession implements OnlineSessionLike {
   /** The last link status, to tell a lost channel from a peer that never connected. */
   private link: DoSignalStatus = "waiting";
   /**
-   * Whether the channel has opened since the room seated the current peer: a
+   * Whether the channel has opened since the room last seated a peer: a
    * channel lost after that is a reconnect, with re-offers; one that never
-   * opened is no direct link (`reconnectAfter`).
+   * opened is no direct link (`reconnectAfter`). Reset by `peer-joined` only.
    */
   private linked = false;
   /** Fresh offers the host has left for this outage; see `REOFFER_DELAYS_MS`. */
@@ -172,8 +172,10 @@ export class OnlineSession implements OnlineSessionLike {
           this.events.emit({ type: "peer", present: true });
           break;
         case "peer-left":
+          // `linked` stays: a held channel can outlive its peer's room socket, and a link
+          // that opened and then fails is a failed link, not no direct link (Task 40b
+          // review Minor 2). An empty seat starts no first link; the next peer-joined does.
           this.seatedPeer = null;
-          this.linked = false;
           this.resetReconnect();
           // A start that went to (or came from) the player who left is
           // withdrawn: whoever takes the seat meets a lobby again.

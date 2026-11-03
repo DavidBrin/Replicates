@@ -677,6 +677,32 @@ describe("OnlineSession", () => {
       expect(session.transport.status).toBe("open");
     });
 
+    /**
+     * The final wave (Task 40b review Minor 2): mid-match the other player's room socket can
+     * drop while the held channel stays open. A link that worked and then fails is a failed
+     * link, not "couldn't connect directly": only a newcomer in the seat starts a first link.
+     */
+    it("calls a link that had opened, failing after its peer's room socket left mid-match, a failed link", async () => {
+      const { session, signalling, channel, events, fail } = await negotiatingHost();
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      fail();
+      expect(events.at(-1)).toEqual({ type: "link", status: "failed" });
+      expect(errors(events)).toEqual([]);
+      expect(signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "no-direct-link")).toEqual([]);
+    });
+
+    it("still calls a newcomer's first link that fails no direct link", async () => {
+      const { session, signalling, channel, events, fail } = await negotiatingHost();
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      fail();
+      expect(errors(events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
+    });
+
     /** A channel that had opened and dropped is a reconnect, not a first link: its re-offers stand. */
     it("says the room is lost once every re-offer to a channel that had opened has timed out too", async () => {
       const h = await hostMeetingGuest();
