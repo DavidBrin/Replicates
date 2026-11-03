@@ -85,6 +85,10 @@ export function reflectProjectile(p: ProjectileState, def: ProjectileDef, by: Fi
   const left = Math.trunc((lifetime * r.lifetime) / ONE);
   p.age = lifetime - left;
   if (crawling) p.life = left;
+  // A jolt's whole life (`crawl.maxLife`, from `lived`) starts again with its renewed clock
+  // (Plan 6, Task 16 fix round 3, controller ruling): a reflected spark or wave is not
+  // cut off at 193 frames from its first firing. Only a crawl definition reads `lived`.
+  if (def.crawl !== undefined) p.lived = 0;
   p.hitPorts.length = 0;
   // UNVERIFIED: a reflected boomerang starts its flight over, so it slows from
   // its reflected speed, turns, and comes back to the reflector, its owner now,

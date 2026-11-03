@@ -1088,6 +1088,23 @@ describe("Thunder Jolt runs along surfaces (Plan 6, Task 16; SmashWiki \"Thunder
     }
   });
 
+  it("a spark reflected in flight 150 frames after its firing runs its renewed life, its 193 frames started again (fix round 3)", () => {
+    const open = fx(1000);
+    const stage = { ...FD, blastZone: { left: -open, right: open, top: open, bottom: -open }, platforms: [] };
+    const { fighters } = duel("pikachu", "fox", 0, 40);
+    const p: ProjectileState = {
+      ...spawnProjectile(JOLT(), fighters[0], 1),
+      mode: "fly", ground: -1, face: -1, life: 0, facing: 1,
+      x: 0, y: fx(100), vx: JOLT().vx, vy: JOLT().vy, age: 50, lived: 150,
+    };
+    // Fox's Reflector ("Lifetime multiplier" 1): the spark's whole 98 again, from age 0.
+    reflectProjectile(p, JOLT(), fighters[1], fighterDef("fox").moves.downB!.reflector!);
+    expect([p.age, p.lived]).toEqual([0, 0]);
+    let frames = 1;
+    for (let frame = 1; frame < 400 && advanceProjectile(p, JOLT(), stage, null, frame).alive; frame++) frames += 1;
+    expect(frames, "not cut off at 193 from its firing").toBe(JOLT().lifetime);
+  });
+
   it("a spark meeting a wall runs down it, then along the underside (`meetSide`)", () => {
     const wall = FLOOR.x - FLOOR.halfWidth;
     const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "fox" }], RULES, 5);

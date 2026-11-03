@@ -575,7 +575,8 @@ export interface ProjectileDef {
    * boxes are `hitbox` (for fighters on the ground) and `air` (for fighters in the air),
    * each over its `hitbox`, then each of `stages` from its age. Meeting a surface sets its
    * age to 0 and its life to `life` ("its hitbox duration always starts from the
-   * beginning"), but never past `maxLife` frames from its firing (`ProjectileState.lived`).
+   * beginning"), but never past `maxLife` frames from its firing or its last reflection
+   * (`ProjectileState.lived`).
    * One fired from a fighter on the ground runs from its first frame.
    */
   readonly crawl?: {
@@ -1720,9 +1721,10 @@ export interface ProjectileState {
    */
   face: number;
   /**
-   * Frames since it was fired, in every mode, never renewed (Plan 6, Task 16 fix round
-   * 1): what holds a running projectile to its `crawl.maxLife` however often it lands.
-   * `age` is renewed by a landing or a reflection; this is not.
+   * Frames since it was fired, in every mode (Plan 6, Task 16 fix round 1): what holds a
+   * running projectile to its `crawl.maxLife` however often it lands. A landing does not
+   * renew it, as it renews `age`; a reflection of a `crawl` projectile starts it again
+   * (fix round 3, `reflectProjectile`).
    */
   lived: number;
   /**
