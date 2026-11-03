@@ -896,6 +896,53 @@ describe("a tick the rollback session refuses", () => {
     expect(moves[0], "carried without its Soft, the tilt went out as a smash").toBe("ftilt");
   });
 
+  /** Tilt and Right (and `kept`) held from the start into the stall, Attack tapped on a refused tick, Tilt and Right let go on the next, `kept` held to the end; the moves the host's Mario began, and the frames it sent. */
+  function attackUnderHeldTilt(kept: readonly string[] = []) {
+    const { bindings } = CONFIG_ARROWS;
+    const { network, keyboard, host, guest, sent } = hostWithKeyboard();
+    const moves: string[] = [];
+    try {
+      // Tilt and Right held from the start (Mario walks), into the stall.
+      for (const code of [bindings.tilt, bindings.right, ...kept]) window.dispatchEvent(new KeyboardEvent("keydown", { code }));
+      for (let i = 0; i < 20; i++) {
+        host.advance(1);
+        network.advance(FRAME_MS);
+      }
+      expect(host.stalled).toBe(true);
+      // Attack tapped on one refused tick; Tilt and Right let go on the next.
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: bindings.attack }));
+      window.dispatchEvent(new KeyboardEvent("keyup", { code: bindings.attack }));
+      host.advance(1);
+      for (const code of [bindings.tilt, bindings.right]) window.dispatchEvent(new KeyboardEvent("keyup", { code }));
+      host.advance(1);
+      expect(host.stalled).toBe(true);
+      for (let i = 0; i < 40; i++) {
+        guest.advance(1);
+        host.advance(1);
+        network.advance(FRAME_MS);
+        const move = host.state.fighters[0].move;
+        if (move !== null && moves.at(-1) !== move) moves.push(move);
+      }
+      for (const code of kept) window.dispatchEvent(new KeyboardEvent("keyup", { code }));
+      return { moves, sent };
+    } finally {
+      keyboard.detach();
+    }
+  }
+
+  it("keeps Attack tapped during the stall under a Tilt-key direction held from before it a tilt, the keys let go before it ends (Plan 6, Task 4 fix round 2)", () => {
+    const { moves, sent } = attackUnderHeldTilt();
+    expect(sent.filter((input) => (input & Btn.Attack) !== 0), "the Attack and the tilt it was made under").toEqual([Btn.Right | Btn.Soft | Btn.Attack]);
+    expect(moves[0], "carried without its direction, the tilt went out as a jab").toBe("ftilt");
+  });
+
+  it("gives that Attack no aim on a frame that holds a direction of its own (Plan 6, Task 4 fix round 2)", () => {
+    // Down held hard from the start and kept after Tilt and Right are let go: the frame the
+    // Attack joins holds Down, which no press carries.
+    const { sent } = attackUnderHeldTilt([CONFIG_ARROWS.bindings.down]);
+    expect(sent.filter((input) => (input & Btn.Attack) !== 0)).toEqual([Btn.Down | Btn.Attack]);
+  });
+
   it("drops a carried tilt's Soft on a frame that holds a hard direction (Plan 6, Task 4 fix round 1)", () => {
     const { bindings } = CONFIG_ARROWS;
     // Up held hard, no Tilt key, from the second refused tick on: the frame the tilt joins.
@@ -1005,6 +1052,8 @@ describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4
         network.advance(FRAME_MS);
       }
       expect(tappedOnRunningTick).toBe(true);
+      // At latency 0 every frame is acknowledged before the next window, so no overwrite is ever
+      // re-sent here and no session mutant bites this; overwrites are pinned by the horizon check below and the hash and desync checks.
       expect(conflicts, "frames re-sent with another value").toBe(0);
       expect(sent.findIndex((input) => (input & Btn.Jump) !== 0), "the first frame past the horizon the tap was made at").toBe(horizon + 1);
       expect(sent.filter((input) => (input & Btn.Jump) !== 0)).toHaveLength(1);
@@ -1303,6 +1352,9 @@ describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", ()
     expect(flicks).toHaveLength(1);
     expect(flicks[0] & Btn.Left, "the later flick's direction").not.toBe(0);
     expect(flicks[0] & Btn.Right).toBe(0);
+    // Nothing of the replaced flick goes out: not its direction and Attack as a plain press either (fix round 2).
+    expect(stalled.sent.filter((input) => (input & Btn.Attack) !== 0), "the later flick's fire alone").toEqual(flicks);
+    expect(stalled.sent.filter((input) => (input & Btn.Right) !== 0), "the replaced flick's direction").toEqual([]);
   });
 
   it("a pad press on an owed flick frame a second flick's fire replaces still reaches the wire once (Plan 6, Task 4 fix round 1)", () => {
@@ -1320,6 +1372,22 @@ describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", ()
       expect(stalled.guest.frame).toBe(stalled.host.frame);
       expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
     }
+  });
+
+  it("Attack tapped in a stall under a pad tilt held from before it, the stick let go before it ends: still the forward tilt (Plan 6, Task 4 fix round 2)", () => {
+    // The left stick half right from tick 1 (Mario walks), A on the host's fourth refused poll alone,
+    // the stick back at rest on the next: only the A is fresh, its tilt is the held direction.
+    const script: PadScript = (t) => ({ buttons: t === STALL + 3 ? [PAD.attack] : [], rightX: 0, leftX: t <= STALL + 3 ? 0.5 : 0 });
+    const live = flickMatch(script, 1);
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).toEqual(expect.arrayContaining([STALL + 3, STALL + 4]));
+    const tilt = Btn.Right | Btn.Soft | Btn.Attack;
+    expect(live.move).toBe("ftilt");
+    expect(live.sent).toContain(tilt);
+    expect(stalled.sent.filter((input) => (input & Btn.Attack) !== 0), "the Attack and the tilt it was made under").toEqual([tilt]);
+    expect(stalled.move, "carried without its direction, the tilt went out as a jab").toBe("ftilt");
+    expect(stalled.guest.frame).toBe(stalled.host.frame);
+    expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
   });
 
   it("a pad tilt and Attack inside a stall go out as the forward tilt they were, not a forward smash (Plan 6, Task 4 fix round 1)", () => {
