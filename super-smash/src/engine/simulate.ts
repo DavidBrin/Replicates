@@ -927,7 +927,13 @@ export function step(
     // above, on every step (UNVERIFIED-simplified); its hitstun, status and movement wait
     // for its next running step. A press made now waits in the buffer, as in a KO's
     // freeze (Task 13), and a dodge's or a move's intangible frames hold, as in hitlag.
+    // The buffer ages only on the fighter's own running steps, as its actions lengthen
+    // (SmashWiki "Slowdown": "increased in length proportional to the degree of
+    // slowdown"): a press already waiting is kept a step younger, so a tap under Mario
+    // Finale's rate 20 or the Ancient Arrow's 30 still fires on the next running step
+    // (Review Focus 3; Task 41's fix wave, final review I-1).
     if (slowStill) {
+      if (f.bufferedAction !== null) f.bufferedAction.frame += 1;
       bufferPress(f, intent, s.frame);
       updateDodgeIntangibility(f, defs[i]);
       frozen[i] = true;

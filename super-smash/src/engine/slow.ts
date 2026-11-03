@@ -26,8 +26,10 @@
  *   full speed.
  * - A press on a still step waits in the buffer as it was made: a stick smash stays a smash,
  *   and a smash-input special keeps its smash version (`bufferPress`; UNVERIFIED, the
- *   controller's ruling, for every buffered press). One older than the buffer's nine frames
- *   when the fighter next runs has expired, so under rates over 9 an early press is lost.
+ *   controller's ruling, for every buffered press). The buffer ages only on the fighter's
+ *   own running steps (`step`'s still-step branch keeps a waiting press a step younger;
+ *   Task 41's fix wave, final review I-1), so under any rate, Mario Finale's 20 and the
+ *   Ancient Arrow's 30 included, a press on a still step fires on the next running step.
  * - Not modelled: the start scripts' own `SlowModule` calls, a slowing of the whole match:
  *   Donkey Kong's `game_finalstart` `set_whole(30, 0)` on its frame 15, cleared on 16; Fox's
  *   `FinalLockOn` `set_whole(2, 0)` from 5 to 25 (read by the review in `data.json`) and his

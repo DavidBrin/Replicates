@@ -104,6 +104,24 @@ describe("SLOW_OPPONENT (Plan 6, Task 11)", () => {
     expect(states[4].fighters[1].action).toBe("jumpSquat");
   });
 
+  // Mario Finale's (20, 75) and the Ancient Arrow's (30, 100) (`mario.ts`, `link.ts`): more
+  // still steps in a row than the buffer's nine frames. The buffer ages only on the
+  // fighter's own running steps (Plan 6, Task 41's fix wave: final review I-1), so a tap on
+  // any still step waits for the next one that runs.
+  it.each([
+    [20, 75],
+    [30, 100],
+  ])("Review Focus: at rate %i (%i frames), a press on any still step fires on the next running step", (rate, frames) => {
+    for (let tap = 1; tap < rate; tap++) {
+      const s = pair();
+      slowOthers(s, 0, { rate, frames });
+      // Step 1 runs; steps 2 to `rate` stand still; step `rate` + 1 runs.
+      const states = run(s, (i) => [0, i === tap ? Btn.Jump : 0], rate + 1);
+      expect(states[rate - 1].fighters[1].action, `tap on step ${tap + 1}: still standing`).toBe("stand");
+      expect(states[rate].fighters[1].action, `tap on step ${tap + 1}`).toBe("jumpSquat");
+    }
+  });
+
   it("Review Focus: a Final Smash started inside a rollback window, its Special press mispredicted, replays identically", () => {
     // Pikachu with the Smash Ball's power and Mario 4 ahead, inside the startup's sparks:
     // the slow counters (`slowRate`, `slowFrames`, `slowPhase`) and the sparks' record
