@@ -568,6 +568,9 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     // About the hip the leg turns round, at the leg's reach, as parts of the body it is
     // drawn on (Plan 6, Task 37). They were 4.2, 5.4 and 2.5 units, the 2D rig's: on the
     // 21-unit model the arc turned round her knees, under the boxes her boots sweep.
+    // These are the model's proportions: on a stand-in (`height` is the 2D rig's
+    // `visualHeight`, 14.58, with its hip at 0.32 of it, not 0.58) the arc sits higher,
+    // near her chest, nearer the boxes than the stand-in's own leg.
     kickArc(ctx, x, y - u * height * 0.58, dir, u * height * 0.33, u * height * 0.12, lead - 1.5, lead, k);
     return NOTHING;
   },

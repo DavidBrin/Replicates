@@ -34,8 +34,25 @@ const FEET = { x: 400, y: 600 };
 const EFFECT_MAX_RATIO = 4;
 const EFFECT_MIN_RATIO = 1 / 3;
 const SCENES: ReadonlySet<MoveSlot> = new Set(["finalSmash"]);
+/** How far a listed effect's figures may drift from `EXPECTED`'s, as a fraction of them (UNVERIFIED, a test's tolerance). */
+const FIGURE_TOLERANCE = 0.1;
 
-/** Effects out of band, by `"<fighter> <slot>"`: what was measured, and why it is right on the model (Step 5's look). */
+/** The figures at the head of an outlier's text, `"<ratio>x, <off> off"`. */
+function figures(text: string): { readonly ratio: number; readonly off: number } {
+  const m = /^\s*(\d+\.\d+)x, (\d+\.\d+) off/.exec(text);
+  if (m === null) throw new Error(`no figures in "${text}"`);
+  return { ratio: Number(m[1]), off: Number(m[2]) };
+}
+
+/** Whether `got` is within `FIGURE_TOLERANCE` of `want` (a recorded 0 stays 0). */
+const near = (got: number, want: number) => Math.abs(got - want) <= FIGURE_TOLERANCE * want;
+
+/**
+ * Effects out of band, by `"<fighter> <slot>"`: what was measured, and why it is right on the model (Step 5's look).
+ * The figures are pinned too, as `reach.test.ts` pins `measured`: a listed effect whose size ratio or distance
+ * off drifts more than `FIGURE_TOLERANCE` from them fails, so a listed effect cannot grow or shrink unseen
+ * (Plan 6, Task 37 fix round 1). A change that moves one on purpose re-measures and rewrites its figures.
+ */
 const EXPECTED: Readonly<Record<string, string>> = {
   "mario upB": "0.20x, 5.2 off: the Star Coins are the hit effect, coin-sized puffs thrown from the box's front edge where a victim is struck (none on a whiff), not the body-wide box",
   "donkeyKong dashAttack": "0.82x, 16.3 off: the roll's dust, a trail left behind him along the floor while the box rolls ahead",
@@ -98,6 +115,14 @@ describe("move effects at the model's size, on their own hitboxes (Plan 6, Task 
     expect(out.filter((o) => EXPECTED[o.slice(0, o.indexOf(":"))] === undefined), "out of band and not listed").toEqual([]);
     const listed = Object.keys(EXPECTED).filter((k) => k.startsWith(`${id} `));
     expect(listed.filter((k) => !out.some((o) => o.startsWith(`${k}:`))), "listed but back in band: strike it").toEqual([]);
+    const drifted = out.flatMap((o) => {
+      const key = o.slice(0, o.indexOf(":"));
+      if (EXPECTED[key] === undefined) return [];
+      const got = figures(o.slice(key.length + 1));
+      const want = figures(EXPECTED[key]);
+      return near(got.ratio, want.ratio) && near(got.off, want.off) ? [] : [`${o} (listed: ${want.ratio.toFixed(2)}x, ${want.off.toFixed(1)} off)`];
+    });
+    expect(drifted, "listed, but its figures drifted past 10%: look again and re-measure").toEqual([]);
   });
 
   it("measures a painter it can see: Mario's forward smash, its fire on its hitbox", () => {
