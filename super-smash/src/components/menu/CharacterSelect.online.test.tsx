@@ -6,6 +6,7 @@ import { localBuild } from "@/game/onlineConfig";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { STUN_ONLY } from "@/net/iceConfig";
+import type { MatchRules } from "@/engine/types";
 import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
@@ -48,6 +49,13 @@ function goOnline(role: Role): FakeSession {
 async function renderSelect() {
   render(<CharacterSelect />);
   await act(async () => {});
+}
+
+/** The guest, the host's stage (and rules, when given) already sent (`OnlineState.hostStage`). */
+async function guestWithStage(rules?: MatchRules) {
+  goOnline("guest");
+  useOnlineStore.getState().patch({ hostStage: rules ? { stageId: "battlefield", form: "normal", rules } : { stageId: "battlefield", form: "normal" } });
+  await renderSelect();
 }
 
 beforeEach(() => {
@@ -120,12 +128,26 @@ describe("CharacterSelect, online", () => {
     expect(status).toBeEmptyDOMElement();
   });
 
-  /** The banner tag is hidden below `sm` for everyone else; the guest's is the one place it learns the stage. */
+  /**
+   * The banner tag is hidden below `sm` for everyone else; the guest's is the one place it learns
+   * the stage, so one of its two tags shows at every width: the short one below `sm` (Plan 6, Task 28).
+   */
   it("shows the guest the host's stage at every width", async () => {
-    goOnline("guest");
-    useOnlineStore.getState().patch({ hostStage: { stageId: "battlefield", form: "normal" } });
-    await renderSelect();
-    expect(screen.getByText("Stage: Battlefield").closest(".hidden")).toBeNull();
+    await guestWithStage();
+    expect(screen.getByText("Battlefield").closest(".hidden")).toBeNull();
+    expect(screen.getByText("Battlefield")).toHaveClass("sm:hidden");
+    expect(screen.getByText("Stage: Battlefield")).toHaveClass("hidden", "sm:inline");
+  });
+
+  it("gives the guest a one-line stage-and-rules tag below sm, and the full one from sm (Plan 6, Task 28)", async () => {
+    await guestWithStage({ mode: "stock", stocks: 3, timeLimit: 0, smashBall: true, oneOnOne: true });
+    expect(screen.getByText("Battlefield · 3 stocks")).toHaveClass("sm:hidden");
+    expect(screen.getByText("Stage: Battlefield · 3-stock match · 1v1 damage 1.2× · Smash Ball on")).toHaveClass("hidden", "sm:inline");
+  });
+
+  it("says a timed match's length in the short tag as the match clock shows it", async () => {
+    await guestWithStage({ mode: "time", stocks: 3, timeLimit: 150 * 60, smashBall: false, oneOnOne: true });
+    expect(screen.getByText("Battlefield · 2:30")).toHaveClass("sm:hidden");
   });
 
   it("makes the host's back button leave the room once the room cannot go on", async () => {

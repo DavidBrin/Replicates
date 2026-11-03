@@ -707,6 +707,15 @@ export function rulesLabel(rules: MatchRules): string {
   return `${length} match${rules.oneOnOne ? " · 1v1 damage 1.2×" : ""}${rules.smashBall ? " · Smash Ball on" : " · Smash Ball off"}`;
 }
 
+/**
+ * The rules in a few words, for a narrow screen's banner (Plan 6, Task 28): "3 stocks", "1 stock",
+ * or a timed match's length as the match clock shows it, "2:30".
+ */
+export function shortRulesLabel(rules: MatchRules): string {
+  if (rules.mode === "stock") return `${rules.stocks} ${rules.stocks === 1 ? "stock" : "stocks"}`;
+  return formatTime(rules.timeLimit);
+}
+
 export interface PlayerResultStat {
   readonly port: number;
   readonly kos: number;

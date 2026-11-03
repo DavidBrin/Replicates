@@ -52,6 +52,13 @@ export function OnlineLobby({
    * to be cleared, and must not flash, bounce the player on, or be announced.
    */
   const [tried, setTried] = useState<RoomIntent | null>(null);
+  /** The Copy button says so for two seconds after a copy (Plan 6, Task 28). */
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2_000);
+    return () => clearTimeout(t);
+  }, [copied]);
   const errorId = useId();
   const codePanel = useRef<HTMLDivElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
@@ -216,6 +223,24 @@ export function OnlineLobby({
                 {roomCode}
               </p>
               <p className="sr-only">{spelledOut(roomCode)}</p>
+              {/* How the other player gets here, and the code to paste (Plan 6, Task 28). */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+                <SkewButton
+                  aria-label={copied ? "Copied" : "Copy room code"}
+                  onClick={() => {
+                    // Clipboard access can be refused (permissions, an insecure page): the code stays on screen.
+                    void navigator.clipboard?.writeText(roomCode ?? "").then(
+                      () => setCopied(true),
+                      () => {},
+                    );
+                  }}
+                  className="border-[3px] border-panel-ink bg-smash-yellow px-5 py-1.5 text-panel-ink transition-transform hover:-translate-y-0.5"
+                  innerClassName="font-display text-sm tracking-[0.14em] uppercase"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </SkewButton>
+                <p className="text-sm font-bold">On the other computer: open {window.location.host}, choose Online, and type the code.</p>
+              </div>
             </div>
           </SkewPanel>
         ) : null}

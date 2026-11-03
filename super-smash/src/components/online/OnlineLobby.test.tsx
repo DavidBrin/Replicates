@@ -224,6 +224,25 @@ describe("OnlineLobby", () => {
     expect(screen.getByTestId("room-code")).toHaveTextContent(opened[0].code);
   });
 
+  it("offers to copy the room code, and says how the other player joins (Plan 6, Task 28)", async () => {
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    // jsdom has no clipboard: one of the test's own, taken away again after.
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    try {
+      const { opened } = harness();
+      await create();
+      act(() => opened[0].emit({ type: "joined", role: "host" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Copy room code" }));
+      });
+      expect(writeText).toHaveBeenCalledWith(opened[0].code);
+      expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+      expect(screen.getByText(`On the other computer: open ${window.location.host}, choose Online, and type the code.`)).toBeInTheDocument();
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+
   it("joins a code typed in lowercase with a dash", async () => {
     const { opened } = harness();
     await join("qr-st");

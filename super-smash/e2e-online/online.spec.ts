@@ -130,6 +130,30 @@ test("two browsers play a match through a room, and one leaving ends it for the 
   await guest.context().close();
   await host.waitForURL(`**${ROUTES.results}`, { timeout: LINK_LOST_LIMIT_MS });
   await expect(host.getByText("Connection Lost", { exact: true })).toBeVisible();
+  // The message is the page's middle, not a line under the header (Plan 6, Task 28).
+  const box = (await host.getByRole("status").boundingBox())!;
+  const height = host.viewportSize()!.height;
+  expect(box.y + box.height / 2).toBeGreaterThan(height * 0.3);
+  expect(box.y + box.height / 2).toBeLessThan(height * 0.7);
+});
+
+test("the guest's character select fits a phone: a short stage tag, and room for the roster (Plan 6, Task 28)", async ({ browser }) => {
+  const host = await player(browser);
+  const guest = await player(browser);
+  await guest.setViewportSize({ width: 390, height: 844 });
+  const code = await createRoom(host);
+  await joinRoom(guest, code);
+  await host.waitForURL(`**${ROUTES.stage}`, { timeout: 30_000 });
+  await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
+  await host.getByLabel("Stages", { exact: true }).getByRole("button", { name: "Battlefield", exact: true }).click();
+  await host.getByRole("button", { name: /choose fighters/i }).click();
+  const tag = guest.getByText(/^Battlefield · \d+ stocks?$/);
+  await expect(tag).toBeVisible();
+  // Two lines at most at 390 px wide; the full tag took six.
+  expect((await tag.boundingBox())!.height).toBeLessThan(40);
+  // So the roster's scroll box keeps room for both rows of portraits (161 px, against 85 under the full tag).
+  const roster = guest.getByLabel("Fighters", { exact: true }).locator("..");
+  expect((await roster.boundingBox())!.height).toBeGreaterThan(140);
 });
 
 test("two browsers play a match to its result, and both see the same one", async ({ browser }) => {

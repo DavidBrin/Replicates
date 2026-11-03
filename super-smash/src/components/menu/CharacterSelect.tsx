@@ -23,6 +23,7 @@ import {
   portColour,
   portTag,
   rulesLabel,
+  shortRulesLabel,
   useMatchConfig,
   useRoster,
   type MenuFighter,
@@ -233,12 +234,20 @@ export function CharacterSelect() {
     router.push("/play");
   };
 
+  const guestStage = onlineRole === "guest" && hostStage ? (findStage(roster, hostStage.stageId)?.name ?? "Random") : null;
   const bannerTag =
     onlineRole === "guest"
-      ? hostStage
-        ? [`Stage: ${findStage(roster, hostStage.stageId)?.name ?? "Random"}`, hostStage.rules && rulesLabel(hostStage.rules)]
-            .filter(Boolean)
-            .join(" · ")
+      ? hostStage && guestStage !== null
+        ? (
+            // One line on a phone, the details from `sm` up (Plan 6, Task 28): the full tag
+            // wrapped to six lines at 390 px and left the roster a box 85 px tall.
+            <>
+              <span className="sm:hidden">{[guestStage, hostStage.rules && shortRulesLabel(hostStage.rules)].filter(Boolean).join(" · ")}</span>
+              <span className="hidden sm:inline">
+                {[`Stage: ${guestStage}`, hostStage.rules && rulesLabel(hostStage.rules)].filter(Boolean).join(" · ")}
+              </span>
+            </>
+          )
         : "The host is picking the stage"
       : onlineRole === "host"
         ? "Online"

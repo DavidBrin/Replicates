@@ -109,6 +109,15 @@ describe("Results after an online match", () => {
     expect(screen.queryByRole("button", { name: /rematch/i })).toBeNull();
   });
 
+  it("gives the unfinished message its own centred panel, in larger type (Plan 6, Task 28)", async () => {
+    useMatchConfig.getState().setResult(LOST);
+    await renderResults();
+    const status = await screen.findByText(/connection to the other player was lost/i);
+    expect(status).toBe(screen.getByRole("status"));
+    expect(status.closest("[data-testid='unfinished-panel']")).not.toBeNull();
+    expect(status).toHaveClass("text-lg");
+  });
+
   /** A status region announces a change to one it already knows, not one that arrives with its text in it. */
   it("says it in a status region that was already there, empty, when the screen arrived", async () => {
     vi.useFakeTimers();

@@ -163,10 +163,23 @@ export function Results() {
         </SkewTag>
       </ScreenBanner>
 
-      <div className="mx-auto w-full max-w-6xl flex-1 px-5 pb-10 sm:px-8">
-        <p role="status" className={cn("text-center text-sm font-bold text-white/80", status && "mb-6")}>
-          {status}
-        </p>
+      <div className={cn("mx-auto w-full max-w-6xl flex-1 px-5 pb-10 sm:px-8", unfinished && "flex flex-col items-center justify-center")}>
+        {/* An unfinished match's message is the whole page (Plan 6, Task 28): centred, and larger. */}
+        {unfinished ? (
+          <SkewPanel
+            data-testid="unfinished-panel"
+            className="w-full max-w-xl border-[3px] border-panel-ink bg-[#181b20] shadow-[0_8px_0_rgb(0_0_0/0.4)]"
+            innerClassName="px-8 py-10 text-center"
+          >
+            <p role="status" className="text-lg leading-relaxed font-bold text-white/90">
+              {status}
+            </p>
+          </SkewPanel>
+        ) : (
+          <p role="status" className={cn("text-center text-sm font-bold text-white/80", status && "mb-6")}>
+            {status}
+          </p>
+        )}
         {/* A match that never finished has no placings to show, and no rules worth stating. */}
         {unfinished ? null : (
           <ol className="flex flex-wrap items-end justify-center gap-4">
