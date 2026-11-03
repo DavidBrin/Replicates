@@ -1064,6 +1064,30 @@ describe("Thunder Jolt runs along surfaces (Plan 6, Task 16; SmashWiki \"Thunder
     expect(91 + trail.length).toBe(193);
   });
 
+  it("a spark that falls off a soft platform's end after a late landing still ends by 193 frames in all (fix round 2)", () => {
+    // The review's probe: a lone soft platform in open air, so nothing it falls past
+    // catches it, and the spark lands 4 short of its end and runs off it.
+    const open = fx(1000);
+    const stage = { ...FD, blastZone: { left: -open, right: open, top: open, bottom: -open }, platforms: [{ x: 0, y: 0, halfWidth: fx(10), soft: true, ledges: false }] };
+    const owner = duel("pikachu", "fox", 0, 40).fighters[0];
+    for (const lived of [60, 96, 150]) {
+      const p: ProjectileState = {
+        ...spawnProjectile(JOLT(), owner, 1),
+        mode: "fly", ground: -1, face: -1, life: 0, facing: 1,
+        x: fx(6), y: fx(1), vx: JOLT().vx, vy: JOLT().vy, age: 0, lived,
+      };
+      const modes: string[] = [];
+      let frames = lived + 1;
+      for (let frame = 1; frame < 400 && advanceProjectile(p, JOLT(), stage, null, frame).alive; frame++) {
+        frames += 1;
+        modes.push(p.mode);
+      }
+      expect(modes.indexOf("fly"), `${lived}: it runs off the end`).toBeGreaterThan(modes.indexOf("crawl"));
+      expect(modes.indexOf("crawl"), `${lived}: it lands`).toBeGreaterThanOrEqual(0);
+      expect(frames, `landing ${lived} frames old`).toBeLessThanOrEqual(193);
+    }
+  });
+
   it("a spark meeting a wall runs down it, then along the underside (`meetSide`)", () => {
     const wall = FLOOR.x - FLOOR.halfWidth;
     const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "fox" }], RULES, 5);

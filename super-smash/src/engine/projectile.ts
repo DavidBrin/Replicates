@@ -328,6 +328,11 @@ export function advanceProjectile(
     p.life -= 1;
     if (p.life <= 0) return { alive: false, prevX, prevY };
   } else if (p.age >= def.lifetime) return { alive: false, prevX, prevY };
+  // A running projectile's spark is held to its most from its firing too (Plan 6, Task 16
+  // fix round 2): one that falls off a soft platform's end after a late landing flies on
+  // from its renewed age, and would outlive SmashWiki's "possible maximum of 193 frames"
+  // (`crawl.maxLife`). Running, its landing's life already holds it (`startCrawl`).
+  else if (def.crawl !== undefined && p.lived >= def.crawl.maxLife) return { alive: false, prevX, prevY };
 
   // Running along a surface (Plan 6, Task 16): its own life counts (above), and it goes
   // nowhere but round its platform.
