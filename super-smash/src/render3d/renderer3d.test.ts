@@ -33,7 +33,8 @@ import { actionFrameOf } from "@/engine/hitbox";
 import { platformCentreX } from "@/engine/physics";
 import { shieldBubble } from "@/engine/shield";
 import { createInitialState } from "@/engine/simulate";
-import type { FighterState, GameState } from "@/engine/types";
+import { gameScriptFor } from "@/engine/acmd/legacy";
+import type { FighterDef, FighterState, GameState } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
 import { bootstrapEngine } from "@/game/bootstrap";
@@ -155,7 +156,9 @@ function capCache(ids: readonly string[], warn = vi.fn(), side: Side = FrontSide
 
 const RULES = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false } as const;
 
-function setup(opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanvasElement; onContextGone?: (gone: boolean) => void } = {}) {
+function setup(
+  opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanvasElement; onContextGone?: (gone: boolean) => void; fighterOf?: (id: string) => FighterDef | undefined } = {},
+) {
   bootstrapEngine();
   const stage = stageOf(opts.stageId ?? "battlefield");
   const canvas = opts.canvas ?? document.createElement("canvas");
@@ -171,6 +174,7 @@ function setup(opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanva
     models: opts.models ?? createModelCache({ index: async () => null, load: async () => { throw new Error("unreachable"); } }, warn),
     makeGL: (c) => (gl = fakeGL(c)),
     onContextGone: opts.onContextGone,
+    fighterOf: opts.fighterOf,
   });
   const state: GameState = createInitialState(stage.id, defs.map((d) => ({ defId: d.id })), RULES, 1);
   const rs: RenderState = { current: state, previous: null, stage, fighters: defs, vfx: createVfx(), hud: createHudState() };
@@ -406,6 +410,36 @@ describe("the 3D presenter", () => {
     const colour = trails().geometry.getAttribute("color");
     const shown = [...Array(colour.count).keys()].filter((i) => colour.getW(i) > 0);
     expect(shown).toEqual([0, 1, 2, 3].map((i) => 2 * TRAIL_SAMPLES * 2 + i));
+  });
+
+  /**
+   * The final wave (seam review M-4): a Kirby with a Copy Ability runs the copy's neutral
+   * special (`withCopyAbility`), so his trail is looked up in it, as the charge glow's hold is
+   * (Task 35). No copied neutral special trails today, so the copied fighter here is Fox with
+   * a kick for a neutral special: his forward tilt, on a knee bone Kirby has too. The match's
+   * Fox stays as he is; the copy's definition is asked of `fighterOf`.
+   */
+  it("draws a Kirby's trail from the move his Copy Ability runs, not from his own neutral special", async () => {
+    const kick = defs[1].moves.ftilt!;
+    const kicker: FighterDef = { ...defs[1], moves: { ...defs[1].moves, neutralB: kick }, scripts: { ...defs[1].scripts, neutralB: gameScriptFor(defs[1], "ftilt")! } };
+    const first = Math.min(...kick.hitboxes.map((h) => h.startFrame));
+    const trailed = async (copy: string) => {
+      const { presenter, rs, state, stage, gl } = setup({ fighterOf: (id) => (id === "fox" ? kicker : defs.find((d) => d.id === id)) });
+      await presenter.ready;
+      standAll(state);
+      for (let k = 0; k < 2; k++) {
+        state.frame += 1;
+        const kirby = state.fighters[2];
+        state.fighters[2] = { ...kirby, action: "special", move: "neutralB", actionFrame: actionFrameOf(first) + k, combat: { ...kirby.combat, copy } };
+        presenter.paint(rs, createCamera(stage), 1, []);
+      }
+      const visible = (gl().scene!.getObjectByName("trails") as Mesh).visible;
+      presenter.dispose();
+      return visible;
+    };
+    expect(await trailed("fox")).toBe(true);
+    // His own neutral special, Inhale, trails nothing.
+    expect(await trailed("")).toBe(false);
   });
 
   it("holds a trail still while its fighter's clock is stopped: a forward tilt held 8 frames in hitlag keeps its ribbon (Plan 6, Task 34 fix round 1)", async () => {

@@ -52,6 +52,7 @@ import {
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { toFloat } from "@/engine/fixed";
 import { moveFrameOf } from "@/engine/hitbox";
+import { withCopyAbility } from "@/engine/inhale";
 import { platformCentreX } from "@/engine/physics";
 import type { FighterDef, FighterState, GameState, MoveSlot, StageDef } from "@/engine/types";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
@@ -130,6 +131,12 @@ export interface Renderer3DOptions {
    * and `false` if the browser gives it back after all.
    */
   readonly onContextGone?: (gone: boolean) => void;
+  /**
+   * Each fighter's definition by id, for a Kirby's Copy Ability (as `stepVfx` takes it,
+   * Plan 6, Task 35). Defaults to the match's own `defs` by id: a copy is only ever taken
+   * from a fighter in the match, or from a Kirby who took it from one (`abilityFromSwallow`).
+   */
+  readonly fighterOf?: (id: string) => FighterDef | undefined;
 }
 
 /**
@@ -327,6 +334,26 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
    * fighter's still step or a scene's freeze is none, so the ribbon stops as its fighter does.
    */
   const trailClock = opts.defs.map(() => ({ action: "", move: null as MoveSlot | null, frame: -1 }));
+  /**
+   * A Kirby with a Copy Ability runs the copy's neutral special (`withCopyAbility`), so his
+   * trail is the copy's (final wave, seam review M-4; Task 35 reads the charge glow the same
+   * way). Its table is built the first time a port swings it, per copy.
+   */
+  const fighterOf = opts.fighterOf ?? ((id: string) => opts.defs.find((d) => d?.id === id) ?? undefined);
+  const copiedTrails = opts.defs.map(() => new Map<string, readonly (TrailBox | null)[] | null>());
+  const trailTableOf = (f: FighterState, move: MoveSlot): readonly (TrailBox | null)[] | null => {
+    const own = opts.defs[f.port];
+    if (move !== "neutralB" || f.combat.copy === "" || own == null) return trailBoxes[f.port]?.get(move) ?? null;
+    const byCopy = copiedTrails[f.port];
+    let table = byCopy.get(f.combat.copy);
+    if (table === undefined) {
+      const copy = fighterOf(f.combat.copy);
+      // A copy not known draws none, rather than the trail of a move he is not running.
+      table = copy === undefined ? null : trailBoxesOf(withCopyAbility(own, copy), "neutralB", opts.bake.bones);
+      byCopy.set(f.combat.copy, table);
+    }
+    return table;
+  };
   const tip = new Vector3();
   const sample = newTrailSample();
   /** Every layer but the fighters, whose matrices `paint` builds; each fighter builds its own (`Fighter3D.update`). */
@@ -448,7 +475,7 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
           clock.move = f.move;
           clock.frame = f.actionFrame;
           // None for a fighter not drawn (dead, or hidden: its bones were not placed this paint).
-          const box = f.move === null || !fighter.placement.visible ? null : (trailBoxes[f.port]?.get(f.move)?.[moveFrameOf(f.actionFrame)] ?? null);
+          const box = f.move === null || !fighter.placement.visible ? null : (trailTableOf(f, f.move)?.[moveFrameOf(f.actionFrame)] ?? null);
           // The model is drawn shaken in hitlag (`Fighter3D.update`), so the box's edge is too.
           const live = box !== null && fighter.bonePosition(box.bone, tip);
           trails.push(f.port, live ? trailSample(box, pos.x + hitlagShake(f), pos.y, f.facing, tip, sample) : null);
