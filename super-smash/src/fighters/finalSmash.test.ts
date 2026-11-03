@@ -1986,15 +1986,27 @@ describe("Final Smash scenes are the same whichever ports the fighters are on (P
     return [o.x, o.damage, o.action];
   }
 
+  // Each also pins the outcome both orders share (final wave, item 34): two orders that agreed
+  // because both missed would pass an equality alone. A miss leaves the other where it stood,
+  // undamaged and standing.
   it("Kirby's Ultra Sword takes Donkey Kong standing 3 behind him, facing away, the same as port 0 or port 1", () => {
-    expect(scene("kirby", "donkeyKong", 1, -3, -1, 60)).toEqual(scene("kirby", "donkeyKong", 0, -3, -1, 60));
+    const caught = scene("kirby", "donkeyKong", 1, -3, -1, 60);
+    expect(caught).toEqual(scene("kirby", "donkeyKong", 0, -3, -1, 60));
+    // Caught where he stood (x -3 in Q12, -12288), 8.4% in, and still held in the scene at frame 60.
+    expect(caught).toEqual([-12288, 34408, "finalTrapped"]);
   });
 
   it("Zero Laser's start reaches Donkey Kong standing 8 behind Samus the same as port 0 or port 1", () => {
-    expect(scene("samus", "donkeyKong", 1, -8, 1, 60)).toEqual(scene("samus", "donkeyKong", 0, -8, 1, 60));
+    const hit = scene("samus", "donkeyKong", 1, -8, 1, 60);
+    expect(hit).toEqual(scene("samus", "donkeyKong", 0, -8, 1, 60));
+    // Moved in from -8 (-32768) to -3.8 and struck, 1.05%, in hitstun.
+    expect(hit).toEqual([-15630, 4301, "hitstun"]);
   });
 
   it("Volt Tackle's sparks push Mario standing 6 ahead the same distance as port 0 or port 1 (a pin: port-free since Tasks 9 and 11)", () => {
-    expect(scene("pikachu", "mario", 1, 6, -1, 46)).toEqual(scene("pikachu", "mario", 0, 6, -1, 46));
+    const pushed = scene("pikachu", "mario", 1, 6, -1, 46);
+    expect(pushed).toEqual(scene("pikachu", "mario", 0, 6, -1, 46));
+    // Pushed from 6 (24576) to 6.9 (28236) by the sparks, 1.89%, in hitstun.
+    expect(pushed).toEqual([28236, 7740, "hitstun"]);
   });
 });
