@@ -1919,6 +1919,20 @@ export interface StepEvents {
    * footstooling player").
    */
   footstools: { jumper: number; victim: number }[];
+  /**
+   * Glancing blows this frame (Plan 6, Task 31): a source whose boxes reached a body
+   * only less than `GLANCING_BLOW_DEPTH` deep, so none of them hit it (SmashWiki
+   * "Glancing blow": a "very quiet "chik" sound" and "small orange sparks"). One per
+   * source and victim; never a grab's, a windbox's, a shield's or an intangible
+   * fighter's. Where its lowest-id grazing box touched the body (`contactPoint`, as
+   * `hits[].contactX`). Presentation only.
+   */
+  glances: { attacker: number; victim: number; x: number; y: number }[];
+  /**
+   * Midair jumps this frame (Plan 6, Task 31): `jumps` keeps the jumps that push off
+   * something. Presentation only: the midair jump's sound.
+   */
+  airJumps: { port: number; x: number; y: number }[];
 }
 
 export function emptyEvents(): StepEvents {
@@ -1936,5 +1950,7 @@ export function emptyEvents(): StepEvents {
     counters: [],
     pushes: [],
     footstools: [],
+    glances: [],
+    airJumps: [],
   };
 }

@@ -203,6 +203,38 @@ describe("driven by events, never by state", () => {
     expect(mock.filters.some((f) => f.frequency.valuePath[0] === 8000)).toBe(true);
   });
 
+  it("plays a chik for a glance, and a sound each for a midair jump, a reflection and a counter's catch (Plan 6, Task 31)", async () => {
+    // Each sound has a signature the mock records: a module namespace cannot be spied on under ESM.
+    const cases: [string, (e: StepEvents) => void, (m: MockAudioContext) => boolean][] = [
+      ["glance", (e) => e.glances.push({ attacker: 0, victim: 1, x: 0, y: 0 }), (m) => m.filters.some((f) => f.frequency.valuePath[0] === 3_500)],
+      ["midairJump", (e) => e.airJumps.push({ port: 0, x: 0, y: 0 }), (m) => m.oscillators.some((o) => o.frequency.valuePath[0] === 520)],
+      ["reflectChime", (e) => e.reflects.push({ port: 0, x: 0, y: 0 }), (m) => m.oscillators.some((o) => o.frequency.valuePath[0] === 1_800)],
+      ["counterCatch", (e) => e.counters.push({ port: 0, x: 0, y: 0, damage: fx(1) }), (m) => m.filters.some((f) => f.frequency.valuePath[0] === 2_600)],
+    ];
+    for (const [name, fill, heard] of cases) {
+      const { mock, engine } = await running();
+      const events = emptyEvents();
+      fill(events);
+      engine.handleEvents(events);
+      expect(heard(mock), name).toBe(true);
+    }
+  });
+
+  it("chiks once for a graze that lasts several frames, and not over a hit", async () => {
+    const { mock, engine } = await running();
+    for (let i = 0; i < 3; i++) {
+      const events = emptyEvents();
+      events.glances.push({ attacker: 0, victim: 1, x: 0, y: 0 });
+      engine.handleEvents(events);
+    }
+    expect(mock.filters.filter((f) => f.frequency.valuePath[0] === 3_500).length).toBe(1);
+    const { mock: other, engine: second } = await running();
+    const withHit = hit();
+    withHit.glances.push({ attacker: 0, victim: 1, x: 0, y: 0 });
+    second.handleEvents(withHit);
+    expect(other.filters.some((f) => f.frequency.valuePath[0] === 3_500)).toBe(false);
+  });
+
   it("handles every event channel without leaking a node", async () => {
     const { mock, engine } = await running();
     const events = hit();
@@ -275,11 +307,12 @@ describe("a counter's catch and its counterattack (Plan 5, Task 17)", () => {
     expect(rings(mock)).toBe(1);
   });
 
-  it("makes no sound of its own on the catch", async () => {
+  /** Plan 6, Task 31: the catch has its own clash now; the ring still waits for the counterattack. */
+  it("plays the catch's own clash on the catch, and no ring until its counterattack lands", async () => {
     const { mock, engine } = await running();
-    const before = mock.created.length;
     engine.handleEvents(caught(1, fx(30)));
-    expect(mock.created.length).toBe(before);
+    expect(mock.filters.some((f) => f.frequency.valuePath[0] === 2_600)).toBe(true);
+    expect(rings(mock)).toBe(0);
   });
 });
 

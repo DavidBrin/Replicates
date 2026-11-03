@@ -935,12 +935,15 @@ export function step(
     if (!f.grounded && f.ledge === null) f.airTime += 1;
 
     const before = f.action;
+    const jumpsBefore = f.jumpsUsed;
     const copyBefore = f.combat.copy;
     const wallJumpsBefore = f.combat.wallJumps;
     advanceFighter(f, intent, stateCtx(i));
     if (before === "jumpSquat" && f.action === "jump") {
       events.jumps.push({ port: f.port, x: f.x, y: f.y });
     }
+    // A midair jump (`airJump` spends one past the ground's; Plan 6, Task 31), for its sound.
+    if (jumpsBefore >= 1 && f.jumpsUsed > jumpsBefore && !f.grounded) events.airJumps.push({ port: f.port, x: f.x, y: f.y });
     // A wall jump or a wall tech jump this frame (`launchOffWall` counts each), for
     // its sound and puff (Plan 5, Task 17). Presentation only.
     if (f.combat.wallJumps > wallJumpsBefore) events.jumps.push({ port: f.port, x: f.x, y: f.y, from: "wall" });
@@ -1939,6 +1942,15 @@ function resolveHits(
     const reachesBody = (c: Candidate): boolean =>
       hurtboxes.some((h) => sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, h)) &&
       (reachOf(c).depth >= GLANCING_BLOW_DEPTH || c.hitbox.grabbing === true || hitReachesShield(victim, defs[v], c));
+    /**
+     * Asked only of a box `reachesBody` turned away: it is in the body, so the depth is
+     * what kept it out, a glancing blow (Plan 6, Task 31). Not a windbox, which hits
+     * nobody anyway. Reported, never a hit.
+     */
+    const grazes = (c: Candidate): boolean =>
+      c.hitbox.windbox !== true && hurtboxes.some((h) => sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, h));
+    /** Per source, its lowest-id box that only grazed this victim (Plan 6, Task 31). */
+    const grazed = new Map<number, Candidate>();
     // A counter out (Plan 5, Task 5): its bubble catches whatever reaches it but
     // a grab, which goes through to the body (`counter.ts`), and a windbox (Task
     // 6), which pushes the countering fighter as it would anyone. UNVERIFIED for
@@ -2024,10 +2036,27 @@ function resolveHits(
         if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
       } else if (bubble !== null && !c.hitbox.grabbing && c.hitbox.windbox !== true && c.final === null && sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, bubble)) {
         caught.add(c);
-      } else if (!reachesBody(c)) continue;
+      } else if (!reachesBody(c)) {
+        if (grazes(c)) {
+          const key = pickKey(c);
+          const was = grazed.get(key);
+          if (was === undefined || c.hitbox.id < was.hitbox.id) grazed.set(key, c);
+        }
+        continue;
+      }
       const key = pickKey(c);
       const incumbent = perSource.get(key);
       if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
+    }
+
+    // A glancing blow is a source that only grazed: none of its boxes reached the body or
+    // a counter's bubble this frame. Nothing is there to graze while intangible (Plan 6, Task 31).
+    if (victim.intangible === 0) {
+      for (const [key, c] of [...grazed].sort((a, b) => a[0] - b[0])) {
+        if (perSource.has(key)) continue;
+        const at = contactPoint(capsuleOf(c), hurtboxes[reachOf(c).index]);
+        events.glances.push({ attacker: c.attacker, victim: victim.port, x: at.x, y: at.y });
+      }
     }
 
     // Sorted by key so two sources connecting on one frame resolve in the same

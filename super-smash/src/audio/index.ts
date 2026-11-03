@@ -40,13 +40,16 @@
 import { STRONG_COUNTER_DAMAGE } from "@/engine/counter";
 import { fx } from "@/engine/fixed";
 import type { StepEvents } from "@/engine/types";
+import { GLANCE_REPEAT_FRAMES } from "@/render/vfx";
 import type { SynthContext, Voice } from "./synth";
 import {
   clank,
+  counterCatch,
   countdownBeep,
   criticalHit,
   dodge,
   finalSmash,
+  glance,
   goStinger,
   grab,
   heavyHit,
@@ -57,7 +60,9 @@ import {
   menuBack,
   menuConfirm,
   menuMove,
+  midairJump,
   perfectShield,
+  reflectChime,
   shieldBreak,
   shieldHit,
   shieldVoice,
@@ -125,6 +130,8 @@ export class AudioEngine {
   private readonly shields = new Map<number, Voice>();
   /** Per port, frames left in which a hit is a strong counter's (`STRONG_COUNTER_WINDOW`). */
   private readonly strongCounters = new Map<number, number>();
+  /** Frames left before a glance may chik again (Plan 6, Task 31): a graze can last several. */
+  private glanceQuiet = 0;
 
   constructor(options: AudioEngineOptions = {}) {
     this.contextFactory =
@@ -277,6 +284,16 @@ export class AudioEngine {
     // (a footstool), Plan 5 Task 17.
     if (events.jumps.length > 0) jump(sc);
     if (events.lands.length > 0) land(sc);
+    // Plan 6, Task 31. A glance only when nothing landed solidly this frame, and once in
+    // `GLANCE_REPEAT_FRAMES` (one sound for every graze in the match, not per pair).
+    if (events.glances.length > 0 && events.hits.length === 0 && this.glanceQuiet === 0) {
+      glance(sc);
+      this.glanceQuiet = GLANCE_REPEAT_FRAMES;
+    }
+    if (this.glanceQuiet > 0) this.glanceQuiet -= 1;
+    if (events.airJumps.length > 0) midairJump(sc);
+    if (events.reflects.length > 0) reflectChime(sc);
+    if (events.counters.length > 0) counterCatch(sc);
     this.counterattackRings(sc, events);
   }
 

@@ -2110,3 +2110,68 @@ describe("how long the Smash Ball's power has been held (Plan 6, Task 24)", () =
     expect(run(frozen, [0, 0], KO_FREEZE_FRAMES + 1).fighters[0].combat.standbyFrames).toBe(41);
   });
 });
+
+/* -------------------------------------- glances and midair jumps (Plan 6, Task 31) -- */
+
+describe("presentation events for a glance and a midair jump (Plan 6, Task 31)", () => {
+  /** `n` frames from `s` under `ctx`, Attack pressed on the first; each frame's events. */
+  function jabFrames(s: GameState, ctx: SimContext, n: number): ReturnType<typeof step>["events"][] {
+    const out: ReturnType<typeof step>["events"][] = [];
+    let state = s;
+    let prev: InputFrame[] = [0, 0];
+    for (let i = 0; i < n; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Attack : 0, 0];
+      const r = step(state, now, { prevInputs: prev, ctx });
+      out.push(r.events);
+      state = r.state;
+      prev = now;
+    }
+    return out;
+  }
+
+  it("reports a box that grazes a body under 0.1 deep as a glance, not a hit", () => {
+    // The tester's jab box, radius 5 at (8, 6), against the body's capsule, radius 4
+    // (`width`) on a spine at the victim's x: placed 8 + 5 + 4 − 0.05 out, it reaches 0.05 in.
+    const s = standing();
+    s.fighters[1].x = fx(8) + fx(5) + fx(4) - fx(0.05);
+    const frames = jabFrames(s, CTX, 8);
+    expect(frames.flatMap((e) => e.hits)).toEqual([]);
+    const glances = frames.flatMap((e) => e.glances);
+    expect(glances.length).toBeGreaterThan(0);
+    expect(glances[0]).toMatchObject({ attacker: 0, victim: 1 });
+  });
+
+  it("reports no glance for a swing that also lands: one box hits while another grazes", () => {
+    // Box 0 lands deep; box 1, radius 1 just over the head (the capsule's top is at 12), grazes.
+    const twoBoxes: FighterDef = {
+      ...DEF,
+      moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ id: 0 }), hitbox({ id: 1, x: fx(8), y: fx(12.95), radius: fx(1) })] }) },
+    };
+    const ctx: SimContext = { fighter: () => twoBoxes, stage: () => STAGE };
+    const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+    for (const f of s.fighters) Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0, vx: 0, vy: 0 });
+    Object.assign(s.fighters[0], { x: 0, facing: 1 });
+    Object.assign(s.fighters[1], { x: fx(8), facing: -1 });
+    const frames = jabFrames(s, ctx, 8);
+    expect(frames.flatMap((e) => e.hits).length).toBe(1);
+    expect(frames.flatMap((e) => e.glances)).toEqual([]);
+  });
+
+  it("reports a midair jump, and not a ground jump, as an air jump", () => {
+    let state = standing();
+    let prev: InputFrame[] = [0, 0];
+    const air: unknown[] = [];
+    const ground: unknown[] = [];
+    // A short hop, then a second jump in the air.
+    for (let i = 0; i < 20; i++) {
+      const now: InputFrame[] = [i === 0 || i === 15 ? Btn.Jump : 0, 0];
+      const out = step(state, now, { prevInputs: prev, ctx: CTX });
+      air.push(...out.events.airJumps);
+      ground.push(...out.events.jumps);
+      state = out.state;
+      prev = now;
+    }
+    expect(ground.length).toBe(1);
+    expect(air.length).toBe(1);
+  });
+});

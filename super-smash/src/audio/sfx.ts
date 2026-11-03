@@ -201,6 +201,32 @@ export function jump(sc: SynthContext, when?: number): void {
   });
 }
 
+/** A glancing blow (Plan 6, Task 31; SmashWiki: a "very quiet "chik""): a short, high, quiet tick. */
+export function glance(sc: SynthContext, when?: number): void {
+  const at = when ?? sc.ctx.currentTime;
+  noise(sc, { duration: 0.025, gain: 0.06, attack: 0.001, decay: 0.025, band: { type: "highpass", frequency: 3_500 }, when: at });
+}
+
+/** A midair jump (Plan 6, Task 31): the ground jump's rise without its push-off, higher and lighter. */
+export function midairJump(sc: SynthContext, when?: number): void {
+  const at = when ?? sc.ctx.currentTime;
+  tone(sc, { wave: "triangle", freqStart: 520, freqEnd: 1_250, duration: 0.11, attack: 0.004, decay: 0.11, gain: 0.11, when: at });
+}
+
+/** A projectile sent back (Plan 6, Task 31): a bright metallic ping. */
+export function reflectChime(sc: SynthContext, when?: number): void {
+  const at = when ?? sc.ctx.currentTime;
+  tone(sc, { wave: "square", freqStart: 1_800, freqEnd: 2_400, duration: 0.09, attack: 0.002, decay: 0.09, gain: 0.12, when: at });
+  tone(sc, { wave: "sine", freqStart: 3_600, freqEnd: 3_600, duration: 0.14, attack: 0.002, decay: 0.14, gain: 0.06, when: at });
+}
+
+/** A counter catching a blow (Plan 6, Task 31): a sharp parry-like clash, shorter than a clank. */
+export function counterCatch(sc: SynthContext, when?: number): void {
+  const at = when ?? sc.ctx.currentTime;
+  noise(sc, { duration: 0.06, gain: 0.18, attack: 0.001, decay: 0.06, band: { type: "bandpass", frequency: 2_600, Q: 2 }, when: at });
+  tone(sc, { wave: "sawtooth", freqStart: 900, freqEnd: 600, duration: 0.07, attack: 0.002, decay: 0.07, gain: 0.1, when: at });
+}
+
 /** Landing. The mirror of the jump: falls, and is more felt than heard. */
 export function land(sc: SynthContext, when?: number): void {
   const at = when ?? sc.ctx.currentTime;

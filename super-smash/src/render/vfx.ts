@@ -120,9 +120,20 @@ export interface VfxState {
    * when it should be brightest.
    */
   swing: ({ action: string; move: string | null; actionFrame: number } | null)[];
+  /** The frame (`frame`) each attacker-victim pair last sparked a glance, keyed `attacker * 4 + victim` (Plan 6, Task 31). */
+  lastGlance: Map<number, number>;
   seed: number;
   frame: number;
 }
+
+/** A glancing blow's sparks (Plan 6, Task 31; SmashWiki "Glancing blow": "small orange sparks"). */
+export const GLANCE_ORANGE = "#FF9A3A";
+/**
+ * A graze can last several frames; its sparks, and its "chik" (`audio/index.ts`), come
+ * once in this many per attacker and victim. UNVERIFIED (cosmetic): SmashWiki says only
+ * that both "occur on the first frame of the hit".
+ */
+export const GLANCE_REPEAT_FRAMES = 4;
 
 /** A hit victim flashes white for two to four frames, scaled by damage. */
 export const HIT_FLASH_FRAMES = 4;
@@ -143,6 +154,7 @@ export function createVfx(): VfxState {
     poseBlend: createPoseBlends(),
     lastHit: [null, null, null, null],
     swing: [null, null, null, null],
+    lastGlance: new Map(),
     seed: 0x9e3779b9,
     frame: 0,
   };
@@ -229,6 +241,15 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState, 
       victim.actionFrame <= PERFECT_SHIELD_WINDOW;
     spawnShieldHit(v, toFloat(s.x), toFloat(s.y), s.victim, parried);
     if (parried) v.parryFlash[s.victim] = 10;
+  }
+
+  // A glancing blow's small orange sparks (Plan 6, Task 31), once in `GLANCE_REPEAT_FRAMES` per pair.
+  for (const g of events.glances) {
+    const key = g.attacker * 4 + g.victim;
+    const was = v.lastGlance.get(key);
+    if (was !== undefined && v.frame - was < GLANCE_REPEAT_FRAMES) continue;
+    v.lastGlance.set(key, v.frame);
+    spawnGlance(v, toFloat(g.x) + (shift?.[g.attacker] ?? 0), toFloat(g.y));
   }
 
   for (const c of events.clanks) spawnClank(v, toFloat(c.x), toFloat(c.y));
@@ -533,6 +554,14 @@ export function spawnJumpPush(v: VfxState, j: StepEvents["jumps"][number], state
     spawnDust(v, x, y, 6, 0.8);
   } else {
     spawnDust(v, x, y, 6, 0.6);
+  }
+}
+
+/** Four small orange sparks, short-lived: a glance is a graze, not an impact (Plan 6, Task 31). */
+export function spawnGlance(v: VfxState, x: number, y: number): void {
+  for (let i = 0; i < 4; i++) {
+    const a = rand(v) * Math.PI * 2;
+    push(v, { kind: "spark", x, y, vx: Math.cos(a) * 0.6, vy: Math.sin(a) * 0.6, life: 6, maxLife: 6, size: 0.45, colour: GLANCE_ORANGE, rotation: a, spin: 0, gravity: 0, drag: 0.9 });
   }
 }
 

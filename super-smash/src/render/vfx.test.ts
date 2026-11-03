@@ -6,6 +6,8 @@ import { PORT_COLOURS, hexToRgb } from "./characterArt";
 import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
 import {
   BURST_MAX_GROWTH,
+  GLANCE_ORANGE,
+  GLANCE_REPEAT_FRAMES,
   HIT_FLASH_FRAMES,
   createVfx,
   drawKoFlash,
@@ -316,6 +318,26 @@ describe("the perfect-shield flash", () => {
     });
     ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
     expect(v.parryFlash[1]).toBe(0);
+  });
+});
+
+describe("a glancing blow (Plan 6, Task 31)", () => {
+  it("draws a glance's small orange sparks, once in GLANCE_REPEAT_FRAMES per pair", () => {
+    const v = createVfx();
+    const state = makeState();
+    const glance = makeEvents({ glances: [{ attacker: 0, victim: 1, x: 0, y: 0 }] });
+    const orange = () => v.particles.filter((p) => p.kind === "spark" && p.colour === GLANCE_ORANGE).length;
+    ingestEvents(v, glance, state);
+    const first = orange();
+    expect(first).toBeGreaterThan(0);
+    for (let i = 1; i < GLANCE_REPEAT_FRAMES; i++) {
+      updateVfx(v);
+      ingestEvents(v, glance, state);
+    }
+    expect(orange()).toBe(first);
+    updateVfx(v);
+    ingestEvents(v, glance, state);
+    expect(orange()).toBe(2 * first);
   });
 });
 
