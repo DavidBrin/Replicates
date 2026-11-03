@@ -265,6 +265,14 @@ describe("a CPU's swing range matches its arms", () => {
 });
 
 describe("the worlds the game's CPUs see", () => {
+  it("work out Volt Tackle's firing bands for a CPU's port only (Plan 6, Task 23; part 5's cost)", () => {
+    const stage = getStageOrThrow("pokemonStadium2");
+    const defs = [getFighterOrThrow("pikachu"), getFighterOrThrow("pikachu")];
+    const [human, cpu] = matchCpuWorlds(stage, defs, getFighterOrThrow, GAME_SIM_CONTEXT.bake, [false, true]);
+    expect(human.firingBands).toBeUndefined();
+    expect(cpu.firingBands).toBeDefined();
+  });
+
   // Plan 5, Task 4b fix round 1: the game's own wiring of the up special model,
   // which the golden and the sweep build for themselves and so cannot pin.
   it("carry each fighter's up special model, as every other CPU world does", () => {

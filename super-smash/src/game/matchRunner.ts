@@ -243,9 +243,12 @@ export function matchCpuWorlds(
   defs: readonly (FighterDef | undefined)[],
   getFighter?: (id: string) => FighterDef | undefined,
   bake: BakeTables | undefined = GAME_SIM_CONTEXT.bake,
+  cpu: readonly boolean[] = defs.map(() => true),
 ): CpuWorld[] {
   const view = stageViewFromDef(stage);
-  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view, defs, getFighter, bake) : { stage: view, jumps: 2, matchDefs: defs }));
+  // A human's port gets the plain world: nothing reads a full one there, and its firing
+  // bands cost 40-110 ms at match start (Plan 6, Task 23; Plan 5 final wave, part 5's cost).
+  return defs.map((def, i) => (def !== undefined && cpu[i] !== false ? cpuWorldFromDef(def, view, defs, getFighter, bake) : { stage: view, jumps: 2, matchDefs: defs }));
 }
 
 /**
@@ -382,7 +385,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   // decision forever and stops looking like a player.
   let cpuSeed = seed ^ 0x1f2e3d4c;
 
-  const cpuWorlds = matchCpuWorlds(stage, defs, getFighter);
+  const cpuWorlds = matchCpuWorlds(stage, defs, getFighter, GAME_SIM_CONTEXT.bake, players.map((p) => p.cpuLevel !== null));
 
   const camera = createCamera(stage);
   const vfx: VfxState = createVfx();
