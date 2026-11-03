@@ -412,6 +412,10 @@ export default function PlayPage() {
   const keyboardRef = useRef<KeyboardInput | null>(null);
   const bake = useBake();
   const { world, error: worldError } = useWorld3d();
+  // When the page mounted: the online wait for models counts from here, not from the 3D
+  // code's arrival (Plan 6, Task 40). A lazy initial state, read once (a ref's initial
+  // value would call `performance.now` on every render).
+  const [mountedAt] = useState(() => performance.now());
 
   const players = useMatchConfig((s) => s.players);
   const stageId = useMatchConfig((s) => s.stageId);
@@ -716,7 +720,8 @@ export default function PlayPage() {
         layers: { gl, background },
         bake: tables,
         world,
-        modelWaitMs: ONLINE_MODEL_WAIT_MS,
+        // The 5 s count from the page's mount, so a slow 3D chunk does not add to it (Plan 6, Task 40).
+        modelWaitMs: Math.max(0, ONLINE_MODEL_WAIT_MS - (performance.now() - mountedAt)),
         onReady: () => {
           setLoading(false);
           // Watched from its start, not from mount (ruling R3): a model still
@@ -768,7 +773,7 @@ export default function PlayPage() {
       delete (window as unknown as { __smashNet?: unknown }).__smashNet;
       if (!handedOff) abandonOnline(session);
     };
-  }, [online, bindings, router, setResult, bake.tables, world]);
+  }, [online, bindings, router, setResult, bake.tables, world, mountedAt]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

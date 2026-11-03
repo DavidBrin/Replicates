@@ -107,6 +107,18 @@ describe("loading fighter models (never fatal)", () => {
     expect((await got).kind).toBe("standIn");
   });
 
+  it("cancels a download that timed out, not only discards it (Plan 6, Task 40)", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const cache = createModelCache(source({ load: (_entry, s) => ((signal = s), new Promise(() => {})) }), () => {}, 1000);
+    const got = cache.get("mario");
+    await vi.advanceTimersByTimeAsync(999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await got).kind).toBe("standIn");
+    expect(signal?.aborted).toBe(true);
+  });
+
   it("tries a failed model again next match instead of standing it in for the rest of the page", async () => {
     const load = vi.fn().mockRejectedValueOnce(new Error("network error")).mockResolvedValue(new Group());
     const index = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(parseModelIndex(INDEX));
@@ -519,6 +531,15 @@ describe("the browser source", () => {
 
   describe("load()", () => {
     const glb = { scene: new Group() };
+
+    it("hands the cache's abort signal to the download's fetch (Plan 6, Task 40)", async () => {
+      const { browserModelSource } = await freshLoader();
+      decoder.parseAsync.mockResolvedValue(glb);
+      const f = fetchOf(() => new Response(body.slice(0), { status: 200 }));
+      const abort = new AbortController();
+      await browserModelSource(f).load(entry, abort.signal);
+      expect(f).toHaveBeenCalledWith("/models/mario.0123abcd.glb", { signal: abort.signal });
+    });
 
     it("fetches /models/<file>, verifies, then decodes with meshopt and the models folder as the base path", async () => {
       const { browserModelSource } = await freshLoader();

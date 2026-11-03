@@ -53,8 +53,11 @@ export function parseModelIndex(json: unknown): ModelIndex | null {
 export interface ModelSource {
   /** The index; null when there is none (a 404: the checkout never ran `pnpm models`); rejects, saying why, when it could not be read. */
   index(): Promise<ModelIndex | null>;
-  /** The glb's scene, ready to clone; rejects if the bytes are not the entry's. */
-  load(entry: ModelIndexEntry): Promise<Object3D>;
+  /**
+   * The glb's scene, ready to clone; rejects if the bytes are not the entry's. `signal`
+   * aborts the download when the cache has given up on it (Plan 6, Task 40).
+   */
+  load(entry: ModelIndexEntry, signal?: AbortSignal): Promise<Object3D>;
 }
 
 /** Resolves when `bytes` are exactly what `entry` lists; rejects naming what differs. */
@@ -86,9 +89,12 @@ export const MODEL_TIMEOUT_MS = 20_000;
 
 const reasonOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+function timeout<T>(p: Promise<T>, ms: number, what: string, onTimeout?: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+    const t = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`${what} timed out after ${ms} ms`));
+    }, ms);
     p.then(
       (v) => (clearTimeout(t), resolve(v)),
       (e: unknown) => (clearTimeout(t), reject(e)),
@@ -132,7 +138,9 @@ export function createModelCache(source: ModelSource, warn: (msg: string) => voi
         if (!Object.hasOwn(read.found.models, id)) return standIn(id, "not in the model index");
         const entry = read.found.models[id];
         try {
-          const scene = await timeout(source.load(entry), ms, "download");
+          // A download that times out is cancelled, not only discarded (Plan 6, Task 40).
+          const abort = new AbortController();
+          const scene = await timeout(source.load(entry, abort.signal), ms, "download", () => abort.abort());
           state[id] = "glb";
           return { kind: "glb", scene } as const;
         } catch (e) {
@@ -166,8 +174,9 @@ export function browserModelSource(fetchFn: typeof fetch = (u, init) => fetch(u,
       if (index === null) throw new Error(`not a schema ${MODEL_INDEX_SCHEMA} model index (files named <id>.<8 hex>.glb)`);
       return index;
     },
-    async load(entry) {
-      const res = await fetchFn(`/models/${entry.file}`);
+    async load(entry, signal) {
+      const url = `/models/${entry.file}`;
+      const res = await (signal === undefined ? fetchFn(url) : fetchFn(url, { signal }));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const bytes = await res.arrayBuffer();
       await verifyModelBytes(bytes, entry);

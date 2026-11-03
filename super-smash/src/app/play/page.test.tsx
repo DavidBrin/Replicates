@@ -1240,6 +1240,19 @@ describe("the play page in 3D (Plan 4)", () => {
     expect(mocks.worlds.map((w) => w.layers.gl)).toEqual([layer("world"), layer("world")]);
   });
 
+  it("counts the online wait for models from the page's mount, not from the 3D code's arrival (Plan 6, Task 40)", async () => {
+    // The 3D world's code is still loading when the page mounts, and arrives 3 s later.
+    WORLD_STATE.world = null;
+    goOnline("host");
+    const { rerender } = await renderPage();
+    expect(mocks.worlds).toEqual([]);
+    act(() => vi.advanceTimersByTime(3_000));
+    WORLD_STATE.world = WORLD;
+    rerender(<PlayPage />);
+    await act(async () => {});
+    expect(only(mocks.worlds).options?.modelWaitMs).toBe(2_000);
+  });
+
   it("waits on the loader's own timeouts locally, with no cap of its own", async () => {
     await renderPage();
     expect(only(mocks.worlds).options?.modelWaitMs).toBeUndefined();
