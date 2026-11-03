@@ -7,10 +7,13 @@
  * z = 0 below a platform's top shows in front of the stage's face rather than
  * behind it: Zero Laser's lower fringe and end blast, Mario Finale's flame 8 below
  * the floor. The 3D stage extrudes each solid platform `HARD_PLATFORM_DEPTH` deep
- * and `MAIN_DEPTH_Z` toward and away from the camera (`render3d/stage3d.ts`); its
- * front half covers, on screen, exactly the points at z = 0 that it hides. So the
- * overlay clips that region out (`clipOutStage`), and past the ledge, over open
- * air, an effect still shows in full. A soft platform has no body.
+ * and `MAIN_DEPTH_Z` toward and away from the camera (`render3d/stage3d.ts`), but
+ * since Plan 6, Task 33 (ruling D11) that depth hides nothing: the stage draws first,
+ * writing no depth, and every fighter is drawn over its front face. So the overlay
+ * clips out the body's section in the play plane alone, where an effect at z = 0 is
+ * inside the solid (`clipOutStage`); past the wall, where the front face only
+ * overhangs in perspective, an effect shows in full, as the fighter beside it does.
+ * A soft platform has no body.
  *
  * Three-free, like the rest of the overlay (`app/chunkSplit.test.ts`): the 3D
  * stage takes its depth from here.
@@ -30,9 +33,9 @@ export interface Point {
 }
 
 /**
- * Each solid platform's front half (z 0 to `MAIN_DEPTH_Z / 2`), projected through
- * the 3D side camera the overlay is framed with (`render3d/camera3d.ts`: at z = 0
- * it is `worldToScreen` exactly), as a convex polygon in screen pixels.
+ * Each solid platform's section in the play plane (z = 0), projected through the 3D
+ * side camera the overlay is framed with (`render3d/camera3d.ts`: at z = 0 it is
+ * `worldToScreen` exactly), as a convex polygon in screen pixels (Plan 6, Task 33).
  */
 export function stageSolidsOnScreen(stage: StageDef, stageFrame: number, cam: Pick<Camera, "x" | "y" | "zoom" | "shakeX" | "shakeY">): Point[][] {
   const distance = VIEW_HEIGHT / 2 / (cam.zoom * Math.tan((SIDE_FOV_DEG * Math.PI) / 180 / 2));
@@ -49,17 +52,14 @@ export function stageSolidsOnScreen(stage: StageDef, stageFrame: number, cam: Pi
     const half = toFloat(p.halfWidth);
     const top = toFloat(p.y);
     const bottom = top - toFloat(HARD_PLATFORM_DEPTH);
-    const corners: Point[] = [];
-    for (const z of [0, MAIN_DEPTH_Z / 2]) {
-      for (const [x, y] of [
+    const corners: Point[] = (
+      [
         [cx - half, top],
         [cx + half, top],
         [cx + half, bottom],
         [cx - half, bottom],
-      ] as const) {
-        corners.push(project(x, y, z));
-      }
-    }
+      ] as const
+    ).map(([x, y]) => project(x, y, 0));
     out.push(hull(corners));
   }
   return out;

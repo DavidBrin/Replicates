@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { Box3, Color, Mesh, Vector3 } from "three";
+import { Box3, Color, Mesh, Vector3, type Material } from "three";
 
 import { fx, toFloat } from "@/engine/fixed";
 import { HARD_PLATFORM_DEPTH, platformCentreX } from "@/engine/physics";
 import type { StageDef } from "@/engine/types";
 import { stagePaintFor } from "@/render/stageArt";
 import { STAGES, allStageForms } from "@/stages";
-import { MAIN_DEPTH, createStage3D, prismGeometry } from "./stage3d";
+import { LIP_HEIGHT, MAIN_DEPTH, MAIN_DEPTH_Z, createStage3D, prismGeometry } from "./stage3d";
 
-const meshes = (s: ReturnType<typeof createStage3D>) => s.group.children.filter((c): c is Mesh => c instanceof Mesh);
+/**
+ * The stage's bodies, one per platform. The decorative underside (Plan 6, Task 33) is not one
+ * of them: it is no surface, sits behind the play plane, and nothing the sim does meets it.
+ */
+const meshes = (s: ReturnType<typeof createStage3D>) => s.group.children.filter((c): c is Mesh => c instanceof Mesh && c.name !== "underside");
 
 describe("3D stages from the sim's platforms", () => {
   it("puts every platform's top surface exactly where the sim lands fighters", () => {
@@ -222,11 +226,15 @@ describe("the 3D stage's paint and faces", () => {
           } else {
             side++;
             expect(Math.abs(t.stored.y), label).toBeLessThan(1e-6);
-            sameColour(t.colour, soft ? paint.soft : paint.face);
+            // A hard body's front face starts with the ledge lip, in the edge colour (Plan 6,
+            // Task 33); every other wall triangle starts at a top corner, in the face colour.
+            const lip = !soft && t.stored.z > 0.99 && t.centroid.y > -LIP_HEIGHT;
+            sameColour(t.colour, soft ? paint.soft : lip ? paint.edge : paint.face);
           }
         }
-        // A box: two triangles on the top, two underneath, eight on the walls.
-        expect([up, down, side], label).toEqual([2, 2, 8]);
+        // A box: two triangles on the top, two underneath, eight on the walls, and a hard
+        // body's two more for the lip, its front face split where the lip ends.
+        expect([up, down, side], label).toEqual(soft ? [2, 2, 8] : [2, 2, 10]);
       });
       s.dispose();
     }
@@ -254,5 +262,72 @@ describe("the 3D stage's paint and faces", () => {
       expect(Math.abs(pos.getX(v))).toBeCloseTo(pos.getY(v) === 0 ? 10 : 5, 6);
     }
     g.dispose();
+  });
+});
+
+describe("the ledge lip, the shaded walls and the underside (Plan 6, Task 33)", () => {
+  const bf = STAGES.find((st) => st.id === "battlefield")!;
+  const fd = STAGES.find((st) => st.id === "finalDestination")!;
+  /** The main body's mesh, as the stage builds it. */
+  const mainMesh = (stage: StageDef): Mesh => meshes(createStage3D(stage))[stage.platforms.findIndex((p) => !p.soft)];
+  /** Vertex `i`'s colour is `hex`, to float32's precision. */
+  const isColour = (m: Mesh, i: number, hex: string): boolean => {
+    const c = m.geometry.getAttribute("color");
+    const want = new Color(hex);
+    return Math.abs(c.getX(i) - want.r) < 1e-5 && Math.abs(c.getY(i) - want.g) < 1e-5 && Math.abs(c.getZ(i) - want.b) < 1e-5;
+  };
+
+  it("paints the top band of a hard body's front face in the stage's edge colour: the ledge lip", () => {
+    const paint = stagePaintFor(bf);
+    const m = mainMesh(bf);
+    const pos = m.geometry.getAttribute("position");
+    const lip = [...Array(pos.count).keys()].filter((i) => pos.getZ(i) === MAIN_DEPTH_Z / 2 && isColour(m, i, paint.edge));
+    expect(lip.length).toBe(6);
+    expect(lip.every((i) => pos.getY(i) >= -LIP_HEIGHT - 1e-5)).toBe(true);
+  });
+
+  it("shades a hard body's walls from the face colour at the top to the deep colour at the bottom", () => {
+    const paint = stagePaintFor(fd);
+    const m = mainMesh(fd);
+    const pos = m.geometry.getAttribute("position");
+    const normal = m.geometry.getAttribute("normal");
+    const walls = [...Array(pos.count).keys()].filter((i) => Math.abs(normal.getY(i)) < 1e-6);
+    const bottom = walls.filter((i) => pos.getY(i) === -MAIN_DEPTH);
+    const above = walls.filter((i) => pos.getY(i) > -MAIN_DEPTH && !isColour(m, i, paint.edge));
+    // Four walls, each two triangles with three corners on the bottom edge between them.
+    expect(bottom.length).toBe(12);
+    expect(bottom.every((i) => isColour(m, i, paint.deep))).toBe(true);
+    expect(above.every((i) => isColour(m, i, paint.face))).toBe(true);
+  });
+
+  it("hangs a decorative tapered underside behind the play plane, under Battlefield's floor, and none under Final Destination's", () => {
+    const s = createStage3D(bf);
+    const under = s.group.children.find((o) => o.name === "underside");
+    expect(under).toBeDefined();
+    const box = new Box3().setFromObject(under!);
+    const main = bf.platforms.find((p) => !p.soft)!;
+    // Wholly behind the play plane, so a fighter under the stage is drawn in front of it.
+    expect(box.max.z).toBeLessThan(0);
+    // Hung from the body's bottom (Battlefield's floor is at 0.111), and tapering 34 below it.
+    expect(box.max.y).toBeCloseTo(toFloat(main.y) - MAIN_DEPTH, 5);
+    expect(box.min.y).toBeCloseTo(toFloat(main.y) - MAIN_DEPTH - 34, 5);
+    s.dispose();
+    expect(createStage3D(fd).group.children.some((o) => o.name === "underside")).toBe(false);
+  });
+
+  /**
+   * Ruling D11 (Plan 6, Task 33): the stage's depth toward the camera is decoration, so it
+   * never hides the play plane. Drawn first and writing no depth, it is covered by every
+   * fighter, shield and spark, a fighter hugging a wall below the ledge included.
+   */
+  it("draws every stage mesh first, writing no depth (ruling D11)", () => {
+    for (const stage of allStageForms()) {
+      const s = createStage3D(stage);
+      for (const m of s.group.children as Mesh[]) {
+        expect((m.material as Material).depthWrite, stage.id).toBe(false);
+        expect(m.renderOrder, stage.id).toBeLessThan(0);
+      }
+      s.dispose();
+    }
   });
 });

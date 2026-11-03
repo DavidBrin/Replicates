@@ -267,8 +267,9 @@ describe("the 3D presenter", () => {
     const parts = [...resourcesOf(gl().scene!).materials].filter((m) => m.type === "MeshToonMaterial");
     expect(parts).toHaveLength(4 * MAX_FIGHTER_PRIMITIVES);
     expect(parts.every((m) => m.transparent && m.side === DoubleSide)).toBe(true);
-    // One pass each: 4 × 12, Battlefield's 4 platforms and the 3 batches. Two passes each would be 4 × 12 × 2 + 7 = 103.
-    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + stage.platforms.length + BATCH_CALLS);
+    // One pass each: 4 × 12, Battlefield's 4 platforms and its decorative underside (Plan 6,
+    // Task 33), and the 3 batches. Two passes each would be 4 × 12 × 2 + 8 = 104.
+    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + stage.platforms.length + 1 + BATCH_CALLS);
     expect(presenter.info().calls).toBeLessThanOrEqual(MAX_DRAW_CALLS);
     expect(presenter.info().triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
   });
@@ -376,6 +377,19 @@ describe("the 3D presenter", () => {
       expect(shadow.y - toFloat(state.fighters[port].y)).toBeGreaterThan(0);
       expect(shadow.y - toFloat(state.fighters[port].y)).toBeLessThan(0.1);
     }
+  });
+
+  it("tips each shadow disc toward the camera, so the level side camera sees it under the feet (Plan 6, Task 33)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const shadows = gl().scene!.getObjectByName("shadows") as InstancedMesh;
+    const m = new Matrix4();
+    shadows.getMatrixAt(0, m);
+    const up = new Vector3(0, 1, 0).transformDirection(m);
+    // A flat disc's normal is straight up; tipped 24°, it leans toward +z, the camera.
+    expect(up.z).toBeCloseTo(Math.sin((24 * Math.PI) / 180), 6);
   });
 
   it("casts none for a fighter inside Kirby, grounded in a grounded Kirby's mouth, and keeps the Stone's, hidden as it is (Plan 5, Task 17)", async () => {

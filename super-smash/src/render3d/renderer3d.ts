@@ -29,6 +29,7 @@ import {
   Color,
   DirectionalLight,
   DynamicDrawUsage,
+  Euler,
   HemisphereLight,
   InstancedMesh,
   Matrix4,
@@ -193,6 +194,13 @@ export function createLights(): { readonly hemisphere: HemisphereLight; readonly
 /** A blob shadow's size against the fighter's `attributes.width`, across and in depth. UNVERIFIED (cosmetic): by eye. */
 const SHADOW_ACROSS = 1.6;
 const SHADOW_DEEP = 1.1;
+/**
+ * How far each blob shadow tips toward the camera from lying flat (Plan 6, Task 33): the
+ * level side camera sees a flat disc on the floor as a line a pixel or two tall; tipped,
+ * it reads as a contact shadow under the feet. UNVERIFIED (cosmetic): by eye, from stand-in
+ * captures (the stage writes no depth, so the whole tipped disc shows).
+ */
+export const SHADOW_TIP_DEG = 24;
 /** How far a shadow floats over the ground it is cast on, so it never fights the platform's top. UNVERIFIED (cosmetic). */
 const SHADOW_LIFT = 0.05;
 
@@ -349,7 +357,8 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   opts.canvas.addEventListener("webglcontextrestored", onRestored, false);
 
   const m = new Matrix4();
-  const flat = new Quaternion();
+  // The shadow disc lies flat (its geometry) and tips toward the camera (Plan 6, Task 33).
+  const flat = new Quaternion().setFromEuler(new Euler((SHADOW_TIP_DEG * Math.PI) / 180, 0, 0));
   const size = new Vector3();
   const at = new Vector3();
 

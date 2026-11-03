@@ -62,6 +62,12 @@ export interface StagePaint {
   readonly edge: string;
   readonly soft: string;
   readonly softEdge: string;
+  /**
+   * A decorative tapered underside below the main body, behind the play plane (Plan 6,
+   * Task 33), `depth` units tall, its bottom `taper` × the body's width; none when absent.
+   * UNVERIFIED (cosmetic): by eye, from Battlefield's silhouette in Ultimate.
+   */
+  readonly underside?: { readonly depth: number; readonly taper: number };
 }
 
 const PAINTS: Record<StageTheme, StagePaint> = {
@@ -72,6 +78,7 @@ const PAINTS: Record<StageTheme, StagePaint> = {
     edge: "#9FD2F2",
     soft: "#3A5D8C",
     softEdge: "#8FC4EA",
+    underside: { depth: 34, taper: 0.38 },
   },
   finalDestination: {
     top: "#8E6FD6",

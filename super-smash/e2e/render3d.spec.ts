@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { BATCH_CALLS, MAX_DRAW_CALLS, MAX_TRIANGLES_PER_FRAME } from "../src/render3d/budget";
+import { stagePaintFor } from "../src/render/stageArt";
 import { parseModelIndex } from "../src/render3d/models/loader";
 import { SKELETONS } from "../src/render3d/skeletons";
 import { resolveStage } from "../src/stages";
@@ -43,13 +44,14 @@ import { P1, ROUTES, pauseMatch, simFrame, simStageId, startFromTitle, startMatc
  * ## Drawn, not just counted
  *
  * A frame's draw calls are known by construction (`renderer3d.ts`): one per
- * stage platform, one batch each for the sparks and bursts, the shields and
- * the blob shadows (`BATCH_CALLS`), and the fighters: a stand-in is one mesh
- * per hurt capsule of its skeleton, a glb one per primitive of the file the
- * server sends. So a fighter is seen to draw by a bound on calls that nothing
- * else reaches (`callRange`): with the capsules never attached a match is the
- * stage and its batches, 7 calls on Battlefield, and a bare `calls > 0` is met
- * by that alone. The ceiling is the batches' 3 above the floor, so any fighter
+ * stage mesh (each platform, and Battlefield's decorative underside, Plan 6
+ * Task 33), one batch each for the sparks and bursts, the shields and the blob
+ * shadows (`BATCH_CALLS`), and the fighters: a stand-in is one mesh per hurt
+ * capsule of its skeleton, a glb one per primitive of the file the server
+ * sends. So a fighter is seen to draw by a bound on calls that nothing else
+ * reaches (`callRange`): with the capsules never attached a match is the stage
+ * and its batches, 8 calls on Battlefield, and a bare `calls > 0` is met by
+ * that alone. The ceiling is the batches' 3 above the floor, so any fighter
  * whose parts are drawn twice is over it.
  */
 
@@ -86,7 +88,7 @@ type DrawnFighter = { id: string; kind: "standIn" } | { id: string; kind: "glb";
 
 /**
  * The draw calls a frame costs, as the range its parts allow: the stage's
- * platforms (`stage3d.ts`: one mesh each), the fighters, and at most the
+ * meshes (`stage3d.ts`: one per platform, and the underside), the fighters, and at most the
  * `BATCH_CALLS` batches. A stand-in is one mesh per hurt capsule of its
  * fighter's skeleton (`standInModel`), always all of them; a glb is one per
  * primitive of its own file, always all of them. `min` is above everything the
@@ -94,21 +96,25 @@ type DrawnFighter = { id: string; kind: "standIn" } | { id: string; kind: "glb";
  * in it; `max` is what the parts can draw at most, so one fighter's parts drawn
  * twice is over it.
  */
-function callRange(platforms: number, fighters: readonly DrawnFighter[]): { min: number; max: number } {
+function callRange(stageMeshes: number, fighters: readonly DrawnFighter[]): { min: number; max: number } {
   let parts = 0;
   for (const f of fighters) parts += f.kind === "glb" ? f.primitives : SKELETONS[f.id].hurt.length;
-  const range = { min: platforms + parts, max: platforms + BATCH_CALLS + parts };
+  const range = { min: stageMeshes + parts, max: stageMeshes + BATCH_CALLS + parts };
   // The floor is only worth having if the stage and its batches cannot reach it.
-  expect(range.min, "a floor that only drawn fighters reach").toBeGreaterThan(platforms + BATCH_CALLS);
+  expect(range.min, "a floor that only drawn fighters reach").toBeGreaterThan(stageMeshes + BATCH_CALLS);
   return range;
 }
 
-/** The stage of the running match: how many platforms it has. A form (`-omega`, `-battlefield`) has its template's. */
-async function stagePlatforms(page: Page): Promise<number> {
+/**
+ * The stage of the running match: how many meshes it draws, one per platform and its
+ * decorative underside where its theme has one (Plan 6, Task 33). A form (`-omega`,
+ * `-battlefield`) has its template's platforms and theme.
+ */
+async function stageMeshes(page: Page): Promise<number> {
   const id = await simStageId(page);
   const stage = resolveStage(id);
   if (stage === undefined) throw new Error(`the match is on a stage the game does not know: "${id}"`);
-  return stage.platforms.length;
+  return stage.platforms.length + (stagePaintFor(stage).underside === undefined ? 0 : 1);
 }
 
 /** Poll until the frame's draw calls are within what its parts allow (`callRange`): the fighters are drawn, each once. */
@@ -199,7 +205,7 @@ test.describe("stand-ins when the models are not there", () => {
     await expect.poll(async () => (await renderInfo(page))?.fighters ?? []).toEqual(["standIn", "standIn"]);
     await framesAdvance(page);
     // A stand-in is drawn, not skipped: every capsule of both, once, on top of the stage.
-    await expectDrawn(page, callRange(await stagePlatforms(page), DEFAULT_PAIR.map((id) => ({ id, kind: "standIn" }))), "both stand-ins drawn");
+    await expectDrawn(page, callRange(await stageMeshes(page), DEFAULT_PAIR.map((id) => ({ id, kind: "standIn" }))), "both stand-ins drawn");
     await expect(matchFailed(page)).toHaveCount(0);
     expect(seen.pageErrors).toEqual([]);
     // Said once per fighter, naming it, so a missing model is never silent.
@@ -219,7 +225,7 @@ test.describe("stand-ins when the models are not there", () => {
 
     await expect.poll(async () => (await renderInfo(page))?.fighters ?? []).toEqual(["standIn", "standIn"]);
     await framesAdvance(page);
-    await expectDrawn(page, callRange(await stagePlatforms(page), DEFAULT_PAIR.map((id) => ({ id, kind: "standIn" }))), "both stand-ins drawn");
+    await expectDrawn(page, callRange(await stageMeshes(page), DEFAULT_PAIR.map((id) => ({ id, kind: "standIn" }))), "both stand-ins drawn");
     await expect(matchFailed(page)).toHaveCount(0);
     expect(seen.pageErrors).toEqual([]);
     expect(standInsWarnedOf(seen.warnings)).toHaveLength(2);
@@ -545,7 +551,7 @@ test.describe("four fighters", () => {
       const want = HEAVIEST_FOUR.map((f) => (requireGlb || built.has(f.id) ? ("glb" as const) : ("standIn" as const)));
       await expect.poll(async () => (await renderInfo(page))?.fighters).toEqual(want);
       const range = callRange(
-        await stagePlatforms(page),
+        await stageMeshes(page),
         HEAVIEST_FOUR.map((f, i): DrawnFighter => {
           if (want[i] === "standIn") return { id: f.id, kind: "standIn" };
           const primitives = built.get(f.id);
@@ -575,7 +581,7 @@ test.describe("four fighters", () => {
       expect(stepped.hitFrames).toBeGreaterThan(0);
       expect(stepped.shieldFrames).toBeGreaterThan(0);
       // ...and the fighters were drawn, each once: more than the stage and the batches alone can reach (stand-ins
-      // that draw nothing are 7 calls on Battlefield), and no more than the parts allow (a fighter drawn twice is over).
+      // that draw nothing are 8 calls on Battlefield), and no more than the parts allow (a fighter drawn twice is over).
       expect(worst.calls, "the fighters are drawn").toBeGreaterThanOrEqual(range.min);
       expect(worst.calls, "no part is drawn twice").toBeLessThanOrEqual(range.max);
       expect(worst.calls).toBeLessThan(MAX_DRAW_CALLS);
