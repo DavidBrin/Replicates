@@ -5,7 +5,7 @@ Six implementation plans turn the `super-smash` replica into **David-Smash**: SS
 - **Why:** `../specs/2026-10-24-david-smash-design.md` (requirements, David's decisions).
 - **Evidence:** `../../../research/rebuild-2026-10/README.md` (repo analysis, physics gap table, compute budget, hosting comparison).
 
-**Status: Plans 1-6 are executed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plans 1-5 are deployed; Plan 6 is pushed and waits for David's go to deploy.
+**Status: Plans 1-6 are executed and deployed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plan 6 was deployed on 2026-11-03 (rules version 6).
 
 ## Order
 
@@ -35,7 +35,7 @@ Every outward or installing step says **STOP: ask David for go** and waits for a
 | 4 / 7 | Download Blender 5.2.2 (346 MB) into the git-ignored `.model-cache/tools/`. If David says no, the game still works, with capsule stand-ins in place of models. |
 | 4 / 23 | Deploy the 3D build. |
 | 5 / 23 | Deploy the finished game (rules version 5) |
-| 6 / 42 | Deploy (rules version 6), on David's go |
+| 6 / 42 | Deploy (rules version 6), on David's go: deployed 2026-11-03 |
 
 Plans 2 and 3 do not deploy. Their changes go live with the next deploy David approves.
 
@@ -102,7 +102,7 @@ None blocks the start. Each plan follows a stated default until David says other
     - Is the power lost on a KO? The plan says yes.
   - Should the wall-jump push, footstool reach/stun/push and their windows be play-tested before the deploy? The wall-jump heights are SmashWiki's.
 - **Plan 6:**
-  - Deploy rules version 6? Pushed, not deployed.
+  - Set the TURN secrets (`TURN_KEY_ID`, `TURN_KEY_API_TOKEN`): without them players on separate networks cannot connect directly. Plan 6 itself is deployed.
   - A real-gamepad check of the pad remap, the right stick (standing, in the air, shielding, holding someone) and press-to-join.
 
 ## Executing

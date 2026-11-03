@@ -4646,7 +4646,12 @@ the controller on David's behalf, with its cost if wrong.
 grouped by task, each with its cost if wrong. Several reverse or extend the plan; those are marked.
 - *Go*: David's "deploy it", in reply to the plan's presentation, read as the go to execute Plan 6
   and to deploy at its end, after Task 42's push and pre-push scan, verified as Plans 4 and 5
-  were. Cost: one deploy David did not want, reversible by redeploying `46e0706`.
+  were. Cost: one deploy David did not want, reversible by redeploying `46e0706`. Deployed on
+  2026-11-03 from `90de7ce` (rules version 6) to the `david-smash` Worker, version
+  `fca17710-6771-49d2-ab0c-b86342be4af1`. Verified live: `/bake/roster.bin.gz` serves 200 as
+  `application/gzip`, 2,033,862 bytes, with no `content-encoding`; the live e2e (`SMASH_URL`) 45
+  passed, 7 skipped; the live online e2e 6 passed, Task 40b's no-direct-link sentence included
+  (under forced relay, since `/api/ice` still answers `{"turn":false}`).
 - *Process*: one implementer at a time in the main checkout; reviews may run in scratch copies;
   fix rounds resume the same implementer. Task 18's brief carried the bodies' group intro at its
   end, ignored by Task 18. Cost: none.
@@ -4753,8 +4758,8 @@ grouped by task, each with its cost if wrong. Several reverse or extend the plan
   limit it starts no new attack, jab loop, smash charge or landing attack (an attack already out
   finishes), and the six-stage idle-Mario test runs in the game's own baked context. Its deadline
   is 240 frames after the later of the limit and the target's first catchable frame (a hit before
-  the limit can KO the idle Mario, who respawns invincible). Cost: a CPU near the limit gives up some free hits to fire
-  (intended by D10). A CPU Pikachu that climbs to a target's floor or steers the tackle is carried:
+  the limit can KO the idle Mario, who respawns invincible). Cost: a CPU near the limit gives up
+  some free hits to fire (intended by D10). A CPU Pikachu that climbs to a target's floor or steers the tackle is carried:
   CPU Volt Tackle stays rare against moving CPU targets. Cost: CPU-against-CPU matches rarely show
   it. The airborne half (an airborne CPU past the limit still started aerials) was carried, then
   closed by Task 26.
@@ -5027,16 +5032,12 @@ with its reason.
   script and projectile, recovery, footstool and bake items D58 names (D58's "Marked, not
   modelled" and its per-move lists).
 
-**For David.**
-- *Deploy Plan 6* (rules version 6)? Pushed, not deployed. Online peers on version 5 and 6 refuse
-  each other, so both players reload after a deploy.
-- *Set the TURN secrets*: `TURN_KEY_ID` and `TURN_KEY_API_TOKEN` (`wrangler secret put`). Without
-  them players on separate networks cannot connect; Task 40b only makes that fail quickly and say
-  why.
+**For David.** Plan 6 is deployed (the *Go* entry above); what is still his:
+- *Set the TURN secrets*: `wrangler secret put TURN_KEY_ID` and `wrangler secret put
+  TURN_KEY_API_TOKEN`. Without them players on separate networks cannot connect; Task 40b only
+  makes that fail quickly and say why. Once they are set, the controller verifies that `/api/ice`
+  answers `turn: true` and runs the online e2e with the relay forced.
 - *A real-gamepad check*: remap Attack and Special and play a match; flick the right stick each
   way standing, in the air, shielding (rolls, a spot dodge, an up smash) and holding someone
   (throws, D1); press A on the select screen with a second pad (Task 30), and with a keyboard
   player and one pad (the trade-off).
-- *Optional, a local look at the real models*: Kirby's stance, Donkey Kong's carry, lift and full
-  releases, the dash-off flip, the slip and wall-tech clips, the 3D stage, the trails, the effect
-  fixes and outliers, and the portraits.
