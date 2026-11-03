@@ -1049,6 +1049,29 @@ describe("a buffered right-stick flick keeps its direction (Plan 6, Task 5; Smas
   });
 });
 
+describe("a buffered stick smash stays a smash (Plan 6, Task 11 fix round 1)", () => {
+  // The buffer keeps a stick smash's direction with its Attack press (`bufferPress`), as it
+  // keeps a right-stick flick's (Task 5). UNVERIFIED: the controller's ruling (`BufferedAction`).
+  it("comes out of an attack's end lag as the forward smash pressed in it, the direction still held", () => {
+    // The up tilt's last 4 frames (of 20): a fresh Right and Attack together, Right held.
+    const f = fighter({ action: "attack", move: "utilt", actionFrame: 16 });
+    tick(f, Btn.Right | Btn.Attack, 0);
+    expect(f.bufferedAction).toMatchObject({ kind: "attack", smashX: 1, smashY: 0 });
+    hold(f, Btn.Right, 6, Btn.Right | Btn.Attack);
+    expect([f.action, f.move]).toEqual(["attack", "fsmash"]);
+  });
+
+  it("keeps a buffered tilt a tilt: an Attack after the smash window, Right held", () => {
+    const f = fighter({ action: "attack", move: "utilt", actionFrame: 10 });
+    tick(f, Btn.Right, 0);
+    hold(f, Btn.Right, SMASH_INPUT_WINDOW, Btn.Right);
+    tick(f, Btn.Right | Btn.Attack, Btn.Right);
+    expect(f.bufferedAction).toEqual({ kind: "attack", frame: expect.any(Number) });
+    hold(f, Btn.Right, 6, Btn.Right | Btn.Attack);
+    expect([f.action, f.move]).toEqual(["attack", "ftilt"]);
+  });
+});
+
 /* -------------------------------------------------------------- charge -- */
 
 describe("smash charge", () => {

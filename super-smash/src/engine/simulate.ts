@@ -1251,6 +1251,11 @@ export function step(
     f.combat.footstools = 0;
     f.combat.footstoolFrame = 0;
     f.combat.sinceAttack = SINCE_ATTACK_CAP;
+    // ...nor stays slowed by a Final Smash's start (Plan 6, Task 11 fix round 1): the
+    // respawn's countdown runs at full speed.
+    f.combat.slowRate = 0;
+    f.combat.slowFrames = 0;
+    f.combat.slowPhase = 0;
     // ...nor keeps the Smash Ball's power (Plan 5, Task 14). UNVERIFIED: no source
     // says a KO loses it; SmashWiki "Final Smash" says only that a hit can drop it.
     f.finalSmashReady = 0;

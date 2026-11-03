@@ -454,7 +454,14 @@ const MATCHES: readonly Match[] = [
  * inhale, projectile, states and slip labs. All 60 are visited.
  * Plan 6, Task 11 (`SLOW_OPPONENT`) adds no action: each Final Smash's start slows the
  * others, so the Final Smash, beams and dash labs and the ball-on CPU match move, and
- * nothing else. All 60 are visited.
+ * nothing else. In the dash lab Pikachu, slowed by Team Star Fox's start, is KO'd on 191
+ * (169); in the beams lab Donkey Kong on 666 (593) and Samus on 761 (762). All 60 are
+ * visited.
+ * Its fix round 1 adds no action: the input buffer keeps a stick smash with its press, so
+ * a CPU's smash pressed in another action's last frames comes out a smash, not a tilt (and
+ * a smash-input special its smash version); and a KO ends a slow. Three CPU matches
+ * (donkeyKong-pikachu-finalDestination, link-samus-smashville, kirby-marth-pokemonStadium2)
+ * and the ball-on CPU match move, and nothing else. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

@@ -30,6 +30,7 @@ import { mashFrames } from "../shield";
 import {
   SHIELD_START_FRAMES,
   attackFlick,
+  attackSmash,
   bufferPress,
   buttonPresses,
   endStatus,
@@ -88,7 +89,9 @@ export const STATUS_GUARD: FighterStatus = {
       // shield"), or without a flick the stick's up smash input (SPEC §6: Up pressed fresh
       // within 5 frames). Attack otherwise grabs (ruling R-P6-14): SmashWiki "Grab", a grab
       // "can be performed by pressing the shield and attack buttons simultaneously".
-      const up = flick !== null ? flick.y > 0 : intent.smash && intent.smashY > 0;
+      // A buffered stick smash counts as the frame's own (Plan 6, Task 11 fix round 1).
+      const smash = attackSmash(intent, p);
+      const up = flick !== null ? flick.y > 0 : smash !== null && smash.y > 0;
       if (up && hasMove(ctx, "usmash")) startMove(f, "attack", "usmash");
       else startMove(f, "grab", "grab");
       return;

@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { FINAL_SMASH_READY } from "./final";
 import { fx } from "./fixed";
+import { platformCentreX } from "./physics";
 import { hashState } from "./hash";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "./simulate";
 import { slowOthers, slowedThisStep } from "./slow";
@@ -138,5 +139,58 @@ describe("SLOW_OPPONENT (Plan 6, Task 11)", () => {
     expect(live[23].fighters[1].combat.slowFrames, "Mario slowed on step 24").toBeGreaterThan(0);
     expect(live[23].fighters[0].combat.sceneHits.length, "a spark recorded by step 24").toBeGreaterThan(0);
     rollBack(23, (i) => [truth(i)[0], Btn.Right]);
+  });
+
+  // Fix round 1 (the review's Important 1): a KO ends the slow with the stock, as it ends the
+  // stock's other per-stock state, so the respawn's countdown runs at full speed.
+  it("a fighter KO'd while slowed leaves `dead` on the same step as one that was not", () => {
+    const leaves = (slow: { rate: number; frames: number } | null): number => {
+      const s = pair();
+      if (slow !== null) slowOthers(s, 0, slow);
+      // Mario under Final Destination's bottom blast line: KO'd on step 1.
+      Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, y: -fx(400) });
+      const states = run(s, () => [0, 0], 300);
+      expect(states[0].fighters[1].action, "KO'd on step 1").toBe("dead");
+      return 1 + states.findIndex((st) => st.fighters[1].action !== "dead");
+    };
+    // Unslowed, it leaves on step 75 (states[74]).
+    expect(leaves(null)).toBe(75);
+    expect(leaves({ rate: 30, frames: 100 }), "Link's (30, 100)").toBe(75);
+    expect(leaves({ rate: 20, frames: 75 }), "Mario's (20, 75)").toBe(75);
+  });
+
+  // Fix round 1 (the review's Minor 2): the buffer keeps a stick smash's direction with its
+  // attack press (`bufferPress`), so a smash pressed on a still step is still a smash.
+  it("a stick smash pressed on a still step comes out as the smash on the next running step, not a tilt", () => {
+    const s = pair();
+    slowOthers(s, 0, { rate: 9, frames: 45 });
+    // Steps 1 and 10 run. Forward (Left, Mario faces left) and Attack pressed together on
+    // step 2, a still step, and forward held: unslowed, a forward smash.
+    const states = run(s, (i) => [0, i === 1 ? Btn.Left | Btn.Attack : i > 1 ? Btn.Left : 0], 10);
+    expect(states[8].fighters[1].action, "still on step 9").toBe("stand");
+    expect(states[9].fighters[1]).toMatchObject({ action: "attack", move: "fsmash" });
+  });
+
+  // Fix round 1: Smashville's platform carries a fighter that stands still (Task 12,
+  // decision D6: `carryOnPlatform`), and a slowed one's still step is one of those.
+  it("carries a slowed fighter standing on Smashville's moving platform through its still steps", () => {
+    const sv = STAGES.find((st) => st.id === "smashville")!;
+    const mover = sv.platforms.findIndex((p) => p.motion !== undefined);
+    const plat = sv.platforms[mover];
+    const s = createInitialState("smashville", [{ defId: "pikachu" }, { defId: "mario" }], RULES, 5);
+    s.stageFrame = 1;
+    Object.assign(s.fighters[0], { action: "stand", actionFrame: 10, grounded: true, platform: 0, x: -fx(60), y: 0, intangible: 0 });
+    Object.assign(s.fighters[1], {
+      action: "stand", actionFrame: 10, grounded: true, platform: mover, x: platformCentreX(plat, 1), y: plat.y, facing: 1, intangible: 0, vx: 0, vy: 0,
+    });
+    slowOthers(s, 0, { rate: 4, frames: 40 });
+    const states = run(s, () => [0, 0], 4);
+    // Steps 2-4 stand still: each is carried by as far as the platform moved, and stays on it.
+    for (let k = 1; k < 4; k++) {
+      const moved = platformCentreX(plat, states[k].stageFrame) - platformCentreX(plat, states[k - 1].stageFrame);
+      expect(moved, `the platform moves on step ${k + 1}`).not.toBe(0);
+      expect(states[k].fighters[1].x - states[k - 1].fighters[1].x, `step ${k + 1}`).toBe(moved);
+      expect(states[k].fighters[1].platform).toBe(mover);
+    }
   });
 });

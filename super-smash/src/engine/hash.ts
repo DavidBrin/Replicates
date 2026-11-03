@@ -161,6 +161,10 @@ export function mixFighter(h: number, f: FighterState): number {
     if ((b.kind === "attack" || b.kind === "special") && b.flickX !== undefined) {
       x = mixInt(x, 1 + (b.flickX + 1) * 3 + ((b.flickY ?? 0) + 1));
     }
+    // A buffered stick smash (Plan 6, Task 11 fix round 1): the attack's direction, the
+    // special's flick age. Nothing new for a press without one.
+    if (b.kind === "attack" && b.smashX !== undefined) x = mixInt(x, 10 + (b.smashX + 1) * 3 + ((b.smashY ?? 0) + 1));
+    if (b.kind === "special" && b.flickAge !== undefined) x = mixInt(x, 20 + b.flickAge);
   }
   x = mixKinetic(x, f.kinetic);
   return mixCombat(x, f.combat);

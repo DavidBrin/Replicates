@@ -145,17 +145,20 @@ describe("a side special's smash input: the smash attacks' flick, at its own mov
     }
   });
 
-  it("needs a fresh B press: a B buffered through a landing lag comes out as the tilt version, held or not, as a buffered attack is never a smash", () => {
-    const s = duel("samus", "mario", -30, 60);
-    Object.assign(s.fighters[0], { action: "landingLag", actionFrame: 0, charge: 5 });
-    // Right and B pressed together on step 2, in the lag, and both held after: B is
-    // held, not pressed, on the frame the buffered special comes out (fix round 1).
-    const states = run(s, 8, (i) => [i >= 2 ? Btn.Right | Btn.Special : 0, 0]);
-    const start = states.findIndex((st) => st.fighters[0].action === "special");
-    expect(start).toBeGreaterThan(2);
-    // The flick is 3 frames old, inside the 5: only the B press is not fresh.
-    expect(start - 2).toBeLessThanOrEqual(5);
-    expect(states[start].fighters[0].move).toBe("sideB");
+  // Plan 6, Task 11 fix round 1: the buffer keeps the smash flick a B was pressed with
+  // (`bufferPress`; UNVERIFIED, the controller's ruling), as it keeps a stick smash's attack.
+  // Until then a buffered B was always the tilt version.
+  it.each(["samus", "link"])("%s: a smash-input B buffered through a landing lag comes out as the smash version, B held or let go", (id) => {
+    for (const held of [true, false]) {
+      const s = duel(id, "mario", -30, 60);
+      Object.assign(s.fighters[0], { action: "landingLag", actionFrame: 0, charge: 5 });
+      // Right and B pressed together on step 2, in the lag, and Right held after: B is
+      // not pressed on the frame the buffered special comes out.
+      const states = run(s, 8, (i) => [i >= 2 ? Btn.Right | (i === 2 || held ? Btn.Special : 0) : 0, 0]);
+      const start = states.findIndex((st) => st.fighters[0].action === "special");
+      expect(start, `${id}, B held: ${held}`).toBeGreaterThan(2);
+      expect(states[start].fighters[0].move, `${id}, B held: ${held}`).toBe("sideBSmash");
+    }
   });
 
   it("turns the fighter round first when pressed backward, as the tilt version does", () => {

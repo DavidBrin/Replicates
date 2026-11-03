@@ -1617,9 +1617,16 @@ export type BufferedAction =
    * `flickX`/`flickY`: a right-stick flick's direction (`Intent.rightFlick`), each −1/0/1,
    * when the press was one (Plan 6, Task 5; SmashWiki "C-Stick": C-Stick inputs "can be
    * accidentally buffered"). Absent for a press of the button.
+   *
+   * Without a flick, a press made as a stick smash keeps it (Plan 6, Task 11 fix round 1, the
+   * controller's ruling; UNVERIFIED: no page read says what the buffer keeps of the stick, and
+   * the replica reads a buffered smash as staying a smash): an attack its smash's direction
+   * (`smashX`/`smashY`, `Intent.smash`), a special its smash flick's age (`flickAge`,
+   * `Intent.flickAge`), which picks a smash-input special's smash version
+   * (`MoveDef.smashInput`). Absent for a tilt, and for a special with no direction held.
    */
-  | { kind: "attack"; frame: number; flickX?: number; flickY?: number }
-  | { kind: "special"; frame: number; flickX?: number; flickY?: number }
+  | { kind: "attack"; frame: number; flickX?: number; flickY?: number; smashX?: number; smashY?: number }
+  | { kind: "special"; frame: number; flickX?: number; flickY?: number; flickAge?: number }
   | { kind: "shield"; frame: number }
   | { kind: "grab"; frame: number };
 

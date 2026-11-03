@@ -386,7 +386,15 @@ export function bufferPress(f: FighterState, intent: Intent, frame: number): voi
   if (kind === null) return;
   // A flicked attack or special keeps the flick's direction (Plan 6, Task 5).
   const flick = kind === "attack" || kind === "special" ? intent.rightFlick : null;
-  f.bufferedAction = (flick === null ? { kind, frame } : { kind, frame, flickX: flick.x, flickY: flick.y }) as BufferedAction;
+  if (flick !== null) {
+    f.bufferedAction = { kind, frame, flickX: flick.x, flickY: flick.y } as BufferedAction;
+    return;
+  }
+  // A stick smash stays a smash (Plan 6, Task 11 fix round 1): an attack keeps its smash's
+  // direction, a special its smash flick's age, for its smash version.
+  if (kind === "attack" && intent.smash) f.bufferedAction = { kind, frame, smashX: intent.smashX, smashY: intent.smashY };
+  else if (kind === "special" && intent.flickAge !== NO_FLICK) f.bufferedAction = { kind, frame, flickAge: intent.flickAge };
+  else f.bufferedAction = { kind, frame } as BufferedAction;
 }
 
 /** The buffered action still inside its window, or null. Expired ones are dropped. */
@@ -703,10 +711,11 @@ export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot):
  * `flick` is how many frames before this B press its smash flick was
  * (`Intent.flickAge`), or `NO_FLICK` when B was not pressed this frame: within the
  * move's own window it starts the move's smash version (`MoveDef.smashInput`;
- * Plan 5, Task 13d), which turns as the side special does. A buffered B is never
- * one (UNVERIFIED: no source says what the buffer keeps of the stick); a buffered
- * right-stick flick keeps its own direction instead, and its attack is a smash
- * (Plan 6, Task 5: `presses`, `withFlick`).
+ * Plan 5, Task 13d), which turns as the side special does. A buffered B keeps the
+ * flick it was pressed with (Plan 6, Task 11 fix round 1: `Presses.specialFlickAge`;
+ * UNVERIFIED, as for a buffered smash attack: `BufferedAction`); a buffered right-stick
+ * flick keeps its own direction instead, and its attack is a smash (Plan 6, Task 5:
+ * `presses`, `withFlick`).
  */
 export function beginSpecial(
   f: FighterState,
@@ -835,6 +844,16 @@ export interface Presses {
    * own (`Intent.rightFlick`), and the flick aims nothing but its own press.
    */
   flick: { readonly kind: "attack" | "special"; readonly x: number; readonly y: number } | null;
+  /**
+   * The stick smash this frame's buffered attack was pressed as (Plan 6, Task 11 fix round 1),
+   * its direction, or null: none, or this frame pressed Attack itself (`attackSmash`).
+   */
+  smash: { readonly x: number; readonly y: number } | null;
+  /**
+   * The smash flick's age this frame's buffered special was pressed with (`Intent.flickAge`
+   * then; Plan 6, Task 11 fix round 1), or `NO_FLICK`: none, or this frame pressed B itself.
+   */
+  specialFlickAge: number;
 }
 
 /** This frame's presses, with a still-valid buffered press folded in. */
@@ -848,6 +867,14 @@ export function presses(f: FighterState, intent: Intent, frame: number): Presses
     grab: intent.grabPressed || b === "grab",
     shield: intent.shieldPressed || b === "shield",
     flick: bufferedFlick(buffered, intent),
+    smash:
+      buffered !== null && buffered.kind === "attack" && buffered.smashX !== undefined && !intent.attackPressed
+        ? { x: buffered.smashX, y: buffered.smashY ?? 0 }
+        : null,
+    specialFlickAge:
+      buffered !== null && buffered.kind === "special" && buffered.flickAge !== undefined && !intent.specialPressed
+        ? buffered.flickAge
+        : NO_FLICK,
   };
   if (b !== null) f.bufferedAction = null;
   return p;
@@ -867,6 +894,21 @@ function bufferedFlick(b: BufferedAction | null, intent: Intent): Presses["flick
 export function attackFlick(intent: Intent, p: Presses): { readonly x: number; readonly y: number } | null {
   if (intent.attackPressed) return intent.rightFlick;
   return p.flick !== null && p.flick.kind === "attack" ? p.flick : null;
+}
+
+/**
+ * The stick smash this frame's attack press comes with (Plan 6, Task 11 fix round 1), its
+ * direction: the frame's own when it pressed Attack (`Intent.smash`), or the one a buffered
+ * attack kept; else null.
+ */
+export function attackSmash(intent: Intent, p: Presses): { readonly x: number; readonly y: number } | null {
+  if (intent.attackPressed) return intent.smash ? { x: intent.smashX, y: intent.smashY } : null;
+  return p.smash;
+}
+
+/** `intent` with a buffered stick smash (Plan 6, Task 11 fix round 1): the attack it starts is that smash. */
+function withSmash(intent: Intent, smash: { readonly x: number; readonly y: number }): Intent {
+  return { ...intent, smash: true, smashX: smash.x, smashY: smash.y };
 }
 
 /**
@@ -1035,9 +1077,12 @@ export function landFromSpecialFall(f: FighterState, def: FighterDef): void {
   f.charge = lag;
 }
 
-/** The smash flick a B press this frame comes with (`beginSpecial`'s `flick`): none for a buffered B. */
-function specialFlick(intent: Intent): number {
-  return intent.specialPressed ? intent.flickAge : NO_FLICK;
+/**
+ * The smash flick a B press this frame comes with (`beginSpecial`'s `flick`): a buffered B's
+ * is the one it was pressed with (Plan 6, Task 11 fix round 1: `Presses.specialFlickAge`).
+ */
+function specialFlick(intent: Intent, p: Presses): number {
+  return intent.specialPressed ? intent.flickAge : p.specialFlickAge;
 }
 
 /**
@@ -1051,9 +1096,11 @@ function specialFlick(intent: Intent): number {
 export function handleActionable(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   const p = presses(f, intent, ctx.frame);
   // A buffered flick aims the press it was buffered with (Plan 6, Task 5), and nothing else:
-  // `aim` the special, `aimAttack` the attack.
+  // `aim` the special, `aimAttack` the attack. A buffered stick smash is the attack's smash
+  // (Task 11 fix round 1).
   const aim = p.flick !== null && p.flick.kind === "special" ? withFlick(intent, p.flick) : intent;
-  const aimAttack = p.flick !== null && p.flick.kind === "attack" ? withFlick(intent, p.flick) : intent;
+  const aimAttack =
+    p.flick !== null && p.flick.kind === "attack" ? withFlick(intent, p.flick) : p.smash !== null ? withSmash(intent, p.smash) : intent;
 
   if (f.grounded) {
     if (p.shield || intent.shieldHeld) {
@@ -1065,7 +1112,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
       startMove(f, "grab", hasMove(ctx, slot) ? slot : "grab");
       return true;
     }
-    if (p.special && beginSpecial(f, ctx, specialSlot(aim), aim.x, aim, specialFlick(intent))) return true;
+    if (p.special && beginSpecial(f, ctx, specialSlot(aim), aim.x, aim, specialFlick(intent, p))) return true;
     if (p.attack) {
       const slot = groundAttackSlot(f, aimAttack);
       // A forward smash pressed toward the fighter's back turns it round first (Plan 6,
@@ -1106,7 +1153,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
     }
     if (startAirDodge(f, intent)) return true;
   }
-  if (p.special && beginSpecial(f, ctx, specialSlot(aim), aim.x, aim, specialFlick(intent))) return true;
+  if (p.special && beginSpecial(f, ctx, specialSlot(aim), aim.x, aim, specialFlick(intent, p))) return true;
   if (p.attack) {
     const slot = aerialSlot(f, aimAttack);
     if (hasMove(ctx, slot)) {

@@ -256,10 +256,10 @@ describe("hashState", () => {
     const FULL: Partial<FighterState> = {
       move: "jab1",
       ledge: { platform: 0, side: 1 },
-      // A buffered flick (Plan 6, Task 5), so the walk reaches its direction. Its fields
-      // first: the walk mutates this one object in place, leaf by leaf, and once `kind` is
-      // no longer "attack" the flick is not mixed at all.
-      bufferedAction: { flickX: 1, flickY: 0, kind: "attack", frame: 3 },
+      // A buffered flick (Plan 6, Task 5) and stick smash (Task 11 fix round 1), so the walk
+      // reaches their directions. Their fields first: the walk mutates this one object in
+      // place, leaf by leaf, and once `kind` is no longer "attack" neither is mixed at all.
+      bufferedAction: { flickX: 1, flickY: 0, smashX: 1, smashY: 0, kind: "attack", frame: 3 },
       combat: { ...emptyCombat(), helplessMove: "upB" },
     };
     /** Arrays `mixFighter` hashes element by element, each with an explicit case in the list above. */
@@ -305,6 +305,23 @@ describe("hashState", () => {
     expect(hashState(right)).not.toBe(hashState(plain));
     expect(hashState(up)).not.toBe(hashState(right));
     expect(cloneState(right).fighters[0].bufferedAction).toEqual(right.fighters[0].bufferedAction);
+  });
+
+  it("hashes a buffered stick smash's direction and a buffered special's flick age (Plan 6, Task 11 fix round 1)", () => {
+    const withBuffer = (b: FighterState["bufferedAction"]) => {
+      const s = state();
+      s.fighters[0].bufferedAction = b;
+      return hashState(s);
+    };
+    const plain = withBuffer({ kind: "attack", frame: 3 });
+    expect(withBuffer({ kind: "attack", frame: 3, smashX: 1, smashY: 0 })).not.toBe(plain);
+    expect(withBuffer({ kind: "attack", frame: 3, smashX: 0, smashY: 1 })).not.toBe(withBuffer({ kind: "attack", frame: 3, smashX: 1, smashY: 0 }));
+    const special = withBuffer({ kind: "special", frame: 3 });
+    expect(withBuffer({ kind: "special", frame: 3, flickAge: 2 })).not.toBe(special);
+    expect(withBuffer({ kind: "special", frame: 3, flickAge: 3 })).not.toBe(withBuffer({ kind: "special", frame: 3, flickAge: 2 }));
+    const s = state();
+    s.fighters[0].bufferedAction = { kind: "special", frame: 3, flickAge: 2 };
+    expect(cloneState(s).fighters[0].bufferedAction).toEqual(s.fighters[0].bufferedAction);
   });
 
   it("notices a change to every projectile field", () => {
