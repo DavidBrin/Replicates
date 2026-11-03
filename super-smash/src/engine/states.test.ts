@@ -977,6 +977,27 @@ describe("input buffer", () => {
     for (let i = 0; i < BUFFER_FRAMES + 2; i++) tick(f, 0, 0);
     expect(peekBuffer(f, queuedAt + BUFFER_FRAMES + 1)).toBeNull();
   });
+
+  // The far edge, from both sides (Task 41's fix wave, final review item 23): the slowed
+  // still step (Task 11, final review I-1) and the KO freeze (Task 13) stand on it.
+  // SmashWiki "Buffer": Ultimate's window is 9 frames.
+  it("keeps a press nine frames old and drops it at ten", () => {
+    const f = fighter({ bufferedAction: { kind: "jump", frame: 100 } });
+    expect(peekBuffer(f, 109)).toBe("jump");
+    expect(peekBuffer(f, 110)).toBeNull();
+    expect(f.bufferedAction).toBeNull();
+  });
+
+  it("fires a press made on landing lag's first frame of nine, at age 9; of ten, it has expired", () => {
+    const fired = (charge: number): boolean => {
+      const f = fighter({ action: "landingLag", charge, actionFrame: 0 });
+      tick(f, Btn.Jump, 0);
+      for (let i = 0; i < charge + 2; i++) tick(f, 0, 0);
+      return f.action === "jump" || f.action === "jumpSquat";
+    };
+    expect(fired(9), "age 9").toBe(true);
+    expect(fired(10), "age 10").toBe(false);
+  });
 });
 
 describe("a buffered right-stick flick keeps its direction (Plan 6, Task 5; SmashWiki \"C-Stick\")", () => {
