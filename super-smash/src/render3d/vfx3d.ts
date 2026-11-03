@@ -11,9 +11,10 @@
  * A spark is drawn over everything, as the 2D overlay always drew it: the sprites
  * take no depth test, so neither the stage's front face nor a fat fighter's own
  * body (Donkey Kong's bust capsule has a radius of 6.09) can hide the one frame
- * a player most needs to read. The shield bubble keeps the depth test: the floor
- * clipping its lower half is natural, and the fighter inside shows through its
- * front.
+ * a player most needs to read. The shield bubble keeps the depth test, and the
+ * fighter inside shows through its front. Its cap below a grounded fighter's floor
+ * is discarded per instance (`instanceClip.ts`; Plan 6, Task 33 fix round 1): the
+ * stage writes no depth (ruling D11), so the floor no longer hides it.
  *
  * Shapes and timings are the 2D ones (D36: a spark is a third of a fighter and
  * gone in a tenth of a second); only the drawing moved. Where they spawn is
@@ -60,6 +61,7 @@ import { shieldBubble } from "@/engine/shield";
 import type { FighterDef, FighterState } from "@/engine/types";
 import { PORT_COLOURS } from "@/render/rigKit";
 import { BURST_MAX_GROWTH, type ParticleKind, type VfxState } from "@/render/vfx";
+import { NO_BOUND, clipInstances } from "./instanceClip";
 
 /** Particle kinds the 3D layer draws; `drawParticles` skips them in 3D mode. */
 export const SPRITE_KINDS: ReadonlySet<ParticleKind> = new Set<ParticleKind>(["spark", "burst"]);
@@ -98,6 +100,11 @@ export interface ShieldLook {
   readonly radius: number;
   readonly alpha: number;
   readonly colour: string;
+  /**
+   * World y below which the bubble is not drawn: a grounded fighter's floor, its feet
+   * (Plan 6, Task 33 fix round 1); `-NO_BOUND` in the air.
+   */
+  readonly floor: number;
 }
 
 function shielding(f: Pick<FighterState, "action">): boolean {
@@ -116,7 +123,7 @@ function shielding(f: Pick<FighterState, "action">): boolean {
  * the sim moves it the drawing moves with it.
  */
 export function shieldLook(
-  f: Pick<FighterState, "action" | "actionFrame" | "shieldHealth" | "port" | "x" | "y">,
+  f: Pick<FighterState, "action" | "actionFrame" | "shieldHealth" | "port" | "x" | "y" | "grounded">,
   def: FighterDef,
   parryFlash: number,
 ): ShieldLook | null {
@@ -132,7 +139,7 @@ export function shieldLook(
   } else if (f.action === "shieldRelease") {
     alpha *= Math.max(0, 1 - f.actionFrame / SHIELD_RELEASE_FRAMES);
   }
-  return { x: toFloat(c.x1), y: toFloat(c.y1), radius: toFloat(c.r), alpha, colour };
+  return { x: toFloat(c.x1), y: toFloat(c.y1), radius: toFloat(c.r), alpha, colour, floor: f.grounded ? toFloat(f.y) : -NO_BOUND };
 }
 
 /* ------------------------------------------------------------- colour -- */
@@ -227,6 +234,7 @@ export function createVfx3D(): Vfx3D {
   sprites.renderOrder = SPRITE_RENDER_ORDER;
   const shieldMaterial = new MeshBasicMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending });
   const bubbles = instanced("shields", new SphereGeometry(1, 24, 16), shieldMaterial, MAX_SHIELDS);
+  const bubbleClip = clipInstances(bubbles);
   group.add(sprites, bubbles);
 
   const m = new Matrix4();
@@ -280,11 +288,13 @@ export function createVfx3D(): Vfx3D {
         m.compose(p.set(sh.x, sh.y, 0), q.identity(), s.setScalar(sh.radius));
         bubbles.setMatrixAt(shieldCount, m);
         bubbles.setColorAt(shieldCount, setColour(c, sh.colour).multiplyScalar(sh.alpha));
+        bubbleClip.set(shieldCount, -NO_BOUND, NO_BOUND, sh.floor);
         shieldCount++;
       }
       bubbles.count = shieldCount;
       bubbles.instanceMatrix.needsUpdate = true;
       bubbles.instanceColor!.needsUpdate = true;
+      bubbleClip.commit();
     },
     counts: () => ({ sprites: spriteCount, shields: shieldCount }),
     dispose() {

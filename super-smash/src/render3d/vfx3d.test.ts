@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AdditiveBlending, Color, InstancedMesh, Matrix4, Quaternion, Vector3, type MeshBasicMaterial } from "three";
+import { AdditiveBlending, Color, InstancedMesh, Matrix4, Quaternion, Vector3, type BufferAttribute, type MeshBasicMaterial } from "three";
 
 import { ATTACK, clearAll, frame } from "@/engine/acmd/dsl";
 import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES } from "@/engine/constants";
@@ -26,6 +26,7 @@ import { MAX_ZOOM, MIN_ZOOM, VIEW_HEIGHT, VIEW_WIDTH, createCamera, worldToScree
 import { makeEvents, makeFighter, makeState } from "@/render/testFixtures";
 import { BURST_MAX_GROWTH, createVfx, ingestEvents, spawnBurst, spawnDust, spawnHitSpark, updateVfx, type Particle, type VfxState } from "@/render/vfx";
 import { applySideCamera, createSideCamera } from "./camera3d";
+import { KEEP_ATTRIBUTE, NO_BOUND, patchKeepShader } from "./instanceClip";
 import { MAX_SHIELDS, MAX_SPRITES, SPRITE_KINDS, SPRITE_Z, createVfx3D, shieldLook, type Vfx3D } from "./vfx3d";
 
 const roster = (id: string): FighterDef => FIGHTERS.find((f) => f.id === id)!;
@@ -397,6 +398,30 @@ describe("3D sparks, KO blasts and shields as instances", () => {
     const five = Array.from({ length: MAX_SHIELDS + 1 }, (_, port) => shieldLook(makeFighter({ action: "shield", port }), mario, 0));
     layer.update(createVfx(), five);
     expect(layer.counts().shields).toBe(MAX_SHIELDS);
+  });
+
+  /**
+   * Plan 6, Task 33 fix round 1: the stage writes no depth (ruling D11), so the floor no
+   * longer hides a grounded shield's cap; the bubble's own box discards it
+   * (`instanceClip.ts`, whose shader test pins the discard).
+   */
+  it("draws nothing of a grounded shield below its fighter's floor, and an airborne one whole", () => {
+    const layer = createVfx3D();
+    const floor = 12;
+    const grounded = shieldLook(makeFighter({ action: "shield", port: 0, y: fx(floor) }), roster("donkeyKong"), 0)!;
+    const airborne = shieldLook(makeFighter({ action: "shield", port: 1, y: fx(30), grounded: false }), mario, 0)!;
+    layer.update(createVfx(), [grounded, airborne]);
+    const mesh = layer.group.getObjectByName("shields") as InstancedMesh;
+    const keep = mesh.geometry.getAttribute(KEEP_ATTRIBUTE) as BufferAttribute;
+    // Donkey Kong's full bubble reaches 7.9 below his feet, so there is a cap to cut.
+    const bubble = instance(layer, "shields", 0);
+    expect(bubble.position.y - bubble.scale.y).toBeLessThan(floor - 7);
+    // Kept from the floor up, unbounded across; the one in the air is kept whole.
+    expect([keep.getX(0), keep.getY(0), keep.getZ(0)]).toEqual([-NO_BOUND, NO_BOUND, floor]);
+    expect([keep.getX(1), keep.getY(1), keep.getZ(1)]).toEqual([-NO_BOUND, NO_BOUND, -NO_BOUND]);
+    expect(keep.version).toBeGreaterThan(0);
+    expect((mesh.material as MeshBasicMaterial).onBeforeCompile).toBe(patchKeepShader);
+    layer.dispose();
   });
 
   describe("a spark lands where the box touched the body (R9)", () => {

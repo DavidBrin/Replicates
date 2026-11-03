@@ -52,6 +52,7 @@ import {
 import type { BakeTables } from "@/engine/acmd/bakeTables";
 import { toFloat } from "@/engine/fixed";
 import { activeHitboxes, moveFrameOf } from "@/engine/hitbox";
+import { platformCentreX } from "@/engine/physics";
 import type { FighterDef, FighterState, GameState, MoveSlot, StageDef } from "@/engine/types";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Camera } from "@/render/camera";
 import { interpolatePosition, sceneShiftAt, type RenderState } from "@/render/renderer";
@@ -59,6 +60,7 @@ import { hitFlashAmount } from "@/render/vfx";
 import { fighterPoser } from "./bake/bake";
 import { applySideCamera, createSideCamera } from "./camera3d";
 import { createFighter3D, type Fighter3D } from "./fighter3d";
+import { NO_BOUND, clipInstances } from "./instanceClip";
 import { NO_WEBGL } from "./webgl";
 import type { ModelCache } from "./models/loader";
 import type { SkeletonFile } from "./skeleton/skeleton";
@@ -213,6 +215,7 @@ interface DrawnShield {
   radius: number;
   alpha: number;
   colour: string;
+  floor: number;
 }
 
 /** Something the GPU holds a copy of, which three frees on a "dispose" event. */
@@ -288,6 +291,10 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   shadows.count = 0;
   shadows.frustumCulled = false;
   shadows.instanceMatrix.setUsage(DynamicDrawUsage);
+  // Each disc ends where the surface under it ends (Plan 6, Task 33 fix round 1): tipped, the
+  // part past a ledge or a soft platform's end would hang in the air, and the stage, writing
+  // no depth (ruling D11), hides none of it.
+  const shadowClip = clipInstances(shadows);
 
   // Sword and kick trails (Plan 6, Task 34): one ribbon for every fighter, and each
   // fighter's trail bone per move, found once.
@@ -312,7 +319,7 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
 
   const fighters: (Fighter3D | null)[] = opts.defs.map(() => null);
   const shields: (DrawnShield | null)[] = opts.defs.map(() => null);
-  const drawnShields: DrawnShield[] = opts.defs.map(() => ({ x: 0, y: 0, radius: 0, alpha: 0, colour: "" }));
+  const drawnShields: DrawnShield[] = opts.defs.map(() => ({ x: 0, y: 0, radius: 0, alpha: 0, colour: "", floor: -NO_BOUND }));
   let disposed = false;
 
   const ready = Promise.all(
@@ -429,6 +436,8 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
           s.radius = look.radius;
           s.alpha = look.alpha;
           s.colour = look.colour;
+          // Its floor carried with it: the cap below the drawn feet is not drawn (Plan 6, Task 33 fix round 1).
+          s.floor = look.floor + (pos.y - toFloat(f.y));
           shields[f.port] = s;
         }
         // None for a fighter inside Kirby (Plan 5, Task 17), who can be `grounded`
@@ -437,11 +446,21 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
         if (f.grounded && f.action !== "dead" && f.action !== "swallowed" && shadowCount < shadows.instanceMatrix.count) {
           const w = toFloat(def.attributes.width);
           m.compose(at.set(pos.x, pos.y + SHADOW_LIFT, 0), flat, size.set(w * SHADOW_ACROSS, 1, w * SHADOW_DEEP));
+          // The surface it lies on, where the stage draws it this frame; unbounded with none known.
+          const ground = opts.stage.platforms[f.platform];
+          if (ground === undefined) {
+            shadowClip.set(shadowCount, -NO_BOUND, NO_BOUND, -NO_BOUND);
+          } else {
+            const cx = toFloat(platformCentreX(ground, game.stageFrame));
+            const half = toFloat(ground.halfWidth);
+            shadowClip.set(shadowCount, cx - half, cx + half, -NO_BOUND);
+          }
           shadows.setMatrixAt(shadowCount++, m);
         }
       }
       shadows.count = shadowCount;
       shadows.instanceMatrix.needsUpdate = true;
+      shadowClip.commit();
       trails.update();
       vfx.update(rs.vfx, shields);
       for (let i = 0; i < fixed.length; i++) fixed[i].updateMatrixWorld();

@@ -320,6 +320,20 @@ describe("the ledge lip, the shaded walls and the underside (Plan 6, Task 33)", 
    * never hides the play plane. Drawn first and writing no depth, it is covered by every
    * fighter, shield and spark, a fighter hugging a wall below the ledge included.
    */
+  it("draws the underside before every body, so it never paints over a front face (Plan 6, Task 33 fix round 1)", () => {
+    let undersides = 0;
+    for (const stage of allStageForms()) {
+      const s = createStage3D(stage);
+      const under = s.group.children.find((o) => o.name === "underside");
+      if (under !== undefined) {
+        undersides++;
+        for (const m of meshes(s)) expect(under.renderOrder, stage.id).toBeLessThan(m.renderOrder);
+      }
+      s.dispose();
+    }
+    expect(undersides).toBeGreaterThan(0);
+  });
+
   it("draws every stage mesh first, writing no depth (ruling D11)", () => {
     for (const stage of allStageForms()) {
       const s = createStage3D(stage);

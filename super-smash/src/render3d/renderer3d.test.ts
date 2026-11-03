@@ -47,6 +47,7 @@ import { MAX_TRIANGLES } from "../../scripts/models/glb.mjs";
 import { fighterPoser } from "./bake/bake";
 import { BATCH_CALLS, MAX_DRAW_CALLS, MAX_FIGHTER_PRIMITIVES, MAX_TRIANGLES_PER_FRAME } from "./budget";
 import { createFighter3D } from "./fighter3d";
+import { KEEP_ATTRIBUTE, NO_BOUND, patchKeepShader } from "./instanceClip";
 import { LOST_CONTEXT_ERROR, claimContext } from "./fakeContext";
 import { createModelCache, parseModelIndex, type ModelCache, type ModelIndexEntry } from "./models/loader";
 import { CONTEXT_RESTORE_WAIT_MS, NO_WEBGL, bufferSizeFor, createRenderer3D, type GLLike } from "./renderer3d";
@@ -418,6 +419,65 @@ describe("the 3D presenter", () => {
     const up = new Vector3(0, 1, 0).transformDirection(m);
     // A flat disc's normal is straight up; tipped 24°, it leans toward +z, the camera.
     expect(up.z).toBeCloseTo(Math.sin((24 * Math.PI) / 180), 6);
+  });
+
+  it("ends each shadow where the surface under it ends: a ledge, a soft platform's end (Plan 6, Task 33 fix round 1)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state);
+    const main = stage.platforms.findIndex((p) => !p.soft);
+    const soft = stage.platforms.findIndex((p) => p.soft);
+    // Port 0 a unit inside the main body's right ledge, port 1 a unit inside a soft platform's left end.
+    const at = (i: number, platform: number, x: number) => {
+      const p = stage.platforms[platform];
+      state.fighters[i] = { ...state.fighters[i], x, y: p.y, platform };
+    };
+    at(0, main, stage.platforms[main].x + stage.platforms[main].halfWidth - fx(1));
+    at(1, soft, stage.platforms[soft].x - stage.platforms[soft].halfWidth + fx(1));
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const shadows = gl().scene!.getObjectByName("shadows") as InstancedMesh;
+    const keep = shadows.geometry.getAttribute(KEEP_ATTRIBUTE);
+    for (const [i, platform] of [[0, main], [1, soft]] as const) {
+      const p = stage.platforms[platform];
+      // The disc reaches past the end, so there is something to cut.
+      expect(instanceAt(gl().scene!, "shadows", i).scale.x).toBeGreaterThan(1);
+      expect(keep.getX(i)).toBeCloseTo(toFloat(p.x - p.halfWidth), 5);
+      expect(keep.getY(i)).toBeCloseTo(toFloat(p.x + p.halfWidth), 5);
+      expect(keep.getZ(i)).toBe(-NO_BOUND);
+    }
+    expect((shadows.material as Material).onBeforeCompile).toBe(patchKeepShader);
+  });
+
+  it("cuts each grounded shield at its fighter's drawn feet (Plan 6, Task 33 fix round 1)", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state, "shield");
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const bubbles = gl().scene!.getObjectByName("shields") as InstancedMesh;
+    const keep = bubbles.geometry.getAttribute(KEEP_ATTRIBUTE);
+    expect(bubbles.count).toBe(state.fighters.length);
+    state.fighters.forEach((f, i) => expect(keep.getZ(i)).toBeCloseTo(toFloat(f.y), 5));
+  });
+
+  /** Ruling D11, with the fix round's Minor 3: the stage's meshes sort before every other mesh in the scene. */
+  it("draws the stage before every fighter, shield, spark, trail and shadow", async () => {
+    const { presenter, rs, state, stage, gl } = setup();
+    await presenter.ready;
+    standAll(state, "shield");
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const scene = gl().scene!;
+    const stageGroup = scene.getObjectByName(`stage:${stage.id}`)!;
+    const stageOrders: number[] = [];
+    const otherOrders: number[] = [];
+    scene.traverse((o) => {
+      if (!(o as Mesh).isMesh) return;
+      let inStage = false;
+      for (let p: Object3D | null = o; p !== null; p = p.parent) if (p === stageGroup) inStage = true;
+      (inStage ? stageOrders : otherOrders).push(o.renderOrder);
+    });
+    expect(stageOrders).toHaveLength(stage.platforms.length + 1);
+    expect(otherOrders.length).toBeGreaterThan(BATCH_CALLS);
+    expect(Math.max(...stageOrders)).toBeLessThan(Math.min(...otherOrders));
   });
 
   it("casts none for a fighter inside Kirby, grounded in a grounded Kirby's mouth, and keeps the Stone's, hidden as it is (Plan 5, Task 17)", async () => {
