@@ -884,6 +884,85 @@ describe("a tick the rollback session refuses", () => {
   });
 });
 
+describe("Review Focus: a tap on the tick the auto delay shrinks (Plan 6, Task 4)", () => {
+  it("reaches the wire once, on the next frame scheduled, and both peers stay level", () => {
+    const network = new LoopbackNetwork({ latencyMs: 90 });
+    const keyboard = new KeyboardInput([{ port: 0, scheme: CONFIG_ARROWS }], { window, overlayHost: null });
+    keyboard.attach();
+    const sent: InputFrame[] = [];
+    const transport = network.connect("host");
+    try {
+      const host = createMatchRunner({
+        stage: getStageOrThrow("battlefield"),
+        players: HUMANS,
+        rules: RULES,
+        seed: 0x5eed1e55,
+        getFighter: getFighterOrThrow,
+        keyboard,
+        net: {
+          transport: {
+            ...transport,
+            send(bytes) {
+              const packet = decodePacket(bytes);
+              if (packet?.type === PacketType.Input) packet.inputs.forEach((input, i) => (sent[packet.startFrame + i] = input));
+              transport.send(bytes);
+            },
+          },
+          localPorts: [0],
+          autoInputDelay: true,
+          now: () => network.now(),
+        },
+      });
+      const guest = createMatchRunner({
+        stage: getStageOrThrow("battlefield"),
+        players: HUMANS,
+        rules: RULES,
+        seed: 0x5eed1e55,
+        getFighter: getFighterOrThrow,
+        net: { transport: network.connect("guest"), localPorts: [1], autoInputDelay: true, now: () => network.now() },
+      });
+      for (let i = 0; i < 400; i++) {
+        host.advance(1);
+        guest.advance(1);
+        network.advance(FRAME_MS);
+      }
+      const raised = host.netStats?.inputDelay ?? 0;
+      expect(raised).toBeGreaterThan(2);
+      network.setOptions({ latencyMs: 0 });
+      let delay = raised;
+      let tappedOnRunningTick = false;
+      for (let i = 0; i < 600; i++) {
+        const now = host.netStats?.inputDelay ?? 0;
+        // The delay fell on the last tick: this tick's input has no frame to land on.
+        const tapNow = !tappedOnRunningTick && now < delay;
+        if (tapNow) {
+          window.dispatchEvent(new KeyboardEvent("keydown", { code: CONFIG_ARROWS.bindings.jump }));
+          window.dispatchEvent(new KeyboardEvent("keyup", { code: CONFIG_ARROWS.bindings.jump }));
+        }
+        delay = now;
+        host.advance(1);
+        if (tapNow) {
+          expect(host.stalled, "the tap's tick must run, or it is the refused-tick case").toBe(false);
+          tappedOnRunningTick = true;
+        }
+        guest.advance(1);
+        network.advance(FRAME_MS);
+      }
+      expect(tappedOnRunningTick).toBe(true);
+      expect(sent.filter((input) => (input & Btn.Jump) !== 0)).toHaveLength(1);
+      for (let i = 0; i < 60 && host.frame !== guest.frame; i++) {
+        (guest.frame < host.frame ? guest : host).advance(1);
+        network.advance(FRAME_MS);
+      }
+      expect(hashState(guest.state)).toBe(hashState(host.state));
+      expect(host.netStats?.desyncs).toBe(0);
+      expect(guest.netStats?.desyncs).toBe(0);
+    } finally {
+      keyboard.detach();
+    }
+  });
+});
+
 /** Buttons on a pad with the W3C standard mapping (`STANDARD_MAPPING`): a jump and the d-pad. */
 const PAD = { jump: 2, up: 12, left: 14, right: 15 } as const;
 
@@ -1106,6 +1185,61 @@ describe("a right-stick flick across refused ticks (ruling R-FW3f, refined)", ()
     expect(aroundFlick(stalled.sent)).toEqual([Btn.Up, Btn.Up | Btn.Right | Btn.Attack | Btn.Flick, Btn.Up]);
     expect(stalled.sent.filter((input) => input & Btn.Flick)).toHaveLength(1);
     expect(live.sent.filter((input) => input & Btn.Flick)).toHaveLength(1);
+  });
+
+  it("a pad press made on the tick an owed flick frame goes out instead of its poll reaches the wire once, a tick or two late (Plan 6, Task 4)", () => {
+    // The stall's last refused tick, the sticks at rest throughout.
+    const rest = flickMatch(() => ({ buttons: [], rightX: 0 }), ANSWER).refused;
+    const last = rest[rest.findIndex((tick, i) => rest[i + 1] !== tick + 1)];
+    // A flick right lets go on STALL + 4 and fires on STALL + 5, both refused, so two
+    // frames are owed when the host runs again; Jump is down for the first tick that runs only.
+    const script: PadScript = (t) => ({ buttons: t === last + 1 ? [PAD.jump] : [], rightX: t >= STALL + 4 && t <= STALL + 6 ? 0.9 : 0 });
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).toEqual(expect.arrayContaining([STALL + 4, STALL + 5, last]));
+    expect(stalled.refused).not.toContain(last + 1);
+    expect(stalled.sent.filter((input) => (input & Btn.Flick) !== 0)).toHaveLength(1);
+    expect(stalled.sent.filter((input) => (input & Btn.Jump) !== 0), "the Jump poll an owed frame stood in for").toHaveLength(1);
+    expect(stalled.guest.frame).toBe(stalled.host.frame);
+    expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
+    expect(stalled.host.netStats?.desyncs).toBe(0);
+  });
+
+  it("a pad press seen by one refused tick's poll only reaches the wire once, on the first tick that runs (Plan 6, Task 4)", () => {
+    // Jump down for the host's fourth refused tick alone, no flick: nothing is owed.
+    const script: PadScript = (t) => ({ buttons: t === STALL + 3 ? [PAD.jump] : [], rightX: 0 });
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).toContain(STALL + 3);
+    expect(stalled.sent.filter((input) => (input & Btn.Jump) !== 0), "the Jump a refused tick's poll read").toHaveLength(1);
+    expect(stalled.guest.frame).toBe(stalled.host.frame);
+    expect(hashState(stalled.guest.state)).toBe(hashState(stalled.host.state));
+  });
+
+  it("a pad press on the poll a second flick lets go on, behind an owed one, reaches the wire once, in that let-go (Plan 6, Task 4)", () => {
+    const rest = flickMatch(() => ({ buttons: [], rightX: 0 }), ANSWER).refused;
+    const last = rest[rest.findIndex((tick, i) => rest[i + 1] !== tick + 1)];
+    // A flick right inside the stall, owed when the host runs again; on the first tick that runs,
+    // Jump is down and the right stick goes left (a second flick's let-go, its fire on the next).
+    // That poll misses the wire behind the owed frames, then goes out as the second flick's let-go.
+    const script: PadScript = (t) => ({
+      buttons: t === last + 1 ? [PAD.jump] : [],
+      rightX: t >= STALL + 4 && t <= STALL + 6 ? 0.9 : t >= last + 1 && t <= last + 3 ? -0.9 : 0,
+    });
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).not.toContain(last + 1);
+    expect(stalled.sent.filter((input) => (input & Btn.Jump) !== 0), "carried as well as sent in the let-go, it went out twice").toHaveLength(1);
+    const flicks = stalled.sent.filter((input) => (input & Btn.Flick) !== 0);
+    expect(flicks).toHaveLength(1);
+    expect(flicks[0] & Btn.Left).not.toBe(0);
+  });
+
+  it("two flicks inside one stall: the later replaces the earlier, as two taps of one key make one press (pinned; Plan 5 final wave 5 fix round 1)", () => {
+    const script: PadScript = (t) => ({ buttons: [], rightX: t >= STALL + 2 && t <= STALL + 4 ? 0.9 : t >= STALL + 8 && t <= STALL + 10 ? -0.9 : 0 });
+    const stalled = flickMatch(script, ANSWER);
+    expect(stalled.refused).toEqual(expect.arrayContaining([STALL + 3, STALL + 9]));
+    const flicks = stalled.sent.filter((input) => (input & Btn.Flick) !== 0);
+    expect(flicks).toHaveLength(1);
+    expect(flicks[0] & Btn.Left, "the later flick's direction").not.toBe(0);
+    expect(flicks[0] & Btn.Right).toBe(0);
   });
 });
 

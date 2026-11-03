@@ -177,6 +177,15 @@ export interface AdvanceResult<S = GameState> {
   readonly stallReason: StallReason | null;
   /** Frames re-simulated before this frame ran. 0 on a clean frame. */
   readonly rolledBackFrames: number;
+  /**
+   * Whether this call put the caller's local input on a frame (Plan 6, Task 4).
+   * False when the session stalled, and false when a frame ran but the input
+   * landed on none: the automatic delay shrank, so every frame up to the new
+   * target was already scheduled and sent, and overwriting one would desync
+   * (`scheduleLocal`). The caller keeps that input's presses for its next call,
+   * as it does a refused frame's (`matchRunner.ts`).
+   */
+  readonly localScheduled: boolean;
 }
 
 export interface DesyncReport {
@@ -631,7 +640,7 @@ export class RollbackSession<S = GameState> {
       return this.stalled("timesync", rolledBack);
     }
 
-    this.scheduleLocal(localInputs);
+    const localScheduled = this.scheduleLocal(localInputs);
     this.heartbeat();
 
     const frame = this.currentFrame;
@@ -657,6 +666,7 @@ export class RollbackSession<S = GameState> {
       advanced: true,
       stallReason: null,
       rolledBackFrames: rolledBack,
+      localScheduled,
     };
   }
 
@@ -713,12 +723,13 @@ export class RollbackSession<S = GameState> {
    * imperceptible). A smaller delay would land on a frame that has already been
    * scheduled *and sent*; overwriting it would mean the peer and this machine
    * simulate different inputs for one frame, which is a desync. So it is
-   * dropped instead. Shrinking the delay costs one input read; getting it wrong
-   * would cost the match.
+   * left unscheduled instead, and the call says so (`AdvanceResult.localScheduled`)
+   * so the caller can carry the input's presses to its next frame (Plan 6, Task 4:
+   * a tap in that one read used to be lost). Getting it wrong would cost the match.
    */
-  private scheduleLocal(localInputs: InputFrame | readonly InputFrame[]): void {
+  private scheduleLocal(localInputs: InputFrame | readonly InputFrame[]): boolean {
     const target = this.currentFrame + this.inputDelay;
-    if (target <= this.highestScheduled) return;
+    if (target <= this.highestScheduled) return false;
 
     for (const port of this.localPorts) {
       const value = readPortInput(localInputs, port);
@@ -727,6 +738,7 @@ export class RollbackSession<S = GameState> {
       }
     }
     this.highestScheduled = target;
+    return true;
   }
 
   /**
@@ -1163,6 +1175,7 @@ export class RollbackSession<S = GameState> {
       advanced: false,
       stallReason: reason,
       rolledBackFrames: rolledBack,
+      localScheduled: false,
     };
   }
 }

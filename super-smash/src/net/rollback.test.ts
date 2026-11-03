@@ -897,6 +897,81 @@ describe("input delay", () => {
   });
 });
 
+describe("a shrinking input delay (Plan 6, Task 4)", () => {
+  /** Two auto-delay sessions on `network`, ports 0 and 1. */
+  function pair(network: LoopbackNetwork) {
+    const deps = makeDeps();
+    const make = (id: string, port: number) =>
+      new RollbackSession<FakeState>({
+        transport: network.connect(id),
+        deps,
+        initialState: initialState(),
+        playerCount: 2,
+        localPorts: [port],
+        autoInputDelay: true,
+        now: () => network.now(),
+      });
+    return { a: make("A", 0), b: make("B", 1) };
+  }
+
+  it("runs a tick whose input it cannot schedule, says so, and does it once for each frame of delay given back", () => {
+    const network = new LoopbackNetwork({ latencyMs: 90 });
+    const { a, b } = pair(network);
+    for (let i = 0; i < 400; i++) {
+      a.advance(0);
+      b.advance(0);
+      network.advance(FRAME_MS);
+    }
+    const raised = a.delay;
+    expect(raised).toBeGreaterThan(2);
+    network.setOptions({ latencyMs: 0 });
+    let unscheduled = 0;
+    let scheduled = 0;
+    for (let i = 0; i < 600; i++) {
+      const r = a.advance(0);
+      if (r.advanced) {
+        if (r.localScheduled) scheduled++;
+        else unscheduled++;
+      }
+      b.advance(0);
+      network.advance(FRAME_MS);
+    }
+    expect(a.delay).toBe(2);
+    expect(unscheduled, "ticks that ran with nowhere to put their input").toBe(raised - a.delay);
+    expect(scheduled).toBeGreaterThan(500);
+  });
+
+  it("schedules every tick while the delay holds or grows", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const { a, b } = pair(network);
+    let unscheduled = 0;
+    for (let i = 0; i < 400; i++) {
+      if (i === 100) network.setOptions({ latencyMs: 90 });
+      const r = a.advance(0);
+      if (r.advanced && !r.localScheduled) unscheduled++;
+      b.advance(0);
+      network.advance(FRAME_MS);
+    }
+    expect(a.delay).toBeGreaterThan(2);
+    expect(unscheduled).toBe(0);
+  });
+
+  it("reports nothing scheduled on a stalled tick", () => {
+    const session = new RollbackSession<FakeState>({
+      transport: createNullTransport(),
+      deps: makeDeps(),
+      initialState: initialState(),
+      playerCount: 2,
+      localPorts: [0],
+      autoInputDelay: false,
+    });
+    let last = session.advance(0);
+    for (let i = 0; i < 20 && last.advanced; i++) last = session.advance(0);
+    expect(last.advanced).toBe(false);
+    expect(last.localScheduled).toBe(false);
+  });
+});
+
 describe("a session with nobody on the other end", () => {
   it("runs every frame and matches the reference exactly", () => {
     // Local play and CPU matches take this path. One code path through the

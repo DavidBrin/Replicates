@@ -33,6 +33,7 @@ import type {
   StageDef,
   StepEvents,
 } from "@/engine/types";
+import { Btn } from "@/engine/types";
 import { createInitialState, cloneState, step, DEFAULT_SEED } from "@/engine/simulate";
 import type { FighterSelection } from "@/engine/simulate";
 import { createCamera, updateCamera, type Camera } from "@/render/camera";
@@ -255,6 +256,9 @@ interface PadFrame {
 
 const NO_PAD: PadFrame = { frame: 0, flick: 0 };
 
+/** A pad poll's bits that are presses a later poll may carry: all but the soft tilt and the flick's own mark. */
+const PAD_PRESS_BITS = ~(Btn.Soft | Btn.Flick);
+
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   const {
     stage,
@@ -358,10 +362,20 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let owedPads = noPads;
   // This tick's owed pad frames, its own flick's among them, kept in case it is refused.
   let tickPads = noPads;
+  // A pad's fresh presses on polls that never reached the wire (Plan 6, Task 4): a poll a
+  // refused or unscheduled tick read, or one an owed flick frame went out in place of (Plan 5
+  // final wave 5's cost: "a pad press held for that one poll alone is lost"). They join the
+  // next poll that goes out whole, as a tapped key's do (`carriedPresses`).
+  let carriedPadPresses: readonly InputFrame[] = noPresses;
+  // The same with the last poll's, if this tick found it lost; kept in case this tick's input reaches no frame.
+  let tickPadPresses: readonly InputFrame[] = noPresses;
   // Each port's poll on the last tick and this one, and whether the last went out as polled.
   let lastPolls: readonly PadFrame[] = players.map(() => NO_PAD);
   let tickPolls = lastPolls;
   let lastPollsSent: readonly boolean[] = players.map(() => true);
+  // Each port's presses on the last poll and on this one: its bits the poll before lacked.
+  let lastPollFresh: readonly InputFrame[] = noPresses;
+  let tickPollFresh: readonly InputFrame[] = noPresses;
   /** What `gatherInputs` gave each port on the last tick (`MatchRunner.lastInputs`). */
   let lastInputs: readonly InputFrame[] = noPresses;
 
@@ -381,11 +395,22 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       // at 5 a second went out 50 ticks late, behind stale smashes).
       return [...(lastPollsSent[port] ? [] : [lastPolls[port]]), poll];
     });
+    tickPollFresh = tickPolls.map((poll, port) => poll.frame & ~lastPolls[port].frame & PAD_PRESS_BITS);
+    tickPadPresses = players.map((_, port) => {
+      // The last poll missed the wire and goes out as no owed frame either (this tick's fire did
+      // not take it for its let-go, and it is no flick frame still owed): its presses are carried.
+      // Decided now, not on its own tick, so a let-go's presses go out once, in the let-go.
+      const lost = !lastPollsSent[port] && !tickPads[port].includes(lastPolls[port]);
+      return carriedPadPresses[port] | (lost ? lastPollFresh[port] : 0);
+    });
     return players.map((p, port) => {
       if (p.cpuLevel === null) {
         const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
-        const pad = tickPads[port][0] ?? tickPolls[port];
-        return mergeKeyboardAndPad(keys, pad.frame, pad.flick);
+        const owed = tickPads[port];
+        const pad = owed[0] ?? tickPolls[port];
+        // Presses carried from polls that missed the wire ride the first poll that goes out whole.
+        const carried = owed.length === 0 ? tickPadPresses[port] : 0;
+        return mergeKeyboardAndPad(keys, pad.frame | carried, pad.flick);
       }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
@@ -420,22 +445,34 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     if (session) {
       const result = session.advance(inputs);
       stalled = !result.advanced;
-      if (!result.advanced) {
-        // A refused frame ran nothing new: nothing to age, sound or report. The
-        // picture holds still instead of re-blending the last step, and this
-        // tick's presses, and a flick's pad frames, wait for the next one.
-        previous = state;
+      if (!result.advanced || !result.localScheduled) {
+        // This tick's input reached no frame: the session refused the frame, or ran
+        // it with its input already scheduled because the automatic delay shrank
+        // (`AdvanceResult.localScheduled`; Plan 6, Task 4). Either way this tick's
+        // presses, a flick's pad frames and the pad presses carried so far wait for
+        // the next tick.
         carriedPresses = tickPresses;
+        carriedPadPresses = tickPadPresses;
         owedPads = tickPads;
         lastPolls = tickPolls;
+        lastPollFresh = tickPollFresh;
         lastPollsSent = players.map(() => false);
+      } else {
+        carriedPresses = noPresses;
+        // Sent with this tick's poll, or still waiting behind an owed frame.
+        carriedPadPresses = tickPads.map((owed, port) => (owed.length === 0 ? 0 : tickPadPresses[port]));
+        // The first owed pad frame went out; this tick's poll did if it was that one or none was owed.
+        owedPads = tickPads.map((owed) => owed.slice(1));
+        lastPollsSent = tickPads.map((owed, port) => owed.length === 0 || owed[0] === tickPolls[port]);
+        lastPolls = tickPolls;
+        lastPollFresh = tickPollFresh;
+      }
+      if (!result.advanced) {
+        // A refused frame ran nothing new: nothing to age, sound or report. The
+        // picture holds still instead of re-blending the last step.
+        previous = state;
         return;
       }
-      carriedPresses = noPresses;
-      // The first owed pad frame went out; this tick's poll did if it was that one or none was owed.
-      owedPads = tickPads.map((owed) => owed.slice(1));
-      lastPollsSent = tickPads.map((owed, port) => owed.length === 0 || owed[0] === tickPolls[port]);
-      lastPolls = tickPolls;
       previous = state;
       state = result.state;
       events = result.events;
