@@ -641,6 +641,15 @@ function isSceneBox(c: Candidate): boolean {
   return c.final === "hold" || c.final === "launch";
 }
 
+/**
+ * A shield hit's event (Plan 6, Task 32): the box's near end, and where its spine met
+ * the bubble, measured before the hit wears the shield.
+ */
+function shieldHitAt(victim: FighterState, victimDef: FighterDef, c: Candidate): StepEvents["shieldHits"][number] {
+  const at = contactPoint(capsuleOf(c), shieldBubble(victim, victimDef));
+  return { victim: victim.port, x: c.x, y: c.y, contactX: at.x, contactY: at.y };
+}
+
 /** Where a candidate's box is this frame: a capsule, or a circle when it has no length. */
 function capsuleOf(c: Candidate): Capsule {
   return { x1: c.x, y1: c.y, x2: c.x + c.dx, y2: c.y + c.dy, r: c.hitbox.radius };
@@ -3314,6 +3323,7 @@ function applyHit(
   // Copy's ×1.2 kept (Task 9). UNVERIFIED: the attacker's pushback too; no page
   // names it, and it follows the shield's reading.
   if (onShield) {
+    const shieldEvent = shieldHitAt(victim, victimDef, c);
     const lag = computeHitlag(lagDamage, {
       electric: hb.effect === "electric",
       shielding: true,
@@ -3344,7 +3354,7 @@ function applyHit(
       if (!fromProjectile) freezeFighter(attacker, parry.attacker);
       kineticSetX(victim, away * shieldPushback(stunExact, true), "stop");
       if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(takenBefore1v1));
-      events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
+      events.shieldHits.push(shieldEvent);
       return;
     }
     victim.shieldHealth -= shieldDamage(takenBefore1v1);
@@ -3365,7 +3375,7 @@ function applyHit(
     } else {
       startAction(victim, "shieldStun");
     }
-    events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
+    events.shieldHits.push(shieldEvent);
     return;
   }
 

@@ -40,6 +40,7 @@ import type {
   MatchRules,
   MoveDef,
   StageDef,
+  StepEvents,
 } from "./types";
 
 /* ------------------------------------------------------------- fixtures -- */
@@ -2173,5 +2174,36 @@ describe("presentation events for a glance and a midair jump (Plan 6, Task 31)",
     }
     expect(ground.length).toBe(1);
     expect(air.length).toBe(1);
+  });
+});
+
+/* --------------------------------------------- a shield hit's contact (Plan 6, Task 32) -- */
+
+describe("a shield hit's contact point (Plan 6, Task 32)", () => {
+  it("is where a capsule's spine meets the bubble, not the capsule's first point", () => {
+    // A blade-like box: a capsule from 2 to 14 in front, at the bubble's height (half the
+    // body, 6), against a shield up at 16. Its first point is the hilt's end; the point of
+    // its spine nearest the bubble's centre (16, 6) is its far end, 14.
+    const blade: FighterDef = {
+      ...DEF,
+      moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ x: fx(2), y: fx(6), x2: fx(14), y2: fx(6), radius: fx(2) })] }) },
+    };
+    const ctx: SimContext = { fighter: () => blade, stage: () => STAGE };
+    let state = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+    for (const f of state.fighters) Object.assign(f, { grounded: true, platform: 0, y: 0, intangible: 0, vx: 0, vy: 0 });
+    Object.assign(state.fighters[0], { action: "stand", actionFrame: 0, x: 0, facing: 1 });
+    Object.assign(state.fighters[1], { action: "shield", actionFrame: 10, x: fx(16), facing: -1 });
+    let prev: InputFrame[] = [0, Btn.Shield];
+    let hit: StepEvents["shieldHits"][number] | undefined;
+    for (let i = 0; i < 10 && hit === undefined; i++) {
+      const now: InputFrame[] = [i === 0 ? Btn.Attack : 0, Btn.Shield];
+      const out = step(state, now, { prevInputs: prev, ctx });
+      hit = out.events.shieldHits[0];
+      state = out.state;
+      prev = now;
+    }
+    expect(hit).toBeDefined();
+    expect(hit!.x).toBe(fx(2));
+    expect([hit!.contactX, hit!.contactY]).toEqual([fx(14), fx(6)]);
   });
 });

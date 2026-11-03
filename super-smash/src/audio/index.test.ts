@@ -238,7 +238,7 @@ describe("driven by events, never by state", () => {
   it("handles every event channel without leaking a node", async () => {
     const { mock, engine } = await running();
     const events = hit();
-    events.shieldHits.push({ victim: 1, x: 0, y: 0 });
+    events.shieldHits.push({ victim: 1, x: 0, y: 0, contactX: 0, contactY: 0 });
     events.clanks.push({ x: 0, y: 0 });
     events.kos.push({ port: 0, x: 0, y: 0, kind: "star" });
     events.jumps.push({ port: 0, x: 0, y: 0 });

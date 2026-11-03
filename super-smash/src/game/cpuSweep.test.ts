@@ -138,7 +138,7 @@ describe("the CPU sweep's counting rules", () => {
         s.fighters[1].action = "shieldBroken";
         s.fighters[1].grounded = false;
       },
-      { shieldHits: [{ victim: 1, x: 0, y: 0 }], shieldBreaks: [1] },
+      { shieldHits: [{ victim: 1, x: 0, y: 0, contactX: 0, contactY: 0 }], shieldBreaks: [1] },
     );
     m.play(() => {}, { kos: [ko(1)] });
     expect(m.stats.selfDestructs).toBe(0);

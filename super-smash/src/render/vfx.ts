@@ -239,7 +239,8 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState, 
       victim !== undefined &&
       victim.action === "shieldRelease" &&
       victim.actionFrame <= PERFECT_SHIELD_WINDOW;
-    spawnShieldHit(v, toFloat(s.x), toFloat(s.y), s.victim, parried);
+    // Where the box met the bubble (Plan 6, Task 32), not the box's near end.
+    spawnShieldHit(v, toFloat(s.contactX), toFloat(s.contactY), s.victim, parried);
     if (parried) v.parryFlash[s.victim] = 10;
   }
 

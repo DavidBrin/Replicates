@@ -307,7 +307,7 @@ describe("the perfect-shield flash", () => {
         makeFighter({ port: 1, action: "shieldRelease", actionFrame: 2 }),
       ],
     });
-    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
+    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0, contactX: 0, contactY: 0 }] }), state);
     expect(v.parryFlash[1]).toBeGreaterThan(0);
   });
 
@@ -316,8 +316,18 @@ describe("the perfect-shield flash", () => {
     const state = makeState({
       fighters: [makeFighter({ port: 0 }), makeFighter({ port: 1, action: "shield", actionFrame: 2 })],
     });
-    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
+    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0, contactX: 0, contactY: 0 }] }), state);
     expect(v.parryFlash[1]).toBe(0);
+  });
+});
+
+describe("a shield hit's contact (Plan 6, Task 32)", () => {
+  it("sparks a shield hit where the box met the bubble", () => {
+    const v = createVfx();
+    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0, contactX: fx(5), contactY: fx(2) }] }), makeState());
+    const sparks = v.particles.filter((p) => p.kind === "shieldSpark");
+    expect(sparks.length).toBeGreaterThan(0);
+    expect(sparks.every((p) => p.x === 5 && p.y === 2)).toBe(true);
   });
 });
 

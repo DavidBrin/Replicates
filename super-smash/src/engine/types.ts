@@ -1880,7 +1880,13 @@ export interface StepEvents {
      */
     outranked?: boolean;
   }[];
-  shieldHits: { victim: number; x: number; y: number }[];
+  /**
+   * `x`/`y` are the box's near end, as `hits[]`'s; `contactX`/`contactY` are where it met
+   * the bubble: the point of the box's spine nearest the bubble's centre (Plan 6, Task 32;
+   * ruling R9's `contactPoint`, as `hits[].contactX` is for a body). A sphere's is its centre.
+   * Presentation only: where the shield's sparks go.
+   */
+  shieldHits: { victim: number; x: number; y: number; contactX: number; contactY: number }[];
   clanks: { x: number; y: number }[];
   kos: { port: number; x: number; y: number; kind: "blast" | "star" | "screen" }[];
   /**
