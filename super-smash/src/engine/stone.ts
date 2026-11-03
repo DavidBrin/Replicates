@@ -27,7 +27,17 @@
 
 import { actionFrameOf, moveFrameOf } from "./hitbox";
 import type { Intent } from "./states";
+import type { CombatState } from "./combat";
 import type { FighterDef, FighterState, StoneDef } from "./types";
+
+/**
+ * The stone's window as the stone has it (Plan 6, Task 36): one that ended in the air
+ * keeps the air's window wherever it is, the landing step's frame 46 included
+ * (`stoneOf`); otherwise the window for where the fighter is (`stoneWindow`).
+ */
+export function stoneWindowOf(f: Pick<FighterState, "grounded"> & { readonly combat: Pick<CombatState, "stoneEndedAir"> }, stone: StoneDef): readonly [number, number] {
+  return f.combat.stoneEndedAir ? stone.air : stoneWindow(f, stone);
+}
 
 /** The stone's window for where the fighter is: the air's or the ground's. */
 export function stoneWindow(f: Pick<FighterState, "grounded">, stone: StoneDef): readonly [number, number] {
@@ -73,7 +83,7 @@ export function stoneOf(f: Pick<FighterState, "action" | "move" | "actionFrame" 
   // A stone that ended in the air is the air's window's wherever it is: on the step
   // it lands, its frame 46 is the air's "Stone protection 29-46" still (the Task 13
   // tail, the re-review's N6; UNVERIFIED: no published timeline times that landing).
-  const [from, to] = f.combat.stoneEndedAir ? stone.air : stoneWindow(f, stone);
+  const [from, to] = stoneWindowOf(f, stone);
   const frame = moveFrameOf(f.actionFrame);
   return frame >= from && frame <= to ? stone : null;
 }

@@ -94,6 +94,13 @@ export interface FxContext {
    */
   readonly struckWith?: number | null;
   /**
+   * How many of this fighter's own projectiles of def id `defId` are out now (Plan 6,
+   * Task 36): a painter that animates a launcher reads what actually came out, so a
+   * pump refused inside a wall leaves F.L.U.D.D. dry. Absent where no match runs (the
+   * animation lab): the painter draws as if it came out.
+   */
+  readonly projectilesOut?: (defId: string) => number;
+  /**
    * Paint this *after* the figure instead of under it.
    *
    * An effect is painted under the fighter, which is right for most of them —

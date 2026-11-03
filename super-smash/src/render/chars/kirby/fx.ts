@@ -42,7 +42,7 @@
  * front of him rather than straight up.
  */
 
-import { stoneWindow } from "@/engine/stone";
+import { stoneWindowOf } from "@/engine/stone";
 import {
   NOTHING,
   circle,
@@ -805,7 +805,9 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
   downB: ({ ctx, f, def, x, y, u, frame, over }) => {
     const stone = def.moves.downB?.stone;
     if (!stone) return NOTHING;
-    const [from, to] = stoneWindow({ grounded: f.grounded === true }, stone);
+    // As the engine has it (`stoneWindowOf`; Plan 6, Task 36): a stone ended in the
+    // air is still the air's on the step it lands, its frame 46.
+    const [from, to] = stoneWindowOf({ grounded: f.grounded === true, combat: { stoneEndedAir: f.combat?.stoneEndedAir === true } }, stone);
     if (frame < from || frame > to) return NOTHING;
 
     // Eleven units across against his 6.9-unit ball, standing 7.2 against his

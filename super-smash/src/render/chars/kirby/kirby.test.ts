@@ -26,6 +26,7 @@ import { getCharacterRig } from "..";
 import { poses } from "./poses";
 import { fx, HAMMER_FLAME_FROM, hammerLit, hammerVisible } from "./fx";
 import { runPainter } from "../../testFixtures";
+import { emptyCombat } from "@/engine/combat";
 
 const rig = getCharacterRig("kirby");
 const NAMES = Object.keys(poses) as PoseName[];
@@ -1163,5 +1164,14 @@ describe("Hammer Flip's hammer and flame (Plan 6, Task 35)", () => {
     expect(hammerLit(30)).toBe(true);
     // The painter's flame: more drawn at 30 charge frames than at 29.
     expect(at(30, 30).calls.length).toBeGreaterThan(at(30, 29).calls.length);
+  });
+});
+
+describe("the stone on its landing step (Plan 6, Task 36)", () => {
+  it("is still the air's stone on frame 46 when it ended in the air and landed, as the engine protects it (`stoneOf`)", () => {
+    const rock = (stoneEndedAir: boolean) =>
+      runPainter(fx.downB!, def, { frame: 46, f: { action: "special", move: "downB", grounded: true, combat: { ...emptyCombat(), stoneFrames: 18, stoneEndedAir } } });
+    expect(rock(true).calls.length).toBeGreaterThan(0);
+    expect(rock(false).calls).toHaveLength(0);
   });
 });

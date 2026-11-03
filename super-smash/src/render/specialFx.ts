@@ -40,7 +40,7 @@
  * entry is already the cheap path.
  */
 
-import type { FighterDef, FighterState } from "@/engine/types";
+import type { FighterDef, FighterState, ProjectileState } from "@/engine/types";
 import type { Camera } from "./camera";
 import { fxContextFor, struckWithFor, DREW_NOTHING, type MoveFxResult } from "./fxKit";
 import { alwaysFxFor, fxFor } from "./chars";
@@ -90,7 +90,12 @@ export function drawMoveFx(
   screenX: number,
   screenY: number,
   /** Cosmetic state, for the effects that need to know a swing connected. */
-  struck?: { lastHit: ({ hitboxId: number; frame: number } | null)[]; frame: number },
+  struck?: {
+    lastHit: ({ hitboxId: number; frame: number } | null)[];
+    frame: number;
+    /** The projectiles in flight, for `FxContext.projectilesOut` (Plan 6, Task 36). */
+    projectiles?: readonly ProjectileState[];
+  },
 ): MoveFxResult {
   // A state the fighter carries is drawn whatever it is doing (Plan 6, Task 35: a stored
   // charge), before any move's, on the match's own clock (`frame` is the sim's here).
@@ -105,19 +110,23 @@ export function drawMoveFx(
   if (!fn) return DREW_NOTHING;
 
   const over: (() => void)[] = [];
+  const context = fxContextFor(
+    ctx,
+    def,
+    f,
+    cam,
+    height,
+    screenX,
+    screenY,
+    move.totalFrames,
+    struck ? struckWithFor(struck.lastHit, f) : undefined,
+    (paint) => over.push(paint),
+  );
+  const flying = struck?.projectiles;
   const result = fn(
-    fxContextFor(
-      ctx,
-      def,
-      f,
-      cam,
-      height,
-      screenX,
-      screenY,
-      move.totalFrames,
-      struck ? struckWithFor(struck.lastHit, f) : undefined,
-      (paint) => over.push(paint),
-    ),
+    flying === undefined
+      ? context
+      : { ...context, projectilesOut: (id) => flying.reduce((n, p) => (p.owner === f.port && p.defId === id ? n + 1 : n), 0) },
   );
   // Not `result ?? DREW_NOTHING`: an effect that returns `{ hideFigure: true }`
   // returns a `SpecialFxResult`, which carries no queue, and taking it whole

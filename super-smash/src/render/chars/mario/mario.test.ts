@@ -21,6 +21,7 @@ import type { PoseName } from "../../poses/library";
 import { samplePose } from "../../poses/clip";
 import { poses } from "./poses";
 import { rig } from "./rig";
+import { runPainter } from "../../testFixtures";
 import { fx, projectiles } from "./fx";
 import { assignmentsTo, countOf, createMockContext, type MockContext } from "../../mockContext";
 
@@ -804,5 +805,16 @@ describe("Mario Finale's flames (Plan 5, Task 17 fix round 2, ruling R-T17g)", (
     expect(sizes[0]).toBeGreaterThan(0);
     for (let i = 1; i < sizes.length; i++) expect(sizes[i]).toBeGreaterThan(sizes[i - 1]);
     expect(sizes.at(-1)).toBeLessThan(16);
+  });
+});
+
+describe("F.L.U.D.D.'s spray (Plan 6, Task 36)", () => {
+  const pumping = (out?: number) =>
+    runPainter(fx.downB!, mario, { frame: 30, total: 67, f: { action: "special", move: "downB" }, ...(out === undefined ? {} : { projectilesOut: () => out }) });
+
+  it("sprays at the nozzle only while a pump of its own is out: a refused pump (inside a wall) leaves it dry", () => {
+    expect(countOf(pumping(1), "fill")).toBeGreaterThan(countOf(pumping(0), "fill"));
+    // With no count to read (the animation lab), as before.
+    expect(countOf(pumping(), "fill")).toBe(countOf(pumping(1), "fill"));
   });
 });

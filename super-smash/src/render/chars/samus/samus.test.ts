@@ -34,7 +34,7 @@ import { FIGHTERS } from "@/fighters";
 import { bakedContext } from "@/game/bake";
 import { STAGES } from "@/stages";
 import { makeFighter, runPainter } from "../../testFixtures";
-import { countOf, createMockContext, type MockContext } from "../../mockContext";
+import { assignmentsTo, countOf, createMockContext, type MockContext } from "../../mockContext";
 import { emptyCombat } from "@/engine/combat";
 import { storedChargeTell } from "./fx";
 
@@ -1171,15 +1171,21 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
   it("draws no bands and nothing behind the muzzle: one fill, no strokes, no caps, from 12 ahead on", () => {
     for (const frame of [81, 86, 150, 209, 216]) {
       const f = fills(frame);
-      expect(f.out.length, `frame ${frame}`).toBe(1);
+      // The end blast's mouth fades in over six slices before its one fill (Plan 6, Task 36).
+      expect(f.out.length, `frame ${frame}`).toBe(frame >= 209 ? 7 : 1);
       expect(f.strokes, `frame ${frame}`).toEqual([]);
       expect(f.circles, `frame ${frame}`).toEqual([]);
-      expect(f.out[0].x0, `frame ${frame}`).toBe(12);
+      expect(Math.min(...f.out.map((o) => o.x0)), `frame ${frame}`).toBe(12);
     }
   });
 
   it("ends in one blast over its envelope, 209-216: the main blast's and the fringe blasts', -11.5 to 41.5, fading out", () => {
-    for (const frame of [209, 216]) expect(fills(frame).out.map(box), `frame ${frame}`).toEqual([{ x0: 12, x1: 174.5, lo: -11.5, hi: 41.5 }]);
+    // Its mouth's slices and its one fill (Plan 6, Task 36) cover it together.
+    const union = (frame: number) => {
+      const out = fills(frame).out;
+      return box({ ...out[0], x0: Math.min(...out.map((o) => o.x0)), x1: Math.max(...out.map((o) => o.x1)), lo: Math.min(...out.map((o) => o.lo)), hi: Math.max(...out.map((o) => o.hi)) });
+    };
+    for (const frame of [209, 216]) expect(union(frame), `frame ${frame}`).toEqual({ x0: 12, x1: 174.5, lo: -11.5, hi: 41.5 });
     const core = (frame: number) => Math.max(...fills(frame).out[0].grad!.stops.map(([, c]) => alphaOf(c)));
     expect(core(216)).toBeLessThan(core(209));
     for (const frame of [217, 240, 263]) expect(fills(frame).out, `frame ${frame}`).toEqual([]);
@@ -1203,11 +1209,12 @@ describe("Zero Laser (Plan 5, Task 17 fix round 2, ruling R-T17g)", () => {
       expect(r(heightAt(points, 19.5)), `frame ${frame}`).toEqual([2.5, 27.5]);
       for (const ahead of [27, 100, 168]) expect(r(heightAt(points, ahead)), `frame ${frame} at ${ahead}`).toEqual([-5, 35]);
     }
-    // The end blast: its main blast's 4 to 26 at the muzzle, the envelope's -11.5 to 41.5 from 27.
+    // The end blast: its main blast's 4 to 26 at the muzzle (its first slice's, Plan 6,
+    // Task 36), the envelope's -11.5 to 41.5 from 27 (its one fill's).
     for (const frame of [209, 216]) {
-      const { points } = fills(frame).out[0];
-      expect(r(heightAt(points, 12)), `frame ${frame}`).toEqual([4, 26]);
-      expect(r(heightAt(points, 27)), `frame ${frame}`).toEqual([-11.5, 41.5]);
+      const { out } = fills(frame);
+      expect(r(heightAt(out[0].points, 12)), `frame ${frame}`).toEqual([4, 26]);
+      expect(r(heightAt(out[out.length - 1].points, 27)), `frame ${frame}`).toEqual([-11.5, 41.5]);
     }
     // The beam alone (81-85) is its main box's height all along: nothing to open into.
     expect(r(heightAt(fills(81).out[0].points, 12))).toEqual([10, 20]);
@@ -1307,5 +1314,18 @@ describe("a stored full Charge Shot shows (Plan 6, Task 35)", () => {
     expect(countOf(tell(full), "arc")).toBeGreaterThan(0);
     expect(countOf(tell(full, "run"), "arc")).toBeGreaterThan(0);
     expect(countOf(tell(full - 1), "arc")).toBe(0);
+  });
+});
+
+describe("Zero Laser's end blast at its mouth (Plan 6, Task 36)", () => {
+  const alphas = (frame: number) =>
+    assignmentsTo(runPainter(fx.finalSmash!, samus, { frame, total: 263, f: { action: "special", move: "finalSmash" } }), "globalAlpha").map(Number);
+
+  it("fades in across its first units on the blast's frames, not as a hard edge 22 units tall", () => {
+    // Slices up to full across the mouth: the faintest well under a quarter.
+    expect(alphas(209).some((a) => a > 0 && a < 0.25)).toBe(true);
+    expect(alphas(216).some((a) => a > 0 && a < 0.25)).toBe(true);
+    // The beam before it keeps its taper and no fade.
+    expect(alphas(150).some((a) => a > 0 && a < 0.25)).toBe(false);
   });
 });

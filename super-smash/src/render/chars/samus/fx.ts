@@ -1185,16 +1185,51 @@ function zeroBeam(ctx: CanvasRenderingContext2D, boxes: readonly Hitbox[], frame
   const mouthHi = Math.min(hi, my + mr);
   const open = Math.min(near + ZERO_NEAR_TAPER, far);
   const at = (ahead: number, up: number) => [feetX + dir * ahead * u, feetY - up * u] as const;
+  /** The beam's bottom and top `ahead` of the feet: the mouth's, opening to the envelope's over the taper. */
+  const edge = (ahead: number): readonly [number, number] => {
+    const k = open > near ? Math.min(1, Math.max(0, (ahead - near) / (open - near))) : 1;
+    return [mouthLo + (lo - mouthLo) * k, mouthHi + (hi - mouthHi) * k];
+  };
+  // The end blast fades in across its mouth (Plan 6, Task 36; the Task 17 re-review 4):
+  // its first `BLAST_MOUTH_FADE` units in slices, faint to full, where the blast's own
+  // 22-unit height stood as a hard, bright edge in front of the cannon.
+  const start = blast ? Math.min(near + BLAST_MOUTH_FADE, far) : near;
+  if (start > near) {
+    const base = ctx.globalAlpha;
+    for (let i = 0; i < BLAST_MOUTH_SLICES; i++) {
+      const a = near + ((start - near) * i) / BLAST_MOUTH_SLICES;
+      const b = near + ((start - near) * (i + 1)) / BLAST_MOUTH_SLICES;
+      const [aLo, aHi] = edge(a);
+      const [bLo, bHi] = edge(b);
+      ctx.globalAlpha = (base * (i + 0.5)) / BLAST_MOUTH_SLICES;
+      ctx.beginPath();
+      ctx.moveTo(...at(a, aHi));
+      ctx.lineTo(...at(b, bHi));
+      ctx.lineTo(...at(b, bLo));
+      ctx.lineTo(...at(a, aLo));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = base;
+  }
+  const [startLo, startHi] = edge(start);
   ctx.beginPath();
-  ctx.moveTo(...at(near, mouthHi));
-  ctx.lineTo(...at(open, hi));
+  ctx.moveTo(...at(start, startHi));
+  if (open > start) ctx.lineTo(...at(open, hi));
   ctx.lineTo(...at(far, hi));
   ctx.lineTo(...at(far, lo));
-  ctx.lineTo(...at(open, lo));
-  ctx.lineTo(...at(near, mouthLo));
+  if (open > start) ctx.lineTo(...at(open, lo));
+  ctx.lineTo(...at(start, startLo));
   ctx.closePath();
   ctx.fill();
 }
+
+/**
+ * How far the end blast fades in from its mouth, units, and in how many steps (Plan 6,
+ * Task 36). UNVERIFIED (cosmetic): by eye, a fifth of the taper.
+ */
+const BLAST_MOUTH_FADE = 3;
+const BLAST_MOUTH_SLICES = 6;
 
 /**
  * How far past the muzzle Zero Laser's beam opens from its main box's height to

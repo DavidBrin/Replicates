@@ -230,6 +230,19 @@ describe("no Final Smash user drawn inside the fighter it trapped, at its real t
   });
 });
 
+describe("Kirby's Ultra Sword holds its gap through the launch freeze (Plan 6, Task 36: kirby-trap3)", () => {
+  it("holds him backed off on every frame of Mario's freeze and the frame the launch fires, and lets go only as Mario flies", () => {
+    const frames = run("kirby", 3);
+    const freeze = frames.filter((f) => f.held === "frozen");
+    expect(freeze.length).toBe(8);
+    const fires = frames[frames.indexOf(freeze.at(-1)!) + 1];
+    // Six and a half units back: the finishing blow's gap (9.5 since Task 19) less Mario's 3 ahead.
+    expect(new Set([...freeze, fires].map((f) => f.shift))).toEqual(new Set([-6.5]));
+    const lets = frames.find((f) => f.at > fires.at && f.shift !== -6.5)!;
+    expect(lets.held).toBe("flying");
+  });
+});
+
 describe("letting go (rulings R-T17o and R-T17q; the re-review 2's N7 and 3's N9)", () => {
   /**
    * The shift the runner hands the drawing on each paint (`easeSceneShift` of

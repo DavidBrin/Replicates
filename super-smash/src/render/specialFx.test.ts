@@ -16,7 +16,7 @@ import { createMockContext, countOf } from "./mockContext";
 import { MOVE_FX_KEYS, drawMoveFx } from "./specialFx";
 import { fxContextFor } from "./fxKit";
 import { fxFor } from "./chars";
-import { makeFighter, makeStage } from "./testFixtures";
+import { makeFighter, makeProjectile, makeStage } from "./testFixtures";
 
 const cam = createCamera(makeStage());
 const byId = new Map(FIGHTERS.map((f) => [f.id, f]));
@@ -61,6 +61,20 @@ describe("the effect table", () => {
     const ctx = createMockContext();
     drawMoveFx(ctx, samus, stored, cam, 13, 0, 0, { lastHit: [], frame: 40 });
     expect(ctx.calls.length).toBeGreaterThan(0);
+  });
+
+  it("counts the fighter's own projectiles of an id for its painter: Mario's water (Plan 6, Task 36)", () => {
+    const mario = byId.get("mario")!;
+    const f = makeFighter({ defId: "mario", action: "special", move: "downB", actionFrame: 29 });
+    const water = makeProjectile({ owner: 0, defId: mario.moves.downB!.projectiles![0].id });
+    const theirs = makeProjectile({ owner: 1, defId: water.defId });
+    const fills = (projectiles: ReturnType<typeof makeProjectile>[]) => {
+      const ctx = createMockContext();
+      const fx = drawMoveFx(ctx, mario, f, cam, 13, 0, 0, { lastHit: [], frame: 30, projectiles });
+      for (const paint of fx.over) paint();
+      return countOf(ctx, "fill");
+    };
+    expect(fills([water])).toBeGreaterThan(fills([theirs]));
   });
 
   it("draws nothing for a fighter who is not doing a special", () => {
