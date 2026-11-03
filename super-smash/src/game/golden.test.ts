@@ -74,7 +74,9 @@ import { PROJECTILE_PATHS, projectilePathsOf, type ProjectilePath } from "./proj
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
- * a status one frame longer) is still caught.
+ * a status one frame longer) is still caught. A match whose length is not a
+ * multiple of 100 also samples its last frame (Plan 6, Task 41's fix wave: the
+ * slip lab's frames 101-120 and the beams lab's 901-950 were in no digest).
  *
  * Deliberately not `hashState`: Plan 2 adds fields to `FighterState`, and
  * `hashState` must cover them (that is its job), so its value changes on every
@@ -550,6 +552,11 @@ const MATCHES: readonly Match[] = [
  * match and the contact lab (`pummel`) reach. The ball-on match reaches `pummel`, which the
  * four do not, and no longer `finalTrapped` (the Final Smash lab's) or `turnaround`. All 60
  * are visited.
+ * Plan 6, Task 41's fix wave (a match whose length is not a multiple of 100 also samples
+ * its last frame: final review item 27) adds no action and changes no behaviour. The two
+ * such traces gain a last digest: the beams lab (frames 901-950) and the slip lab
+ * (101-120). Every earlier digest of every trace is byte-identical, and every lab pin
+ * holds. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -848,7 +855,7 @@ function play(match: Match): Played {
     if (out.events.smashBallBroken !== null) ballsBroken++;
     finalSmashes += out.events.finalSmashes.length;
     roll = mixInt(roll, digest(state));
-    if (frame % EVERY === 0) digests.push(roll >>> 0);
+    if (frame % EVERY === 0 || frame === match.frames) digests.push(roll >>> 0);
   }
   const projectilePaths = new Map<ProjectilePath, number>();
   for (const set of reached.values()) for (const path of set) projectilePaths.set(path, (projectilePaths.get(path) ?? 0) + 1);
@@ -1560,6 +1567,13 @@ describe("engine golden trace", () => {
     expect(played.get(SLIP_LAB.name)!.actions.has("edgeSlip"), "the slip lab's edge slip").toBe(true);
   }
 
+  // Plan 6, Task 41's fix wave (final review item 27): every match's last frame is in a
+  // digest, so a lab's tail past its last hundred (the slip lab's 101-120, the beams lab's
+  // 901-950) is pinned too.
+  function expectTails(): void {
+    for (const m of MATCHES) expect(played.get(m.name)!.digests.length, m.name).toBe(Math.ceil(m.frames / EVERY));
+  }
+
   function expectInvariants(): void {
     for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
   }
@@ -1576,6 +1590,7 @@ describe("engine golden trace", () => {
   it("clanks, stuns a shield and pummels in the contact lab", expectContacts);
   it("slips off a platform's end backward in the slip lab", expectSlip);
   it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
+  it("samples every match's last frame", expectTails);
 
   if (process.env.UPDATE_GOLDEN === "1") {
     it("writes the golden trace", () => {
@@ -1591,6 +1606,7 @@ describe("engine golden trace", () => {
       expectContacts();
       expectSlip();
       expectInvariants();
+      expectTails();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;
       mkdirSync(dirname(FIXTURE), { recursive: true });
@@ -1609,7 +1625,7 @@ describe("engine golden trace", () => {
       const got = played.get(m.name)!.digests;
       expect(got.length).toBe(want.length);
       const firstDiff = got.findIndex((v, i) => v !== want[i]);
-      const span = `frames ${firstDiff * EVERY + 1}-${(firstDiff + 1) * EVERY}`;
+      const span = `frames ${firstDiff * EVERY + 1}-${Math.min((firstDiff + 1) * EVERY, m.frames)}`;
       expect(firstDiff, `first divergence in ${span}`).toBe(-1);
     });
   }
