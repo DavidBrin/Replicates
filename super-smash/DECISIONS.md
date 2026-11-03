@@ -4430,7 +4430,11 @@ places reverse or extend the plan. The controller's folder
     reaches this path seven times, all one attacker's multi-part hits in one step, so D9 also
     covers same-source multi-part hits.
   - *One idle phase* (Task 18): a standing fighter's sim body was its idle clip offset per port,
-    so a presentation offset decided hits by port (14 scenes, every one a standing Donkey Kong).
+    so a presentation offset decided hits by port: with the old clock, 30 of the review's 2,560
+    constructed Final Smash scenes differed by port order (15 two-fighter scenes and the same 15
+    with a third fighter), on many pairs (Donkey Kong's, and Mario against Marth, Link against
+    Samus, Samus against Mario, Samus and Fox, Kirby against Samus, Fox against Link); the planning
+    replay had seen 14, every one a standing Donkey Kong.
     Every port now stands on `IDLE_PHASE` 27, the old port 1's (0 kept port 0's body and broke the
     idle-player test's turn limit); after it, 0 of 2,560 Final Smash scenes differ by port order
     (the review's probe). The 3D drawing reads the same pose; the 2D renderer's own idle offset is
@@ -4668,8 +4672,9 @@ grouped by task, each with its cost if wrong. Several reverse or extend the plan
   hard direction goes out alone (a jab where live play may have tilted): re-attaching a hard
   direction to a later frame could read as a fresh one (a smash). Cost: a rare jab after a stall,
   never a desync.
-- *Task 9*: the world-end comments corrected and the rubendal spot-check above, in its fix round.
-  Cost: none.
+- *Task 9*: the world-end comments corrected and the rubendal spot-check above, in its fix round,
+  which also fixed the stale `barrage()` reference in `render/chars/donkeyKong/poses.ts` (Task 9
+  had deleted `barrage()`). Cost: none.
 - *Task 10*: a comments-only follow-up re-measured the dash and beams labs' landing frames. Its
   commit body (`62dac3f`) omitted two facts, recorded here because history is never rewritten:
   Pikachu's Volt Tackle also ends in the air (frame 138) and gets the boost (still KO'd, on 169 at
@@ -4696,7 +4701,11 @@ grouped by task, each with its cost if wrong. Several reverse or extend the plan
   as the dump says; "the wave's facing" is `ProjectileState.facing`, its travelling sense, so a
   wave that wraps a corner launches by its current sense, not its throw (the cost if wrong). A
   reflected crawling wave renews its life by `reflect.ts`'s rule; the life is capped at 193 frames
-  through landings, falls and reflections (a fallen spark had reached 249). Cost: none.
+  through landings, falls and reflections (a fallen spark had reached 249). Cost: none. The same
+  fix round added the tests that kill two surviving mutants (the `meetSide` direction, the
+  underside box offset), and took three of its review's Minors: the crawl's first frame carries
+  the spark's velocity, a spawn at a solid platform's edge no longer floats past the ledge for a
+  frame, and `types.ts`'s docs. Cost: none.
 - *Task 17* (extends D9): a pre-step snapshot (crouch, ground, platform, jumps used) before the
   step's hits, so the ranking reads how the fighter stood in both port layouts; the KO credit
   follows the launch that stands, not the later port; an outranked hit still deals its damage.
@@ -4742,9 +4751,9 @@ grouped by task, each with its cost if wrong. Several reverse or extend the plan
   when the trap arrives (no fire through invincibility); the limit is firm: from 1,200 frames the
   CPU goes to a firing position and fires as soon as the target is catchable. Round 2: past the
   limit it starts no new attack, jab loop, smash charge or landing attack (an attack already out
-  finishes), and the six-stage idle-Mario test runs in the game's own baked context. Its deadline is 240 frames after
-  the later of the limit and the target's first catchable frame (a hit before the limit can KO the
-  idle Mario, who respawns invincible). Cost: a CPU near the limit gives up some free hits to fire
+  finishes), and the six-stage idle-Mario test runs in the game's own baked context. Its deadline
+  is 240 frames after the later of the limit and the target's first catchable frame (a hit before
+  the limit can KO the idle Mario, who respawns invincible). Cost: a CPU near the limit gives up some free hits to fire
   (intended by D10). A CPU Pikachu that climbs to a target's floor or steers the tackle is carried:
   CPU Volt Tackle stays rare against moving CPU targets. Cost: CPU-against-CPU matches rarely show
   it. The airborne half (an airborne CPU past the limit still started aerials) was carried, then
@@ -4794,9 +4803,11 @@ grouped by task, each with its cost if wrong. Several reverse or extend the plan
   - Seam I-1: the gamepad options listened to the wrong pad after a press-to-join (a third copy of
     the pad-to-seat rule); one helper, `padIndexForSeat`, now owns it. Cost: none.
   - Seam M-1, M-2 and M-3 are recorded, not changed (below). Cost: none now.
-  - 38 deferred Minors marked must-fix (22 comment, prose and SPEC lines; 13 tests; the portraits'
-    muted look), plus three owed fixes (throws draw no trail, Task 39's test, Task 40b's two), all
-    fixed in 19 commits (`e59efff`..`83c3851`), re-reviewed with no new Critical or Important. The
+  - 38 deferred Minors marked must-fix (31 ledger lines and 7 review-file items), fixed as 36
+    items, some sharing one: 22 comment, prose and SPEC lines, 13 tests (Task 40b's guard test
+    among them) and the portraits' muted look. Owed besides: throws draw no trail, Task 39's Lab3D
+    test and Task 40b's `linked` reset. All fixed in 21 commits (`e59efff`..`83c3851`),
+    re-reviewed with no new Critical or Important. The
     golden now samples every match's last frame, so the slip lab's frames 101-120 are pinned (pin
     `c5ea40aa` → `ccc446b7`).
 
@@ -4814,7 +4825,7 @@ edgeguard exits ≥ 5,194, self-destructs ≤ 22.
 | Task 24, first commit (re-judged at `856f68d`) | 1,313 | 142.72 | 5,770 | 20 | 8 |
 | Task 24, fix round 1 (`6246d9f`) | 1,311 | 142.56 | 5,769 | 20 | 6 |
 | Task 24, fix round 2 (`b0a1fa2`) | 1,312 | 142.29 | 5,767 | 20 | 7 |
-| Task 25 (`2295195`) | 1,307 | 142.35 | 5,783 | 20 | — |
+| Task 25 (`2295195`) | 1,307 | 142.35 | 5,783 | 20 | 7 |
 | Task 26 (`f1aca90`) | 1,397 | 142.15 | 5,541 | 6 | 10 |
 | Task 27 (`77d091b`), the final sweep | 1,370 | 137.70 | 6,011 | 7 | 3 |
 
@@ -4928,8 +4939,9 @@ with its reason.
   carried and trapped hang at the `throw` joint, carry (a).
 - *The 363°, 366° and 368° autolink angles* (f), refused at load: the pages give no rule.
 - *Marth's grounded up special boxes* (g): neither height can be set from a source.
-- *Stances*: Mario (a 0.32 lift is a third of his 1.11 sink and draws Donkey Kong and Fox inside
-  him in their Final Smash scenes), Donkey Kong (his sink is his knuckles), and Pikachu (mesh
+- *Stances*: Mario (mesh −1.23, legs −0.324: a 0.32 lift is about a quarter of his sink, leaves
+  his soles about 0.91 under, and draws Donkey Kong and Fox inside him in their Final Smash
+  scenes), Donkey Kong (his sink is his knuckles), and Pikachu (mesh
   −1.25, legs −1.23) and Fox (mesh −0.34, legs −0.12), whose lift turned 12 close-range hits into
   whiffs: their fix is their idle clips' feet. Marth's cape and sheath sit 0.21 under at idle.
 - *Fighters' clips*: Samus's held Charge Shot shows about half its lunge (clip time 0.056; a key

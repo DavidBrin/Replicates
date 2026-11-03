@@ -70,7 +70,7 @@ Plans 2 and 3 do not deploy. Their changes go live with the next deploy David ap
   - Fighters are drawn over the stage's front face, the side camera stays, and shadows tip toward it (D11, D12).
   - Kirby alone is lifted onto the floor (0.57); Mario, Donkey Kong, Pikachu and Fox are carried (D13).
   - HUD portraits are rendered from the loaded model and never saved (D14).
-  - Press-to-join seats only a pad that drives no seat yet; with a keyboard player and one pad, the pad takes P2 from the menu (R-P6-11).
+  - Press-to-join (R-P6-11, narrowed by Task 30's ruling): a pad already driving a seat, the lone pad on P1 included, takes no other; with a keyboard player and one pad, the pad also drives P1, so P2 is set to a human in the menu or a second pad joins.
   - The online lobby says when it is loading the game data, and a direct link that cannot open fails in about 15 s with its own sentence (Task 40b).
 
 ## Open questions for David
