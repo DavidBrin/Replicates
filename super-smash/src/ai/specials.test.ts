@@ -181,6 +181,113 @@ describe("the Final Smash", () => {
     expect(fire(s, pikachu)).toBe(true);
   });
 
+  it("never fires at a target that cannot be hit when the trap arrives, past the limit or proven held (Task 24 fix round 1)", () => {
+    const overdue = (over: Partial<FighterState>) => {
+      const s = ready(20, { x: 0, defId: "pikachu" });
+      s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT;
+      Object.assign(s.fighters[1], over);
+      return fire(s, pikachu);
+    };
+    expect(overdue({}), "a free target").toBe(true);
+    expect(overdue({ invincible: 59 }), "a respawn's invincibility").toBe(false);
+    expect(overdue({ action: "roll", actionFrame: 1 }), "a roll about to turn intangible").toBe(false);
+    expect(overdue({ action: "respawnPlatform", actionFrame: 30 }), "on the respawn platform").toBe(false);
+    const s = fd(0);
+    s.fighters[1] = makeFighter({ port: 1, x: fx(40), action: "tumble", actionFrame: 20, hitstun: 120, grounded: true, invincible: 90 });
+    expect(fire(s, pikachu), "proven held, but invincible").toBe(false);
+  });
+
+  /**
+   * Pikachu holding the power from the match's start against an idle Mario (input 0), with
+   * the ball off: past `FINAL_SMASH_HOLD_LIMIT` it drops what it is doing, goes to where it
+   * fires from and fires (Task 24 fix round 1, ruling D10 made firm).
+   */
+  const idleMatch = (id: string, frames: number) => {
+    const view = stageViewFromDef(STAGES.find((x) => x.id === id)!);
+    const s = createInitialState(id, [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 9, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+    s.fighters[0].finalSmashReady = FINAL_SMASH_READY;
+    const world = cpuWorldFromDef(pikachu, view, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
+    let st = s;
+    let prev: InputFrame[] = [0, 0];
+    let seed = 3;
+    let firedAt = -1;
+    for (let i = 1; i <= frames && firedAt < 0; i++) {
+      const d = decideCpu(st, 0, 9, seed, world);
+      seed = d.seed;
+      const out = step(st, [d.input, 0], { prevInputs: prev });
+      if (out.events.finalSmashes.includes(0)) firedAt = i;
+      st = out.state;
+      prev = [d.input, 0];
+    }
+    let trapped = false;
+    for (let i = 0; i < 400 && firedAt > 0; i++) {
+      st = step(st, [0, 0], { prevInputs: prev }).state;
+      prev = [0, 0];
+      trapped ||= st.fighters[1].action === "finalTrapped";
+    }
+    return { firedAt, trapped, stocks: st.fighters[0].stocks, start: s.fighters[0].stocks };
+  };
+
+  it.each(STAGES.map((x) => x.id))("fires Volt Tackle at an idle Mario within 240 frames past the limit, traps him, and never self-destructs, on %s (Task 24 fix round 1)", (id) => {
+    const m = idleMatch(id, FINAL_SMASH_HOLD_LIMIT + 240);
+    expect(m.firedAt, "fired within 1,200 + 240 frames").toBeGreaterThan(0);
+    expect(m.trapped, "trapped him").toBe(true);
+    expect(m.stocks, "no self-destruct").toBe(m.start);
+  });
+
+  it("past the limit, drops attacking and approaching a free target for where it fires from (Task 24 fix round 1)", () => {
+    const world = cpuWorldFromDef(pikachu, FD, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
+    for (const gap of [6, 60]) {
+      const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+      Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: FD.groundY, facing: 1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
+      Object.assign(s.fighters[1], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: fx(gap), y: FD.groundY, facing: -1, intangible: 0, invincible: 0 });
+      s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT - 1;
+      const before = [3, 4, 5, 6].map((seed) => decideCpu(s, 0, 9, seed, world).behaviour);
+      expect(before, `${gap} ahead, before the limit`).not.toContain("finalSmash");
+      s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT;
+      expect([3, 4, 5, 6].map((seed) => decideCpu(s, 0, 9, seed, world).behaviour), `${gap} ahead, at the limit`).toEqual(["finalSmash", "finalSmash", "finalSmash", "finalSmash"]);
+      // Going there outranks every attack and movement (700 at most), and no survival behaviour (900 and up).
+      if (gap === 60) expect(finalSmash(context(s, pikachu, 9, undefined, FD)).score).toSatisfy((x: number) => x > 700 && x < 900);
+    }
+  });
+
+  it("past the limit, waits out a target's invincibility each time it comes back, then fires once it can be hit (Task 24 fix round 1)", () => {
+    const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "mario" }], { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true }, 5);
+    Object.assign(s.fighters[0], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: 0, y: FD.groundY, facing: 1, intangible: 0, invincible: 0, finalSmashReady: FINAL_SMASH_READY });
+    Object.assign(s.fighters[1], { action: "stand", actionFrame: 30, grounded: true, platform: 0, x: fx(20), y: FD.groundY, facing: -1, intangible: 0, invincible: 40 });
+    s.fighters[0].combat.standbyFrames = FINAL_SMASH_HOLD_LIMIT;
+    const world = cpuWorldFromDef(pikachu, FD, [pikachu, mario], (f) => FIGHTERS.find((d) => d.id === f)!);
+    let st = s;
+    let prev: InputFrame[] = [0, 0];
+    let seed = 3;
+    let firedAt = -1;
+    let hittableFrom = -1;
+    for (let i = 1; i <= 200 && firedAt < 0; i++) {
+      // Invincible again, as a respawn makes it, the frame it runs out the first time.
+      if (i === 41) st.fighters[1].invincible = 60;
+      if (hittableFrom < 0 && i > 41 && st.fighters[1].invincible === 0) hittableFrom = i;
+      const d = decideCpu(st, 0, 9, seed, world);
+      seed = d.seed;
+      const out = step(st, [d.input, 0], { prevInputs: prev });
+      if (out.events.finalSmashes.includes(0)) {
+        firedAt = i;
+        expect(st.fighters[1].invincible, "never into invincibility").toBe(0);
+      }
+      st = out.state;
+      prev = [d.input, 0];
+    }
+    expect(hittableFrom).toBeGreaterThan(0);
+    expect(firedAt, "fired once it could be hit").toBeGreaterThanOrEqual(hittableFrom);
+    expect(firedAt - hittableFrom, "and soon").toBeLessThanOrEqual(tuningForLevel(9).reactionFrames + 8);
+    let trapped = false;
+    for (let i = 0; i < 80 && !trapped; i++) {
+      st = step(st, [0, 0], { prevInputs: prev }).state;
+      prev = [0, 0];
+      trapped = st.fighters[1].action === "finalTrapped";
+    }
+    expect(trapped).toBe(true);
+  });
+
   it("is used at once when it needs no aim, and only in reach when it traps", () => {
     expect(finalSmash(context(ready(150), mario)).score).toBeGreaterThan(0);
     expect(finalSmash(context(landing(150), kirby)).score).toBe(0);

@@ -223,9 +223,10 @@ export function finalReach(move: MoveDef): number {
 
 /**
  * UNVERIFIED (CPU judgement; ruling D10): after holding the Smash Ball's power this long, a
- * CPU fires its travelling Final Smash at any target in its path from a standstill
- * (`fireFinalSmash`), whiff or not, so no Smash Ball is held back from everybody for good
- * (D58's M2). 1,200 frames, the one Final Smash limit published, the FS Meter's (SmashWiki
+ * CPU holding a travelling Final Smash goes to point blank of its target on its floor
+ * (`overdueApproach`) and fires it from a standstill once the target can be caught
+ * (`fireFinalSmash`, `hittable`), whiff check or not, so no Smash Ball is held back from
+ * everybody for good (D58's M2). 1,200 frames, the one Final Smash limit published, the FS Meter's (SmashWiki
  * "Final Smash": "a charged FS Meter now has a time limit of 20 seconds"); the Smash Ball's
  * own standby has none (R-FW2m).
  */
@@ -258,6 +259,50 @@ export function connectFrame(fs: MoveDef, ahead: number): number {
   if (ahead <= reach || dash === undefined || dash.x === 0) return first;
   return Math.max(first, dash.frame) + Math.ceil((ahead - reach) / abs(dash.x));
 }
+
+/**
+ * What a target does that has, or is about to have, intangibility or invincibility (Task 24
+ * fix round 1): the respawn's platform and its entry, a dodge, a tech, a get-up, and the
+ * ledge's options. A trap that reaches it through them whiffs (the review's FD probe: a
+ * Volt Tackle fired at a just-respawned Mario, invincible 59, passed through him, and its
+ * whiff carried Pikachu to the blast line).
+ */
+const SOON_UNHITTABLE: readonly ActionState[] = [
+  "respawnPlatform",
+  "entering",
+  "dead",
+  "spotDodge",
+  "roll",
+  "airDodge",
+  "tech",
+  "techRoll",
+  "getUp",
+  "ledgeHang",
+  "ledgeGetUp",
+  "ledgeAttack",
+  "ledgeRoll",
+  "ledgeJump",
+];
+
+/**
+ * Whether a travelling Final Smash's trap can catch `target` (Task 24 fix round 1): neither
+ * invincible nor intangible as the view shows it, nor in an action that is about to make it so
+ * (`SOON_UNHITTABLE`). As the grab reads a target (ruling R-FW1r), the view's invincibility
+ * as it is, its intangibility once the view has seen it begin (ruling R-T19k).
+ */
+export function hittable(target: Pick<FighterState, "action" | "invincible" | "intangible">): boolean {
+  return target.invincible === 0 && target.intangible === 0 && !SOON_UNHITTABLE.includes(target.action);
+}
+
+/**
+ * UNVERIFIED (CPU judgement; Task 24 fix round 1): past `FINAL_SMASH_HOLD_LIMIT`, how far ahead
+ * of it the CPU wants its target to fire at, at most: point blank (`FINAL_SMASH_RANGE`), where
+ * the start's slowing of the others (`SLOW_OPPONENT`, Volt Tackle's (9, 45): Task 11) keeps a
+ * free target inside the trap's reach through the windup. And at least `FINAL_SMASH_EDGE_ROOM`,
+ * so that floor for the dash's room check (`roomAhead`) is ahead of it even with the target at
+ * a ledge.
+ */
+export const OVERDUE_AHEAD_MIN = FINAL_SMASH_EDGE_ROOM;
 
 /**
  * Is anybody's Final Smash out: a fighter in one, or a projectile one launched? The
@@ -309,8 +354,10 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  *    Pikachu past the target in the windup, and the dash went on alone.)
  *  - a travelling one that ignores the edge also fires, whiff or not, at a target the view
  *    has seen held until it lands, beyond point blank (`holdLeft`, `connectFrame`),
- *    stopping first if it is moving (Plan 6, Task 24), or once the power has been held
- *    `FINAL_SMASH_HOLD_LIMIT` frames (ruling D10).
+ *    stopping first if it is moving (Plan 6, Task 24); and once the power has been held
+ *    `FINAL_SMASH_HOLD_LIMIT` frames (ruling D10), at point blank, the CPU going there first
+ *    (`overdueApproach`); either only at a target its trap can catch (`hittable`; Task 24 fix
+ *    round 1).
  *
  * It turns to face the target first (a grounded turn is an input), at point blank with
  * the press that does not carry it past (ruling R-FW1a: `pressToward`; the review's I1:
@@ -323,8 +370,51 @@ function finalSmashOut(ctx: BehaviourContext): boolean {
  */
 export const finalSmash: Behaviour = (ctx) => {
   const fire = fireFinalSmash(ctx);
-  return fire.score > 0 ? fire : finalSmashSpot(ctx);
+  if (fire.score > 0) return fire;
+  const overdue = overdueApproach(ctx);
+  return overdue.score > 0 ? overdue : finalSmashSpot(ctx);
 };
+
+/** Whether `self` has held the Smash Ball's power `FINAL_SMASH_HOLD_LIMIT` frames or more (ruling D10). */
+function overdueHolding(self: FighterState): boolean {
+  return self.finalSmashReady > 0 && self.combat.standbyFrames >= FINAL_SMASH_HOLD_LIMIT;
+}
+
+/**
+ * Past the time limit (ruling D10, made firm in Task 24's fix round 1), a CPU holding a
+ * travelling Final Smash drops whatever else it does on the ground and goes to where it fires
+ * from: on its own floor, `OVERDUE_AHEAD_MIN` to `FINAL_SMASH_RANGE` short of its target and
+ * `SPOT_EDGE_ROOM` inside the floor's ends, on the side it is on (the other where that side has
+ * no room), facing it, still; there it waits for the target to be catchable (`hittable`, on the
+ * ground), and `fireFinalSmash` fires. Its score beats every attack and movement but loses to the
+ * survival behaviours and a shield's decision (Task 24 fix round 1: against an idle player the
+ * limit fired 578-2,116 frames late, the CPU busy attacking). Where its target is on no floor
+ * level with it, there is no such place, and the CPU fights on as before (`approach` takes it
+ * up to a platform). As `finalSmashSpot`, it moves by `goToSpot`'s rules and never presses
+ * what takes it off its floor (`keepFloor`).
+ */
+function overdueApproach(ctx: BehaviourContext): BehaviourResult {
+  const { self, target, dx, dy } = ctx.view;
+  const def = ctx.fighterDef;
+  const fs = def?.moves.finalSmash;
+  if (def === null || fs === undefined || target === null || !overdueHolding(self) || dashTravel(fs) === 0) return NOTHING;
+  if (!free(self) || !self.grounded || abs(dy) > VERTICAL_REACH || finalSmashOut(ctx)) return NOTHING;
+  const floor = floorEnds(self, ctx.stage, ctx.state.stageFrame);
+  if (floor === null) return NOTHING;
+  const tx = self.x + dx;
+  const stretch = (dir: number) => {
+    const from = Math.max(dir > 0 ? tx - FINAL_SMASH_RANGE : tx + OVERDUE_AHEAD_MIN, floor.left + SPOT_EDGE_ROOM);
+    const to = Math.min(dir > 0 ? tx - OVERDUE_AHEAD_MIN : tx + FINAL_SMASH_RANGE, floor.right - SPOT_EDGE_ROOM);
+    return from <= to ? { x: Math.min(Math.max(self.x, from), to), dir, from, to } : null;
+  };
+  const side = dx >= 0 ? 1 : -1;
+  const spot = stretch(side) ?? stretch(-side);
+  if (spot === null) return NOTHING;
+  return keepFloor(ctx, moveToSpot(ctx, def, spot, OVERDUE_SCORE));
+}
+
+/** UNVERIFIED (CPU judgement): `overdueApproach`'s score, above every attack and movement (at most 700), below the survival behaviours (900 and up). */
+const OVERDUE_SCORE = 890;
 
 /** `finalSmash`'s use of the power, where the moment has come; NOTHING where it has not. */
 function fireFinalSmash(ctx: BehaviourContext): BehaviourResult {
@@ -347,13 +437,18 @@ function fireFinalSmash(ctx: BehaviourContext): BehaviourResult {
     // the startup's sparks hit it first, and a hit ends its stun: there R-T19d's `held` rule
     // stands, with its whiff check. Conservative under a slowdown: a slowed target's hold lasts
     // longer than its state reads.
-    const proven = still && target.grounded && ctx.view.targetActionAge >= 0 && ahead > FINAL_SMASH_RANGE && holdLeft(target) > ctx.tuning.reactionFrames + connectFrame(fs, ahead);
-    const overdue = still && self.combat.standbyFrames >= FINAL_SMASH_HOLD_LIMIT;
+    // Either one only at a target its trap can catch when it arrives (`hittable`; Task 24 fix
+    // round 1: a respawn's invincibility let the tackle through, and its whiff killed Pikachu).
+    const catchable = target.grounded && hittable(target);
+    const proven = still && catchable && ctx.view.targetActionAge >= 0 && ahead > FINAL_SMASH_RANGE && holdLeft(target) > ctx.tuning.reactionFrames + connectFrame(fs, ahead);
+    // Past the time limit (ruling D10), at point blank, where the start's slowing keeps it in
+    // the trap's reach (`OVERDUE_AHEAD_MIN`'s note); `overdueApproach` brings it there.
+    const overdue = still && catchable && overdueHolding(self) && ahead <= FINAL_SMASH_RANGE;
     // On the move at a target seen held: stop now, to fire from the standstill, where the hold
     // outlasts the stop too and the slide (`slideToward`, its own braking) leaves the target
     // beyond point blank (Plan 6, Task 24: the CPU is seldom still when a hold begins). Not one
     // that stops at the edge (Critical Hit), which fires from a run as before (R-P6-15).
-    if (fs.dashEnd?.edge !== true && !still && target.grounded && ctx.view.targetActionAge >= 0) {
+    if (fs.dashEnd?.edge !== true && !still && catchable && ctx.view.targetActionAge >= 0) {
       const slide = slideToward(ctx, dx >= 0 ? 1 : -1);
       const stopFrames = Math.ceil(abs(self.vx) / fighterParams(ctx.fighterDef!).ground_brake);
       if (ahead - slide > FINAL_SMASH_RANGE && holdLeft(target) > ctx.tuning.reactionFrames + stopFrames + connectFrame(fs, ahead - slide)) return { score: 880, input: 0 };
@@ -594,7 +689,11 @@ function slideStop(ctx: BehaviourContext, def: FighterDef): number | null {
  * own let-go guard does (`cpuInput`).
  */
 function finalSmashSpot(ctx: BehaviourContext): BehaviourResult {
-  const go = goToSpot(ctx);
+  return keepFloor(ctx, goToSpot(ctx));
+}
+
+/** A move to a spot that would take the fighter off its floor (`leavesFloor`) is not made: it lets go, or shields where the let-go would slide it off. */
+function keepFloor(ctx: BehaviourContext, go: BehaviourResult): BehaviourResult {
   if (go.score === 0) return go;
   if (!leavesFloor(ctx, go.input)) return go;
   return { score: go.score, input: go.input !== 0 && !leavesFloor(ctx, 0) ? 0 : Btn.Shield };
@@ -612,6 +711,12 @@ function goToSpot(ctx: BehaviourContext): BehaviourResult {
   if (!COMMITTED.includes(ctx.view.targetAction)) return NOTHING;
   const spot = finalSmashSpotFor(bands, ctx.stage, self.x, self.x + dx);
   if (spot === null) return NOTHING;
+  return moveToSpot(ctx, def, spot, 450);
+}
+
+/** The CPU's way to `spot` and its stand there facing `spot.dir`, scored `score` (`goToSpot`'s, shared with `overdueApproach`). */
+function moveToSpot(ctx: BehaviourContext, def: FighterDef, spot: FinalSmashSpot, score: number): BehaviourResult {
+  const { self } = ctx.view;
   // The part of the stretch it stops in: all of it facing the target, short of the target's
   // side by the turn's room facing away.
   const room = self.facing === spot.dir ? 0 : Math.min(SPOT_TURN_ROOM, (spot.to - spot.from) >> 1);
@@ -621,18 +726,18 @@ function goToSpot(ctx: BehaviourContext): BehaviourResult {
     // Moving: it lets go once its slide would stop in the stretch or past it; short of it,
     // it keeps going.
     const stop = slideStop(ctx, def);
-    if (stop === null || (self.vx > 0 ? stop >= from : stop <= to)) return { score: 450, input: 0 };
+    if (stop === null || (self.vx > 0 ? stop >= from : stop <= to)) return { score, input: 0 };
     const way = self.vx > 0 ? to - self.x : from - self.x;
-    return { score: 450, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
+    return { score, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
   }
   if (self.x < from || self.x > to) {
     const way = (self.x < from ? from : to) - self.x;
-    return { score: 450, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
+    return { score, input: abs(way) >= SPOT_WALK ? towardX(0, way) : towardX(0, way) | Btn.Soft };
   }
-  if (self.facing !== spot.dir) return { score: 450, input: towardX(0, spot.dir) | Btn.Soft };
+  if (self.facing !== spot.dir) return { score, input: towardX(0, spot.dir) | Btn.Soft };
   // There, facing the busy target: it stands still, so that it is still standing when the
   // target is held (`fireFinalSmash` fires from a standstill only).
-  return { score: 450, input: 0 };
+  return { score, input: 0 };
 }
 
 /**

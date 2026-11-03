@@ -13,6 +13,7 @@ import {
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   SHIELD_MAX_HEALTH,
 } from "./constants";
+import { STANDBY_FRAMES_CAP } from "./combat";
 import { hashState } from "./hash";
 import {
   DEFAULT_SEED,
@@ -2094,5 +2095,18 @@ describe("how long the Smash Ball's power has been held (Plan 6, Task 24)", () =
     expect(after.fighters[1].combat.standbyFrames).toBe(0);
     after.fighters[0].finalSmashReady = 0;
     expect(run(after, [0, 0], 1).fighters[0].combat.standbyFrames).toBe(0);
+  });
+
+  it("stops at its cap, and pauses through a KO freeze (Task 24 fix round 1)", () => {
+    const s = standing();
+    s.fighters[0].finalSmashReady = 1;
+    s.fighters[0].combat.standbyFrames = STANDBY_FRAMES_CAP - 1;
+    expect(run(s, [0, 0], 2).fighters[0].combat.standbyFrames).toBe(STANDBY_FRAMES_CAP);
+    const frozen = standing();
+    frozen.fighters[0].finalSmashReady = 1;
+    frozen.fighters[0].combat.standbyFrames = 40;
+    frozen.freezeFrames = KO_FREEZE_FRAMES;
+    expect(run(frozen, [0, 0], KO_FREEZE_FRAMES).fighters[0].combat.standbyFrames).toBe(40);
+    expect(run(frozen, [0, 0], KO_FREEZE_FRAMES + 1).fighters[0].combat.standbyFrames).toBe(41);
   });
 });
