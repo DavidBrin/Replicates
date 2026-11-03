@@ -159,6 +159,27 @@ describe("a flick buffered in shieldstun fires out of shield (Plan 6, Task 5; fi
   });
 });
 
+// The stick's own up smash, pressed in shieldstun, is buffered as an up smash (`bufferPress`
+// keeps `smashX`/`smashY`; Plan 6, Task 11 fix round 1), and the guard reads it
+// through `attackSmash` when the shield comes up (final wave, item 30). A fresh Up with
+// Attack on the shield's own frame is the `Up and Attack together` case above.
+describe("a buffered stick up smash out of shield (Plan 6, Task 11 fix round 1; final wave item 30)", () => {
+  it.each([
+    ["Up held", Btn.Up],
+    ["Up let go", 0],
+  ] as const)("Up and Attack made in shieldstun come out as the up smash on the shield's first frame, %s", (_name, after) => {
+    const p = player(mario({ action: "shieldStun", actionFrame: 6, hitstun: 4 }));
+    p.tick(Btn.Shield | Btn.Up | Btn.Attack);
+    expect(p.state.fighters[0].action).toBe("shieldStun");
+    expect(p.state.fighters[0].bufferedAction).toMatchObject({ kind: "attack", smashX: 0, smashY: 1 });
+    for (let i = 0; i < 12 && p.state.fighters[0].action === "shieldStun"; i++) p.tick(Btn.Shield | after);
+    expect(p.state.fighters[0].action).toBe("shield");
+    p.tick(Btn.Shield | after);
+    expect(p.state.fighters[0].action).toBe("attack");
+    expect(p.state.fighters[0].move).toBe("usmash");
+  });
+});
+
 describe("a flick while holding someone (Plan 6, Task 5; ruling D1)", () => {
   function holding(): GameState {
     const s = mario({ action: "grabHold", actionFrame: 0, x: fx(-4), grabbing: 1 });
