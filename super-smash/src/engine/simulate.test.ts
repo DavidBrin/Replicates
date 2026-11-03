@@ -16,6 +16,7 @@ import {
 import { hashState } from "./hash";
 import {
   DEFAULT_SEED,
+  KO_FREEZE_FRAMES,
   cloneState,
   createInitialState,
   registryContext,
@@ -1106,6 +1107,46 @@ describe("KOs and stocks", () => {
 });
 
 /* ------------------------------------------------------------ registry -- */
+
+describe("presses during a KO's freeze (Plan 6, Task 13; SmashWiki \"Buffer\")", () => {
+  /** Step `s` once per entry of `inputs`, port 0 pressing it, port 1 idle. */
+  function stepEach(s: GameState, inputs: readonly InputFrame[]): GameState[] {
+    let state = s;
+    let prev: readonly InputFrame[] = [0, 0];
+    const out: GameState[] = [];
+    for (const i of inputs) {
+      const now: InputFrame[] = [i, 0];
+      state = step(state, now, { prevInputs: prev, ctx: CTX }).state;
+      prev = now;
+      out.push(state);
+    }
+    return out;
+  }
+
+  it("a Jump pressed in the freeze's last nine frames jumps on the first frame after it", () => {
+    const s = standing();
+    s.freezeFrames = KO_FREEZE_FRAMES;
+    const press = KO_FREEZE_FRAMES - 4;
+    const states = stepEach(s, Array.from({ length: KO_FREEZE_FRAMES + 2 }, (_, i) => (i === press ? Btn.Jump : 0)));
+    expect(states[KO_FREEZE_FRAMES - 1].fighters[0].action).toBe("stand");
+    expect(states[KO_FREEZE_FRAMES].fighters[0].action).toBe("jumpSquat");
+  });
+
+  it("one pressed earlier than that has expired", () => {
+    const s = standing();
+    s.freezeFrames = KO_FREEZE_FRAMES;
+    const states = stepEach(s, Array.from({ length: KO_FREEZE_FRAMES + 2 }, (_, i) => (i === 0 ? Btn.Jump : 0)));
+    expect(states[KO_FREEZE_FRAMES].fighters[0].action).toBe("stand");
+  });
+
+  it("the freeze still moves nobody", () => {
+    const s = standing();
+    s.freezeFrames = 3;
+    const [after] = stepEach(s, [Btn.Right]);
+    expect(after.fighters[0].x).toBe(s.fighters[0].x);
+    expect(after.fighters[0].action).toBe("stand");
+  });
+});
 
 describe("registry", () => {
   it("resolves ids through the registered roster and stage list", () => {

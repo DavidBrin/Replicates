@@ -731,6 +731,21 @@ export function step(
   // KO (`KO_FREEZE_FRAMES`), and it is read here as one.
   if (s.freezeFrames > 0) {
     s.freezeFrames -= 1;
+    // A press made during the freeze is kept, as the buffer keeps any press made while a
+    // fighter cannot act (Plan 6, Task 13; SmashWiki "Buffer": Ultimate's 9-frame window).
+    // Read into each living fighter's buffer and its direction counter; nothing else of
+    // the step runs. The counter runs through the freeze, so a direction pressed before a
+    // KO and Attack pressed after its freeze are a tilt, not a smash. Holding a button
+    // through the freeze does not buffer it (the page's held-input buffering is not
+    // modelled anywhere in the replica; D59).
+    for (let i = 0; i < s.fighters.length; i++) {
+      const f = s.fighters[i];
+      if (f.action === "dead") continue;
+      const input = inputs[i] ?? 0;
+      const prev = prevInputs[i] ?? 0;
+      updateInputTracking(f, input, prev);
+      bufferPress(f, interpretInput(f, input, prev), s.frame);
+    }
     return { state: s, events };
   }
 
