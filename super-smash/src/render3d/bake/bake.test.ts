@@ -327,6 +327,30 @@ describe("Donkey Kong's carry and lift, and the full releases (Plan 6, Task 20)"
     }
   });
 
+  // Fix round 2: Samus's Charge Shot anchors its clip's shot key on the plasma's spawn,
+  // game frame 16 (`MoveDef.clipStrike`), where her motion used to play the clip
+  // linearly and show the shot on its frame 4 and the charge hold in the recovery.
+  it("play Samus's Charge Shot to its shot on game frame 16, when the plasma leaves, uncharged and from a full charge, holding the charge in the lunge (fix round 2)", () => {
+    const samus = fighterOf("samus");
+    const moves = moveSamplers(samus);
+    const own = moves.get(gameScriptFor(samus, "neutralB")!.motion)!;
+    const full = moves.get("special_n_f_max")!;
+    const sc = samus.moves.neutralB!.specialCharge!;
+    const strike = own.clip.strike!;
+    const spawn = samus.moves.neutralB!.projectiles!.find((p) => p.id === "chargeShot")!.spawnFrame;
+    expect(spawn).toBe(16);
+    // Game frame g is `actionFrame` g − 1.
+    const at = (g: number) => own.time(moveScriptFrame(samus, { move: "neutralB", actionFrame: g - 1 })!.state.motionFrame);
+    // Uncharged: winding into the shot on frame 4 and through the charge hold
+    // (`actionFrame` loopFrame − 1), the shot key on the spawn.
+    expect(at(4), "frame 4 is well short of the shot").toBeLessThan(strike / 2);
+    expect(at(sc.loopFrame)).toBeLessThan(strike);
+    expect(at(spawn)).toBeCloseTo(strike, 12);
+    // From a full charge: from the loop frame forward to the shot, on the spawn.
+    expect(full.time(1)).toBeLessThan(strike);
+    expect(full.time(spawn - sc.loopFrame)).toBeCloseTo(strike, 12);
+  });
+
   it("play a full release's wind-up back to the strike when the loop frame stands past it (fix round 1)", () => {
     expect(fullReleaseClipTime(0.3, 0.07, 3, 47, 1)).toBe(0.3);
     expect(fullReleaseClipTime(0.3, 0.07, 3, 47, 3)).toBeCloseTo(0.07, 12);

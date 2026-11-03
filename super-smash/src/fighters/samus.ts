@@ -709,6 +709,12 @@ const legacy: FighterDef = {
       // CancelFrame 48, so 47 frames, shooting on its frame 3), played from the loop frame,
       // after the 13 entry frames (`special_n_s`, CancelFrame 14): 13 + 48 = 61 (Plan 6, Task 20).
       specialCharge: { mode: "store", frames: 112, loopFrame: 13, fromStore: { start: "entry", interruptible: 61, motion: "special_n_f_max", fullFrames: 47 } },
+      // The drawing (Plan 6, Task 20 fix round 2): the clip's shot key lands when the
+      // plasma leaves, its spawn on frame 16 (below), uncharged or from a full charge,
+      // and the charge hold (`loopFrame` − 1) sits in the lunge before it. With no box
+      // to anchor on, the clip played linearly: the shot on frame 4, the hold in the
+      // recovery.
+      clipStrike: 16,
       hitboxes: [],
       projectiles: [
         {

@@ -37,17 +37,20 @@
  * ## Timing: read this before moving a key
  *
  * `poseTimeFor` only remaps a clip onto its contact frame when the move has a
- * **hitbox**. Charge Shot, Missile and Bomb have none — their whole output is a
- * projectile — so for those three `strike` is inert and clip time is exactly
- * `actionFrame / totalFrames`. Their keys are therefore placed at hand-computed
- * fractions and the `strike` value is documentation, not machinery. Every other
- * clip here is anchored properly and only has to be the right *shape*.
+ * **hitbox**, or names one (`MoveDef.clipStrike`). Missile and Bomb have none —
+ * their whole output is a projectile — so for those two `strike` is inert and clip
+ * time is exactly `actionFrame / totalFrames`. Their keys are therefore placed at
+ * hand-computed fractions and the `strike` value is documentation, not machinery.
+ * Charge Shot anchors its `strike` on the plasma's spawn, frame 16, by `clipStrike`
+ * (Plan 6, Task 20 fix round 2). Every other clip here is anchored properly and
+ * only has to be the right *shape*.
  *
  * The other timing fact that decides a whole clip: **while Charge Shot is being
- * charged the engine pins `actionFrame` to 1**, so `neutralB` is sampled at
- * t ≈ 0.023 for as long as the button is held. Its `t = 0` key is not a wind-up,
- * it is the charge stance, and it is the pose players will spend more time
- * looking at than any other frame she has.
+ * charged the engine holds `actionFrame` on its loop frame − 1** (12), so
+ * `neutralB` is sampled at t ≈ 0.056 for as long as the button is held, between
+ * its `t = 0` key and the shot. That key is not a wind-up, it is the charge
+ * stance, and it is the pose players will spend more time looking at than any
+ * other frame she has.
  */
 
 import { P, type PoseClip } from "../../poses/clip";
@@ -244,8 +247,8 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * from — an upright stance held the barrel a unit and a half above its own
    * projectile.
    *
-   * The shot itself has to land at t ≈ 0.07 because the plasma leaves on move
-   * frame 3 of 44 and there is no hitbox for `strike` to anchor to. The whole
+   * The shot itself is the key at t ≈ 0.07, which `clipStrike` lands on the
+   * plasma's spawn, move frame 16 of 44 (Plan 6, Task 20 fix round 2). The whole
    * remaining 93% of the clip is recovery, which is why the recoil is spent
    * over three keys instead of snapping back: thirty-eight frames of a single
    * ease reads as a freeze.
