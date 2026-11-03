@@ -841,6 +841,35 @@ describe("projectile phases by age (Plan 6, Task 15)", () => {
       [fx(5), fx(2.5)],
     ]);
   });
+
+  // Each phase's whole box, so a number a stage leaves out shows (fix round 1): rubendal
+  // 13.0.1 `link_boomerang` `Fly` (frame 0: 8.0, 70, BKB 80, KBG 40, Size 4.0; frame 10:
+  // 6.0, Angle=65, 60, 40, 3.6) and `Turn` (3.0, 70, 50, 40, 3.6); the smash throw ×1.2 on
+  // the clean and late damage (SmashWiki); `samus_bomb` `BurstAttack` (5.0, 60, BKB 40,
+  // KBG 30, Size 7.38, then `set_size` 4.9 and 2.5).
+  it("each phase's whole box is the script's", () => {
+    const whole = (damage: number, angle: number, baseKnockback: number, knockbackGrowth: number, radius: number) => ({
+      damage: fx(damage),
+      angle: fx(angle),
+      baseKnockback: fx(baseKnockback),
+      knockbackGrowth: fx(knockbackGrowth),
+      radius: fx(radius),
+    });
+    const tilt = proj(link(), "sideB");
+    const smash = proj(link(), "sideBSmash");
+    const bomb = proj(samus(), "downB");
+    const hb = (def: ProjectileDef, age: number) => projectileHitbox(at(def, age), def);
+    expect(hb(tilt, 9), "tilt, clean").toMatchObject(whole(8, 70, 80, 40, 4));
+    expect(hb(tilt, 10), "tilt, late").toMatchObject(whole(6, 65, 60, 40, 3.6));
+    expect(hb(smash, 9), "smash, clean").toMatchObject(whole(9.6, 70, 80, 40, 4));
+    expect(hb(smash, 10), "smash, late").toMatchObject(whole(7.2, 65, 60, 40, 3.6));
+    for (const def of [tilt, smash]) {
+      expect(projectileHitbox({ ...at(def, 20), returning: true }, def), `${def.id}, returning`).toMatchObject(whole(3, 70, 50, 40, 3.6));
+    }
+    expect(hb(bomb, 72), "bomb, early").toMatchObject(whole(5, 60, 40, 30, 7.38));
+    expect(hb(bomb, 84), "bomb, mid").toMatchObject(whole(5, 60, 40, 30, 4.9));
+    expect(hb(bomb, 87), "bomb, late").toMatchObject(whole(5, 60, 40, 30, 2.5));
+  });
 });
 
 describe("Thunder Jolt runs along surfaces (Plan 6, Task 16; SmashWiki \"Thunder Jolt\")", () => {

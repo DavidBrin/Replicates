@@ -480,6 +480,13 @@ const MATCHES: readonly Match[] = [
  * Missile on 39, a frame sooner, and the match no longer reaches `ledgeTrumped`, which the
  * script does: the four CPU matches reach 43 between them, down from 44. All 60 are
  * visited.
+ * Its fix round 1 (the late hit's angle is the script's 65, not the clean hit's 70) adds
+ * no action, and again only those two traces move. In the lab Samus, still in hitstun from
+ * the 473 hit, flies at 115° rather than 110° and lands on 519 (517). In link-samus the
+ * tilt-thrown Boomerang's late hit on 1955 launches her at 65° (first different on 1964,
+ * the 1901-2000 sample), and the match no longer reaches `downed` or `getUp`; mario-fox
+ * and the states lab reach `downed`, the states lab `getUp`. The four CPU matches reach 42
+ * between them, down from 43. All 60 are visited.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

@@ -86,9 +86,9 @@ const STEPS: readonly ScriptStep[] = [
   //                                    on 410
   [1, 0, L | B], //                421: Link throws the Boomerang with a smash input:
   [179, 0, 0], //                       out on 447 at 3.1, it hits Samus on 473 with its
-  //                                    late hit (7.2%, ×1.2: 8.64%; Plan 6, Task 15),
-  //                                    turns on 507 (age 60) and is caught on 566; to
-  //                                    600, the trace's last sample
+  //                                    late hit (7.2% at 65°, ×1.2 one-on-one: 8.64%;
+  //                                    Plan 6, Task 15), turns on 507 (age 60) and is
+  //                                    caught on 566; to 600, the trace's last sample
   // The failed throw (Task 13d fix round 1, ruling R-T13d-d; appended after 600).
   [1, 0, S | L | B], //            601: Link throws the Boomerang as a tilt (Tilt held):
   [49, 0, 0], //                        out on 627 at 2.4

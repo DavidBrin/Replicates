@@ -103,8 +103,10 @@ const BOOMERANG: ProjectileDef = {
     // Task 13c).
   },
   // "Tilt input hitboxes (clean, late, returning) 27-36, 37-71, 72-151": late from frame 10
-  // of its flight, 6.0%, BK 60, KS 40, size 3.6 (Plan 6, Task 15).
-  stages: [{ from: 10, hitbox: { damage: fx(6.0), baseKnockback: fx(60), radius: fx(3.6) } }],
+  // of its flight, 6.0%, angle 65, BK 60, KS 40, size 3.6 (Plan 6, Task 15; the angle is
+  // rubendal 13.0.1 link_boomerang `Fly` `frame(Frame=10)`: `Angle=65`, and the page's
+  // "Late hit" row's 65, where the clean hit's is 70).
+  stages: [{ from: 10, hitbox: { damage: fx(6.0), angle: fx(65), baseKnockback: fx(60), radius: fx(3.6) } }],
 };
 
 /** The hand-authored moveset; `link` below runs its root-bone moves from the imported scripts. */
@@ -771,8 +773,9 @@ const legacy: FighterDef = {
           vx: fx(3.1),
           lifetime: 167,
           hitbox: { ...BOOMERANG.hitbox, endFrame: 166, damage: fx(9.6) },
-          // The late 7.2% (6.0 × 1.2) from frame 10, "27-36, 37-86" (Plan 6, Task 15).
-          stages: [{ from: 10, hitbox: { damage: fx(7.2), baseKnockback: fx(60), radius: fx(3.6) } }],
+          // The late 7.2% (6.0 × 1.2) from frame 10, "27-36, 37-86", at the tilt throw's
+          // late angle 65 (rubendal link_boomerang `Fly` frame 10; Plan 6, Task 15).
+          stages: [{ from: 10, hitbox: { damage: fx(7.2), angle: fx(65), baseKnockback: fx(60), radius: fx(3.6) } }],
         },
       ],
     },
