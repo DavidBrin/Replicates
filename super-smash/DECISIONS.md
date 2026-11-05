@@ -5048,16 +5048,17 @@ with its reason.
 **Decision.** Plan 7 (`docs/superpowers/plans/2026-11-04-plan-7-relay-and-four-player-online.md`,
 written against `b53ebdd`) has two phases: a relay for two players (Phase A), shipped and
 deployed on its own, and then rooms of up to four players, all of them through that relay
-(Phase B). This entry is written in two parts. Phase A's is below, as built at the end of its
-Task 7; Phase B's is added by Task 18, and the deploy checkpoint's measurements by a
-documents-only commit after the deploy. Phase A: when no direct WebRTC link opens, the room's
+(Phase B). This entry is written in two parts. Phase A's comes first, as built at the end of its
+Task 7 and measured live at its deploy; Phase B's, added by Task 18, follows it ("Phase B: rooms
+of up to four"), and its own deploy's measurements are added by a documents-only commit after that
+deploy. Phase A: when no direct WebRTC link opens, the room's
 Durable Object carries the match instead. The room forwards a binary game frame from one socket
 to every other, prefixed with the sender's id, and never parses it; the transport
 (`adapters/doSignal.ts`) sends the rollback session's packets through the room socket in that
 mode, and the session (`online/session.ts`) tells the other side through the room so both
-switch. The relay is a fallback and never the first try: a first direct link gets its full
-negotiation deadline (`NEGOTIATION_TIMEOUT_MS`, 15 s) as before, and the direct path is
-unchanged when it opens. `?ice=relay` keeps its meaning, "force TURN", which is a direct route.
+switch. For two players the relay is a fallback and never the first try (a room that seats three
+or four relays from the start: Phase B): a first direct link gets its full negotiation deadline
+(`NEGOTIATION_TIMEOUT_MS`, 15 s) as before, and the direct path is unchanged when it opens. `?ice=relay` keeps its meaning, "force TURN", which is a direct route.
 Nothing in `step()` moved: `ENGINE_RULES_VERSION` stays 6 and `PROTOCOL_VERSION` stays 2, since
 the relay wraps the packets and does not change their layout; the golden passes untouched.
 
@@ -5209,6 +5210,8 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
   message from the seat since the link opened or the seat was taken, the lobby fails with
   `link-failed` ("The connection to the other player failed…") and leaves the room, rather than
   the version sentence; a seat that talked but sent no hello is still refused as another build.
+  (Phase B changed the host's half: with several seats, once any seat has been heard the silent
+  one is refused alone and the room stays; see Phase B.)
 - *After a match, the linger re-sends every 50 ms* (`LINGER_RESEND_MS`): 20 sends a second, and
   the batcher flushes on every second one, so about 10 messages a second, far under the 40 cap.
   Steady play is 30 a second (60 frames, two to a message). Catch-up after a stall is clamped
@@ -5281,3 +5284,291 @@ after the results), and the relay is sticky only for the room, so a pair whose n
 relay waits the full 15 s on "Opening a direct connection…" before every match. If testers find
 that tedious, one cheap option is to remember in `sessionStorage` that this browser's last room
 fell back to the relay, and shorten that side's first deadline. Your call.
+
+**Phase B: rooms of up to four** (Task 18's part of this entry). Plan 7's Tasks 8-17 ran from
+`e93b71a` to `1a28305`, on top of Phase A's deployed `5a694c9`: 20 commits, the review fix
+rounds included. A room now holds up to four players, and a room that seats three or four plays
+through the relay from its first frame. Written before Phase B's deploy: the deploy is the
+controller's, on David's go, and its measurements are a documents-only commit after it. Nothing
+in `step()` moved (`src/engine/**` is untouched): `ENGINE_RULES_VERSION` stays 6 and
+`PROTOCOL_VERSION` stays 2, since no packet layout changed (a Ping's token now carries the
+pinger's port in its top byte, which the u32 it already was has room for), and the golden passes
+untouched. D54's "two peers" to a room is superseded: a room seats up to four. Its limit of no
+online rematch stands, with every player, not two, returning to the lobby. The controller's folder
+(`.superpowers/sdd/plan-7-relay-4p/`) holds each task's report and review and the ledger
+(`progress.md`); this is the summary.
+
+*What was built.*
+- *Seats and ports* (Task 9). The room gives each player a port as it admits them: the host is 0,
+  and each guest takes the lowest free port (`ROOM_CAPACITY` 4; a fifth is refused `full`, "Room
+  ABCD already has four players."). The welcome is `{self, peers}` (the others, sorted by port),
+  and a signal or lobby message may be addressed with `to`: the room delivers it to that peer
+  alone, and drops it when that peer is not seated or is the sender; an unaddressed message goes
+  to every other peer. The room is as payload-blind as before: it stamps the sender on a game
+  frame, forwards it to every other socket and reads nothing of it.
+- *Topology* (Task 12). A room that seats a third player moves to the relay, a star through the
+  Durable Object, and stays there even if players leave; only a room of two tries a direct link
+  first. There is no WebRTC mesh. A player who joins a room that already relays is told so by its
+  host (`use-relay`, addressed to it), since it would wait for an offer that never comes. A third
+  player who joins while the first two negotiate directly moves all three to the relay: the
+  half-open connection closes, no offer goes to the newcomer, and a late answer or ICE from the
+  old negotiation is ignored (Review Focus 5, pinned in `session.test.ts`, on both sides).
+- *The waiting room and the begin* (Task 14). Every room, a pair included, goes through the
+  waiting room, and the lobby moves on at the host's Start (`begin`), not when the link opens.
+  "Start (3 players)" is enabled once at least one other player is seated and every seat has
+  passed the build check; a seat whose hello is still pending holds it. A guest reads "You are P3.
+  Waiting for the host to start…". `begin` lists the seats as `{id, port}` and compacts them to
+  the match ports `0..n-1`, so after a seat emptied before the Start a player can play on a
+  different port than their waiting-room seat (without a gap the two are equal). The play page
+  and the select screens read the match port from the store, never the room's seat port.
+- *The begin locks the roster* (Tasks 12 and 14). From the begin on, each side counts only the
+  players the begin names. A stranger who types the code (seated after the begin, or just before
+  it and not listed) moves nobody to the relay, can't send the start, is never heard (neither its
+  picks nor its game data), and its leaving ends nothing: a `use-relay` is followed only from a
+  seated roster player, a guest takes `start` only from port 0, and the link monitor ignores the
+  leave of anyone not in the match, even a stranger a guest announced before it locked (pinned
+  through the real relay transport in `linkMonitor.test.ts`). In a begun two-player lobby a
+  seated stranger no longer blocks the host's re-offer to its own player: the guards count
+  players, not seats.
+- *A seat emptied after the begin* (Task 14). While the players are choosing, a guest who leaves
+  frees their match port; the next joiner takes that port with an empty panel, the host repeats
+  its stage and re-sends the begin, and the host's `connected` waits until every player the begin
+  named is seated again (Review Focus 3 and 4, pinned in `onlineStore.test.ts`; the rejoin hook's
+  refilled-seat case in `useRejoinResend.test.ts`). A joiner with no seat free is told the room
+  began ("That room has already started its match. Ask the host for a new room.") and leaves.
+- *The hello, per seat* (Task 13). Each side greets a newcomer with a hello addressed to it (a
+  relayed newcomer's link opens before the room seats it, and the others' hellos went out before
+  it came), a host waits on every seat's hello separately, and a guest on its host's alone. A
+  seat that says nothing for `HELLO_TIMEOUT_MS` (5 s) is refused alone; the others stay. The wait
+  starts when a seat is seated with the link open and when a room turns to the relay: a third
+  player's arrival does that after its `peer` event, so the first version never timed that seat
+  (the Task 13 review's I-1).
+- *The build check and leaving.* One guest on another build is refused alone and the room stays:
+  the host shows "P2 is running a different version, so they can't play in this room.", which
+  outlives that seat's leaving, and the guest leaves with the sentence it always had ("The other
+  player is running a different version. Both reload the page."). Before Phase B the host left
+  too. The host leaving, while nothing has been started, closes the room for its guests ("The host
+  left, so the room has closed. Create or join another.", `host-left`); once a match is out, a
+  leave ends the match instead (below). A seat that empties before the Start shows "P2 left the
+  room.", and a link loss that empties several at once names them all ("P2, P3 and P4 left the
+  room.").
+- *A seat that never answered is not a build mismatch.* A relayed seat that has sent no lobby
+  message at all is refused with "P{n} didn't answer, so they can't play in this room." (the
+  host's notice, which also outlives the seat), and its own tab reads the link-failed sentence
+  ("The connection to the other player failed. Leave the room and try again."). A seat that talked
+  but sent no hello, or one for another build, gets the build-mismatch refusal above. This takes
+  Phase A's split (a tab that cannot run says nothing, which is not another build) from the room
+  to each seat (ruled below).
+- *Picks and settings* (Tasks 11 and 15). Each seat picks its own fighter on its own panel, the
+  host picks the stage, and every concrete pick is preloaded once all are known. Online match
+  settings accept two to four fighters, refuse a bad third or fourth entry, and keep the 1v1
+  rules for two only (`oneOnOne` is derived from the count). `StageSelect` needed no change.
+- *Rollback for N peers* (Task 10). The hash of each peer is compared per sending port and peer
+  (`remoteHashes` by frame, then peer), and each mismatch is reported once and by peer. Frame
+  advantage is tracked per peer, with the old 0.7/0.3 average, each peer's adding back half of
+  *that peer's own* round trip; time sync holds this machine back for the peer it is furthest
+  ahead of, never the average. Each peer keeps its own round-trip average, the input delay follows
+  the peer with the highest one (once it has two samples), and the HUD shows that worst ping. Ping
+  tokens carry the pinger's port: in a star every Pong reaches every machine and every session
+  counts its tokens from 1, so without it a Pong answering A's token k would count as B's own.
+  Port 0's tokens are the old numbers, so a two-player match behaves as it did. Two things were
+  kept as they were, with their reasons: `ack` stays the minimum over every remote port (always
+  safe, and the relay's TCP keeps the window short), and Pongs stay broadcast (in a star every
+  peer gets every Pong; the receiver keys a sample by the sender the room stamped, and the port in
+  the token keeps other machines' Pongs out).
+- *One player gone ends the match for all* (Task 16). The link monitor runs one watchdog per
+  other player in the begun room: a lobby `away` gives only its sender the minute, the health
+  shown is the worst, and any one player's leave or silence (`SILENCE_LOST_MS`) calls the match
+  lost, as Connection Lost, for everyone. The play page runs every port the match was started
+  with, and the results name all of them. The two unfinished-match lines now read "The connection
+  to another player was lost before the match finished. Nobody wins this one." and "The games
+  went out of sync, so this match can't count." In relay mode the room socket closing, with any
+  code, is every relayed player leaving (Phase A's Review Focus 2). A player gone before the match
+  finishes loading ends it at once. In a room of three or four the room link stays open while the
+  others are there, so Phase A's "link not open at ready" check missed a player who left during
+  the model wait, and the match would have ended only after 10 s of silence; now, when the match
+  is ready, a room that no longer seats one of its players, or has none, is Connection Lost then
+  and there, and a monitor with nobody to watch never starts (it could never call the match
+  lost).
+- *Phones* (Task 15). Three or four online panels overflowed a 390 px phone: the roster collapsed
+  to nothing and the Ready button was clipped. Below Tailwind's `sm`, online panels go two to a
+  row, with a shorter art well and scheme row; the offline footer is unchanged. Two 390 x 844 e2e
+  tests (three seats and four) measure the roster box (297 px against a bar of 250, set between
+  the 161 px that widths alone give and the 297 that widths and heights give) and that the button
+  sits inside the viewport; two unit tests pin the class names, since jsdom has no layout.
+
+*The four-page spike* (Task 8). Four WebGL pages at once on one machine was the plan's named risk,
+so a test proved that four pages each run a match frame loop before anything built on it
+(`e2e-online/fourPages.spec.ts`: four local matches on stand-ins, 20 s, bar 600 frames, which is
+30 a second, the relay's rate and the least that plays). The first run's four deltas were 1,193,
+1,191, 1,193 and 1,192 frames, about 60 a second a page, twice the bar. Every other run the
+reports quote fell between 1,183 and 1,202 (the bar-6,000 mutant's 1,183-1,185, the fix round's
+1,197-1,198, Task 17's three runs at 1,194-1,202). Every run was at a 1-minute machine load above
+6 (about 11 to 25 in the four-page windows; the first at 11 to 16), which can only lower a frame
+count, so the figures are conservative; none was taken on a quiet machine. The three Chromium
+flags the plan held in reserve (`--disable-renderer-backgrounding`,
+`--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`) were not
+needed and were not added. The counter is the simulation's own, which catches up by at most 5
+frames per animation frame (`MAX_CATCHUP_FRAMES`), so the spike proves the simulation keeps pace
+on four pages, not that each paints 30 times a second.
+
+*The online e2e* (Tasks 14, 15 and 17). The suite is 11 tests: Phase A's six (the full-room one
+now turns a fifth browser away from four, "Room ABCD already has four players.", with the host
+still in its lobby), the spike, the phone tests for three seats and four, and two four-browser
+tests. Every context routes `/models/` to 404, so only stand-ins are drawn and no real model is
+captured:
+- *Four browsers play a match through the relay.* All four reach frame 180 within one 60 s
+  window; on each page the route is `relay`, `peers` is 3, `desyncs` is 0, the port equals the
+  seat, and the HUD line ends `· RELAY`; the host has compared hashes; and guest 3 (port 3), on a
+  page brought to the front, holds a key and its fighter moves on the host's screen.
+- *One of four closing their tab ends the match for the other three.* The three results pages
+  read "Connection Lost" less than 8 s after the close, not just within the 14 s bound: either
+  10 s watchdog would meet 14 s, so with the room's `peer-left` dead the old bound still passed
+  (the mutant ended at 10,260 ms), and 8 s is what only the `peer-left` can give. The test took
+  6.4 s in all.
+The hello-refusal e2e changed with the build check: the host stays, with its notice.
+At Task 17's end the online suite passed 11/11 (load 7 to 27), and the unit suite 8,843 passed and
+10 skipped at `--testTimeout=30000` (load 10.9), each load above 6, so by the plan's own rule
+neither is a counting pass; the controller's gate before the push runs again.
+
+*The budget.* The Phase A facts above stand. An 8-minute relayed match of four players at 30
+messages a second costs about 2,884 requests (480 s x 30 x 4 players / 20, plus one request per
+socket's upgrade; derived from the quoted lines, not measured), so the day's 100,000 allow about
+34 of them against about 69 for two players. A frame from one player is delivered to three
+others, which costs nothing: outgoing messages are free. A four-player room always spends budget,
+where a two-player room spends it only when it falls back. Duration does not bind first
+(UNVERIFIED, like the Phase A figure): one object serves the four sockets, so a four-player match
+holds it awake for as long as a two-player one. The per-socket caps are unchanged, so a
+four-player relayed match left running is cut at the hour at about 21,600 requests (four sockets
+at 5,400), about a fifth of the day (derived). The deploy checkpoint measures the bill of one
+four-player match against the 2,884.
+
+**The Phase B rulings.** Made by the controller on David's behalf (his "go A then B, defaults and
+recommendations work", 2026-11-04), each with its cost if wrong; the plan's own rulings, which he
+may overrule, are in "For David" below.
+- *The pre-flight's fixes were all applied before Task 1.* One blocker and eleven Important
+  findings (the Minors too). The blocker: in a relayed room nobody said hello to a newcomer, so
+  a joining guest timed out and left with the version sentence (and a build from before the
+  handshake would have held the Start forever); the fix is the addressed hello and a per-seat
+  host timer that refuses that seat alone. The others: the roster lock at the begin (a stranger
+  typing the code into a begun room would otherwise end a running match); port-prefixed ping
+  tokens (a star's Pongs collide otherwise); `host-left` and an emptied seat only while no match
+  is out; the lobby renders the notice, and a refused seat's mismatch notice survives its leave;
+  the play page's own-port read moves to Task 14. Cost if wrong: a few extra lines and tests per
+  task.
+- *The split-route race at the Start: whoever moves the room to the relay tells* (Task 12 review,
+  I-1). The plan had a third player move the room "without any message", each member seeing the
+  same joins. That fails across the roster lock: the host locks as it sends the begin and a guest
+  as it receives it, so a stranger seated between the two moves a guest that has not locked yet
+  (it counts three seated players) and not the host that has (the stranger is not a player). The
+  guest relays and the host stays direct: a dead room, with the match never reaching a frame.
+  Ruled: a side moved by a join tells the room (`use-relay`), and a side that has not started
+  follows a `use-relay` from a seated roster player even after its own lock. One rule closes it
+  wherever each side put its lock. A newcomer welcomed into three seats still moves without a
+  word, since the members it joins tell. Cost if wrong: one duplicate `use-relay` per room that
+  reaches three seats, which a side already relayed ignores. Pinned in `session.test.ts` ("brings
+  a host that locked its roster to the relay when a guest that had not yet locked moved for a
+  third seat"). This reverses the plan's "For David" 7 below.
+- *Strangers can't move or start a room* (Task 12 review, M1). The `use-relay` filter and the
+  port-0 filter on `start` (above) came out of the same review: before them a stranger's
+  `use-relay` could move a begun room and its `start` could make a guest hold for a match that
+  never came. Cost if wrong: none seen; a real start comes from port 0 and a real `use-relay`
+  from a seated roster player.
+- *The host's relayed hello timeout* (Task 13, the implementer's ruling, accepted). The brief
+  refuses a seat alone when its wait runs out; Phase A fails a relayed room as `link-failed` when
+  nothing at all has been heard. They combine: the host fails the whole room as `link-failed`
+  only when no seat has said anything since the link opened (today's two-player behaviour, and the
+  Phase A test is unchanged); once any seat has been heard the relay works and the silent seat is
+  refused alone. A guest keeps its one wait on the host. Cost if wrong: a room of three or four
+  whose every guest is silent closes, instead of idling on its first five seconds.
+- *A silent seat is "didn't answer", not an engine mismatch* (Task 13 review, I-2; the plan's
+  copy only covered a build mismatch). The refused seat's tab shows the existing link-failed
+  sentence, and the host's notice is "P{n} didn't answer, so they can't play in this room." Why:
+  Phase A's split (silence is a tab that cannot run, not another build) applies per seat; telling
+  a player with a backgrounded phone that their build differs sends them to reload for nothing.
+  A seat that talked without a hello is still refused as another build. Cost if wrong: one new
+  string.
+- *Phones are supported for three and four players* (Task 15 review, I-1). The plan's e2e already
+  treated a phone as supported for two, so three and four got compact panels below `sm`, pinned
+  by the 390 x 844 e2e. Cost if wrong: online panels read smaller on a phone; desktop and offline
+  are unchanged, and touch controls stay out of scope (SPEC section 12).
+- *A player gone before the match loads ends it at once* (Task 16, the implementer's concern,
+  ruled). The first version ended it only after the 10 s silence timeout when the leave came
+  during the model wait; Review Focus 2 says Connection Lost at once. Cost if wrong: none for a
+  match that could have been played, since a started match never reconnects and any leave ends it.
+- *Per-peer entries outlive a leaver* (Task 10 review, M3). A leaver's round-trip, advantage and
+  hash entries are kept, not deleted: any leave ends the match, and deleting would change the
+  two-player HUD's last ping. Cost if wrong: it matters only if Phase B is ever changed to let a
+  match outlive a peer.
+- *The spike passes, and Task 17 keeps the 600 bar* (Task 8). A twofold margin at a load above 6
+  is conservative, since load only lowers frames, so no launch flags and no lower bar. Cost if
+  wrong: Task 17's tests flake on a quiet machine, which is implausible.
+- *The waiting room's copy* (Task 14 review). Phase A's step lines
+  ("Connecting through the relay…" and its neighbours) stay until a seat is ready, then "Waiting
+  for every player to be ready…" shows: Phase A's pins conflicted with the plan's copy read
+  literally. The Start button is hidden with nobody in, and the code panel stays. Cost if wrong:
+  a changed line of copy.
+- *The legacy `welcome.peer` field is kept for one release* (Task 9 review, M1). See the deploy
+  note below. Cost if wrong: one field the readers ignore, to drop after Plan 7.
+
+**Behaviour worth knowing.**
+- *A stale tab from before the deploy* is told to reload at the hello rather than left waiting on
+  a welcome it cannot read (the deploy note).
+- *Each side's event order differs by route* (Phase A) still holds, and nothing reads `status`
+  inside a join or leave.
+- *The wrangler line "Uncaught Error: Network connection lost"* that follows the relay test is
+  workerd logging a refused socket's hang-up, as D59 found for the full-room test; the Durable
+  Object does not throw (Task 9 checked, no change).
+- *A hidden tab in a room of four* says `away` to the others; on each other player's screen only
+  the watchdog for that hidden player waits the minute, and the rest keep the ten seconds.
+
+**Deploy note (Phase B).** Deploying Phase B ends every relayed match in progress, which from
+now on is every match of three or four players as well as any two-player match that fell back;
+direct two-player matches keep playing, as they do through any deploy (D54). The room's welcome
+changes shape (`{self, peers}`, with a port on each player), and that is transition-safe: the
+room still sends the old `peer` field for one release (the first other player seated, or null),
+so a tab opened before the deploy parses its welcome, reaches the hello, and is told its build
+differs and to reload, where it would otherwise wait on a welcome it cannot parse. That tab and
+a Phase B tab refuse each other at the build check, as every pair of builds does. The field is
+read by nobody now and goes after Plan 7: it is typed on `ServerMessage`'s welcome in
+`signalProtocol.ts` and written by `decideJoin` in `worker/src/room.ts`. Nothing else crosses the
+deploy: the packets, `step()`, the engine version and the protocol version are unchanged.
+
+**Rejected** (Phase B).
+- *A WebRTC mesh for three or four.* It is six links for four players, one blocked pair blocks
+  the room, and each blocked pair would still need the relay.
+- *A host-forwarded star.* The host would relay everyone's packets: it breaks per-sender
+  bookkeeping (the stamp, the per-peer hashes and advantage) and puts every player's upload on
+  the host's connection.
+- *Continuing without a departed player.* It needs every machine to agree on the frame at which
+  a port turns neutral, a consensus the rollback session has no machinery for.
+
+**Residual risks** (Phase B).
+- *The four-player budget*, above. The first live figure for it is the deploy checkpoint's.
+- *The spike and the e2e ran on stand-ins at a loaded machine,* one machine, one network. A
+  four-player match on four real networks, and its input delay on the relay, are the live suite's
+  first measurement.
+- *Spectators, CPU players in online rooms and more than four online* are out of scope (SPEC
+  section 12), not rejected options.
+
+**For David** (Phase B). Each item is a decision the plan made that is yours to overrule.
+1. *The relay is sticky for the room.* Once a room relays, a newcomer to it relays too, even if
+   their network could go direct, and a room that once seated three stays on the relay. It is
+   simpler, and costs budget only for that room.
+2. *A host leaving closes the room for its guests* (`host-left`). Before, a guest could wait for
+   a new host to take the code, which only someone typing the same code could do.
+3. *One guest on another build no longer closes a two-player room on the host's side.* The host
+   stays, with a notice, and the guest leaves with the sentence it always had.
+4. *Every Worker deploy ends relayed matches in progress*, which is every match of three or four.
+5. *Two-player rooms now need the host's Start too.* The lobby moves on at the Start, not as soon
+   as the other player is connected.
+6. *Seats are renumbered at the Start.* If a seat emptied before it, the Start compacts the seats
+   to match ports `0..n-1`, so a player can play on a different port, and a different colour,
+   than their waiting-room seat. Without a gap they are equal.
+7. *A room that seats a third player moves to the relay.* The plan said every member would see
+   the same joins and move on its own, with no message, and that only the host tells a later
+   newcomer. The first half is reversed (see "whoever moves the room to the relay tells"): the
+   side a join moves also tells the room. A later newcomer is still told by the host alone.
+8. *Phase B is not deployed by this entry.* The deploy is the controller's, on your go (the scope
+   you approved named it), and then the live online suite runs with `SMASH_URL`, the four-browser
+   tests included; its figures are added to this entry.

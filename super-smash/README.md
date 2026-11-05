@@ -41,14 +41,14 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/render3d`](src/render3d) | The 3D world (three.js): the side camera, the stage, the models posed by the clips, sparks and shields, and the bone bake |
 | [`scripts/models`](scripts/models) | `pnpm models`: fetch, export and check the fighter models; only their hashes and bone numbers are committed |
 | [`docs/character-art.md`](docs/character-art.md) | How a fighter is drawn — the model pipeline, the retarget rule, the bake — and the gotchas |
-| [`src/net`](src/net) | Rollback session, wire format, four transports, and the online lobby |
-| [`worker`](worker) | The Cloudflare Worker: static assets, a Durable Object per room (signalling, and the relay when no direct link opens), and TURN credentials if a key is ever set |
+| [`src/net`](src/net) | Rollback session (for up to four peers), wire format, four transports, and the online lobby: a waiting room for up to four players, and the room relay's client |
+| [`worker`](worker) | The Cloudflare Worker: static assets, a Durable Object per room (it seats up to four players by port, relays signalling, and relays the match itself for rooms of three or four and for a pair with no direct link), and TURN credentials if a key is ever set |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
 | [`src/input`](src/input) | Three control schemes and the latched keyboard reader |
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
-| [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against a local Worker that never reloads (`scripts/e2e/wrangler-e2e.mjs`) or the deployed Worker; one test blocks the direct link and plays a match to a result through the room's relay |
+| [`e2e-online`](e2e-online) | Two to four browsers in one room, against a local Worker that never reloads (`scripts/e2e/wrangler-e2e.mjs`) or the deployed Worker; one test blocks the direct link and plays a match to a result through the room's relay, one plays a four-browser match through it and checks that one player leaving ends it for the rest, and one proves four pages can run a match at once |
 | [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame, with the sim's hit- and hurtboxes |
 | [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — projectile, hit spark, the opponent flinching — by cranking a paused match by hand |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
@@ -74,9 +74,12 @@ browser." Online, the lobby asks before it creates or joins a room and refuses i
 words, so the other player is never left waiting on a match this browser cannot draw.
 
 Online play needs the Worker as well: `pnpm preview` builds the static export and serves it
-with the Worker on <http://localhost:8787>. Open it in two browsers, then Online → Create room in
-one and Join room in the other. If the two browsers cannot open a direct link (some networks block
-it), the match goes through the room instead, and the lobby says "Connecting through the relay…".
+with the Worker on <http://localhost:8787>. Open it in two browsers (up to four), then Online →
+Create room in one and Join room in the others. The host sees who has joined in a waiting room and
+presses Start once everyone is in and on the same build. Two players try a direct link first; if
+their browsers cannot open one (some networks block it), the match goes through the room instead,
+and the lobby says "Connecting through the relay…". Three or four players always go through the
+room.
 
 | Command | What it does |
 |---|---|
@@ -87,7 +90,7 @@ it), the match goes through the room instead, and the lobby says "Connecting thr
 | `pnpm run test:watch` | The same, watching |
 | `pnpm run test:e2e` | Playwright end-to-end |
 | `pnpm run test:e2e:ui` | The same, with the inspector |
-| `pnpm run test:e2e:online` | Two browsers play an online match against a local Worker started with wrangler's dev API, watching off |
+| `pnpm run test:e2e:online` | Two to four browsers play online matches against a local Worker started with wrangler's dev API, watching off |
 | `pnpm run typecheck` | `tsc --noEmit` for the app and for the Worker |
 | `pnpm run lint` | ESLint |
 | `pnpm run deploy` | `models:check`, build and `wrangler deploy` (David's Cloudflare login) |
@@ -240,7 +243,7 @@ The analog stick restores what keys cannot: a partial tilt walks, makes a tilt i
 and DIs a quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 
 **Stick Jump can be turned off, per player** (`/controls`), as in Ultimate: then up only aims,
-and only the jump key jumps. It travels with the match, and online to the other peer.
+and only the jump key jumps. It travels with the match, and online to the other players.
 
 **A gamepad's buttons are rebindable too.** On `/controls`, click an action and press the pad
 button for it; the button leaves whatever it did before, and an action left with no button
@@ -318,22 +321,29 @@ air dodges and the rest — and where no source settles one, the code says `UNVE
 
 ## Multiplayer
 
-Rollback netcode, over WebRTC, with **2 frames of input delay** to start (adapting up to 8 from
-the measured round trip) and an 8-frame prediction cap. Your own input is never delayed by the
-network; the opponent's is predicted and corrected. Smash Ultimate itself is delay-based, so
+Rollback netcode, over WebRTC or through the room's relay, with **2 frames of input delay** to
+start (adapting up to 8 from the measured round trip, the slowest player's with more than two)
+and an 8-frame prediction cap. Your own input is never delayed by the network; the others' are
+predicted and corrected. Smash Ultimate itself is delay-based, so
 this is the one axis on which the replica is deliberately better than the original.
 
 **Finding each other.** Online → Create room gives a four-letter code (no I or O), with a Copy
-button beside it and a line saying how the other player joins (open the site, choose Online, type
-the code); the other player types it into Join room. The two browsers meet in a Durable Object
-on this project's own Cloudflare Worker, which relays one WebRTC offer, one answer and their ICE
-candidates — and then nothing: inputs go peer to peer over one unordered, unreliable
-DataChannel. The host picks the stage and starts; ping, input delay and rollbacks show in the corner. Where no direct path
-exists, the room's Durable Object carries the packets instead, over the same room socket: both
-sides agree through the room after the direct attempt's 15 s deadline, and the corner says
-`RELAY` rather than `DIRECT` ([D60](DECISIONS.md#d60--no-turn-the-room-relays-the-match-and-rooms-hold-four)).
-The room forwards each message without reading it, and a relayed match ends if the room socket
-drops. There is no TURN server: the Worker hands out STUN, and Cloudflare TURN credentials only if
+button beside it and a line saying how the other players join (open the site, choose Online, type
+the code); up to three others type it into Join room. The browsers meet in a Durable Object on
+this project's own Cloudflare Worker, which seats each player on a port (the host is port 0),
+lists them in a waiting room, and relays one WebRTC offer, one answer and their ICE candidates.
+For two players it then does nothing more: inputs go peer to peer over one unordered, unreliable
+DataChannel. The host presses Start once at least one other player is in and everyone is on the
+same build, then picks the stage while each player picks their own fighter; ping (the worst
+player's), input delay and rollbacks show in the corner. Where no direct path exists, the room's
+Durable Object carries the packets instead, over the same room socket: for two players both sides
+agree through the room after the direct attempt's 15 s deadline, and a room of three or four
+always goes through it from the start, a star through the room with no mesh of direct links. The
+corner says `RELAY` rather than `DIRECT`
+([D60](DECISIONS.md#d60--no-turn-the-room-relays-the-match-and-rooms-hold-four)). The room
+forwards each message without reading it, and a relayed match ends if the room socket drops. In a
+match of three or four, any one player leaving or going silent ends it for everyone, as
+Connection Lost. There is no TURN server: the Worker hands out STUN, and Cloudflare TURN credentials only if
 a TURN key is ever set. The Trystero (Nostr) adapter is still in `src/net/adapters/webrtc.ts`, selectable in code.
 
 **Shared WiFi needs no code.** ICE gathers host candidates for every local interface, and
@@ -375,7 +385,7 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 | `wrangler.jsonc` | Worker `david-smash`: serves `out/`, runs first only for `/api/*` and `/ws/*` |
 | `GET /api/ice` | Mints 1-hour Cloudflare TURN credentials for pages on this site; STUN-only without the two secrets |
 | `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets; fails open |
-| `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, 2 peers, no timers |
+| `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, up to 4 peers, no timers |
 
 **Before a deploy**, in this order:
 
@@ -415,8 +425,8 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 `pnpm run deploy` needs `wrangler login` on David's account. The TURN secrets are optional now
 (D60: the room relays when no direct link opens); if a key is ever set, it goes in with
 `wrangler secret put` (see `.env.example`). A deploy restarts every room, which drops lobby
-sockets and relayed matches, but not matches in progress over a direct link — those are peer to
-peer. Each build is stamped with an id that online players compare, so two different
+sockets and relayed matches (every match of three or four, and a pair that fell back), but not
+matches in progress over a direct link — those are peer to peer. Each build is stamped with an id that online players compare, so two different
 deploys refuse each other in the lobby: the commit, plus a hash of any uncommitted changes in
 `super-smash/`. Set `BUILD_ID` to name a build yourself; a build with no git checkout must set
 it (`BUILD_ID=dev` only on purpose, since every such build would pair with every other). The id
@@ -427,9 +437,9 @@ fails closed: if git cannot say what the uncommitted changes are, a production b
 
 ## Known gaps
 
-1. **Online is two players, one match at a time.** A room holds two peers; four-player online,
-   spectating and an online rematch are not built — after a match, Play online again takes both
-   players back through the lobby to a new room. KO/fall/SD credit on an online results screen
+1. **Online is up to four players, one match at a time.** A room holds up to four peers;
+   spectating, CPU players in online rooms and an online rematch are not built — after a match,
+   Play online again takes every player back through the lobby to a new room. KO/fall/SD credit on an online results screen
    can be off after a rollback that changed a hit; the placings are always right
    ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 2. **Fighters have no walk initial velocity.** Ultimate gives each fighter a small starting

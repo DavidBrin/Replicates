@@ -5,7 +5,7 @@ Seven implementation plans turn the `super-smash` replica into **David-Smash**: 
 - **Why:** `../specs/2026-10-24-david-smash-design.md` (requirements, David's decisions).
 - **Evidence:** `../../../research/rebuild-2026-10/README.md` (repo analysis, physics gap table, compute budget, hosting comparison).
 
-**Status: Plans 1-6 are executed and deployed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plan 6 was deployed on 2026-11-03 (rules version 6). **Plan 7 Phase A is executed and deployed** (the relay fallback, D60; deployed 2026-11-04). Phase B (three and four players) is being executed.
+**Status: Plans 1-6 are executed and deployed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plan 6 was deployed on 2026-11-03 (rules version 6). **Plan 7 is executed** (D60): Phase A (the relay fallback) was deployed on 2026-11-04, and Phase B (three and four players) is built and waits for its deploy, which stops for David.
 
 ## Order
 
@@ -19,9 +19,9 @@ Run the plans strictly in this order. Each plan is written against the code the 
 | 4 | [3D renderer](2026-10-24-plan-4-3d-renderer.md) | 23 | D57 | three.js renderer with SSBU models (fetched locally, never committed), clips retargeted, bones baked into integer tables, per-bone hurtboxes, SSBU sizes, and 50 limb-bone slots live (53 planned; D57) |
 | 5 | [Specials, Final Smash, CPU, controls](2026-10-24-plan-5-specials-final-smash-cpu.md) | 23 | D58 | Charge-on-B, Reflector, Cape, Counter, F.L.U.D.D., Cargo Carry, Inhale/Copy, wall jump, footstool, crawl, throws/pummels and smash attacks on their scripts, eight Final Smashes with the Smash Ball, a CPU that techs, escapes, parries and uses specials, Stick Jump and gamepad remap |
 | 6 | [Polish](2026-11-02-plan-6-polish.md) | 42 | D59 | Input never dropped online, the flick's rules, reverse smash, edge slip, air grab, Final Smash records, slowdown and boosts, Thunder Jolt walls, a smarter CPU Final Smash, the online screens, press-to-join, sounds, 3D stage and fighter polish, authored carry and release motions, model portraits, a settled online e2e |
-| 7 | [Relay and four-player online](2026-11-04-plan-7-relay-and-four-player-online.md) | 18 | D60 | Players whose networks block a direct link play through the room's Durable Object (Phase A, deployed on its own first), then rooms hold up to four players online, all through that relay (Phase B). No TURN: David has no payment card |
+| 7 | [Relay and four-player online](2026-11-04-plan-7-relay-and-four-player-online.md) | 18 | D60 | Players whose networks block a direct link play through the room's Durable Object (Phase A, deployed on its own first), then rooms hold up to four players online (Phase B): a waiting room where the host starts once everyone is in and on the same build, a port for each seat, each player's own pick, rollback that compares, advances and delays per peer, and any one player leaving ending the match for all. Three or four players always play through the relay, a star with no mesh. No TURN: David has no payment card |
 
-`ENGINE_RULES_VERSION` goes 3 (Plan 3) → 4 (Plan 4) → 5 (Plan 5) → 6 (Plan 6). Online peers on different versions refuse to play each other, so both players must reload after a deploy.
+`ENGINE_RULES_VERSION` goes 3 (Plan 3) → 4 (Plan 4) → 5 (Plan 5) → 6 (Plan 6), and Plan 7 leaves it at 6. Online peers on different versions refuse to play each other, so every player must reload after a deploy.
 
 ## Steps that stop for David
 
@@ -37,7 +37,8 @@ Every outward or installing step says **STOP: ask David for go** and waits for a
 | 4 / 23 | Deploy the 3D build. |
 | 5 / 23 | Deploy the finished game (rules version 5) |
 | 6 / 42 | Deploy (rules version 6), on David's go: deployed 2026-11-03 |
-| 7 / Deploy checkpoint | Deploy the relay fallback (Phase A; rules version 6 and protocol 2 unchanged), on David's go. Then the live online e2e, and the measured delay and cost go into D60. Phase B starts only after it |
+| 7 / Deploy checkpoint | Deploy the relay fallback (Phase A; rules version 6 and protocol 2 unchanged), on David's go. Then the live online e2e, and the measured delay and cost go into D60. Phase B starts only after it. Deployed 2026-11-04 |
+| 7 / after 18 | Deploy Phase B (rules version 6 and protocol 2 unchanged), on David's go. It ends relayed matches in progress, and the room's welcome keeps its old field for one release so a tab from before the deploy is told to reload. Then the live online suite with `SMASH_URL`, the four-browser tests included, and the live figures go into D60 |
 
 Plans 2 and 3 do not deploy. Their changes go live with the next deploy David approves.
 

@@ -38,8 +38,9 @@ reasoning live in [`DECISIONS.md`](DECISIONS.md); the evidence behind them is in
 ## 2. Scope
 
 **In:** the Smash mode — a stock or timed brawl between 2–4 humans and CPUs, on a legal
-stage, with Final Smashes via the Smash Ball. This is the mode that has carried across
-every game in the series and is the one nearly everybody plays.
+stage, with Final Smashes via the Smash Ball; and online, two to four players, one per
+machine, through a room code. This is the mode that has carried across every game in the
+series and is the one nearly everybody plays.
 
 **Out, deliberately:** Spirits, World of Light, Classic Mode, Squad Strike, Tourney,
 Home-Run Contest, amiibo, challenges, the Vault, unlockables, and **every item except the
@@ -394,7 +395,8 @@ Load-bearing details, all from the reference screenshots:
 ## 12. Out of scope
 
 Spirits, items other than the Smash Ball, World of Light, Classic Mode, online
-matchmaking or ranking, replays, stage builder, amiibo, unlockables, Mii fighters, echo
+matchmaking or ranking, CPU players and spectators in online rooms, more than four
+online, replays, stage builder, amiibo, unlockables, Mii fighters, echo
 fighters, stage hazards, a TURN server of our own (D60: the room relays instead), and touch
 controls. The last is not an oversight: every control
 in §6 is a physical key, and a phone has none.
