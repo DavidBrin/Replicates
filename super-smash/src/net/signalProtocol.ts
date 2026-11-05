@@ -1,5 +1,5 @@
 /**
- * The JSON a room's Durable Object relays between two browsers.
+ * The JSON a room's Durable Object relays between the browsers in it.
  *
  * Compiled twice — into the Worker (worker/tsconfig.json) and into the app —
  * so it imports nothing and touches no DOM type. The room understands only the
@@ -137,8 +137,21 @@ export type ClientMessage =
   | { readonly t: "lobby"; readonly payload: OpaquePayload; readonly to?: string };
 
 export type ServerMessage =
-  /** `peers`: the others already seated, sorted by port. */
-  | { readonly t: "welcome"; readonly self: PeerInfo; readonly peers: readonly PeerInfo[] }
+  /**
+   * `peers`: the others already seated, sorted by port.
+   *
+   * `peer` is the welcome of the two-player room, which a tab opened before
+   * this release still reads: the room sends it for one release, so that tab
+   * gets its welcome and reaches the hello, which tells it to reload, instead
+   * of waiting for a welcome it cannot parse. It is a transition field: this
+   * reader ignores it, and it goes after Plan 7.
+   */
+  | {
+      readonly t: "welcome";
+      readonly self: PeerInfo;
+      readonly peers: readonly PeerInfo[];
+      readonly peer?: PeerInfo | null;
+    }
   | { readonly t: "peer-joined"; readonly peer: PeerInfo }
   | { readonly t: "peer-left"; readonly peerId: string }
   | { readonly t: "signal"; readonly from: string; readonly payload: SignalPayload }

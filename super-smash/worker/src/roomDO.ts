@@ -14,7 +14,8 @@ import {
 } from "./room";
 
 /**
- * One room: at most two sockets, and a pipe between them.
+ * One room: up to `ROOM_CAPACITY` sockets, and a pipe between them. A message
+ * goes to the one peer it is addressed to, or to every other peer.
  *
  * Every rule lives in ./room.ts as a pure function; this class only maps those
  * decisions onto sockets. It uses the WebSocket Hibernation API
@@ -61,7 +62,7 @@ export class RoomDO extends DurableObject<Env> {
       // Accepted only long enough to say why: a browser cannot read the HTTP
       // status of a refused upgrade, only a close code. Plain accept(), not
       // acceptWebSocket(): the socket never appears in getWebSockets(), carries
-      // no attachment, and its close never reaches webSocketClose, so the two
+      // no attachment, and its close never reaches webSocketClose, so the
       // peers inside never hear of it. (wrangler dev logs "Network connection
       // lost" when such a socket hangs up; a hibernatable one closed before the
       // 101 instead held the client's close event for ~10 s.)

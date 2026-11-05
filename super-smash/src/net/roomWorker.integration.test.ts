@@ -60,17 +60,22 @@ function connect(code: string, intent: RoomIntent): Client {
   };
 }
 
-describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
+// Its own waits (a `next` is up to 5 s, and a test makes several) can add up to more than vitest's
+// 5 s default, which would fail a slow but correct room with a bare timeout rather than the helper's
+// "no X within 5 s; saw ...".
+describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", { timeout: 20_000 }, () => {
   it("admits a host and a guest, relays between them, and turns a third away", async () => {
     const code = makeRoomCode();
     const host = connect(code, "create");
     const hostWelcome = await host.next("welcome");
-    expect(hostWelcome).toMatchObject({ self: { role: "host", port: 0 }, peers: [] });
+    // `peer` is the old welcome's field, still sent for one release (room.ts), so a stale tab reaches the build check.
+    expect(hostWelcome).toMatchObject({ self: { role: "host", port: 0 }, peers: [], peer: null });
     const guest = connect(code, "join");
     const guestWelcome = await guest.next("welcome");
     expect(guestWelcome).toMatchObject({
       self: { role: "guest", port: 1 },
       peers: [{ id: (hostWelcome.self as { id: string }).id, role: "host", port: 0 }],
+      peer: { id: (hostWelcome.self as { id: string }).id, role: "host", port: 0 },
     });
     expect(await host.next("peer-joined")).toMatchObject({ peer: { role: "guest", port: 1 } });
 

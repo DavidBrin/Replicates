@@ -35,7 +35,7 @@ describe("joining a room", () => {
     expect(decideJoin([], "create", "h1")).toEqual({
       type: "admit",
       peer: host,
-      welcome: { t: "welcome", self: host, peers: [] },
+      welcome: { t: "welcome", self: host, peers: [], peer: null },
       notify: [],
     });
   });
@@ -44,7 +44,7 @@ describe("joining a room", () => {
     expect(decideJoin([host], "join", "g1")).toEqual({
       type: "admit",
       peer: guest,
-      welcome: { t: "welcome", self: guest, peers: [host] },
+      welcome: { t: "welcome", self: guest, peers: [host], peer: host },
       notify: [{ to: "h1", message: { t: "peer-joined", peer: guest } }],
     });
   });
@@ -80,6 +80,7 @@ describe("joining a room", () => {
       t: "welcome",
       self: { id: "x1", role: "guest", port: 3 },
       peers: [host, guest, third],
+      peer: host,
     });
   });
 
@@ -91,6 +92,39 @@ describe("joining a room", () => {
       { to: "g1", message: { t: "peer-joined", peer: newcomer } },
       { to: "t1", message: { t: "peer-joined", peer: newcomer } },
     ]);
+  });
+
+  /**
+   * A tab opened before this release reads a welcome as `{ self, peer }` and
+   * drops one without a `peer` it understands, so it would wait on "Connecting
+   * to room ABCD..." for good. Sent the old field it reaches the hello, which
+   * refuses it with the build-mismatch notice. Drop this with the field, after Plan 7.
+   */
+  it("also sends the old welcome's peer field, so a tab from before this release reaches the build check", () => {
+    // What the previous release's parser needed of a welcome (signalProtocol.ts at 34c0788).
+    const isPeer = (p: unknown): boolean =>
+      typeof p === "object" &&
+      p !== null &&
+      typeof (p as { id?: unknown }).id === "string" &&
+      ((p as { role?: unknown }).role === "host" || (p as { role?: unknown }).role === "guest");
+    const oldReaderAccepts = (w: object): boolean => {
+      const { self, peer } = w as { self?: unknown; peer?: unknown };
+      return isPeer(self) && (peer === null || isPeer(peer));
+    };
+    const welcomeOf = (existing: readonly PeerInfo[], capacity?: number): object => {
+      const decision = decideJoin(existing, existing.length === 0 ? "create" : "join", "x1", capacity);
+      if (decision.type !== "admit") throw new Error("refused");
+      return decision.welcome;
+    };
+
+    const creator = welcomeOf([]);
+    expect(creator).toMatchObject({ peer: null });
+    expect(oldReaderAccepts(creator)).toBe(true);
+    const joiner = welcomeOf([host]);
+    expect(joiner).toMatchObject({ peer: host });
+    expect(oldReaderAccepts(joiner)).toBe(true);
+    // With more seated than the old room could hold, the old field is the first of the new list.
+    expect(welcomeOf([third, guest, host], 4)).toMatchObject({ peer: host });
   });
 
   it("turns a third peer away with 'full' and leaves the two alone", () => {

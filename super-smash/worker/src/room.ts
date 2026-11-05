@@ -86,7 +86,8 @@ export function decideJoin(
   return {
     type: "admit",
     peer,
-    welcome: { t: "welcome", self: peer, peers: others },
+    // `peer` is the old welcome's field, for the tabs of the release before this one (see ServerMessage).
+    welcome: { t: "welcome", self: peer, peers: others, peer: others[0] ?? null },
     notify: others.map((other) => ({ to: other.id, message: { t: "peer-joined", peer } })),
   };
 }
