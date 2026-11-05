@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import { parseIceResponse } from "./iceConfig";
 import { makeRoomCode } from "./roomCode";
-import { RELAY_BURST, RELAY_ID_BYTES, RELAY_RATE_PER_SECOND, ROOM_CLOSE_CODES, type RoomIntent } from "./signalProtocol";
+import {
+  MAX_MESSAGES_PER_PEER,
+  RELAY_BURST,
+  RELAY_ID_BYTES,
+  RELAY_KICK_DROPS,
+  RELAY_RATE_PER_SECOND,
+  ROOM_CLOSE_CODES,
+  type RoomIntent,
+} from "./signalProtocol";
 
 /**
  * Against a running Worker — `pnpm preview` locally, or the deployed URL.
@@ -83,9 +91,19 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
     await host.next("peer-joined");
 
     // Past MAX_MESSAGES_PER_PEER (2000) on purpose: game data is not signalling.
+    // Sent in batches that each overrun the rate cap, but by less than
+    // RELAY_KICK_DROPS, with a pause long enough for the bucket to refill to
+    // full between them, so the drops are forgotten and nothing is kicked.
     const body = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    const batch = RELAY_BURST + RELAY_KICK_DROPS / 2;
+    const refillMs = (RELAY_BURST / RELAY_RATE_PER_SECOND) * 1000 + 1000;
     const startedAt = Date.now();
-    for (let i = 0; i < 2100; i++) host.sendBinary(body);
+    let sent = 0;
+    while (sent <= MAX_MESSAGES_PER_PEER) {
+      if (sent > 0) await new Promise((resolve) => setTimeout(resolve, refillMs));
+      for (let i = 0; i < batch; i++) host.sendBinary(body);
+      sent += batch;
+    }
     for (let waited = 0; waited < 5000 && guest.games.length === 0; waited += 25) {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
@@ -114,6 +132,25 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
 
     guest.close();
     host.close();
+  }, 45_000);
+
+  it("closes a socket that floods the relay with too-many-messages, and tells the other peer it left", async () => {
+    const code = makeRoomCode();
+    const host = connect(code, "create");
+    const hostWelcome = await host.next("welcome");
+    const guest = connect(code, "join");
+    await guest.next("welcome");
+    await host.next("peer-joined");
+
+    // Twice what a full bucket forwards and drops before the kick, so a slow
+    // machine's refill during the burst cannot save it.
+    const body = new Uint8Array([1, 2, 3]);
+    for (let i = 0; i < 2 * (RELAY_BURST + RELAY_KICK_DROPS); i++) host.sendBinary(body);
+    expect(await host.next("error")).toEqual({ t: "error", reason: "too-many-messages" });
+    expect(await host.closed).toBe(ROOM_CLOSE_CODES["too-many-messages"]);
+    expect(await guest.next("peer-left")).toEqual({ t: "peer-left", peerId: (hostWelcome.self as { id: string }).id });
+
+    guest.close();
   });
 
   it("tells a mistyped code there is no such room", async () => {

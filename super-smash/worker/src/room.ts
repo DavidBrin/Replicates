@@ -12,6 +12,7 @@ import {
   MAX_MESSAGES_PER_PEER,
   RELAY_BURST,
   RELAY_ID_BYTES,
+  RELAY_KICK_DROPS,
   RELAY_MAX_FRAME_BYTES,
   RELAY_RATE_PER_SECOND,
   ROOM_CLOSE_CODES,
@@ -90,10 +91,12 @@ export function relay(from: PeerAttachment, raw: string | ArrayBuffer, peers: re
 export interface RelayBucket {
   tokens: number;
   atMs: number;
+  /** Frames dropped over the rate since the bucket was last full (RELAY_KICK_DROPS). */
+  dropped: number;
 }
 
 export function newRelayBucket(nowMs: number): RelayBucket {
-  return { tokens: RELAY_BURST, atMs: nowMs };
+  return { tokens: RELAY_BURST, atMs: nowMs, dropped: 0 };
 }
 
 /** A peer id as the bytes the relay prefixes onto its frames. */
@@ -123,7 +126,13 @@ export function relayGameFrame(
   if (payload.byteLength > RELAY_MAX_FRAME_BYTES) return { type: "kick", ...refusal("bad-message") };
   bucket.tokens = Math.min(RELAY_BURST, bucket.tokens + ((nowMs - bucket.atMs) * RELAY_RATE_PER_SECOND) / 1000);
   bucket.atMs = nowMs;
-  if (bucket.tokens < 1) return { type: "drop" };
+  if (bucket.tokens >= RELAY_BURST) bucket.dropped = 0;
+  if (bucket.tokens < 1) {
+    // A dropped frame was still billed, so a socket that keeps sending over the rate is closed.
+    if (bucket.dropped >= RELAY_KICK_DROPS) return { type: "kick", ...refusal("too-many-messages") };
+    bucket.dropped += 1;
+    return { type: "drop" };
+  }
   bucket.tokens -= 1;
   const frame = new Uint8Array(RELAY_ID_BYTES + payload.byteLength);
   frame.set(sender, 0);

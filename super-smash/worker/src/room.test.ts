@@ -5,6 +5,7 @@ import {
   MAX_MESSAGES_PER_PEER,
   RELAY_BURST,
   RELAY_ID_BYTES,
+  RELAY_KICK_DROPS,
   RELAY_MAX_FRAME_BYTES,
   RELAY_RATE_PER_SECOND,
   ROOM_CLOSE_CODES,
@@ -146,6 +147,50 @@ describe("relaying game frames", () => {
     // A long quiet spell refills to the burst and no further.
     expect(runAt(100_000, RELAY_BURST).every((type) => type === "forward")).toBe(true);
     expect(runAt(100_000, 1)).toEqual(["drop"]);
+  });
+
+  it("closes a socket with too-many-messages on its next frame over the rate once RELAY_KICK_DROPS have been dropped", () => {
+    expect(RELAY_KICK_DROPS).toBe(4 * RELAY_BURST);
+    const bucket = newRelayBucket(0);
+    const frame = new Uint8Array([1]).buffer;
+    const runAt = (nowMs: number, count: number): string[] =>
+      Array.from({ length: count }, () => relayGameFrame(sender(), frame, bucket, nowMs).type);
+    expect(runAt(0, RELAY_BURST).every((type) => type === "forward")).toBe(true);
+    expect(runAt(0, RELAY_KICK_DROPS).every((type) => type === "drop")).toBe(true);
+    expect(relayGameFrame(sender(), frame, bucket, 0)).toEqual({
+      type: "kick",
+      reason: "too-many-messages",
+      closeCode: ROOM_CLOSE_CODES["too-many-messages"],
+      message: { t: "error", reason: "too-many-messages" },
+    });
+  });
+
+  it("only drops a frame over the rate while fewer than RELAY_KICK_DROPS have been dropped", () => {
+    const bucket = newRelayBucket(0);
+    const frame = new Uint8Array([1]).buffer;
+    const runAt = (nowMs: number, count: number): string[] =>
+      Array.from({ length: count }, () => relayGameFrame(sender(), frame, bucket, nowMs).type);
+    expect(runAt(0, RELAY_BURST).every((type) => type === "forward")).toBe(true);
+    expect(runAt(0, RELAY_KICK_DROPS - 1).every((type) => type === "drop")).toBe(true);
+    // The RELAY_KICK_DROPS-th drop is still a drop; only the frame after it is kicked.
+    expect(runAt(0, 1)).toEqual(["drop"]);
+  });
+
+  it("forgets the drops once the bucket refills to full, but not on a partial refill", () => {
+    const bucket = newRelayBucket(0);
+    const frame = new Uint8Array([1]).buffer;
+    const runAt = (nowMs: number, count: number): string[] =>
+      Array.from({ length: count }, () => relayGameFrame(sender(), frame, bucket, nowMs).type);
+    const fullMs = (RELAY_BURST / RELAY_RATE_PER_SECOND) * 1000;
+    runAt(0, RELAY_BURST);
+    expect(runAt(0, RELAY_KICK_DROPS).every((type) => type === "drop")).toBe(true);
+    // A full refill: the count starts again, and a whole burst plus RELAY_KICK_DROPS drops pass unkicked.
+    expect(runAt(fullMs, RELAY_BURST).every((type) => type === "forward")).toBe(true);
+    expect(runAt(fullMs, RELAY_KICK_DROPS).every((type) => type === "drop")).toBe(true);
+    // A partial refill (one token short of full) keeps the count, so the next frame over the rate is kicked.
+    const partialMs = fullMs + ((RELAY_BURST - 1) / RELAY_RATE_PER_SECOND) * 1000;
+    expect(runAt(partialMs, RELAY_BURST - 1).every((type) => type === "forward")).toBe(true);
+    expect(runAt(partialMs, 1)).toEqual(["kick"]);
   });
 
   it("closes a socket whose game frame is over RELAY_MAX_FRAME_BYTES, and forwards one exactly at it", () => {

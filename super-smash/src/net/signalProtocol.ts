@@ -65,6 +65,17 @@ export const RELAY_MAX_FRAME_BYTES = 2048;
 export const RELAY_RATE_PER_SECOND = 40;
 export const RELAY_BURST = 80;
 
+/**
+ * Dropping a frame does not stop it being billed: it was billed on arrival. So
+ * a socket that has had this many frames dropped since its bucket was last
+ * full is closed with `too-many-messages` on its next frame over the rate, and
+ * must come back through the upgrade limiter. An honest client sends 30 a
+ * second against a refill of 40, so it refills to full well before this; it
+ * would take a backlog of more than about 13 s, longer than the 10 s the other
+ * side waits before calling the match lost.
+ */
+export const RELAY_KICK_DROPS = 4 * RELAY_BURST;
+
 export interface PeerInfo {
   readonly id: string;
   readonly role: Role;
