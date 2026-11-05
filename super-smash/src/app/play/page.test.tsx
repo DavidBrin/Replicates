@@ -37,7 +37,7 @@ import { ONLINE_RESULT_LINGER_MS, bindSession, leaveOnline, useOnlineStore } fro
 import type { DoSignalStatus } from "@/net/adapters/doSignal";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
-import { fakeSession, type FakeSession } from "@/net/online/testing";
+import { GUEST_PEER, HOST_PEER, fakeSession, type FakeSession } from "@/net/online/testing";
 import type { NetStats } from "@/net/rollback";
 import type { Role } from "@/net/signalProtocol";
 import PlayPage from "./page";
@@ -415,7 +415,7 @@ describe("the play page, online", () => {
     await renderPage();
     const { runner } = only(mocks.runners);
     const monitor = only(mocks.monitors);
-    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" }, from: GUEST_PEER.id }));
 
     expect(runner.stop).toHaveBeenCalled();
     expect(monitor.stop).toHaveBeenCalled();
@@ -438,7 +438,7 @@ describe("the play page, online", () => {
     const { fake } = goOnline("host");
     await renderPage();
     const { runner } = only(mocks.runners);
-    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "unreadable-start" } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "unreadable-start" }, from: GUEST_PEER.id }));
 
     expect(runner.stop).toHaveBeenCalled();
     const alert = screen.getByRole("alert");
@@ -459,7 +459,7 @@ describe("the play page, online", () => {
     const { fake } = goOnline("host");
     bindSession(fake.session);
     function RefusedMeanwhile() {
-      useLayoutEffect(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }), []);
+      useLayoutEffect(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" }, from: GUEST_PEER.id }), []);
       return null;
     }
     render(
@@ -484,7 +484,7 @@ describe("the play page, online", () => {
     const { fake } = goOnline("guest");
     await renderPage();
     const { runner } = only(mocks.runners);
-    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" }, from: HOST_PEER.id }));
     expect(runner.stop).not.toHaveBeenCalled();
     expect(only(mocks.monitors).stop).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -1352,7 +1352,7 @@ describe("the play page in 3D (Plan 4)", () => {
     mocks.holdModels.next = true;
     const { fake } = goOnline("host");
     await renderPage();
-    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" }, from: GUEST_PEER.id }));
     expect(screen.getByRole("alert")).toHaveTextContent("different version");
     const { runner } = only(mocks.runners);
     await act(async () => only(mocks.worlds).resolve());

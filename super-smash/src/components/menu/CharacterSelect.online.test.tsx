@@ -9,7 +9,7 @@ import { STUN_ONLY } from "@/net/iceConfig";
 import type { MatchRules } from "@/engine/types";
 import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
-import { fakeSession, type FakeSession } from "@/net/online/testing";
+import { GUEST_PEER, HOST_PEER, fakeSession, otherPeer, type FakeSession } from "@/net/online/testing";
 import { ROLE_PORT, type Role } from "@/net/signalProtocol";
 import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
 import { FakeSignalling } from "@/net/testing/fakeSignalling";
@@ -245,7 +245,7 @@ describe("CharacterSelect, online", () => {
     bindSession(fake.session);
     act(() => {
       fake.emit({ type: "joined", role: "host" });
-      fake.emit({ type: "peer", present: true });
+      fake.emit({ type: "peer", present: true, peer: GUEST_PEER });
       fake.emit({ type: "link", status: "open" });
     });
     useMatchConfig.getState().setFighter(0, "mario");
@@ -253,7 +253,7 @@ describe("CharacterSelect, online", () => {
     await renderSelect();
     expect(readyButton()).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("Connecting to the other player…");
-    act(() => fake.emit({ type: "lobby", message: HELLO }));
+    act(() => fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id }));
     expect(readyButton()).toBeEnabled();
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
@@ -265,13 +265,13 @@ describe("CharacterSelect, online", () => {
     bindSession(fake.session);
     act(() => {
       fake.emit({ type: "joined", role: "host" });
-      fake.emit({ type: "peer", present: true });
+      fake.emit({ type: "peer", present: true, peer: GUEST_PEER });
       fake.emit({ type: "link", status: "open" });
     });
     useMatchConfig.getState().setFighter(0, "mario");
     useMatchConfig.getState().setFighter(1, "fox");
     await renderSelect();
-    await act(async () => fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" } }));
+    await act(async () => fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" }, from: GUEST_PEER.id }));
     expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
     expect(readyButton()).toBeDisabled();
     expect(fake.session.close).toHaveBeenCalled();
@@ -364,7 +364,7 @@ describe("CharacterSelect, online", () => {
     await renderSelect();
     expect(useMatchConfig.getState().stageId).toBe("battlefield");
     expect(screen.getByText("The host is picking the stage")).toBeInTheDocument();
-    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal" } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal" }, from: HOST_PEER.id }));
     expect(screen.getByText("Stage: Smashville")).toBeInTheDocument();
   });
 
@@ -372,14 +372,14 @@ describe("CharacterSelect, online", () => {
     const fake = goOnline("guest");
     await renderSelect();
     const rules = { mode: "stock", stocks: 2, timeLimit: 9000, smashBall: false, oneOnOne: true } as const;
-    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal", rules } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal", rules }, from: HOST_PEER.id }));
     expect(screen.getByText("Stage: Smashville · 2-stock match · 1v1 damage 1.2× · Smash Ball off")).toBeInTheDocument();
   });
 
   it("tells the guest the host left, and forgets the host's stage", async () => {
     const fake = goOnline("guest");
     await renderSelect();
-    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal" } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal" }, from: HOST_PEER.id }));
     act(() => fake.emit({ type: "link", status: "waiting" }));
     expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
     expect(screen.getByText("The host is picking the stage")).toBeInTheDocument();
@@ -506,10 +506,11 @@ describe("CharacterSelect, online", () => {
   describe("when somebody takes the empty seat", () => {
     /** The opponent leaves, a newcomer takes the seat, the channel opens again, and the newcomer says it runs this build. */
     function rejoin(fake: FakeSession) {
+      const newcomer = otherPeer(fake.session.role ?? "host");
       act(() => fake.emit({ type: "link", status: "waiting" }));
-      act(() => fake.emit({ type: "peer", present: true }));
+      act(() => fake.emit({ type: "peer", present: true, peer: newcomer }));
       act(() => fake.emit({ type: "link", status: "open" }));
-      act(() => fake.emit({ type: "lobby", message: HELLO }));
+      act(() => fake.emit({ type: "lobby", message: HELLO, from: newcomer.id }));
     }
 
     it("has the host repeat its pick and its stage, since the newcomer's page starts empty", async () => {
@@ -561,9 +562,9 @@ describe("CharacterSelect, online, the models", () => {
     await act(async () => {});
     expect(world.preloadModels).not.toHaveBeenCalled();
     const mine = useMatchConfig.getState().players[1].fighterId!;
-    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 0 } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 0 }, from: HOST_PEER.id }));
     await vi.waitFor(() => expect(world.preloadModels).toHaveBeenCalledWith(["fox", mine]));
-    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "marth", costume: 0 } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "marth", costume: 0 }, from: HOST_PEER.id }));
     await vi.waitFor(() => expect(world.preloadModels).toHaveBeenLastCalledWith(["marth", mine]));
     expect(world.preloadModels).toHaveBeenCalledTimes(2);
   });
@@ -571,7 +572,7 @@ describe("CharacterSelect, online, the models", () => {
   it("fetches nothing for Random, which only the host's start decides", async () => {
     const fake = goOnline("host");
     await renderSelect();
-    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "random", costume: 1 } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "random", costume: 1 }, from: GUEST_PEER.id }));
     fireEvent.click(portraits()[2]);
     const mine = useMatchConfig.getState().players[0].fighterId!;
     await vi.waitFor(() => expect(world.preloadModels).toHaveBeenCalledWith([mine]));

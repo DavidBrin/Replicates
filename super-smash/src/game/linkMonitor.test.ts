@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fakeSession } from "@/net/online/testing";
+import { GUEST_PEER, fakeSession } from "@/net/online/testing";
 import { AWAY_LOST_MS, SILENCE_LOST_MS, type LinkHealth } from "@/net/online/watchdog";
 import { createEmitter } from "@/net/transport";
 import { LINK_CHECK_MS, STALL_LOST_MS, startLinkMonitor } from "./linkMonitor";
@@ -90,7 +90,7 @@ describe("the online link monitor", () => {
 
   it("a backgrounded opponent gets a minute, not ten seconds", () => {
     const h = harness();
-    h.session.emit({ type: "lobby", message: { kind: "away", away: true } });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: true }, from: GUEST_PEER.id });
     expect(h.health.at(-1)).toEqual(["waiting", true]);
     h.advance(30_000);
     expect(h.onLost).not.toHaveBeenCalled();
@@ -100,9 +100,9 @@ describe("the online link monitor", () => {
 
   it("is ok again as soon as the opponent says it is back", () => {
     const h = harness();
-    h.session.emit({ type: "lobby", message: { kind: "away", away: true } });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: true }, from: GUEST_PEER.id });
     h.advance(30_000);
-    h.session.emit({ type: "lobby", message: { kind: "away", away: false } });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: false }, from: GUEST_PEER.id });
     expect(h.health.at(-1)).toEqual(["ok", false]);
   });
 
@@ -122,7 +122,7 @@ describe("the online link monitor", () => {
     expect(h.messages.size).toBe(0);
     h.messages.emit(new Uint8Array([1]), "g1");
     h.leaves.emit("g1");
-    h.session.emit({ type: "lobby", message: { kind: "away", away: false } });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: false }, from: GUEST_PEER.id });
     h.advance(LINK_CHECK_MS);
     expect(h.onLost).toHaveBeenCalledTimes(1);
     expect(h.health).toHaveLength(reports);
@@ -242,17 +242,17 @@ describe("the stall backstop", () => {
     // Their tab stopped drawing, so the match stopped with it; that is the
     // minute the silence check gives them, and the stall check gives the same.
     const h = harness({ confirmed: 7 });
-    h.session.emit({ type: "lobby", message: { kind: "away", away: true } });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: true }, from: GUEST_PEER.id });
     h.heartbeats(AWAY_LOST_MS - 400);
     expect(h.onLost).not.toHaveBeenCalled();
-    h.session.emit({ type: "lobby", message: { kind: "away", away: false } });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: false }, from: GUEST_PEER.id });
     h.heartbeats(STALL_LOST_MS - 400);
     expect(h.onLost).not.toHaveBeenCalled();
     h.heartbeats(400);
     expect(h.onLost).toHaveBeenCalledTimes(1);
 
     const gone = harness({ confirmed: 7 });
-    gone.session.emit({ type: "lobby", message: { kind: "away", away: true } });
+    gone.session.emit({ type: "lobby", message: { kind: "away", away: true }, from: GUEST_PEER.id });
     gone.heartbeats(AWAY_LOST_MS);
     expect(gone.onLost).toHaveBeenCalledTimes(1);
   });

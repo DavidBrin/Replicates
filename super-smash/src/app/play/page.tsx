@@ -101,14 +101,14 @@ function toRunnerSlots(players: readonly PlayerSlot[], seed: number): RunnerSlot
 interface OnlineMount {
   readonly config: OnlineMatchConfig;
   readonly session: OnlineSessionLike;
-  /** From the room's role: the host is port 0 and the guest port 1. */
+  /** The room's seat for this machine (`session.seatPort`): in a room of two, the host is port 0 and the guest port 1. */
   readonly localPort: number;
 }
 
 function onlineAtMount(): OnlineMount | null {
   const config = useOnlineStore.getState().config;
   const session = getActiveSession();
-  const localPort = session?.localPort ?? null;
+  const localPort = session?.seatPort ?? null;
   return config && session && localPort !== null ? { config, session, localPort } : null;
 }
 

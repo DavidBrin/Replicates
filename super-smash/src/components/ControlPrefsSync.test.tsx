@@ -8,7 +8,7 @@ import { CONTROL_SCHEMES, DEFAULT_BINDINGS, useMatchConfig } from "@/lib/matchCo
 import { bindSession, leaveOnline, setOwnPad, setOwnStickJump } from "@/lib/onlineStore";
 import { memoryStorage } from "@/lib/testing/memoryStorage";
 import { setActiveSession } from "@/net/online/session";
-import { fakeSession } from "@/net/online/testing";
+import { HOST_PEER, fakeSession, otherPeer } from "@/net/online/testing";
 import type { Role } from "@/net/signalProtocol";
 import { ControlPrefsSync } from "./ControlPrefsSync";
 
@@ -156,14 +156,14 @@ describe("only /controls saves (P5-R26)", () => {
     const fake = seated(role);
     const theirs = role === "host" ? 1 : 0;
     // Theirs is on (a pick without `stickJump`); every saved port says off.
-    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 }, from: otherPeer(role).id }));
     expect(useMatchConfig.getState().players[theirs].stickJump).toBe(true);
     expectUntouched();
   });
 
   it("never saves leaveOnline's reset, which seats this machine's options and the next port's saved ones", () => {
     const fake = seated("guest");
-    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 }, from: HOST_PEER.id }));
     act(() => leaveOnline());
     expect(useMatchConfig.getState().online).toBe(false);
     expect(useMatchConfig.getState().players.map((p) => ({ stickJump: p.stickJump, pad: p.pad }))).toEqual([SAVED[0], SAVED[1]]);

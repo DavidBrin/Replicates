@@ -8,7 +8,7 @@ import { useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, RELAY_LINKING_STATUS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession } from "@/net/online/session";
 import { NO_WEBGL, webglCheck } from "@/render3d/webgl";
-import { fakeSession, type FakeSession } from "@/net/online/testing";
+import { GUEST_PEER, HOST_PEER, fakeSession, otherPeer, type FakeSession } from "@/net/online/testing";
 import type { Role, RoomIntent } from "@/net/signalProtocol";
 import { OnlineLobby, type OpenSession } from "./OnlineLobby";
 
@@ -298,11 +298,11 @@ describe("OnlineLobby", () => {
     await create();
     act(() => {
       opened[0].emit({ type: "joined", role: "host" });
-      opened[0].emit({ type: "peer", present: true });
+      opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
       opened[0].emit({ type: "link", status: "open" });
     });
     expect(routerMock.push).not.toHaveBeenCalled();
-    act(() => opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() } }));
+    act(() => opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: GUEST_PEER.id }));
     expect(routerMock.push).toHaveBeenCalledWith("/stage");
   });
 
@@ -311,7 +311,7 @@ describe("OnlineLobby", () => {
     await join("ABCD");
     act(() => {
       opened[0].emit({ type: "joined", role: "guest" });
-      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() } });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: HOST_PEER.id });
       opened[0].emit({ type: "link", status: "open" });
     });
     expect(routerMock.push).toHaveBeenCalledWith("/fighters");
@@ -324,7 +324,7 @@ describe("OnlineLobby", () => {
     await act(async () => {
       opened[0].emit({ type: "joined", role: "guest" });
       opened[0].emit({ type: "link", status: "open" });
-      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" } });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" }, from: HOST_PEER.id });
     });
     expect(routerMock.push).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
@@ -483,7 +483,7 @@ describe("OnlineLobby", () => {
       await create();
       act(() => {
         opened[0].emit({ type: "joined", role: "host" });
-        opened[0].emit({ type: "peer", present: true });
+        opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
       });
       expect(useOnlineStore.getState().status).toBe("linking");
 
@@ -499,7 +499,7 @@ describe("OnlineLobby", () => {
       act(() => {
         opened[0].emit({ type: "joined", role });
         opened[0].emit({ type: "link", status: "open" });
-        opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() } });
+        opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: otherPeer(role).id });
       });
       expect(routerMock.push).toHaveBeenCalledWith(role === "host" ? "/stage" : "/fighters");
 
@@ -546,7 +546,7 @@ describe("OnlineLobby", () => {
       act(() => opened[0].emit({ type: "joined", role: "host" }));
       expect(status).toHaveTextContent("Read it to the other player. Waiting for them to join…");
 
-      act(() => opened[0].emit({ type: "peer", present: true }));
+      act(() => opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER }));
       expect(status).toHaveTextContent("They are in. Opening a direct connection…");
       expect(screen.getByRole("status")).toBe(status);
     });
@@ -556,7 +556,7 @@ describe("OnlineLobby", () => {
       await join("ABCD");
       act(() => {
         opened[0].emit({ type: "joined", role: "guest" });
-        opened[0].emit({ type: "peer", present: true });
+        opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
       });
       expect(screen.getByRole("status")).toHaveTextContent(/^Opening a direct connection…$/);
     });
@@ -568,7 +568,7 @@ describe("OnlineLobby", () => {
         host.opened[0].emit({ type: "joined", role: "host" });
         host.opened[0].emit({ type: "route", route: "relay" });
         host.opened[0].emit({ type: "link", status: "open" });
-        host.opened[0].emit({ type: "peer", present: true });
+        host.opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
       });
       expect(useOnlineStore.getState()).toMatchObject({ status: "linking", role: "host", route: "relay" });
       expect(screen.getByRole("status").textContent).toBe(RELAY_LINKING_STATUS);
@@ -581,7 +581,7 @@ describe("OnlineLobby", () => {
       await join("ABCD");
       act(() => {
         guest.opened[0].emit({ type: "joined", role: "guest" });
-        guest.opened[0].emit({ type: "peer", present: true });
+        guest.opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
         guest.opened[0].emit({ type: "route", route: "relay" });
       });
       expect(useOnlineStore.getState()).toMatchObject({ status: "linking", role: "guest", route: "relay" });
@@ -593,7 +593,7 @@ describe("OnlineLobby", () => {
       await create();
       act(() => {
         opened[0].emit({ type: "joined", role: "host" });
-        opened[0].emit({ type: "peer", present: true });
+        opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
         opened[0].emit({ type: "link", status: "open" });
       });
       expect(useOnlineStore.getState()).toMatchObject({ status: "linking", route: "direct" });
@@ -716,7 +716,7 @@ describe("OnlineLobby", () => {
     await create();
     act(() => {
       opened[0].emit({ type: "joined", role: "host" });
-      opened[0].emit({ type: "peer", present: true });
+      opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
     });
     expect(screen.getByTestId("room-code")).toHaveTextContent(opened[0].code);
     expect(screen.getByRole("status")).toHaveTextContent("They are in. Opening a direct connection…");
@@ -739,7 +739,7 @@ describe("OnlineLobby, the first hello", () => {
     await create();
     act(() => {
       opened[0].emit({ type: "joined", role: "host" });
-      opened[0].emit({ type: "peer", present: true });
+      opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
       opened[0].emit({ type: "link", status: "open" });
     });
     const hello = opened[0].sent.find((m) => m.kind === "hello");

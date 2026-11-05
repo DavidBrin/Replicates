@@ -847,9 +847,11 @@ describe("relay mode (Plan 7)", () => {
     alone.signalling.deliver({ t: "peer-left", peerId: "g1" });
     expect(alone.leaves).toEqual(["g1"]);
 
+    // The session withdraws a start whose player left (`releaseChannel`): a held match would not announce the newcomer.
     const joined = await linkedHost();
     joined.transport.holdChannel();
     joined.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    joined.transport.releaseChannel();
     joined.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     joined.transport.useRelay();
     expect(joined.joins).toEqual(["g1", "g2"]);
@@ -1016,5 +1018,99 @@ describe("relay mode (Plan 7)", () => {
       expect(t.leaves, `close code ${code}`).toEqual(["g1"]);
       expect(t.transport.status, `close code ${code}`).toBe("waiting");
     }
+  });
+});
+
+/**
+ * Phase B (Plan 7): a room seats up to four, and three or more play through
+ * the relay. The direct route is for two, so it never builds a second peer
+ * connection; and once a room has begun, its players are locked, so a
+ * stranger typing the code is never a player.
+ */
+describe("rooms of three and four (Plan 7)", () => {
+  const ping = (token: number) => encodeRelayBatch([encodePacket({ type: PacketType.Ping, token })]);
+  const offers = (signalling: FakeSignalling) => signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer");
+
+  it("offers nobody when a peer joins a room that already seats two others", async () => {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
+    await settle();
+    expect(t.peers).toHaveLength(1);
+
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 2 } });
+    await settle();
+    expect(t.peers).toHaveLength(1);
+    expect(offers(t.signalling)).toEqual([{ t: "signal", to: "g1", payload: { kind: "offer", sdp: "offer-sdp" } }]);
+
+    // Nor offers again while the room seats more than one other.
+    t.peers[0].channels[0].remoteClose();
+    t.transport.offerAgain("g1");
+    await settle();
+    expect(t.peers).toHaveLength(1);
+
+    const welcomed = setup();
+    welcomed.signalling.deliver({
+      t: "welcome",
+      self: { id: "h1", role: "host", port: 0 },
+      peers: [
+        { id: "g1", role: "guest", port: 1 },
+        { id: "g2", role: "guest", port: 2 },
+      ],
+    });
+    await settle();
+    expect(welcomed.peers).toHaveLength(0);
+    expect(welcomed.signalling.sent).toEqual([]);
+  });
+
+  it("announces a roster peer on lockRoster, and never one outside it", async () => {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
+    t.transport.useRelay();
+    expect(t.joins).toEqual(["g1"]);
+
+    t.transport.lockRoster(["g1"]);
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 2 } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g3", role: "guest", port: 3 } });
+    t.signalling.deliver({ t: "game", from: "g2", bytes: ping(1) });
+    expect(t.joins).toEqual(["g1"]);
+    expect(t.received).toEqual([]);
+
+    // A re-sent begin puts g2 on a vacated port: it is a player now, and g3 is still not.
+    t.transport.lockRoster(["g1", "g2"]);
+    expect(t.joins).toEqual(["g1", "g2"]);
+    t.signalling.deliver({ t: "game", from: "g2", bytes: ping(2) });
+    t.signalling.deliver({ t: "game", from: "g3", bytes: ping(3) });
+    expect(t.received.map(([, id]) => id)).toEqual(["g2"]);
+    t.signalling.deliver({ t: "peer-left", peerId: "g3" });
+    t.signalling.deliver({ t: "peer-left", peerId: "g2" });
+    expect(t.leaves).toEqual(["g2"]);
+
+    // Held with no roster yet: only the peers already announced are players.
+    const held = setup();
+    held.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
+    held.transport.useRelay();
+    held.transport.holdChannel();
+    held.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 2 } });
+    held.signalling.deliver({ t: "game", from: "g2", bytes: ping(4) });
+    held.signalling.deliver({ t: "peer-left", peerId: "g2" });
+    expect(held.joins).toEqual(["g1"]);
+    expect(held.received).toEqual([]);
+    expect(held.leaves).toEqual([]);
+
+    // Direct, the lock only records the roster, which the relay then keeps to.
+    const direct = setup();
+    direct.signalling.deliver({
+      t: "welcome",
+      self: { id: "h1", role: "host", port: 0 },
+      peers: [
+        { id: "g1", role: "guest", port: 1 },
+        { id: "g2", role: "guest", port: 2 },
+      ],
+    });
+    direct.transport.lockRoster(["g1"]);
+    expect(direct.joins).toEqual([]);
+    direct.transport.useRelay();
+    expect(direct.joins).toEqual(["g1"]);
   });
 });

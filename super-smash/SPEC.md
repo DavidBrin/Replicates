@@ -178,6 +178,9 @@ The simulation is deterministic by construction (§3), which buys rollback.
   instead, two frames to a message; the room stamps the sender and reads nothing (D60). A room
   that has relayed keeps relaying. In relay mode the room socket is the link: losing it ends
   the match.
+- **Rooms of three or four always relay.** A room that seats a third player moves everyone to
+  the room relay, a star through the Durable Object, and stays there; only a two-player room
+  tries a direct channel first. There is no WebRTC mesh.
 - **Input packets** carry every frame of input the receiver has not yet acknowledged (at most
   `MAX_INPUT_WINDOW_FRAMES`, 128), keyed by absolute frame number, plus an `ack`: the highest
   contiguous frame of the receiver's input the sender holds. They travel over an *unreliable,
@@ -193,7 +196,7 @@ The simulation is deterministic by construction (§3), which buys rollback.
 - **LAN comes free.** No code special-cases a local network: ICE gathers host candidates
   and prefers them automatically, so two laptops on the same WiFi negotiate a direct path
   without touching the open internet. That is the whole reason WebRTC was chosen over a
-  relayed WebSocket. The relay is the fallback, never the first try.
+  relayed WebSocket. For two players the relay is the fallback, never the first try.
 - **Desync detection** hashes the state every 30 frames and compares; a mismatch is
   reported rather than left to manifest as two players seeing different winners. With more
   than two machines each peer's hash is compared, and one that differs is reported by peer.

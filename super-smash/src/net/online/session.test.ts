@@ -4,7 +4,8 @@ import { NEGOTIATION_TIMEOUT_MS, type PeerConnectionLike } from "../adapters/doS
 import { STUN_ONLY } from "../iceConfig";
 import type { RoomIntent } from "../signalProtocol";
 import { OpenableChannel, inertPeer } from "../testing/fakePeer";
-import { PROTOCOL_VERSION } from "../packet";
+import { PROTOCOL_VERSION, PacketType, encodePacket } from "../packet";
+import { encodeRelayBatch } from "../relayFrame";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import type { OnlineMatchConfig } from "./lobby";
 import {
@@ -127,12 +128,12 @@ describe("OnlineSession", () => {
     host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
     expect(host.events).toContainEqual({ type: "joined", role: "host" });
     expect(host.session.role).toBe("host");
-    expect(host.session.localPort).toBe(0);
+    expect(host.session.seatPort).toBe(0);
 
     const guest = await open("join");
     guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
-    expect(guest.session.localPort).toBe(1);
-    expect(guest.events).toContainEqual({ type: "peer", present: true });
+    expect(guest.session.seatPort).toBe(1);
+    expect(guest.events).toContainEqual({ type: "peer", present: true, peer: { id: "h1", role: "host", port: 0 } });
   });
 
   it("reports the other player arriving and leaving", async () => {
@@ -141,8 +142,8 @@ describe("OnlineSession", () => {
     signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     signalling.deliver({ t: "peer-left", peerId: "g1" });
     expect(events.filter((e) => e.type === "peer")).toEqual([
-      { type: "peer", present: true },
-      { type: "peer", present: false },
+      { type: "peer", present: true, peer: { id: "g1", role: "guest", port: 1 } },
+      { type: "peer", present: false, peer: { id: "g1", role: "guest", port: 1 } },
     ]);
     expect(events).toContainEqual({ type: "link", status: "negotiating" });
   });
@@ -151,7 +152,7 @@ describe("OnlineSession", () => {
     const { signalling, events } = await open();
     signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 1 } });
     signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "explode" } });
-    expect(events).toEqual([{ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 } }]);
+    expect(events).toEqual([{ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 }, from: "g1" }]);
   });
 
   /** Dropped, it would leave the guest waiting while the host played alone; passed on, the guest refuses it (Plan 2 Task 27). */
@@ -163,6 +164,7 @@ describe("OnlineSession", () => {
     expect(events.at(-1)).toEqual({
       type: "lobby",
       message: { kind: "unreadable-start", build: { build: CONFIG.build, protocol: PROTOCOL_VERSION + 1, bones: CONFIG.bones, engineRules: CONFIG.engineRules } },
+      from: "h1",
     });
   });
 
@@ -489,11 +491,11 @@ describe("OnlineSession", () => {
       expect(g.channels).toHaveLength(3);
     });
 
-    /** Only the guest's side closed: the host, still open, hears of it through the room. */
+    /** Only the guest's side closed: the host, still open, hears of it through the room, addressed to it alone. */
     it("has the guest ask its host to renegotiate when its channel is lost, but not once a start has come", async () => {
       const g = await linkedGuest();
       g.channels[0].drop();
-      expect(g.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "renegotiate")).toHaveLength(1);
+      expect(renegotiates(g.signalling)).toEqual([{ t: "signal", to: "h1", payload: { kind: "renegotiate" } }]);
 
       const started = await linkedGuest();
       started.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: CONFIG } });
@@ -749,7 +751,7 @@ describe("OnlineSession", () => {
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
       await vi.advanceTimersByTimeAsync(60_000);
       expect(errors(h.events)).toEqual([]);
-      expect(h.events.at(-1)).toEqual({ type: "peer", present: false });
+      expect(h.events.at(-1)).toEqual({ type: "peer", present: false, peer: { id: "g1", role: "guest", port: 1 } });
       expect(useRelays(h.signalling)).toBe(0);
       expect(h.session.route).toBe("direct");
       expect(h.signalling.closed).toBe(false);
@@ -781,7 +783,7 @@ describe("OnlineSession", () => {
       expect(useRelays(h.signalling)).toBe(1);
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
       h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
-      expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "use-relay" } });
+      expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", to: "g2", payload: { kind: "use-relay" } });
       expect(useRelays(h.signalling)).toBe(2);
       await vi.advanceTimersByTimeAsync(60_000);
       expect(h.offers()).toBe(1);
@@ -1148,5 +1150,227 @@ describe("OnlineSession", () => {
     setActiveSession(null);
     expect(second.signalling.closed).toBe(true);
     expect(getActiveSession()).toBeNull();
+  });
+});
+
+/**
+ * Phase B (Plan 7): a room seats up to four. Two players try a direct channel
+ * first; a third seat moves everyone to the room relay, a star through the
+ * Durable Object, with no WebRTC mesh and no message needed (every member
+ * sees the same joins).
+ */
+describe("rooms of three and four (Plan 7)", () => {
+  const HOST = { id: "h1", role: "host", port: 0 } as const;
+  const G1 = { id: "g1", role: "guest", port: 1 } as const;
+  const G2 = { id: "g2", role: "guest", port: 2 } as const;
+  const G3 = { id: "g3", role: "guest", port: 3 } as const;
+  const FOUR: OnlineMatchConfig = {
+    ...CONFIG,
+    rules: { ...CONFIG.rules, oneOnOne: false },
+    fighters: ["mario", "fox", "mario", "fox"],
+    costumes: [0, 1, 2, 3],
+    controls: [0, 0, 0, 0],
+  };
+  const ping = (token: number) => encodeRelayBatch([encodePacket({ type: PacketType.Ping, token })]);
+
+  /** A host negotiating with g1: its offer is out and the channel has not opened. Every peer connection it builds is recorded. */
+  async function hostNegotiatingWithG1() {
+    vi.useFakeTimers();
+    const built: { closed: boolean }[] = [];
+    const h = await open("create", () => {
+      const channel = new OpenableChannel();
+      const peer = { ...inertPeer(), createDataChannel: () => channel, closed: false };
+      peer.close = () => {
+        peer.closed = true;
+      };
+      built.push(peer);
+      return peer;
+    });
+    const offers = () => h.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer").length;
+    h.signalling.deliver({ t: "welcome", self: HOST, peers: [G1] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(offers()).toBe(1);
+    expect(h.session.transport.status).toBe("negotiating");
+    return { ...h, built, offers };
+  }
+
+  it("puts a room that seats three on the relay at once, without a message", async () => {
+    vi.useFakeTimers();
+    const g = await opened("join");
+    g.signalling.deliver({ t: "welcome", self: G2, peers: [HOST, G1] });
+
+    expect(g.session.route).toBe("relay");
+    expect(g.session.transport.status).toBe("open");
+    expect(g.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
+    expect(g.signalling.sent).toEqual([]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(g.channels).toHaveLength(0);
+    expect(errors(g.events)).toEqual([]);
+  });
+
+  it("moves a two-player room to the relay when a third joins, and keeps it there when the third leaves", async () => {
+    const h = await hostMeetingGuest();
+    h.channels[0].open();
+    expect(h.session.route).toBe("direct");
+
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    expect(h.session.route).toBe("relay");
+    expect(h.session.transport.status).toBe("open");
+
+    h.signalling.deliver({ t: "peer-left", peerId: "g2" });
+    expect(h.session.route).toBe("relay");
+    expect(h.session.transport.status).toBe("open");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.offers()).toBe(1);
+    expect(h.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
+    expect(useRelays(h.signalling)).toBe(0);
+    expect(errors(h.events)).toEqual([]);
+  });
+
+  it("reports each lobby message with its sender, and each arrival or departure with its seat", async () => {
+    const { signalling, events } = await open();
+    signalling.deliver({ t: "welcome", self: HOST, peers: [G1, G2] });
+    signalling.deliver({ t: "peer-joined", peer: G3 });
+    signalling.deliver({ t: "lobby", from: "g3", payload: { kind: "pick", fighterId: "fox", costume: 1 } });
+    signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "away", away: true } });
+    signalling.deliver({ t: "peer-left", peerId: "g2" });
+
+    expect(events.filter((e) => e.type === "peer" || e.type === "lobby")).toEqual([
+      { type: "peer", present: true, peer: G1 },
+      { type: "peer", present: true, peer: G2 },
+      { type: "peer", present: true, peer: G3 },
+      { type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 }, from: "g3" },
+      { type: "lobby", message: { kind: "away", away: true }, from: "g1" },
+      { type: "peer", present: false, peer: G2 },
+    ]);
+  });
+
+  it("addresses a lobby message to one peer when asked", async () => {
+    const { session, signalling } = await open();
+    signalling.deliver({ t: "welcome", self: HOST, peers: [G1, G2] });
+    const payload = { kind: "pick", fighterId: "fox", costume: 1 } as const;
+
+    expect(session.sendLobby(payload, "g2")).toBe(true);
+    expect(signalling.sent.at(-1)).toEqual({ t: "lobby", to: "g2", payload });
+    // Unaddressed, it goes to everyone, with no address at all.
+    expect(session.sendLobby(payload)).toBe(true);
+    expect(signalling.sent.at(-1)).toStrictEqual({ t: "lobby", payload });
+  });
+
+  it("knows its own seat port from the welcome", async () => {
+    const { session, signalling } = await open("join");
+    expect(session.seatPort).toBeNull();
+    signalling.deliver({ t: "welcome", self: G2, peers: [HOST, G1] });
+    expect(session.seatPort).toBe(2);
+    expect(session.role).toBe("guest");
+  });
+
+  it("sends a four-player start with three others seated, and calls the room lost when one of them is missing", async () => {
+    const full = await open();
+    full.signalling.deliver({ t: "welcome", self: HOST, peers: [] });
+    for (const peer of [G1, G2, G3]) full.signalling.deliver({ t: "peer-joined", peer });
+    expect(full.session.peers.size).toBe(3);
+    expect(full.session.sendLobby({ kind: "start", config: FOUR })).toBe(true);
+    expect(full.signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "start")).toHaveLength(1);
+    expect(errors(full.events)).toEqual([]);
+
+    const short = await open();
+    short.signalling.deliver({ t: "welcome", self: HOST, peers: [G1, G2] });
+    expect(short.session.sendLobby({ kind: "start", config: FOUR })).toBe(false);
+    expect(short.signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "start")).toEqual([]);
+    expect(errors(short.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+  });
+
+  it("lets only the host tell a newcomer to a relayed room to use the relay", async () => {
+    const g = await relayedGuest();
+    g.signalling.deliver({ t: "peer-joined", peer: G2 });
+    expect(useRelays(g.signalling)).toBe(0);
+
+    const h = await hostMeetingGuest();
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+    expect(useRelays(h.signalling)).toBe(1);
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    expect(useRelays(h.signalling)).toBe(2);
+    expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", to: "g2", payload: { kind: "use-relay" } });
+  });
+
+  it("keeps a begun room's route and players when a stranger joins and leaves", async () => {
+    // Direct: the begun room's two players, and a stranger typing the code.
+    const { session, signalling, channel, events } = await negotiatingHost();
+    const joins: string[] = [];
+    const leaves: string[] = [];
+    session.transport.onPeerJoin((id) => joins.push(id));
+    session.transport.onPeerLeave((id) => leaves.push(id));
+    channel.open();
+    session.lockRoster(["g1"]);
+    signalling.deliver({ t: "peer-joined", peer: G2 });
+    signalling.deliver({ t: "peer-left", peerId: "g2" });
+    expect(session.route).toBe("direct");
+
+    expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+    signalling.deliver({ t: "peer-joined", peer: G3 });
+    signalling.deliver({ t: "peer-left", peerId: "g3" });
+    // The start still holds: a stray use-relay cannot move the match.
+    signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "use-relay" } });
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    expect(session.route).toBe("direct");
+    expect(events.filter((e) => e.type === "route")).toEqual([]);
+    expect(joins).toEqual(["g1"]);
+    expect(leaves).toEqual([]);
+    expect(session.transport.status).toBe("open");
+    expect(errors(events)).toEqual([]);
+
+    // Relayed: the stranger is neither announced nor heard.
+    const h = await hostMeetingGuest();
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+    const heard: string[] = [];
+    const relayJoins: string[] = [];
+    const relayLeaves: string[] = [];
+    h.session.transport.onMessage((_bytes, id) => heard.push(id));
+    h.session.transport.onPeerJoin((id) => relayJoins.push(id));
+    h.session.transport.onPeerLeave((id) => relayLeaves.push(id));
+    h.session.lockRoster(["g1"]);
+    expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    h.signalling.deliver({ t: "game", from: "g2", bytes: ping(1) });
+    h.signalling.deliver({ t: "game", from: "g1", bytes: ping(2) });
+    h.signalling.deliver({ t: "peer-left", peerId: "g2" });
+
+    expect(heard).toEqual(["g1"]);
+    expect(relayJoins).toEqual([]);
+    expect(relayLeaves).toEqual([]);
+    expect(h.session.transport.status).toBe("open");
+    expect(errors(h.events)).toEqual([]);
+  });
+
+  it("Review Focus: a third player joining mid-negotiation moves all three to the relay and leaves the old negotiation unanswered", async () => {
+    const h = await hostNegotiatingWithG1();
+    const joins: string[] = [];
+    h.session.transport.onPeerJoin((id) => joins.push(id));
+
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+
+    expect(h.session.route).toBe("relay");
+    expect(h.built).toHaveLength(1);
+    expect(h.built[0].closed).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.offers()).toBe(1);
+
+    // The old negotiation's late answer and candidate land on nothing.
+    h.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "answer", sdp: "a" } });
+    h.signalling.deliver({
+      t: "signal",
+      from: "g1",
+      payload: { kind: "ice", candidate: { candidate: "candidate:1 1 udp 1 10.0.0.2 5000 typ host", sdpMid: "0", sdpMLineIndex: 0, usernameFragment: null } },
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(h.built).toHaveLength(1);
+    expect(h.offers()).toBe(1);
+    expect(joins).toEqual(["g1", "g2"]);
+    expect(h.session.transport.status).toBe("open");
+    expect(errors(h.events)).toEqual([]);
+    expect(useRelays(h.signalling)).toBe(0);
   });
 });

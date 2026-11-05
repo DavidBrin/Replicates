@@ -19,7 +19,7 @@ import {
 import type { IceResponse } from "../iceConfig";
 import { fetchIceServers, toRtcIceServers } from "../iceServers";
 import { createSignallingClient, type SignallingClient } from "../signalling";
-import { ROLE_PORT, isRecord, roomErrorForCloseCode, type Role, type RoomError, type RoomIntent } from "../signalProtocol";
+import { isRecord, roomErrorForCloseCode, type PeerInfo, type Role, type RoomError, type RoomIntent } from "../signalProtocol";
 import { createEmitter, type Emitter, type Unsubscribe } from "../transport";
 import { parseLobbyMessage, type LobbyMessage, type ReceivedLobbyMessage } from "./lobby";
 
@@ -70,19 +70,31 @@ export const GUEST_REOFFER_WAIT_MS = 10_000;
  */
 const USE_RELAY = "use-relay";
 
+/**
+ * How many seated players move a room to the relay (Plan 7, Phase B): from
+ * three, every match is a star through the Durable Object, with no WebRTC
+ * mesh. Only a room of two tries a direct channel first.
+ */
+export const RELAY_FROM_PLAYERS = 3;
+
 export type SessionEvent =
   | { readonly type: "joined"; readonly role: Role }
-  | { readonly type: "peer"; readonly present: boolean }
+  /** A seat filled or emptied: `peer` says who, and at which port. */
+  | { readonly type: "peer"; readonly present: boolean; readonly peer: PeerInfo }
   | { readonly type: "link"; readonly status: DoSignalStatus }
   /** The match moves to the room relay. Said once, before the relay's `link: open`. */
   | { readonly type: "route"; readonly route: Route }
-  | { readonly type: "lobby"; readonly message: ReceivedLobbyMessage }
+  /** `from` is the sender's peer id, as the room stamped it. */
+  | { readonly type: "lobby"; readonly message: ReceivedLobbyMessage; readonly from: string }
   | { readonly type: "error"; readonly reason: SessionError };
 
 export interface OnlineSessionLike {
   readonly roomCode: string;
   readonly role: Role | null;
-  readonly localPort: number | null;
+  /** The room's port for this machine (its welcome's `self.port`); null before the welcome. */
+  readonly seatPort: number | null;
+  /** The others the room seats, by peer id. */
+  readonly peers: ReadonlyMap<string, PeerInfo>;
   readonly turn: boolean;
   readonly transport: DoSignalTransport;
   /** Where the match's packets go: the transport's route. */
@@ -91,10 +103,17 @@ export interface OnlineSessionLike {
   /**
    * True when the message went to the room; false when it did not (the session
    * closed, the room gone, a `start` the other side would not read as sent, or
-   * a `start` with nobody in the room to give it to). Apart from a dropped
-   * `away`, the reason reaches `on()` as an `error`.
+   * a `start` naming a player the room no longer seats). Apart from a dropped
+   * `away`, the reason reaches `on()` as an `error`. With `to`, the room gives
+   * it to that peer alone; without, to every other one.
    */
-  sendLobby(message: LobbyMessage): boolean;
+  sendLobby(message: LobbyMessage, to?: string): boolean;
+  /**
+   * The other players of a begun room, said again on every re-sent begin.
+   * From then on a stranger who types the code is never counted toward the
+   * relay, announced to the match, or heard (`DoSignalTransport.lockRoster`).
+   */
+  lockRoster(ids: readonly string[]): void;
   close(): void;
 }
 
@@ -128,14 +147,10 @@ export class OnlineSession implements OnlineSessionLike {
 
   private readonly events: Emitter<[SessionEvent]> = createEmitter();
   private welcomed = false;
-  /**
-   * The other player, while the room says it seats them. Not whether they are
-   * there (the channel decides that), but whether the room can pass them a
-   * lobby message, and whom a fresh offer goes to: their room socket can drop
-   * on its own while the channel stays open, and the channel can close while
-   * their socket stays.
-   */
-  private seatedPeer: string | null = null;
+  private port: number | null = null;
+  private readonly seated = new Map<string, PeerInfo>();
+  /** The begun room's other players (`lockRoster`), or null before the begin. */
+  private roster: ReadonlySet<string> | null = null;
   /** A start went out (host) or came in (guest): the match owns the channel now. */
   private started = false;
   /** The last link status, to tell a lost channel from a peer that never connected. */
@@ -143,7 +158,8 @@ export class OnlineSession implements OnlineSessionLike {
   /**
    * Whether the channel has opened since the room last seated a peer: a
    * channel lost after that is a reconnect, with re-offers; one that never
-   * opened moves to the relay (`reconnectAfter`). Reset by `peer-joined` only.
+   * opened moves to the relay (`reconnectAfter`). Reset only by a
+   * `peer-joined` that seats the one other player.
    */
   private linked = false;
   /** Fresh offers the host has left for this outage; see `REOFFER_DELAYS_MS`. */
@@ -177,34 +193,52 @@ export class OnlineSession implements OnlineSessionLike {
       switch (event.t) {
         case "welcome":
           this.welcomed = true;
-          this.seatedPeer = event.peers[0]?.id ?? null;
+          this.port = event.self.port;
+          for (const peer of event.peers) this.seated.set(peer.id, peer);
           this.events.emit({ type: "joined", role: event.self.role });
-          if (event.peers.length > 0) this.events.emit({ type: "peer", present: true });
+          for (const peer of event.peers) this.events.emit({ type: "peer", present: true, peer });
+          // Every member sees the same seats, so a room of three moves without a word.
+          this.relayIfThree();
           break;
-        case "peer-joined":
-          // A newcomer gets the transport's ordinary offer, not the old seat's retries.
-          this.seatedPeer = event.peer.id;
-          this.linked = false;
-          this.resetReconnect();
-          this.events.emit({ type: "peer", present: true });
-          // The relay is sticky for the room, and only this side knows it: the
-          // newcomer waits for an offer that will never come until it is told.
-          if (this.transport.route === "relay" && !this.toldRelay) this.tellRelay();
-          break;
-        case "peer-left":
-          // `linked` stays: a held channel can outlive its peer's room socket, and a link
-          // that opened and then fails is a failed link, not a first link to relay (Task
-          // 40b review Minor 2). An empty seat starts no first link; the next peer-joined does.
-          this.seatedPeer = null;
-          this.resetReconnect();
-          // A start that went to (or came from) the player who left is
-          // withdrawn: whoever takes the seat meets a lobby again.
-          if (this.started) {
-            this.started = false;
-            this.transport.releaseChannel();
+        case "peer-joined": {
+          const relayed = this.transport.route === "relay";
+          this.seated.set(event.peer.id, event.peer);
+          // A newcomer the direct route is for gets the transport's ordinary
+          // offer, not the old seat's retries. A third seat, or a stranger in a
+          // begun room, starts no first link.
+          if (this.seatedPeer === event.peer.id) {
+            this.linked = false;
+            this.resetReconnect();
           }
-          this.events.emit({ type: "peer", present: false });
+          this.events.emit({ type: "peer", present: true, peer: event.peer });
+          this.relayIfThree();
+          // The relay is sticky for the room, and only its members know it: a
+          // newcomer to a relayed room of two waits for an offer that will
+          // never come until it is told. The host tells it; the rest stay quiet.
+          if (relayed && this.port === 0 && !this.toldRelay) this.tellRelay(event.peer.id);
           break;
+        }
+        case "peer-left": {
+          const peer = this.seated.get(event.peerId);
+          if (peer === undefined) break;
+          this.seated.delete(event.peerId);
+          // A stranger in a begun room was never one of its players: their
+          // leave touches neither the retries nor the start.
+          if (this.isPlayer(event.peerId)) {
+            // `linked` stays: a held channel can outlive its peer's room socket, and a link
+            // that opened and then fails is a failed link, not a first link to relay (Task
+            // 40b review Minor 2). An empty seat starts no first link; the next peer-joined does.
+            this.resetReconnect();
+            // A start that went to (or came from) the player who left is
+            // withdrawn: whoever takes the seat meets a lobby again.
+            if (this.started) {
+              this.started = false;
+              this.transport.releaseChannel();
+            }
+          }
+          this.events.emit({ type: "peer", present: false, peer });
+          break;
+        }
         case "lobby": {
           // The other side's first channel never opened: follow it onto the relay.
           // A started match owns its channel, so a stray one cannot move it.
@@ -215,7 +249,7 @@ export class OnlineSession implements OnlineSessionLike {
           const message = parseLobbyMessage(event.payload);
           // The guest follows the host into the match: the channel is the match's from here.
           if (message?.kind === "start" && this.role === "guest") this.holdForMatch();
-          if (message) this.events.emit({ type: "lobby", message });
+          if (message) this.events.emit({ type: "lobby", message, from: event.from });
           break;
         }
         case "error":
@@ -242,9 +276,12 @@ export class OnlineSession implements OnlineSessionLike {
     return this.transport.role;
   }
 
-  get localPort(): number | null {
-    const role = this.role;
-    return role === null ? null : ROLE_PORT[role];
+  get seatPort(): number | null {
+    return this.port;
+  }
+
+  get peers(): ReadonlyMap<string, PeerInfo> {
+    return this.seated;
   }
 
   get route(): Route {
@@ -255,7 +292,7 @@ export class OnlineSession implements OnlineSessionLike {
     return this.events.add(cb);
   }
 
-  sendLobby(message: LobbyMessage): boolean {
+  sendLobby(message: LobbyMessage, to?: string): boolean {
     if (this.closed) return false;
     if (this.roomGone) {
       // The socket would swallow it. The lobby cannot go on without the room —
@@ -276,16 +313,22 @@ export class OnlineSession implements OnlineSessionLike {
     }
     // The room drops a message it has nobody to give to. A lost pick or stage
     // is repeated when somebody takes the seat; a lost start would leave this
-    // side playing alone until the link monitor gave up, with the other still
-    // waiting on its select screen. Their room socket is gone, so the room is
-    // as good as lost: both need a new one.
-    if (message.kind === "start" && this.seatedPeer === null) {
+    // side playing alone until the link monitor gave up, with the others still
+    // waiting on their select screens. A start naming more players than the
+    // room seats names one whose room socket is gone, so the room is as good
+    // as lost: everyone needs a new one.
+    if (message.kind === "start" && this.seated.size + 1 < message.config.fighters.length) {
       this.loseRoom();
       return false;
     }
-    this.signalling.send({ t: "lobby", payload: message });
+    this.signalling.send(to === undefined ? { t: "lobby", payload: message } : { t: "lobby", to, payload: message });
     if (message.kind === "start") this.holdForMatch();
     return true;
+  }
+
+  lockRoster(ids: readonly string[]): void {
+    this.roster = new Set(ids);
+    this.transport.lockRoster(ids);
   }
 
   close(): void {
@@ -376,17 +419,18 @@ export class OnlineSession implements OnlineSessionLike {
     }
     this.cancelReconnect();
     const lost = status === "waiting" && (before === "open" || before === "negotiating");
-    if (!lost || this.seatedPeer === null) return;
+    const peer = this.seatedPeer;
+    if (!lost || peer === null) return;
     if (!this.linked) {
-      const peer = this.seatedPeer;
       queueMicrotask(() => {
         if (this.seatedPeer === peer && !this.linked && this.link === "waiting") this.goRelay(true);
       });
       return;
     }
     if (this.role === "guest") {
-      // The host may still think its side open, and only it can offer: ask.
-      this.signalling.send({ t: "signal", payload: { kind: "renegotiate" } });
+      // The host may still think its side open, and only it can offer: ask it.
+      // In a room of two the one other seat is the host's.
+      this.signalling.send({ t: "signal", to: peer, payload: { kind: "renegotiate" } });
       this.reconnect = setTimeout(() => this.loseRoom(), GUEST_REOFFER_WAIT_MS);
       return;
     }
@@ -397,12 +441,43 @@ export class OnlineSession implements OnlineSessionLike {
       return;
     }
     this.reoffersLeft -= 1;
-    const peer = this.seatedPeer;
     this.reconnect = setTimeout(() => {
       this.reconnect = null;
       // The transport refuses unless the channel is still down and not held.
       if (this.seatedPeer === peer) this.transport.offerAgain(peer);
     }, delay);
+  }
+
+  /**
+   * The other player while the room seats exactly one: the two-player
+   * re-offer and grace logic works on them. Not whether they are there (the
+   * channel decides that), but whether the room can pass them a lobby
+   * message, and whom a fresh offer goes to: their room socket can drop on
+   * its own while the channel stays open, and the channel can close while
+   * their socket stays. Null with nobody seated, or more than one.
+   */
+  private get seatedPeer(): string | null {
+    if (this.seated.size !== 1) return null;
+    const [only] = this.seated.keys();
+    return only;
+  }
+
+  /** A seated peer is one of this room's players: on the roster once a begin locked it, anyone before. */
+  private isPlayer(peerId: string): boolean {
+    return this.roster === null || this.roster.has(peerId);
+  }
+
+  /**
+   * A room that seats `RELAY_FROM_PLAYERS` or more goes to the relay, for
+   * good. Counted only before the start, and once a roster is locked, only
+   * over its players: a stranger typing the code into a begun room of two
+   * moves nobody.
+   */
+  private relayIfThree(): void {
+    if (this.started) return;
+    let players = 1;
+    for (const id of this.seated.keys()) if (this.isPlayer(id)) players += 1;
+    if (players >= RELAY_FROM_PLAYERS) this.goRelay(false);
   }
 
   /** The match has started: no fresh offer may replace its channel, on either side. */
@@ -449,9 +524,10 @@ export class OnlineSession implements OnlineSessionLike {
     this.transport.useRelay();
   }
 
-  /** Tell the room's other side to use the relay; see `toldRelay`. */
-  private tellRelay(): void {
-    this.signalling.send({ t: "lobby", payload: { kind: USE_RELAY } });
+  /** Tell the room's other side (or, with `to`, that newcomer alone) to use the relay; see `toldRelay`. */
+  private tellRelay(to?: string): void {
+    const payload = { kind: USE_RELAY };
+    this.signalling.send(to === undefined ? { t: "lobby", payload } : { t: "lobby", to, payload });
     this.toldRelay = true;
     queueMicrotask(() => {
       this.toldRelay = false;

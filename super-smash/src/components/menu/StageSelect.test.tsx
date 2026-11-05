@@ -6,7 +6,7 @@ import { localBuild } from "@/game/onlineConfig";
 import { RANDOM_STAGE, resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
-import { fakeSession, type FakeSession } from "@/net/online/testing";
+import { GUEST_PEER, fakeSession, type FakeSession } from "@/net/online/testing";
 import { StageSelect } from "./StageSelect";
 
 async function renderStages() {
@@ -176,10 +176,10 @@ describe("StageSelect, hosting online", () => {
     useMatchConfig.getState().setFighter(0, "mario");
     await renderStages();
     act(() => fake.emit({ type: "link", status: "waiting" }));
-    act(() => fake.emit({ type: "peer", present: true }));
+    act(() => fake.emit({ type: "peer", present: true, peer: GUEST_PEER }));
     act(() => fake.emit({ type: "link", status: "open" }));
     // The newcomer says it runs this build, as this side did on opening.
-    act(() => fake.emit({ type: "lobby", message: { kind: "hello", ...localBuild() } }));
+    act(() => fake.emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: GUEST_PEER.id }));
     // The stage is still being chosen; it goes with Choose Fighters, as the first time.
     expect(fake.sent).toEqual([
       { kind: "hello", ...localBuild() },

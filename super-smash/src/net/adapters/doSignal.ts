@@ -45,6 +45,14 @@
  * nothing to negotiate), and the socket closing, with any code, is every peer
  * leaving at once, because a relayed match with no room socket has no way to
  * hear anyone. The relay is sticky: there is no way back to direct.
+ *
+ * Rooms of three or four (Plan 7, Phase B) always relay: the direct route is
+ * for two, so it offers only while the room seats exactly one other peer, and
+ * never builds a second peer connection; the session moves the room to the
+ * relay when a third is seated, which lets the one it has go. Once a room has
+ * begun, `lockRoster` names its players, and the relay neither announces nor
+ * hears anyone else: a stranger who types the code into a begun room is never
+ * one of its players, so neither is their leave.
  */
 
 import { asBytes } from "../bytes";
@@ -165,6 +173,14 @@ export interface DoSignalTransport extends Transport {
    * (see `Route`).
    */
   useRelay(): void;
+  /**
+   * The other players of a begun room, said again on every re-sent begin.
+   * Relayed, nobody outside them is announced or heard, and the seated ones
+   * not yet announced (a newcomer on a vacated port) are announced now.
+   * Direct, it only records them, for a later move to the relay. Before any
+   * lock, a held match counts only the peers already announced as players.
+   */
+  lockRoster(ids: readonly string[]): void;
 }
 
 /** One cast at the boundary, for the reason webrtc.ts gives for `RoomLike`. */
@@ -202,6 +218,8 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   const seated = new Set<string>();
   /** Relay mode: the peers announced so far, so each is announced once and its leave is said once. */
   const relayAnnounced = new Set<string>();
+  /** The begun room's other players (`lockRoster`), or null before the begin. */
+  let roster: ReadonlySet<string> | null = null;
   /** The current connection's deadline to open its channel; see `NEGOTIATION_TIMEOUT_MS`. */
   let deadline: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -284,9 +302,19 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     }
   }
 
-  /** Relay mode: a seated peer is here. Said once. */
+  /**
+   * Whether a seated peer is one of this room's players: on the roster once it
+   * is locked; before that, anyone, unless a match holds the link, which is
+   * then for the peers it already has.
+   */
+  function isPlayer(peerId: string): boolean {
+    if (roster !== null) return roster.has(peerId);
+    return !held || relayAnnounced.has(peerId);
+  }
+
+  /** Relay mode: a seated player is here. Said once. */
   function announceRelayed(peerId: string): void {
-    if (relayAnnounced.has(peerId)) return;
+    if (relayAnnounced.has(peerId) || !isPlayer(peerId)) return;
     relayAnnounced.add(peerId);
     joins.emit(peerId);
   }
@@ -475,7 +503,10 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         }
         // While a channel is open it decides (see the header): a newcomer does not replace the peer.
         if (announced) break;
-        if (role === "host") void offerTo(event.peer.id);
+        // Direct is for two: with another already seated, the room is moving to the relay.
+        if (role === "host") {
+          if (seated.size === 1) void offerTo(event.peer.id);
+        }
         // Before then, a host that left can be replaced: the room makes the next joiner host.
         else if (role === "guest" && event.peer.role === "host") hostId = event.peer.id;
         break;
@@ -521,8 +552,8 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         }
         break;
       case "game": {
-        // Only the relay carries game data, and only from a peer the room seats.
-        if (route !== "relay" || !seated.has(event.from)) break;
+        // Only the relay carries game data, and only from a player it announced (whom the room seats).
+        if (route !== "relay" || !relayAnnounced.has(event.from) || !isPlayer(event.from)) break;
         const packets = decodeRelayBatch(event.bytes);
         if (packets) for (const packet of packets) messages.emit(packet, event.from);
         break;
@@ -569,7 +600,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     onPeerJoin: (cb) => joins.add(cb),
     onPeerLeave: (cb) => leaves.add(cb),
     offerAgain(peerId) {
-      if (closed || route === "relay" || held || role !== "host" || status !== "waiting") return;
+      if (closed || route === "relay" || held || role !== "host" || status !== "waiting" || seated.size !== 1) return;
       void offerTo(peerId);
     },
     holdChannel() {
@@ -579,6 +610,12 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       held = false;
     },
     useRelay,
+    lockRoster(ids) {
+      if (closed) return;
+      roster = new Set(ids);
+      if (route !== "relay") return;
+      for (const id of seated) announceRelayed(id);
+    },
     close() {
       if (closed) return;
       closed = true;
