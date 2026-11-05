@@ -40,7 +40,7 @@ describe("control options in the lobby (Plan 5)", () => {
     expect(parseLobbyMessage({ kind: "pick", fighterId: "fox", costume: 2, stickJump: "no" })).toBeNull();
   });
 
-  it("refuses a start whose control options are not two known flag sets", () => {
+  it("refuses a start whose control options are not known flag sets, one for each fighter", () => {
     expectUnplayable({ ...CONFIG, controls: [0] });
     expectUnplayable({ ...CONFIG, controls: [0, 0, 0] });
     expectUnplayable({ ...CONFIG, controls: [0, 7] });
@@ -340,11 +340,38 @@ describe("lobby messages from a hostile or mismatched peer", () => {
     expect(Object.keys(refuse ?? {}).sort()).toEqual(["kind", "reason"]);
   });
 
-  it("reads the config's arrays as exactly two entries, not by prototype or length tricks", () => {
+  it("reads the config's arrays as two to four entries of one length, not by prototype or length tricks", () => {
     const sparse: unknown[] = [];
     sparse[1] = "fox";
     expectUnplayable({ ...CONFIG, fighters: sparse });
+    const gappy: unknown[] = ["mario", undefined, "fox"];
+    delete gappy[1];
+    expectUnplayable({ ...CONFIG, fighters: gappy, costumes: [0, 1, 2], controls: [0, 0, 0] });
+    // Five entries, one entry: outside two to four, though each array agrees with the others.
+    expectUnplayable({ ...CONFIG, fighters: ["mario", "fox", "mario", "fox", "mario"], costumes: [0, 1, 2, 3, 0], controls: [0, 0, 0, 0, 0] });
+    expectUnplayable({ ...CONFIG, fighters: ["mario"], costumes: [0], controls: [0] });
+    // Each array on its own is two to four long, but they are not one length.
     expectUnplayable({ ...CONFIG, fighters: ["mario", "fox", "mario"] });
     expectUnplayable({ ...CONFIG, costumes: [0] });
+    expectUnplayable({ ...CONFIG, costumes: [0, 1, 2] });
+    expectUnplayable({ ...CONFIG, controls: [0, 0, 0] });
+    expectUnplayable({ ...CONFIG, fighters: ["mario", "fox", "mario", "fox"], costumes: [0, 1, 2], controls: [0, 0, 0, 0] });
+    // Three and four entries of one length are a start, each seat's pick and options intact.
+    const three: OnlineMatchConfig = {
+      ...CONFIG,
+      rules: { ...CONFIG.rules, oneOnOne: false },
+      fighters: ["mario", "fox", "kirby"],
+      costumes: [0, 1, 2],
+      controls: [0, CONTROL_STICK_JUMP_OFF, 0],
+    };
+    const four: OnlineMatchConfig = {
+      ...three,
+      fighters: ["mario", "fox", "kirby", "mario"],
+      costumes: [0, 1, 2, 3],
+      controls: [0, CONTROL_STICK_JUMP_OFF, 0, 0],
+    };
+    for (const config of [three, four]) {
+      expect(parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config })))).toEqual({ kind: "start", config });
+    }
   });
 });

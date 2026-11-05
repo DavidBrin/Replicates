@@ -65,6 +65,15 @@ export interface BuildStamp {
   readonly engineRules: string;
 }
 
+/**
+ * How many players an online match seats: the local bounds (`MIN_PLAYERS` and
+ * `MAX_PLAYERS`, lib/matchConfig). They are said again here so this parser
+ * takes no new import from that store; a test (game/onlineConfig.test.ts)
+ * holds the two pairs equal.
+ */
+export const ONLINE_MIN_PLAYERS = 2;
+export const ONLINE_MAX_PLAYERS = 4;
+
 /** The host's `BuildStamp` rides with it: a guest on another build refuses the start (`refuse`). */
 export interface OnlineMatchConfig extends BuildStamp {
   /** A 32-bit integer: `buildStartConfig` truncates the host's draw to one. */
@@ -73,16 +82,19 @@ export interface OnlineMatchConfig extends BuildStamp {
   readonly stageId: string;
   readonly stageForm: StageForm;
   readonly rules: MatchRules;
-  /** Concrete fighter ids for ports 0 and 1. */
-  readonly fighters: readonly [string, string];
-  readonly costumes: readonly [number, number];
+  /**
+   * Concrete fighter ids, one per port from port 0: `ONLINE_MIN_PLAYERS` to
+   * `ONLINE_MAX_PLAYERS` of them, and `costumes` and `controls` are as long.
+   */
+  readonly fighters: readonly string[];
+  readonly costumes: readonly number[];
   /**
    * Each port's control options (`CONTROL_*` bits, Plan 5): the sim reads them
    * on both peers. Required (ruling P5-R24): a start without them is from a
    * build before Plan 5, on other rules, and is read as one this build cannot
    * play, its stamp intact, so the guest refuses it by name.
    */
-  readonly controls: readonly [number, number];
+  readonly controls: readonly number[];
 }
 
 export type LobbyMessage =
@@ -194,28 +206,40 @@ function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineM
   if (!isStageId(stageId) || !isStageForm(stageForm)) return null;
   const parsedRules = parseRules(rules);
   if (!parsedRules) return null;
-  if (!Array.isArray(fighters) || fighters.length !== 2) return null;
-  const [f0, f1] = fighters as unknown[];
-  if (!isFighterId(f0) || !isFighterId(f1)) return null;
-  if (!Array.isArray(costumes) || costumes.length !== 2) return null;
-  const [c0, c1] = costumes as unknown[];
-  if (!isCostume(c0) || !isCostume(c1)) return null;
-  if (!Array.isArray(controls) || controls.length !== 2) return null;
-  const [k0, k1] = controls as unknown[];
-  if (!isControls(k0) || !isControls(k1)) return null;
+  const parsedFighters = readPerPort(fighters, isFighterId);
+  const parsedCostumes = readPerPort(costumes, isCostume);
+  const parsedControls = readPerPort(controls, isControls);
+  if (!parsedFighters || !parsedCostumes || !parsedControls) return null;
+  if (parsedCostumes.length !== parsedFighters.length || parsedControls.length !== parsedFighters.length) return null;
   return {
     seed,
     stageId,
     stageForm,
     rules: parsedRules,
-    fighters: [f0, f1],
-    costumes: [c0, c1],
-    controls: [k0, k1],
+    fighters: parsedFighters,
+    costumes: parsedCostumes,
+    controls: parsedControls,
     build: stamp.build,
     protocol: stamp.protocol,
     bones: stamp.bones,
     engineRules: stamp.engineRules,
   };
+}
+
+/**
+ * One entry per port: an array of `ONLINE_MIN_PLAYERS` to `ONLINE_MAX_PLAYERS`
+ * entries that each pass `isEntry`, copied out by index into a fresh array. A
+ * gap in a sparse array reads as `undefined` and fails the check.
+ */
+function readPerPort<T>(value: unknown, isEntry: (entry: unknown) => entry is T): T[] | null {
+  if (!Array.isArray(value) || value.length < ONLINE_MIN_PLAYERS || value.length > ONLINE_MAX_PLAYERS) return null;
+  const entries: T[] = [];
+  for (let port = 0; port < value.length; port++) {
+    const entry: unknown = value[port];
+    if (!isEntry(entry)) return null;
+    entries.push(entry);
+  }
+  return entries;
 }
 
 function parseBuild(value: Record<string, unknown>): BuildStamp | null {

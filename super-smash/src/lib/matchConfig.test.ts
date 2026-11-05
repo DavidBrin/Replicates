@@ -323,6 +323,38 @@ describe("online mode", () => {
     expect(useMatchConfig.getState().online).toBe(true);
   });
 
+  it("seats as many online players as the room begins with, 1v1 rules only for two", () => {
+    useMatchConfig.getState().configureOnline(4);
+    let { players, rules } = useMatchConfig.getState();
+    expect(players.map((p) => [p.port, p.kind, p.scheme, p.fighterId, p.costume])).toEqual([
+      [0, "human", "arrows", null, 0],
+      [1, "human", "arrows", null, 1],
+      [2, "human", "arrows", null, 2],
+      [3, "human", "arrows", null, 3],
+    ]);
+    expect(rules.oneOnOne).toBe(false);
+    expect(useMatchConfig.getState().online).toBe(true);
+
+    useMatchConfig.getState().configureOnline();
+    ({ players, rules } = useMatchConfig.getState());
+    expect(players.map((p) => p.port)).toEqual([0, 1]);
+    expect(rules.oneOnOne).toBe(true);
+
+    useMatchConfig.getState().configureOnline(3);
+    ({ players, rules } = useMatchConfig.getState());
+    expect(players.map((p) => p.port)).toEqual([0, 1, 2]);
+    expect(rules.oneOnOne).toBe(false);
+  });
+
+  it("keeps the player count to the local bounds", () => {
+    useMatchConfig.getState().configureOnline(1);
+    expect(useMatchConfig.getState().players).toHaveLength(MIN_PLAYERS);
+    useMatchConfig.getState().configureOnline(9);
+    expect(useMatchConfig.getState().players).toHaveLength(MAX_PLAYERS);
+    useMatchConfig.getState().configureOnline(Number.NaN);
+    expect(useMatchConfig.getState().players).toHaveLength(MIN_PLAYERS);
+  });
+
   it("goes back to one human and a CPU on leaving", () => {
     useMatchConfig.getState().configureOnline();
     useMatchConfig.getState().leaveOnline();

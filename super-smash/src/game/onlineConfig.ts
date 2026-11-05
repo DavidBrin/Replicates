@@ -9,7 +9,7 @@
 
 import type { MatchRules } from "@/engine/types";
 import { RANDOM_FIGHTER, controlsOf, type PlayerSlot, type StageForm } from "@/lib/matchConfig";
-import type { BuildStamp, OnlineMatchConfig } from "@/net/online/lobby";
+import { ONLINE_MAX_PLAYERS, ONLINE_MIN_PLAYERS, type BuildStamp, type OnlineMatchConfig } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, resolveFighterId, resolveMatchStage } from "./bootstrap";
 import type { PlayerSlot as RunnerSlot } from "./matchRunner";
@@ -24,19 +24,22 @@ export interface StartConfigInput {
 }
 
 export function buildStartConfig(input: StartConfigInput): OnlineMatchConfig {
-  if (input.players.length !== 2) throw new Error(`An online match is two players, not ${input.players.length}`);
-  const [p0, p1] = input.players;
+  const { players } = input;
+  if (players.length < ONLINE_MIN_PLAYERS || players.length > ONLINE_MAX_PLAYERS) {
+    throw new Error(`An online match is two to four players, not ${players.length}`);
+  }
   const seed = input.seed | 0;
   return {
     seed,
     // "normal" leaves the base id untouched; the form travels separately.
     stageId: resolveMatchStage(input.stageId, "normal", seed).id,
     stageForm: input.stageForm,
-    rules: { ...input.rules, oneOnOne: true },
-    fighters: [resolveFighterId(known(p0.fighterId), seed, 0), resolveFighterId(known(p1.fighterId), seed, 1)],
-    costumes: [p0.costume, p1.costume],
+    // The 1v1 damage bonus applies when exactly two fighters are on the stage (SPEC §4), so only a two-player match plays it.
+    rules: { ...input.rules, oneOnOne: players.length === 2 },
+    fighters: players.map((p, port) => resolveFighterId(known(p.fighterId), seed, port)),
+    costumes: players.map((p) => p.costume),
     // Plan 5: each player's control options, which the sim reads on both peers.
-    controls: [controlsOf(p0), controlsOf(p1)],
+    controls: players.map((p) => controlsOf(p)),
     ...localBuild(),
   };
 }

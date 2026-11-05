@@ -839,8 +839,12 @@ interface MatchConfigState {
    * only this machine's options take port 0's, for `leaveOnline` to seat.
    */
   applyControlPrefs(prefs: ControlPrefs): void;
-  /** Two humans, one per machine, each on their own keyboard's Config 1, both with this machine's control options. */
-  configureOnline(): void;
+  /**
+   * Humans, one per machine and each on their own keyboard's Config 1, all with this machine's control options:
+   * as many as the room begins with (`playerCount`, two by default, kept within `MIN_PLAYERS` to `MAX_PLAYERS`).
+   * The 1v1 damage rule follows the count, as `withDerivedRules` has it.
+   */
+  configureOnline(playerCount?: number): void;
   /** Back to the offline default: one human, with this machine's control options again, and a CPU. */
   leaveOnline(): void;
 
@@ -1094,10 +1098,11 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
       return { players, controlPrefs, localOptions: localOptionsOf({ ...s, players }) };
     }),
 
-  configureOnline: () =>
+  configureOnline: (playerCount = MIN_PLAYERS) =>
     set((s) => {
       const local = localOptionsOf(s);
-      const players = [onlinePlayer(0, local), onlinePlayer(1, local)];
+      const count = Number.isFinite(playerCount) ? Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, Math.trunc(playerCount))) : MIN_PLAYERS;
+      const players = Array.from({ length: count }, (_, port) => onlinePlayer(port, local));
       return { players, rules: withDerivedRules(s.rules, players), result: null, online: true, localOptions: local };
     }),
 

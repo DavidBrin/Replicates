@@ -5,8 +5,8 @@ import { ENGINE_RULES_VERSION } from "@/engine/constants";
 import { CONTROL_STICK_JUMP_OFF, type MatchRules } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { DEFAULT_PAD_SETTINGS } from "@/input/gamepad";
-import { RANDOM_FIGHTER, RANDOM_STAGE, useMatchConfig, type PlayerSlot } from "@/lib/matchConfig";
-import { parseLobbyMessage } from "@/net/online/lobby";
+import { MAX_PLAYERS, MIN_PLAYERS, RANDOM_FIGHTER, RANDOM_STAGE, useMatchConfig, type PlayerSlot } from "@/lib/matchConfig";
+import { ONLINE_MAX_PLAYERS, ONLINE_MIN_PLAYERS, parseLobbyMessage } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, STAGES, bootstrapEngine, resolveMatchStage } from "./bootstrap";
 import { buildMismatch, buildStartConfig, describeMismatch, localBuild, newMatchSeed, runnerSlotsFor } from "./onlineConfig";
@@ -20,6 +20,13 @@ function players(a: string | null, b: string | null): PlayerSlot[] {
     { port: 0, kind: "human", cpuLevel: 3, fighterId: a, costume: 0, scheme: "arrows", stickJump: true, pad: DEFAULT_PAD_SETTINGS, joinedPad: null },
     { port: 1, kind: "human", cpuLevel: 3, fighterId: b, costume: 1, scheme: "arrows", stickJump: false, pad: DEFAULT_PAD_SETTINGS, joinedPad: null },
   ];
+}
+
+/** `count` seats on ports 0 to `count - 1`: the first two as `players` has them (the first with Stick Jump on, the second off), any more as the first, on Mario. */
+function seats(count: number): PlayerSlot[] {
+  const first = players("mario", "fox");
+  const more = Array.from({ length: Math.max(0, count - 2) }, (_, i): PlayerSlot => ({ ...first[0], port: i + 2, costume: i + 2 }));
+  return [...first, ...more].slice(0, count);
 }
 
 beforeAll(() => {
@@ -48,14 +55,43 @@ describe("the host's start config", () => {
     expect(FIGHTERS.map((f) => f.id)).toContain(config.fighters[0]);
   });
 
-  it("always plays the 1v1 rules online", () => {
-    expect(buildStartConfig({ players: players("mario", "fox"), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 }).rules.oneOnOne).toBe(true);
+  it("plays the 1v1 rules online only with two players", () => {
+    const oneOnOne = (count: number) =>
+      buildStartConfig({ players: seats(count), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 }).rules.oneOnOne;
+    expect(oneOnOne(2)).toBe(true);
+    expect(oneOnOne(3)).toBe(false);
+    expect(oneOnOne(4)).toBe(false);
   });
 
-  it("refuses anything but two players", () => {
+  it("carries each of three or four players' fighter, costume and control options, in port order", () => {
+    const four = seats(4);
+    four[2] = { ...four[2], fighterId: "kirby", costume: 5 };
+    four[3] = { ...four[3], fighterId: RANDOM_FIGHTER, costume: 7, stickJump: false };
+    const config = buildStartConfig({ players: four, stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
+    expect(config.fighters).toHaveLength(4);
+    expect(config.fighters.slice(0, 3)).toEqual(["mario", "fox", "kirby"]);
+    expect(FIGHTERS.map((f) => f.id)).toContain(config.fighters[3]);
+    expect(config.costumes).toEqual([0, 1, 5, 7]);
+    expect(config.controls).toEqual([0, CONTROL_STICK_JUMP_OFF, 0, CONTROL_STICK_JUMP_OFF]);
+    expect(runnerSlotsFor(config).map((slot) => slot.label)).toEqual(["P1", "P2", "P3", "P4"]);
+    expect(parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config })))).toEqual({ kind: "start", config });
+  });
+
+  it("refuses fewer than two players or more than four", () => {
+    const build = (count: number) => () =>
+      buildStartConfig({ players: seats(count), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
+    expect(build(1)).toThrow(/two to four players/);
+    expect(build(0)).toThrow(/two to four players/);
     expect(() =>
-      buildStartConfig({ players: players("mario", "fox").slice(0, 1), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 }),
-    ).toThrow(/two players/);
+      buildStartConfig({ players: [...seats(4), { ...seats(4)[0], port: 4 }], stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 }),
+    ).toThrow(/two to four players/);
+    expect(build(2)).not.toThrow();
+    expect(build(4)).not.toThrow();
+  });
+
+  it("keeps the online player bounds equal to the local ones", () => {
+    expect(ONLINE_MIN_PLAYERS).toBe(MIN_PLAYERS);
+    expect(ONLINE_MAX_PLAYERS).toBe(MAX_PLAYERS);
   });
 
   it("survives its own wire format", () => {
