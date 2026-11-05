@@ -1496,6 +1496,13 @@ describe("the waiting room and the host's Start (Plan 7, Phase B)", () => {
     expect(players.map((p) => p.port)).toEqual([0, 1, 2]);
     expect(rules.oneOnOne).toBe(false);
     expect(fake.session.lockRoster).toHaveBeenCalledWith(["g2", "g3"]);
+
+    // The Start goes out once: a second press sends nothing and seats nobody again, so the picks stay.
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 }, from: SECOND_GUEST.id });
+    expect(beginRoom()).toBe(false);
+    expect(begins(fake)).toHaveLength(1);
+    expect(fake.session.lockRoster).toHaveBeenCalledTimes(1);
+    expect(useMatchConfig.getState().players[1].fighterId).toBe("fox");
   });
 
   it("refuses to begin before everyone is connected, or with nobody in", () => {
@@ -1545,6 +1552,11 @@ describe("the waiting room and the host's Start (Plan 7, Phase B)", () => {
     // Only the host begins a room.
     fake.emit({ type: "lobby", message: begin(["g2", 0], ["h1", 1], ["g3", 2]), from: SECOND_GUEST.id });
     expect(useOnlineStore.getState()).toMatchObject({ localPort: 3, begun: false });
+    // Review Focus 3, this side: a fourth the room seated just before the host's begin, which does not list them.
+    const late: PeerInfo = { id: "f1", role: "guest", port: 1 };
+    fake.emit({ type: "peer", present: true, peer: late });
+    fake.emit({ type: "lobby", message: { kind: "away", away: true }, from: late.id });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", remoteAway: true });
 
     fake.emit({ type: "lobby", message: begin(["h1", 0], ["g2", 1], ["g3", 2]), from: HOST_PEER.id });
     expect(useOnlineStore.getState()).toMatchObject({
@@ -1558,6 +1570,8 @@ describe("the waiting room and the host's Start (Plan 7, Phase B)", () => {
     });
     expect(useMatchConfig.getState().players.map((p) => p.port)).toEqual([0, 1, 2]);
     expect(fake.session.lockRoster).toHaveBeenCalledWith(["h1", "g2"]);
+    // The unlisted fourth is gone, and with it their away.
+    expect(useOnlineStore.getState().remoteAway).toBe(false);
     // Its picks go by match port from here.
     fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 4 }, from: SECOND_GUEST.id });
     expect(useMatchConfig.getState().players[1]).toMatchObject({ fighterId: "fox", costume: 4 });
@@ -1670,6 +1684,44 @@ describe("the waiting room and the host's Start (Plan 7, Phase B)", () => {
     expect(useMatchConfig.getState().players).toHaveLength(3);
     expect(own.session.lockRoster).toHaveBeenCalledWith(["h1", "g2"]);
     expect(fake.session.lockRoster).toHaveBeenLastCalledWith(["g2", "n1"]);
+  });
+
+  /**
+   * Fix round 1 (review Minors 1 and 4): a seat kept through a leave with a
+   * start out is the match's; once the start is withdrawn, the next joiner
+   * takes that port, and the stale seat goes. A begin the room never gets
+   * changes nothing.
+   */
+  it("gives the port of a seat kept through a leave to the next joiner once the start is withdrawn", () => {
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "host" });
+    fake.emit({ type: "peer", present: true, peer: GUEST_PEER });
+    fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
+    expect(beginRoom()).toBe(true);
+    useOnlineStore.getState().patch({ config: CONFIG });
+    // The guest leaves before the match took hold: its seat stays the match's, then the channel goes.
+    fake.emit({ type: "peer", present: false, peer: GUEST_PEER });
+    fake.emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", config: null, seats: [{ peerId: "g1", port: 1, build: "pending" }] });
+
+    // A begin that cannot reach the room seats nobody.
+    fake.accepts = false;
+    fake.emit({ type: "peer", present: true, peer: NEWCOMER });
+    expect(useOnlineStore.getState().seats).toEqual([{ peerId: "g1", port: 1, build: "pending" }]);
+    expect(fake.session.lockRoster).toHaveBeenCalledTimes(1);
+    fake.emit({ type: "peer", present: false, peer: NEWCOMER });
+
+    fake.accepts = true;
+    fake.emit({ type: "peer", present: true, peer: NEWCOMER });
+    expect(begins(fake).at(-1)).toEqual([begin(["h1", 0], ["n1", 1]), undefined]);
+    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, seats: [{ peerId: "n1", port: 1, build: "pending" }] });
+    expect(fake.session.lockRoster).toHaveBeenLastCalledWith(["n1"]);
+    fake.emit({ type: "link", status: "negotiating" });
+    fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "lobby", message: HELLO, from: NEWCOMER.id });
+    expect(useOnlineStore.getState().status).toBe("connected");
   });
 
   /** Carried from Task 13: a channel that goes with a start out takes every seat with it, and says so. */

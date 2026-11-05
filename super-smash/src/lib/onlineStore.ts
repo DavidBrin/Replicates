@@ -582,11 +582,12 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * the seats take their match ports, the match config seats that many, and
    * the session locks the roster to these players. False, changing nothing,
    * unless this is the host, connected (every seat said this build), with at
-   * least one other player in, and the begin reached the room.
+   * least one other player in, not yet begun (a second Start would seat the
+   * match config again, clearing every pick), and the begin reached the room.
    */
   const begin = (): boolean => {
     const { status, seats } = online();
-    if (!live || session.role !== "host" || status !== "connected" || seats.length === 0) return false;
+    if (!live || roster !== null || session.role !== "host" || status !== "connected" || seats.length === 0) return false;
     const entries: BeginSeat[] = [{ id: session.transport.selfId, port: HOST_PORT }, ...seats.map((seat, i) => ({ id: seat.peerId, port: i + 1 }))];
     if (!session.sendLobby({ kind: "begin", seats: entries })) return false;
     roster = entries;
@@ -610,24 +611,34 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * port stands empty and no match is under way, and sends the begin again
    * with them on it; otherwise it sends them the begin unchanged, which does
    * not list them, so they leave. A guest waits for its host's word.
+   *
+   * A port stands empty when the room no longer seats its player: a seat kept
+   * through a leave with a start out (`seatLeft`) is the match's, and once the
+   * start is withdrawn it is stale, dropped as its port is reused.
    */
   const arrivedAfterBegin = (peer: PeerInfo) => {
     if (session.role !== "host" || roster === null) return;
     const { seats } = online();
-    const vacant = roster.filter((entry) => entry.port !== HOST_PORT && !seats.some((seat) => seat.port === entry.port));
+    const seatedAt = (port: number) => seats.some((seat) => seat.port === port && session.peers.has(seat.peerId));
+    const vacant = roster.filter((entry) => entry.port !== HOST_PORT && !seatedAt(entry.port));
     if (online().config !== null || vacant.length === 0) {
       session.sendLobby({ kind: "begin", seats: roster }, peer.id);
       lockRoster();
       return;
     }
     const port = Math.min(...vacant.map((entry) => entry.port));
-    roster = roster.map((entry) => (entry.port === port ? { id: peer.id, port } : entry));
+    const next = roster.map((entry) => (entry.port === port ? { id: peer.id, port } : entry));
+    // Nothing changes unless the room has the begin that seats them.
+    if (!session.sendLobby({ kind: "begin", seats: next })) return;
+    roster = next;
+    for (const stale of seats) if (stale.port === port) forgetSeat(stale.peerId);
     // Their panel starts empty, whatever the last player at this port left in it.
     match().setFighter(port, null);
     match().setCostume(port, port);
     const seat: SeatView = { peerId: peer.id, port, build: "pending" };
-    online().patch({ seats: [...seats, seat].sort((a, b) => a.port - b.port), notice: freshNotice() });
-    if (!session.sendLobby({ kind: "begin", seats: roster })) return;
+    const kept = seats.filter((other) => other.port !== port);
+    online().patch({ seats: [...kept, seat].sort((a, b) => a.port - b.port), notice: freshNotice() });
+    sayAway();
     lockRoster();
     settle();
     greet(seat);
