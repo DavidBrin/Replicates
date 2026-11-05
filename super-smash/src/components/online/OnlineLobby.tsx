@@ -105,6 +105,7 @@ export function OnlineLobby({
       remoteAway: false,
       config: null,
       hostStage: null,
+      route: null,
     });
     // WebGL before anything (D57: a match is drawn only in 3D). A browser that
     // cannot draw the match opens no room: the other player would wait on a

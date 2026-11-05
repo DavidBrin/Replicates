@@ -378,11 +378,12 @@ describe("OnlineLobby", () => {
   it.each([
     ["create", create],
     ["join", () => join("ABCD")],
-  ])("starts a new room clean when it is a %s: no notice, nobody away", async (_intent, start) => {
+  ])("starts a new room clean when it is a %s: no notice, nobody away, no route left from the last room", async (_intent, start) => {
     harness();
-    useOnlineStore.getState().patch({ notice: PEER_LEFT_NOTICE, remoteAway: true });
+    // A relayed room that ended in an error leaves its route behind; the next room opens on the same screen.
+    useOnlineStore.getState().patch({ notice: PEER_LEFT_NOTICE, remoteAway: true, route: "relay" });
     await start();
-    expect(useOnlineStore.getState()).toMatchObject({ status: "connecting", notice: null, remoteAway: false });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connecting", notice: null, remoteAway: false, route: null });
   });
 
   it.each([
