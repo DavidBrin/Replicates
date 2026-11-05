@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-import { parseRoomIntent, type ServerMessage } from "../../src/net/signalProtocol";
+import { parseRoomIntent, type RoomError, type ServerMessage } from "../../src/net/signalProtocol";
 import type { Env } from "./env";
 import {
   decideJoin,
@@ -103,10 +103,7 @@ export class RoomDO extends DurableObject<Env> {
         send(ws, outcome.message);
         break;
       case "kick":
-        send(ws, outcome.message);
-        close(ws, outcome.closeCode, outcome.reason);
-        // Gone now, not whenever the client finishes the close handshake.
-        this.depart(ws);
+        this.kick(ws, outcome);
         break;
       case "drop":
         break;
@@ -143,14 +140,19 @@ export class RoomDO extends DurableObject<Env> {
         }
         break;
       case "kick":
-        send(ws, outcome.message);
-        close(ws, outcome.closeCode, outcome.reason);
-        // Gone now, not whenever the client finishes the close handshake.
-        this.depart(ws);
+        this.kick(ws, outcome);
         break;
       case "drop":
         break;
     }
+  }
+
+  /** Tells a socket why, closes it, and settles its departure now. */
+  private kick(ws: WebSocket, outcome: { reason: RoomError; closeCode: number; message: ServerMessage }): void {
+    send(ws, outcome.message);
+    close(ws, outcome.closeCode, outcome.reason);
+    // Gone now, not whenever the client finishes the close handshake.
+    this.depart(ws);
   }
 
   /**
@@ -161,9 +163,15 @@ export class RoomDO extends DurableObject<Env> {
    */
   private ensureLive(): void {
     if (this.liveBuilt) return;
-    this.liveBuilt = true;
+    let sockets: WebSocket[];
+    try {
+      sockets = this.ctx.getWebSockets();
+    } catch {
+      // Not built: the next entry tries again, rather than relaying to nobody for good.
+      return;
+    }
     const now = Date.now();
-    for (const ws of this.ctx.getWebSockets()) {
+    for (const ws of sockets) {
       try {
         if (ws.readyState !== WebSocket.OPEN) continue;
         const entry = livePeerFor(attachmentOf(ws), now);
@@ -172,6 +180,7 @@ export class RoomDO extends DurableObject<Env> {
         // A socket torn down mid-read has no entry; the rest still get theirs.
       }
     }
+    this.liveBuilt = true;
   }
 
   /** Tells the others once, then forgets the socket, so a later close or error is not a second exit. */

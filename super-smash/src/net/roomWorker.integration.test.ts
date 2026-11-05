@@ -84,6 +84,7 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
 
     // Past MAX_MESSAGES_PER_PEER (2000) on purpose: game data is not signalling.
     const body = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    const startedAt = Date.now();
     for (let i = 0; i < 2100; i++) host.sendBinary(body);
     for (let waited = 0; waited < 5000 && guest.games.length === 0; waited += 25) {
       await new Promise((resolve) => setTimeout(resolve, 25));
@@ -100,8 +101,10 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
     guest.send({ t: "signal", payload: { kind: "answer", sdp: "v=0" } });
     expect(await host.next("signal")).toMatchObject({ payload: { kind: "answer", sdp: "v=0" } });
 
-    // The rate cap dropped most of the 2100: no more than a burst plus what 5 s refills.
-    expect(guest.games.length).toBeLessThanOrEqual(RELAY_BURST + RELAY_RATE_PER_SECOND * 5);
+    // The rate cap dropped most of the 2100: no more than a burst plus what the
+    // time since the first frame was sent could refill (a slow machine gets more).
+    const elapsedSeconds = (Date.now() - startedAt) / 1000;
+    expect(guest.games.length).toBeLessThanOrEqual(RELAY_BURST + RELAY_RATE_PER_SECOND * Math.ceil(elapsedSeconds));
     const hostId = (hostWelcome.self as { id: string }).id;
     for (const game of guest.games) {
       expect(new TextDecoder().decode(game.subarray(0, RELAY_ID_BYTES))).toBe(hostId);
