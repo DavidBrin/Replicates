@@ -439,6 +439,9 @@ export default function PlayPage() {
   const [linkHealth, setLinkHealth] = useState<LinkHealth>("ok");
   const [peerAway, setPeerAway] = useState(false);
   const [stalled, setStalled] = useState(false);
+  // The store's route is what the lobby settled on (`null` until the session says); a match that
+  // has not heard of a relay runs direct.
+  const route = useOnlineStore((s) => s.route) ?? "direct";
   const [loading, setLoading] = useState(true);
   const [pictureGone, setPictureGone] = useState(false);
   // A bake that fails its digest says "…does not match this version of the game. Reload the page."
@@ -754,6 +757,10 @@ export default function PlayPage() {
         stats: () => runner.netStats,
         localPort,
         turn: session.turn,
+        // A getter: the route can change while the match runs, and the e2e reads it then.
+        get route() {
+          return session.route;
+        },
       };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -813,7 +820,7 @@ export default function PlayPage() {
         )}
       </div>
 
-      {online && !shownError ? <NetHud stats={netStats} health={linkHealth} peerAway={peerAway} stalled={stalled} /> : null}
+      {online && !shownError ? <NetHud stats={netStats} route={route} health={linkHealth} peerAway={peerAway} stalled={stalled} /> : null}
 
       {shownError && (
         <div

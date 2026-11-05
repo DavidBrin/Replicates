@@ -116,7 +116,7 @@ test("two browsers play a match through a room, and one leaving ends it for the 
     expect(stats?.peers).toBe(1);
     expect(stats?.desyncs).toBe(0);
   }
-  await expect(host.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+$/)).toBeVisible();
+  await expect(host.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+ · (DIRECT|RELAY)$/)).toBeVisible();
 
   // The guest's key moves the guest's fighter on the host's screen.
   const before = (await readFighters(host))[1].x;

@@ -480,9 +480,19 @@ describe("the play page, online", () => {
     await renderPage();
     only(mocks.runners).runner.netStats = STATS;
     act(() => vi.advanceTimersByTime(250));
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12")).toBeInTheDocument();
+    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT")).toBeInTheDocument();
     act(() => only(mocks.monitors).options.onHealth("waiting", true));
     expect(screen.getByRole("status")).toHaveTextContent("Opponent switched tabs…");
+  });
+
+  it("names the room's route on the HUD: direct until the store says relay", async () => {
+    goOnline("guest");
+    await renderPage();
+    only(mocks.runners).runner.netStats = STATS;
+    act(() => vi.advanceTimersByTime(250));
+    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT")).toBeInTheDocument();
+    act(() => useOnlineStore.getState().patch({ route: "relay" }));
+    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · RELAY")).toBeInTheDocument();
   });
 
   it("says it is waiting when the match has been held at the prediction cap for over a second", async () => {
@@ -632,6 +642,17 @@ describe("the play page, leaving online", () => {
     unmount();
     expect(only(mocks.monitors).stop).toHaveBeenCalled();
     expect((window as { __smashNet?: unknown }).__smashNet).toBeUndefined();
+  });
+
+  it("publishes the session's route on __smashNet", async () => {
+    const { fake } = goOnline("host");
+    fake.route = "relay";
+    await renderPage();
+    const net = () => (window as { __smashNet?: { route?: unknown } }).__smashNet;
+    expect(net()?.route).toBe("relay");
+    // A getter, not a copy: the page reads it again when the e2e asks.
+    fake.route = "direct";
+    expect(net()?.route).toBe("direct");
   });
 
   it("does not bounce to the results after leaving during the KO's play-out", async () => {
