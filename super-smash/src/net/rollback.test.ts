@@ -20,7 +20,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Btn, emptyEvents, pressed, type InputFrame, type StepEvents } from "@/engine/types";
 import { LoopbackNetwork } from "./adapters/loopback";
-import { MAX_INPUT_WINDOW_FRAMES, PacketType, decodePacket, encodePacket, type InputPacket } from "./packet";
+import {
+  MAX_INPUT_WINDOW_FRAMES,
+  PacketType,
+  decodePacket,
+  encodePacket,
+  type InputPacket,
+  type PacketTypeValue,
+} from "./packet";
 import { createEmitter, createNullTransport, type Transport } from "./transport";
 import {
   MAX_PREDICTION_FRAMES,
@@ -588,6 +595,48 @@ describe("a stale pong (Phase A fix, M-1)", () => {
     expect(a.stats().rttMs).toBe(before.rttMs);
     expect(a.stats().inputDelay).toBe(before.inputDelay);
     expect(a.delay).toBe(before.inputDelay);
+  });
+});
+
+describe("a heartbeat's order (Phase A fix, M-2)", () => {
+  it("sends a due ping before the frame's inputs, so a relay batch never holds the ping behind them", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const link = network.connect("A");
+    let tick: PacketTypeValue[] = [];
+    const recording: Transport = {
+      ...link,
+      send: (bytes) => {
+        const packet = decodePacket(bytes);
+        if (packet) tick.push(packet.type);
+        link.send(bytes);
+      },
+    };
+    const make = (transport: Transport, port: number) =>
+      new RollbackSession<FakeState>({
+        transport,
+        deps: makeDeps(),
+        initialState: initialState(),
+        playerCount: 2,
+        localPorts: [port],
+        inputDelay: 2,
+        autoInputDelay: false,
+        now: () => network.now(),
+      });
+    const a = make(recording, 0);
+    const b = make(network.connect("B"), 1);
+    const ticksWithPing: PacketTypeValue[][] = [];
+    for (let i = 0; i < 120; i++) {
+      tick = [];
+      a.advance(0);
+      if (tick.includes(PacketType.Ping)) ticksWithPing.push(tick);
+      b.advance(0);
+      network.advance(FRAME_MS);
+    }
+    expect(ticksWithPing.length).toBeGreaterThan(1);
+    for (const sent of ticksWithPing) {
+      expect(sent).toContain(PacketType.Input);
+      expect(sent.indexOf(PacketType.Ping)).toBeLessThan(sent.indexOf(PacketType.Input));
+    }
   });
 });
 

@@ -897,10 +897,13 @@ export class RollbackSession<S = GameState> {
   /* -------------------------------------------------------------- transport -- */
 
   /** One packet per local port, plus a ping on the cadence. Sent every frame,
-   *  stalled or not — a stalled peer that goes quiet looks like a dead one. */
+   *  stalled or not — a stalled peer that goes quiet looks like a dead one.
+   *  The ping goes first: the relay's batch flushes on its second Input, so a
+   *  ping queued after this frame's Input would wait for the next one, and the
+   *  measured round trip would grow by more than the batching delays inputs. */
   private heartbeat(): void {
-    for (const port of this.localPorts) this.sendInputWindow(port);
     this.maybePing();
+    for (const port of this.localPorts) this.sendInputWindow(port);
   }
 
   /**
