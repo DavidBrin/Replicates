@@ -113,6 +113,14 @@ export const MAX_INPUT_DELAY = 8;
 export const HASH_INTERVAL_FRAMES = 30;
 export const PING_INTERVAL_FRAMES = 30;
 
+/**
+ * A round trip longer than this is not a link, it is a peer that was not
+ * running: a backgrounded tab whose Pong waited in the relay's batch, or a
+ * frozen mobile tab. Far above any playable link, so such a sample is ignored
+ * rather than averaged into the input delay.
+ */
+export const MAX_RTT_SAMPLE_MS = 1000;
+
 /** Frames of lead over the peer that trigger giving a frame back. */
 export const TIME_SYNC_THRESHOLD_FRAMES = 2;
 /** …and the minimum gap between two such concessions, so we drift back gently. */
@@ -992,6 +1000,7 @@ export class RollbackSession<S = GameState> {
         if (sentAt === undefined) break;
         this.pings.delete(packet.token);
         const sample = Math.max(0, this.now() - sentAt);
+        if (sample > MAX_RTT_SAMPLE_MS) break;
         // Exponential average. A single spike should not retune the input
         // delay, and a sustained change should reach it within a second.
         this.rttMs = this.rttSamples === 0 ? sample : this.rttMs * 0.8 + sample * 0.2;

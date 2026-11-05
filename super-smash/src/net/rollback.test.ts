@@ -25,6 +25,7 @@ import { createEmitter, createNullTransport, type Transport } from "./transport"
 import {
   MAX_PREDICTION_FRAMES,
   MAX_PREDICTION_FRAMES_LIMIT,
+  MAX_RTT_SAMPLE_MS,
   RollbackSession,
   SAVED_STATE_SLOTS,
   type RollbackDeps,
@@ -518,6 +519,76 @@ describe("acknowledged input windows", () => {
       expect([a.frame, b.frame]).toEqual([300, 300]);
     },
   );
+});
+
+describe("a stale pong (Phase A fix, M-1)", () => {
+  /** A's transport, holding every Pong it receives until `release()`, as a backgrounded peer's relay batch would. */
+  function holdingPongs(transport: Transport) {
+    const callbacks: ((bytes: Uint8Array, peerId: string) => void)[] = [];
+    const held: [Uint8Array, string][] = [];
+    let holding = false;
+    const link: Transport = {
+      ...transport,
+      onMessage: (cb) => {
+        callbacks.push(cb);
+        return transport.onMessage((bytes, peerId) => {
+          if (holding && decodePacket(bytes)?.type === PacketType.Pong) held.push([bytes.slice(), peerId]);
+          else cb(bytes, peerId);
+        });
+      },
+    };
+    return {
+      link,
+      held,
+      hold: () => {
+        holding = true;
+      },
+      release: () => {
+        holding = false;
+        for (const [bytes, peerId] of held.splice(0)) for (const cb of callbacks) cb(bytes, peerId);
+      },
+    };
+  }
+
+  it("ignores a ping answered after a hidden tab returns, so the measured delay does not spike", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const pongs = holdingPongs(network.connect("A"));
+    const make = (transport: Transport, port: number) =>
+      new RollbackSession<FakeState>({
+        transport,
+        deps: makeDeps(),
+        initialState: initialState(),
+        playerCount: 2,
+        localPorts: [port],
+        autoInputDelay: true,
+        now: () => network.now(),
+      });
+    const a = make(pongs.link, 0);
+    const b = make(network.connect("B"), 1);
+    const tick = (frames: number) => {
+      for (let i = 0; i < frames; i++) {
+        a.advance(0);
+        b.advance(0);
+        network.advance(FRAME_MS);
+      }
+    };
+    tick(200);
+    const before = a.stats();
+    expect(before.rttMs).toBeLessThan(MAX_RTT_SAMPLE_MS);
+
+    // A's pings go out and B answers, but the answers wait; then B's tab is
+    // hidden for 20 s, and they land when it comes back.
+    pongs.hold();
+    tick(60);
+    expect(pongs.held.length).toBeGreaterThan(0);
+    network.advance(20_000);
+    pongs.release();
+    a.advance(0);
+
+    expect(a.stats().rttMs).toBe(before.rttMs);
+    expect(a.stats().inputDelay).toBe(before.inputDelay);
+    expect(a.delay).toBe(before.inputDelay);
+  });
 });
 
 describe("a burst of one-way loss", () => {
