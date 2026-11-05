@@ -164,10 +164,11 @@ export interface DoSignalTransport extends Transport {
   readonly route: Route;
   /**
    * No direct link: carry the match through the room socket instead. The peer
-   * connection is let go, every peer the room seats is announced (one the
+   * connection is let go, every player the room seats is announced (one the
    * direct channel had announced is not announced again, unless the room has
    * stopped seating it: then it leaves, as a peer the room says left does),
-   * and the status is open if anyone is seated. A no-op once relaying or
+   * and the status is open while any player is announced: a seated stranger
+   * (`lockRoster`) opens nothing. A no-op once relaying or
    * closed. Joins and leaves are emitted before the status changes, the
    * reverse of the direct route: listeners must not read `status` inside them
    * (see `Route`).
@@ -341,7 +342,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     if (carried !== null && seated.has(carried)) relayAnnounced.add(carried);
     for (const id of seated) announceRelayed(id);
     if (carried !== null && !seated.has(carried)) leaves.emit(carried);
-    setStatus(seated.size > 0 ? "open" : "waiting");
+    setStatus(relayAnnounced.size > 0 ? "open" : "waiting");
   }
 
   function openPeer(peerId: string): PeerConnectionLike | null {
@@ -491,14 +492,14 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         if (route === "relay") {
           // Nothing to negotiate: the room seats the peers, and that is the link.
           for (const peer of event.peers) announceRelayed(peer.id);
-          if (event.peers.length > 0) setStatus("open");
+          if (relayAnnounced.size > 0) setStatus("open");
         } else if (role === "host" && event.peers.length === 1) void offerTo(event.peers[0].id);
         break;
       case "peer-joined":
         seated.add(event.peer.id);
         if (route === "relay") {
           announceRelayed(event.peer.id);
-          setStatus("open");
+          if (relayAnnounced.size > 0) setStatus("open");
           break;
         }
         // While a channel is open it decides (see the header): a newcomer does not replace the peer.
@@ -537,7 +538,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         if (route === "relay") {
           // The room is the link, so its word is final, match or lobby.
           if (relayAnnounced.delete(event.peerId)) leaves.emit(event.peerId);
-          if (seated.size === 0) setStatus("waiting");
+          if (relayAnnounced.size === 0) setStatus("waiting");
           break;
         }
         if (event.peerId !== remoteId) break;
@@ -615,6 +616,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       roster = new Set(ids);
       if (route !== "relay") return;
       for (const id of seated) announceRelayed(id);
+      if (relayAnnounced.size > 0) setStatus("open");
     },
     close() {
       if (closed) return;

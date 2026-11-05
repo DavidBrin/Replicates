@@ -197,8 +197,9 @@ export class OnlineSession implements OnlineSessionLike {
           for (const peer of event.peers) this.seated.set(peer.id, peer);
           this.events.emit({ type: "joined", role: event.self.role });
           for (const peer of event.peers) this.events.emit({ type: "peer", present: true, peer });
-          // Every member sees the same seats, so a room of three moves without a word.
-          this.relayIfThree();
+          // A newcomer welcomed into three seats moves without a word: the
+          // members already seated each hear it join and decide for themselves.
+          this.relayIfThree(false);
           break;
         case "peer-joined": {
           const relayed = this.transport.route === "relay";
@@ -211,7 +212,7 @@ export class OnlineSession implements OnlineSessionLike {
             this.resetReconnect();
           }
           this.events.emit({ type: "peer", present: true, peer: event.peer });
-          this.relayIfThree();
+          this.relayIfThree(true);
           // The relay is sticky for the room, and only its members know it: a
           // newcomer to a relayed room of two waits for an offer that will
           // never come until it is told. The host tells it; the rest stay quiet.
@@ -240,13 +241,19 @@ export class OnlineSession implements OnlineSessionLike {
           break;
         }
         case "lobby": {
-          // The other side's first channel never opened: follow it onto the relay.
-          // A started match owns its channel, so a stray one cannot move it.
+          // Another player moved to the relay (a first channel that never
+          // opened, or a third seat): follow it. A started match owns its
+          // channel, and a stranger in a begun room is no player, so neither
+          // can move it.
           if (event.payload.kind === USE_RELAY) {
-            if (!this.started) this.goRelay(false);
+            if (!this.started && this.seated.has(event.from) && this.isPlayer(event.from)) this.goRelay(false);
             break;
           }
           const message = parseLobbyMessage(event.payload);
+          // Only the host starts a match: a guest drops a start from any other
+          // seat, readable or not, rather than hold for it or refuse it.
+          const starting = message?.kind === "start" || message?.kind === "unreadable-start";
+          if (starting && this.role === "guest" && this.seated.get(event.from)?.port !== 0) break;
           // The guest follows the host into the match: the channel is the match's from here.
           if (message?.kind === "start" && this.role === "guest") this.holdForMatch();
           if (message) this.events.emit({ type: "lobby", message, from: event.from });
@@ -315,9 +322,9 @@ export class OnlineSession implements OnlineSessionLike {
     // is repeated when somebody takes the seat; a lost start would leave this
     // side playing alone until the link monitor gave up, with the others still
     // waiting on their select screens. A start naming more players than the
-    // room seats names one whose room socket is gone, so the room is as good
-    // as lost: everyone needs a new one.
-    if (message.kind === "start" && this.seated.size + 1 < message.config.fighters.length) {
+    // room seats (strangers in a begun room not counted) names one whose room
+    // socket is gone, so the room is as good as lost: everyone needs a new one.
+    if (message.kind === "start" && 1 + this.seatedPlayers() < message.config.fighters.length) {
       this.loseRoom();
       return false;
     }
@@ -467,17 +474,29 @@ export class OnlineSession implements OnlineSessionLike {
     return this.roster === null || this.roster.has(peerId);
   }
 
+  /** The others seated who are players: every seat before a lock, the roster's after. */
+  private seatedPlayers(): number {
+    let players = 0;
+    for (const id of this.seated.keys()) if (this.isPlayer(id)) players += 1;
+    return players;
+  }
+
   /**
    * A room that seats `RELAY_FROM_PLAYERS` or more goes to the relay, for
    * good. Counted only before the start, and once a roster is locked, only
    * over its players: a stranger typing the code into a begun room of two
    * moves nobody.
+   *
+   * A side moved by a join tells the room (`tell`). Every member hears the
+   * same joins, but not at the same point against the lock: the host locks
+   * as it sends the begin and a guest as it receives it, so a stranger seated
+   * in between moves the guest and not the host. Told, the host follows
+   * rather than keep a direct channel the guest has let go. A member that is
+   * already relayed, or moved the same way, ignores the word.
    */
-  private relayIfThree(): void {
+  private relayIfThree(tell: boolean): void {
     if (this.started) return;
-    let players = 1;
-    for (const id of this.seated.keys()) if (this.isPlayer(id)) players += 1;
-    if (players >= RELAY_FROM_PLAYERS) this.goRelay(false);
+    if (1 + this.seatedPlayers() >= RELAY_FROM_PLAYERS) this.goRelay(tell);
   }
 
   /** The match has started: no fresh offer may replace its channel, on either side. */

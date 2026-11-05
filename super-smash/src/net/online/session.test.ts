@@ -1223,7 +1223,8 @@ describe("rooms of three and four (Plan 7)", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(h.offers()).toBe(1);
     expect(h.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
-    expect(useRelays(h.signalling)).toBe(0);
+    // The join that moved it is told to the room, once (see the split-lock test below).
+    expect(h.signalling.sent.filter((m) => m.t === "lobby")).toEqual([{ t: "lobby", payload: { kind: "use-relay" } }]);
     expect(errors(h.events)).toEqual([]);
   });
 
@@ -1371,6 +1372,120 @@ describe("rooms of three and four (Plan 7)", () => {
     expect(joins).toEqual(["g1", "g2"]);
     expect(h.session.transport.status).toBe("open");
     expect(errors(h.events)).toEqual([]);
-    expect(useRelays(h.signalling)).toBe(0);
+    expect(useRelays(h.signalling)).toBe(1);
+  });
+
+  /** RF5's other half: g1, a guest with a half-open answer, moves too, and its host's late word builds nothing. */
+  it("Review Focus, the guest's side: a third player joining mid-negotiation moves the guest to the relay and leaves its answer behind", async () => {
+    vi.useFakeTimers();
+    const built: { closed: boolean }[] = [];
+    const g = await open("join", () => {
+      const channel = new OpenableChannel();
+      const peer = { ...inertPeer(), createDataChannel: () => channel, closed: false };
+      peer.close = () => {
+        peer.closed = true;
+      };
+      built.push(peer);
+      return peer;
+    });
+    const joins: string[] = [];
+    g.session.transport.onPeerJoin((id) => joins.push(id));
+    g.signalling.deliver({ t: "welcome", self: G1, peers: [HOST] });
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(g.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "answer")).toHaveLength(1);
+
+    g.signalling.deliver({ t: "peer-joined", peer: G2 });
+
+    expect(g.session.route).toBe("relay");
+    expect(built).toHaveLength(1);
+    expect(built[0].closed).toBe(true);
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+    g.signalling.deliver({
+      t: "signal",
+      from: "h1",
+      payload: { kind: "ice", candidate: { candidate: "candidate:1 1 udp 1 10.0.0.2 5000 typ host", sdpMid: "0", sdpMLineIndex: 0, usernameFragment: null } },
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(built).toHaveLength(1);
+    expect(g.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "answer")).toHaveLength(1);
+    expect(joins).toEqual(["h1", "g2"]);
+    expect(g.session.transport.status).toBe("open");
+    expect(errors(g.events)).toEqual([]);
+  });
+
+  /**
+   * The host locks the roster as it sends the begin, and a guest only as it
+   * receives it. A stranger the room seats in between counts as a third seat
+   * for the guest and not for the host: the guest's word brings the host to
+   * the relay too, rather than leave it on a channel the guest let go.
+   */
+  it("brings a host that locked its roster to the relay when a guest that had not yet locked moved for a third seat", async () => {
+    const h = await hostMeetingGuest();
+    h.channels[0].open();
+    h.session.lockRoster(["g1"]);
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    expect(h.session.route).toBe("direct");
+
+    const g = await opened("join");
+    g.signalling.deliver({ t: "welcome", self: G1, peers: [HOST] });
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+    await vi.advanceTimersByTimeAsync(0);
+    g.channels[0].open();
+    g.signalling.deliver({ t: "peer-joined", peer: G2 });
+    g.session.lockRoster(["h1"]);
+    expect(g.session.route).toBe("relay");
+    const told = g.signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "use-relay");
+    expect(told).toEqual([{ t: "lobby", payload: { kind: "use-relay" } }]);
+
+    // The room passes it on to the host, stamped with the guest.
+    h.signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "use-relay" } });
+    expect(h.session.route).toBe("relay");
+    expect(h.session.transport.status).toBe("open");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect([...errors(h.events), ...errors(g.events)]).toEqual([]);
+  });
+
+  it("lets no stranger in a begun room move it to the relay or start it", async () => {
+    // A stranger's use-relay, once the host has locked its roster.
+    const h = await hostMeetingGuest();
+    h.channels[0].open();
+    h.session.lockRoster(["g1"]);
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    h.signalling.deliver({ t: "lobby", from: "g2", payload: { kind: "use-relay" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.session.route).toBe("direct");
+    expect(h.events.filter((e) => e.type === "route")).toEqual([]);
+
+    // A start, readable or not, from any seat but the host's.
+    const g = await opened("join");
+    g.signalling.deliver({ t: "welcome", self: G1, peers: [HOST] });
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+    await vi.advanceTimersByTimeAsync(0);
+    g.channels[0].open();
+    g.session.lockRoster(["h1"]);
+    g.signalling.deliver({ t: "peer-joined", peer: G2 });
+    g.signalling.deliver({ t: "lobby", from: "g2", payload: { kind: "start", config: CONFIG } });
+    g.signalling.deliver({ t: "lobby", from: "g2", payload: { kind: "start", config: { ...CONFIG, protocol: PROTOCOL_VERSION + 1 } } });
+    expect(g.events.filter((e) => e.type === "lobby")).toEqual([]);
+    // Not held for it: its host's fresh offer still replaces the channel.
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(g.channels).toHaveLength(2);
+    // The host's own start still goes through.
+    g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: CONFIG } });
+    expect(g.events.filter((e) => e.type === "lobby")).toEqual([{ type: "lobby", message: { kind: "start", config: CONFIG }, from: "h1" }]);
+  });
+
+  it("counts only the roster's players toward a start once the roster is locked", async () => {
+    const { session, signalling, events } = await open();
+    signalling.deliver({ t: "welcome", self: HOST, peers: [G1] });
+    session.lockRoster(["g1"]);
+    signalling.deliver({ t: "peer-left", peerId: "g1" });
+    signalling.deliver({ t: "peer-joined", peer: G2 });
+    expect(session.peers.size).toBe(1);
+    expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(false);
+    expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
   });
 });

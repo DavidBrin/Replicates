@@ -1113,4 +1113,39 @@ describe("rooms of three and four (Plan 7)", () => {
     direct.transport.useRelay();
     expect(direct.joins).toEqual(["g1"]);
   });
+
+  it("is open on the relay only while a player is announced: a seated stranger opens nothing", async () => {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
+    t.transport.useRelay();
+    t.transport.lockRoster(["g1"]);
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 2 } });
+    expect(t.transport.status).toBe("open");
+
+    // The only player leaves with the stranger still seated.
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    expect(t.transport.status).toBe("waiting");
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g3", role: "guest", port: 1 } });
+    expect(t.transport.status).toBe("waiting");
+
+    // A re-sent begin that seats g3 on the vacated port opens it again.
+    t.transport.lockRoster(["g3"]);
+    expect(t.joins).toEqual(["g1", "g3"]);
+    expect(t.transport.status).toBe("open");
+
+    // Moving to the relay with only a stranger seated opens nothing either.
+    const moved = setup();
+    moved.signalling.deliver({
+      t: "welcome",
+      self: { id: "h1", role: "host", port: 0 },
+      peers: [
+        { id: "g1", role: "guest", port: 1 },
+        { id: "g2", role: "guest", port: 2 },
+      ],
+    });
+    moved.transport.lockRoster(["g3"]);
+    moved.transport.useRelay();
+    expect(moved.joins).toEqual([]);
+    expect(moved.transport.status).toBe("waiting");
+  });
 });
