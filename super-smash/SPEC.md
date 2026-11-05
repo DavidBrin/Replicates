@@ -188,12 +188,15 @@ The simulation is deterministic by construction (§3), which buys rollback.
 - **Prediction** repeats the opponent's last known input, capped at 8 frames ahead. Beyond
   that the local simulation stalls rather than guessing further.
 - **Input delay** of 2 frames by default, so a good connection rarely rolls back at all.
+  With more than one remote peer, the slowest one's round trip sets the delay, and the HUD
+  shows that ping.
 - **LAN comes free.** No code special-cases a local network: ICE gathers host candidates
   and prefers them automatically, so two laptops on the same WiFi negotiate a direct path
   without touching the open internet. That is the whole reason WebRTC was chosen over a
   relayed WebSocket. The relay is the fallback, never the first try.
 - **Desync detection** hashes the state every 30 frames and compares; a mismatch is
-  reported rather than left to manifest as two players seeing different winners.
+  reported rather than left to manifest as two players seeing different winners. With more
+  than two machines each peer's hash is compared, and one that differs is reported by peer.
 - **The lobby compares builds before a match.** Each peer's greeting carries its build id, the
   protocol version, a fingerprint of the bone bake it installed and one of the rules and
   script slots it runs; any difference is refused in the lobby, so two peers never simulate

@@ -26,6 +26,7 @@ import {
   decodePacket,
   encodePacket,
   type InputPacket,
+  type Packet,
   type PacketTypeValue,
 } from "./packet";
 import { createEmitter, createNullTransport, type Transport } from "./transport";
@@ -35,6 +36,8 @@ import {
   MAX_RTT_SAMPLE_MS,
   RollbackSession,
   SAVED_STATE_SLOTS,
+  TIME_SYNC_THRESHOLD_FRAMES,
+  type DesyncReport,
   type RollbackDeps,
 } from "./rollback";
 
@@ -146,15 +149,18 @@ function referenceState(
   quietAfter: number,
   deps: RollbackDeps<FakeState>,
   seed = 0,
+  playerCount = 2,
 ): FakeState {
+  const ports = Array.from({ length: playerCount }, (_, port) => port);
   const inputsAt = (frame: number): InputFrame[] =>
-    [0, 1].map((port) =>
+    ports.map((port) =>
       frame - delay < 0 ? 0 : scriptedInput(port, frame - delay, quietAfter, seed),
     );
-  let state = initialState();
+  let state = initialState(playerCount);
   for (let frame = 0; frame < frames; frame++) {
     // Frame 0 has no predecessor: nothing was held before the match started.
-    state = deps.step(state, inputsAt(frame), frame === 0 ? [0, 0] : inputsAt(frame - 1)).state;
+    const prev = frame === 0 ? new Array<InputFrame>(playerCount).fill(0) : inputsAt(frame - 1);
+    state = deps.step(state, inputsAt(frame), prev).state;
   }
   return state;
 }
@@ -276,6 +282,77 @@ function runMatch(options: MatchOptions = {}) {
     matchesReference(session: RollbackSession<FakeState>, deps = depsA): boolean {
       const expected = referenceState(session.frame, delay, frames, deps, scriptSeed);
       return deps.hashState(session.currentState) === deps.hashState(expected);
+    },
+  };
+}
+
+interface RingOptions {
+  latencyMs?: number;
+  lossRate?: number;
+  seed?: number;
+  frames?: number;
+  /** Frames of quiet at the end, so every correction has landed. */
+  tailFrames?: number;
+  /** Each port's simulation: a broken one diverges as a bad build would. */
+  depsFor?: (port: number) => RollbackDeps<FakeState>;
+  /** Port 0's (A's) desync reports. */
+  onDesyncA?: (report: DesyncReport) => void;
+}
+
+/**
+ * `n` machines on one network (Plan 7, Task 10), ports `0..n-1` on endpoints
+ * A, B, C…, every input to every peer as the room's relay star carries it.
+ * Each loop iteration advances the sessions in port order, so A's packets of
+ * a frame always leave before B's, and B's before C's.
+ */
+function ring(n: number, options: RingOptions = {}) {
+  const frames = options.frames ?? 240;
+  const tail = options.tailFrames ?? 90;
+  const total = frames + tail;
+  const delay = 2;
+  const network = new LoopbackNetwork({
+    latencyMs: options.latencyMs ?? 0,
+    lossRate: options.lossRate ?? 0,
+    seed: options.seed ?? 0xc0ffee,
+  });
+  const ports = Array.from({ length: n }, (_, port) => port);
+  const deps = ports.map((port) => options.depsFor?.(port) ?? makeDeps());
+  const ids = ports.map((port) => String.fromCharCode(65 + port));
+  const sessions = ports.map(
+    (port) =>
+      new RollbackSession<FakeState>({
+        transport: network.connect(ids[port]),
+        deps: deps[port],
+        initialState: initialState(n),
+        playerCount: n,
+        localPorts: [port],
+        inputDelay: delay,
+        autoInputDelay: false,
+        now: () => network.now(),
+        onDesync: port === 0 ? options.onDesyncA : undefined,
+      }),
+  );
+
+  const budget = total * 6;
+  let iterations = 0;
+  while (sessions.some((s) => s.frame < total) && iterations < budget) {
+    sessions.forEach((session, port) => {
+      if (session.frame < total) session.advance(scriptedInput(port, session.frame, frames));
+    });
+    iterations++;
+    network.advance(FRAME_MS);
+  }
+  network.flush();
+
+  return {
+    sessions,
+    ids,
+    stalledOut: iterations >= budget,
+    /** Does this session hold the state a lone machine would have reached? */
+    matchesReference(session: RollbackSession<FakeState>): boolean {
+      const reference = makeDeps();
+      const expected = referenceState(session.frame, delay, frames, reference, 0, n);
+      return reference.hashState(session.currentState) === reference.hashState(expected);
     },
   };
 }
@@ -1370,5 +1447,170 @@ describe("resending the input window", () => {
     }
     expect(b.confirmedFrame).toBe(sentThrough);
     expect(b.stats().inputConflicts).toBe(0);
+  });
+});
+
+describe("three and four machines (Plan 7)", () => {
+  it("plays a four-machine match to the state a lone machine reaches, on every machine, through 50 ms and 10% loss", () => {
+    const match = ring(4, { latencyMs: 50, lossRate: 0.1 });
+    const counts = match.sessions.map((session) => {
+      const { desyncs, lateInputs, inputConflicts } = session.stats();
+      return { desyncs, lateInputs, inputConflicts };
+    });
+    expect(counts).toEqual(new Array(4).fill({ desyncs: 0, lateInputs: 0, inputConflicts: 0 }));
+    expect(match.sessions.map((session) => match.matchesReference(session))).toEqual([true, true, true, true]);
+    expect(match.stalledOut).toBe(false);
+  });
+
+  it("catches a third machine's desync after the second agreed on the same frame", () => {
+    // C's simulation goes wrong at frame 50, as in "catches a peer whose
+    // simulation diverges". B advances before C every iteration, so B's
+    // (agreeing) hash of each frame reaches A first: comparing a frame once,
+    // whoever's hash it was, would never look at C's.
+    const reports: DesyncReport[] = [];
+    const match = ring(3, {
+      latencyMs: 0,
+      frames: 200,
+      depsFor: (port) => {
+        const deps = makeDeps();
+        if (port !== 2) return deps;
+        const honest = deps.step.bind(deps);
+        deps.step = (state, inputs, prevInputs) => {
+          const result = honest(state, inputs, prevInputs);
+          if (state.frame === 50) result.state.acc[0] ^= 1;
+          return result;
+        };
+        return deps;
+      },
+      onDesyncA: (report) => reports.push(report),
+    });
+    expect(reports.length).toBeGreaterThan(0);
+    for (const report of reports) {
+      expect(report.peerId).toBe(match.ids[2]);
+      expect(report.port).toBe(2);
+      expect(report.localHash).not.toBe(report.remoteHash);
+    }
+    // One verdict per frame and peer, however often a hash is re-sent.
+    expect(new Set(reports.map((r) => r.frame)).size).toBe(reports.length);
+  });
+
+  /**
+   * One session on a transport a test drives by hand: it records what the
+   * session sends and delivers what the test says, from whom it says.
+   */
+  function handDriven(localPort: number, playerCount = 3) {
+    const messages = createEmitter<[Uint8Array, string]>();
+    const joins = createEmitter<[string]>();
+    const sent: Packet[] = [];
+    const transport: Transport = {
+      selfId: "self",
+      send: (bytes) => {
+        const packet = decodePacket(bytes);
+        if (packet) sent.push(packet);
+      },
+      onMessage: (cb) => messages.add(cb),
+      onPeerJoin: (cb) => joins.add(cb),
+      onPeerLeave: () => () => {},
+      close: () => {},
+    };
+    let clock = 0;
+    const session = new RollbackSession<FakeState>({
+      transport,
+      deps: makeDeps(),
+      initialState: initialState(playerCount),
+      playerCount,
+      localPorts: [localPort],
+      inputDelay: 2,
+      autoInputDelay: true,
+      now: () => clock,
+    });
+    return {
+      session,
+      sent,
+      setNow: (ms: number) => {
+        clock = ms;
+      },
+      join: (peerId: string) => joins.emit(peerId),
+      deliver: (packet: Packet, from: string) => messages.emit(encodePacket(packet), from),
+      /** The token of the newest Ping the session sent. */
+      lastPingToken: () => {
+        const ping = sent.filter((p) => p.type === PacketType.Ping).at(-1);
+        if (ping?.type !== PacketType.Ping) throw new Error("no ping sent");
+        return ping.token;
+      },
+    };
+  }
+
+  /** Neutral input for `port` from frame 0 through `through`, from a sender on `senderFrame`. */
+  const neutral = (port: number, senderFrame: number, through: number): Packet => ({
+    type: PacketType.Input,
+    port,
+    senderFrame,
+    startFrame: 0,
+    ack: -1,
+    inputs: new Array<InputFrame>(through + 1).fill(0),
+  });
+
+  it("takes the slowest peer's round trip for the delay and the HUD", () => {
+    const hand = handDriven(0);
+    hand.join("B");
+    hand.join("C");
+    const pingRound = (at: number) => {
+      hand.setNow(at);
+      // Both peers keep pace and have input in hand, so nothing stalls.
+      for (let i = 0; i < 30; i++) {
+        const frame = hand.session.frame;
+        hand.deliver(neutral(1, frame, frame + 8), "B");
+        hand.deliver(neutral(2, frame, frame + 8), "C");
+        hand.session.advance(0);
+        if (i === 0) {
+          const token = hand.lastPingToken();
+          hand.setNow(at + 20);
+          hand.deliver({ type: PacketType.Pong, token }, "B");
+          hand.setNow(at + 120);
+          hand.deliver({ type: PacketType.Pong, token }, "C");
+        }
+      }
+    };
+    pingRound(0);
+    expect(hand.session.stats().rttMs).toBe(120);
+    pingRound(1000);
+    hand.session.advance(0);
+    expect(hand.session.stats().rttMs).toBe(120);
+    // 60 ms each way is between three and four frames; B's 20 ms would be the floor of 2.
+    expect(hand.session.delay).toBe(4);
+  });
+
+  it("ignores a Pong to another machine's ping, so each peer's round trip is its own", () => {
+    const hand = handDriven(1);
+    hand.join("A");
+    hand.join("C");
+    hand.session.advance(0);
+
+    // C answers A's first ping, and in a star that answer reaches this machine
+    // too, while this machine's own first ping is out.
+    hand.setNow(5);
+    hand.deliver({ type: PacketType.Pong, token: ((0 << 24) | 1) >>> 0 }, "C");
+    expect(hand.session.stats().rttMs).toBe(0);
+    expect(hand.lastPingToken()).toBe(((1 << 24) | 1) >>> 0);
+
+    hand.setNow(80);
+    hand.deliver({ type: PacketType.Pong, token: hand.lastPingToken() }, "C");
+    expect(hand.session.stats().rttMs).toBe(80);
+  });
+
+  it("holds a machine back for the peer it is furthest ahead of, not the average", () => {
+    const hand = handDriven(0);
+    const behind = TIME_SYNC_THRESHOLD_FRAMES + 2;
+    for (let round = 0; round < 30; round++) {
+      const frame = hand.session.frame;
+      // B keeps pace and says so five times; C is four frames behind, with
+      // only the input it has scheduled by then (inside the prediction cap).
+      for (let i = 0; i < 5; i++) hand.deliver(neutral(1, frame, frame + 8), "B");
+      hand.deliver(neutral(2, Math.max(0, frame - behind), Math.max(1, frame - behind + 2)), "C");
+      hand.session.advance(0);
+    }
+    expect(hand.session.stats().stalls.timesync).toBeGreaterThan(0);
+    expect(hand.session.stats().stalls.prediction).toBe(0);
   });
 });

@@ -215,6 +215,10 @@ export interface NetStats {
   readonly rolledBackFrames: number;
   readonly maxRollbackFrames: number;
   readonly stalls: { prediction: number; timesync: number; spike: number };
+  /**
+   * The highest of the peers' round trips, each an average: the worst ping,
+   * which is what the HUD shows and what the input delay is tuned from.
+   */
   readonly rttMs: number;
   readonly inputDelay: number;
   readonly peers: number;
@@ -393,14 +397,27 @@ export class RollbackSession<S = GameState> {
   private readonly peers = new Map<string, PeerInfo>();
   private readonly unsubscribes: Unsubscribe[] = [];
 
-  /** Local hashes awaiting a peer's, and peer hashes awaiting ours. */
+  /** Local hashes awaiting the peers', and each peer's hashes awaiting ours. */
   private readonly localHashes = new Map<number, number>();
-  private readonly remoteHashes = new Map<number, { hash: number; peerId: string; port: number }>();
-  /** Frames whose two hashes have been compared: a hash re-sent for one is not compared again. */
-  private readonly comparedHashes = new Set<number>();
+  private readonly remoteHashes = new Map<number, Map<string, { hash: number; port: number }>>();
+  /**
+   * `${frame}:${peerId}` for each peer hash already compared: a hash re-sent
+   * for one is not compared again. Per peer, because with three machines the
+   * second's agreeing hash must not stand in for the third's.
+   */
+  private readonly comparedHashes = new Set<string>();
 
-  private readonly pings = new Map<number, number>();
+  /**
+   * Pings awaiting answers, by token, and which peers have answered each. In
+   * a star every peer answers every ping, so a token lives until it is old
+   * rather than until its first Pong.
+   */
+  private readonly pings = new Map<number, { sentAt: number; frame: number; answered: Set<string> }>();
   private pingToken = 1;
+  /** Each peer's round trip, averaged, and how many samples are in it. */
+  private readonly peerRtt = new Map<string, { ms: number; samples: number }>();
+  /** Each peer's frame advantage: how far this machine runs ahead of it, averaged. */
+  private readonly frameAdvantage = new Map<string, number>();
 
   private state: S;
   private currentFrame = 0;
@@ -416,9 +433,6 @@ export class RollbackSession<S = GameState> {
   private lastTimeSyncStall = -TIME_SYNC_COOLDOWN_FRAMES;
   private lastDelayChangeFrame = -Infinity;
   private lastPingFrame = -Infinity;
-  private rttMs = 0;
-  private rttSamples = 0;
-  private frameAdvantage = 0;
   private closed = false;
 
   private readonly counters = {
@@ -578,7 +592,7 @@ export class RollbackSession<S = GameState> {
         timesync: c.stallTimesync,
         spike: c.stallSpike,
       },
-      rttMs: this.rttMs,
+      rttMs: this.slowestPeerRtt()?.ms ?? 0,
       inputDelay: this.inputDelay,
       peers: this.peers.size,
       packetsSent: c.packetsSent,
@@ -718,6 +732,8 @@ export class RollbackSession<S = GameState> {
     this.remoteHashes.clear();
     this.comparedHashes.clear();
     this.pings.clear();
+    this.peerRtt.clear();
+    this.frameAdvantage.clear();
   }
 
   /* ---------------------------------------------------------------- inputs -- */
@@ -824,11 +840,17 @@ export class RollbackSession<S = GameState> {
    * added back before comparing. Without the correction every peer would think
    * itself ahead and both would stall, which is a nicely symmetric way to run
    * the game at 40Hz.
+   *
+   * With several peers the one this machine is furthest ahead of decides: an
+   * average would let three peers that keep pace hide a fourth falling
+   * behind, until the prediction cap stalled everyone at once.
    */
   private shouldStallForTimeSync(): boolean {
     if (this.remotePorts.length === 0 || this.peers.size === 0) return false;
     if (this.currentFrame - this.lastTimeSyncStall < TIME_SYNC_COOLDOWN_FRAMES) return false;
-    return this.frameAdvantage >= TIME_SYNC_THRESHOLD_FRAMES;
+    let furthest = 0;
+    for (const advantage of this.frameAdvantage.values()) furthest = Math.max(furthest, advantage);
+    return furthest >= TIME_SYNC_THRESHOLD_FRAMES;
   }
 
   /* ------------------------------------------------------------ save/restore -- */
@@ -952,19 +974,31 @@ export class RollbackSession<S = GameState> {
     return ack === Infinity ? -1 : ack;
   }
 
+  /**
+   * A ping on the cadence. Its token carries this machine's port in the top
+   * byte: in the relay's star every Pong reaches every machine, and every
+   * session counts its tokens from 1, so without the port a Pong answering
+   * another machine's k-th ping would read as an answer to this one's. Port
+   * 0's tokens are the bare count, as they were before there were more.
+   */
   private maybePing(): void {
     if (this.peers.size === 0) return;
     if (this.currentFrame - this.lastPingFrame < this.pingInterval) return;
     this.lastPingFrame = this.currentFrame;
-    const token = this.pingToken++ >>> 0;
-    this.pings.set(token, this.now());
     // Bounded: a peer that never pongs would otherwise leak one entry every
-    // half second for the length of the match.
-    if (this.pings.size > 16) {
-      const oldest = this.pings.keys().next();
-      if (!oldest.done) this.pings.delete(oldest.value);
+    // half second for the length of the match. Four intervals old is far past
+    // any sample `MAX_RTT_SAMPLE_MS` would keep.
+    for (const [old, ping] of this.pings) {
+      if (this.currentFrame - ping.frame > 4 * this.pingInterval) this.pings.delete(old);
     }
+    const token = ((this.pingPort() << 24) | (this.pingToken++ & 0xffffff)) >>> 0;
+    this.pings.set(token, { sentAt: this.now(), frame: this.currentFrame, answered: new Set() });
     this.emit({ type: PacketType.Ping, token });
+  }
+
+  /** The port this machine's ping tokens carry. */
+  private pingPort(): number {
+    return this.localPorts[0] ?? 0;
   }
 
   private emit(packet: Packet): void {
@@ -999,27 +1033,37 @@ export class RollbackSession<S = GameState> {
         this.emit({ type: PacketType.Pong, token: packet.token });
         break;
       case PacketType.Pong: {
-        const sentAt = this.pings.get(packet.token);
-        if (sentAt === undefined) break;
-        this.pings.delete(packet.token);
-        const sample = Math.max(0, this.now() - sentAt);
+        // Another machine's ping, answered to everyone (see `maybePing`).
+        if (packet.token >>> 24 !== this.pingPort()) break;
+        const ping = this.pings.get(packet.token);
+        // Unknown, pruned, or this peer has answered it already.
+        if (ping === undefined || ping.answered.has(peerId)) break;
+        ping.answered.add(peerId);
+        const sample = Math.max(0, this.now() - ping.sentAt);
         if (sample > MAX_RTT_SAMPLE_MS) break;
-        // Exponential average. A single spike should not retune the input
-        // delay, and a sustained change should reach it within a second.
-        this.rttMs = this.rttSamples === 0 ? sample : this.rttMs * 0.8 + sample * 0.2;
-        this.rttSamples++;
+        // Exponential average, per peer. A single spike should not retune the
+        // input delay, and a sustained change should reach it within a second.
+        const rtt = this.peerRtt.get(peerId);
+        if (rtt === undefined) this.peerRtt.set(peerId, { ms: sample, samples: 1 });
+        else {
+          rtt.ms = rtt.ms * 0.8 + sample * 0.2;
+          rtt.samples++;
+        }
         break;
       }
-      case PacketType.Hash:
-        // Re-sent after a desync, or duplicated by the link: one frame, one verdict.
-        if (this.comparedHashes.has(packet.frame)) break;
-        this.remoteHashes.set(packet.frame, {
-          hash: packet.hash,
-          peerId,
-          port: packet.port,
-        });
+      case PacketType.Hash: {
+        // Re-sent after a desync, or duplicated by the link: one frame, one
+        // verdict per peer.
+        if (this.comparedHashes.has(`${packet.frame}:${peerId}`)) break;
+        let pending = this.remoteHashes.get(packet.frame);
+        if (pending === undefined) {
+          pending = new Map();
+          this.remoteHashes.set(packet.frame, pending);
+        }
+        pending.set(peerId, { hash: packet.hash, port: packet.port });
         this.compareHashes(packet.frame);
         break;
+      }
     }
   }
 
@@ -1068,10 +1112,11 @@ export class RollbackSession<S = GameState> {
     }
 
     // Time sync. The sender's frame is stale by about half a round trip, so
-    // that is added back before asking who is ahead.
-    const rttFrames = this.rttMs / 2 / FRAME_MS;
+    // that is added back before asking who is ahead: this peer's own round
+    // trip, since a slow third machine's says nothing about this one's link.
+    const rttFrames = (this.peerRtt.get(peer.id)?.ms ?? 0) / 2 / FRAME_MS;
     const advantage = this.currentFrame - (packet.senderFrame + rttFrames);
-    this.frameAdvantage = this.frameAdvantage * 0.7 + advantage * 0.3;
+    this.frameAdvantage.set(peer.id, (this.frameAdvantage.get(peer.id) ?? 0) * 0.7 + advantage * 0.3);
   }
 
   /* ------------------------------------------------------- desync detection -- */
@@ -1125,22 +1170,26 @@ export class RollbackSession<S = GameState> {
     this.pruneHashes();
   }
 
+  /** Compare this machine's hash of `frame` with every peer's that is waiting,
+   *  and report each one that differs, once. */
   private compareHashes(frame: number): void {
     const local = this.localHashes.get(frame);
-    const remote = this.remoteHashes.get(frame);
-    if (local === undefined || remote === undefined) return;
+    const pending = this.remoteHashes.get(frame);
+    if (local === undefined || pending === undefined) return;
     this.remoteHashes.delete(frame);
-    this.comparedHashes.add(frame);
-    this.counters.hashesCompared++;
-    if (local === remote.hash) return;
-    this.counters.desyncs++;
-    this.onDesync?.({
-      frame,
-      localHash: local,
-      remoteHash: remote.hash,
-      peerId: remote.peerId,
-      port: remote.port,
-    });
+    for (const [peerId, remote] of pending) {
+      this.comparedHashes.add(`${frame}:${peerId}`);
+      this.counters.hashesCompared++;
+      if (local === remote.hash) continue;
+      this.counters.desyncs++;
+      this.onDesync?.({
+        frame,
+        localHash: local,
+        remoteHash: remote.hash,
+        peerId,
+        port: remote.port,
+      });
+    }
   }
 
   private pruneHashes(): void {
@@ -1148,7 +1197,9 @@ export class RollbackSession<S = GameState> {
     if (cutoff <= 0) return;
     for (const f of this.localHashes.keys()) if (f < cutoff) this.localHashes.delete(f);
     for (const f of this.remoteHashes.keys()) if (f < cutoff) this.remoteHashes.delete(f);
-    for (const f of this.comparedHashes) if (f < cutoff) this.comparedHashes.delete(f);
+    for (const key of this.comparedHashes) {
+      if (Number(key.slice(0, key.indexOf(":"))) < cutoff) this.comparedHashes.delete(key);
+    }
   }
 
   /* ----------------------------------------------------------- delay tuning -- */
@@ -1165,16 +1216,28 @@ export class RollbackSession<S = GameState> {
    * Raised immediately and lowered reluctantly: a connection that just got
    * worse should be covered now, and a connection that looks better for half a
    * second has not proven anything yet.
+   *
+   * With several peers the slowest link sets it: its input is the one that
+   * would otherwise arrive late, and one late port rolls back everybody.
    */
   private maybeRetuneDelay(): void {
-    if (!this.autoInputDelay || this.rttSamples < 2) return;
-    const oneWayFrames = this.rttMs / 2 / FRAME_MS;
+    if (!this.autoInputDelay) return;
+    const slowest = this.slowestPeerRtt();
+    if (slowest === null || slowest.samples < 2) return;
+    const oneWayFrames = slowest.ms / 2 / FRAME_MS;
     const target = clampInt(Math.ceil(oneWayFrames), DEFAULT_INPUT_DELAY, MAX_INPUT_DELAY);
     if (target === this.inputDelay) return;
     const cooldown = target > this.inputDelay ? 0 : 60;
     if (this.currentFrame - this.lastDelayChangeFrame < cooldown) return;
     this.inputDelay = target;
     this.lastDelayChangeFrame = this.currentFrame;
+  }
+
+  /** The peer with the highest averaged round trip, or null before any sample. */
+  private slowestPeerRtt(): { ms: number; samples: number } | null {
+    let slowest: { ms: number; samples: number } | null = null;
+    for (const rtt of this.peerRtt.values()) if (slowest === null || rtt.ms > slowest.ms) slowest = rtt;
+    return slowest;
   }
 
   /* ----------------------------------------------------------------- helper -- */
