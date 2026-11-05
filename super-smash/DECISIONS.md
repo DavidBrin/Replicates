@@ -5510,6 +5510,25 @@ may overrule, are in "For David" below.
   a changed line of copy.
 - *The legacy `welcome.peer` field is kept for one release* (Task 9 review, M1). See the deploy
   note below. Cost if wrong: one field the readers ignore, to drop after Plan 7.
+- *The load-time leave check is relay-only* (Phase B final review, C-1; `843dbfa`). Task 16's
+  "a room that no longer seats one of its players is Connection Lost" at ready applied on every
+  route, so on a direct two-player match a room socket that dropped alone during the model wait
+  ended a match whose channel was open, against D54. It now applies only when the route is the
+  relay, where the room is the link; the link-not-open and nobody-to-watch checks are unchanged.
+  Pinned in `page.test.tsx` (the D54 direct case, and the relayed three-player case).
+- *A newcomer whose welcome seats three tells the room* (Phase B final review, M-1; `e68570d`).
+  This supersedes "a newcomer welcomed into three seats still moves without a word" above: in a
+  begun direct room of two with a stranger not yet sent away, a newcomer on the vacated port
+  counted three and relayed silently while the host kept offering a direct link, and the
+  newcomer's hello wait ran out with "different version". It now sends `use-relay`, and the host,
+  whose re-sent begin has made it a roster player, follows at once. Cost if wrong: one more
+  `use-relay` per newcomer to a room of three or more, which members already relayed ignore.
+- *The waiting room numbers players by place* (Phase B final review, M-2; `3294dd2`). Its rows
+  and "You are P{n}" number each player by place among the seated, by room port, which is the
+  match port the Start compacts them to, so the waiting room, the select screens and the match
+  agree (where "What was built" and "For David" 6 say a player can play on a different port than
+  their waiting-room seat, the room port is meant; the number shown no longer differs). Before
+  the Start, the refused-seat and seat-left notices still name the room port.
 
 **Behaviour worth knowing.**
 - *A stale tab from before the deploy* is told to reload at the hello rather than left waiting on
