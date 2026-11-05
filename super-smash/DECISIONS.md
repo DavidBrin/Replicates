@@ -5528,7 +5528,10 @@ may overrule, are in "For David" below.
   match port the Start compacts them to, so the waiting room, the select screens and the match
   agree (where "What was built" and "For David" 6 say a player can play on a different port than
   their waiting-room seat, the room port is meant; the number shown no longer differs). Before
-  the Start, the refused-seat and seat-left notices still name the room port.
+  the Start, the host's refused-seat notices ("didn't answer", "different version") and the
+  seat-left notices number the same way (`seatPlace`, counted as the notice is made, so a refused
+  seat's notice keeps the number its row showed after it leaves); after the Start they name the
+  match port. With port 1 empty, a seat refused at room port 3 is "P3" in its row and its notice.
 
 **Behaviour worth knowing.**
 - *A stale tab from before the deploy* is told to reload at the hello rather than left waiting on

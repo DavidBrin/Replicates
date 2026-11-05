@@ -1314,7 +1314,8 @@ describe("every seat (Plan 7, Phase B)", () => {
     fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
     fake.emit({ type: "peer", present: false, peer: GUEST_PEER });
     vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
-    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, notice: seatNoAnswerNotice(2) });
+    // Port 1 is empty now, so the seat at room port 2 is the lobby's P2, and the notice says so.
+    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, notice: seatNoAnswerNotice(1) });
     expect(fake.session.sendLobby.mock.calls).toContainEqual([REFUSE_SILENT, SECOND_GUEST.id]);
     await Promise.resolve();
     expect(fake.session.close).not.toHaveBeenCalled();

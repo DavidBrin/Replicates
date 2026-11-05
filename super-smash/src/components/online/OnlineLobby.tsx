@@ -14,6 +14,7 @@ import {
   bindSession,
   leaveOnline,
   roomErrorMessage,
+  seatPlace,
   useOnlineStore,
   type OnlineStatus,
   type SeatView,
@@ -386,7 +387,7 @@ function statusText(
       return "Loading game data…";
     case "connected":
       if (role === "host") return "Everyone is ready. Press Start when all your players are in.";
-      return localPort === null ? connecting(roomCode) : `You are P${playerNumber(localPort, seats)}. Waiting for the host to start…`;
+      return localPort === null ? connecting(roomCode) : `You are P${seatPlace(localPort, localPort, seats) + 1}. Waiting for the host to start…`;
     case "connecting":
       return connecting(roomCode);
     case "idle":
@@ -412,11 +413,6 @@ function seatRows(role: Role | null, seats: readonly SeatView[], localPort: numb
   const rows = seats.map((seat) => ({ port: seat.port, label: role === "guest" && seat.port === 0 ? "Host" : BUILD_LABEL[seat.build] }));
   if (localPort !== null) rows.push({ port: localPort, label: role === "host" ? "Host (you)" : "You" });
   return rows.sort((a, b) => a.port - b.port).map((row, i) => ({ ...row, player: i + 1 }));
-}
-
-/** The player number the seat at room port `port` will play as: its place among this machine and the seats, by port. */
-function playerNumber(port: number, seats: readonly SeatView[]): number {
-  return 1 + seats.filter((seat) => seat.port < port).length;
 }
 
 const BUILD_LABEL: Record<SeatView["build"], string> = {

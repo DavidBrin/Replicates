@@ -40,8 +40,20 @@ export type OnlineStatus = "idle" | "loading" | "connecting" | "waiting" | "link
 export type OnlineErrorReason = SessionError | "link-failed" | "engine-mismatch" | "unreadable-start" | "host-left" | "room-begun";
 
 /**
+ * Where the player at room port `port` stands among the seated (this
+ * machine's `localPort` and the `seats`), counted from 0: the match port the
+ * host's Start compacts them to. Before the Start the lobby numbers players
+ * by it, its rows and its notices alike, so a seat emptied below another one
+ * never shows one player under two numbers (Phase B final review, M-2).
+ */
+export function seatPlace(port: number, localPort: number | null, seats: readonly SeatView[]): number {
+  return seats.filter((seat) => seat.port < port).length + (localPort !== null && localPort < port ? 1 : 0);
+}
+
+/**
  * Shown once the players at `ports` have left the room; their seats stand
- * empty. One port is the common case; a channel that goes with a start out
+ * empty. Each port is the one the lobby shows (`seatPlace` before the
+ * Start). One port is the common case; a channel that goes with a start out
  * takes every seat at once, and names them all.
  */
 export function seatLeftNotice(...ports: readonly number[]): string {
@@ -51,18 +63,19 @@ export function seatLeftNotice(...ports: readonly number[]): string {
 }
 
 /**
- * Shown once the host has refused the player at `port` for running another
- * build (Plan 7, Phase B): the host keeps its room. It outlives that player's
- * leaving, which is why they went.
+ * Shown once the host has refused the player at `port` (as the lobby shows
+ * it) for running another build (Plan 7, Phase B): the host keeps its room.
+ * It outlives that player's leaving, which is why they went.
  */
 export function seatMismatchNotice(port: number): string {
   return `P${port + 1} is running a different version, so they can't play in this room.`;
 }
 
 /**
- * Shown once the host has refused the player at `port` for never answering
- * through the relay (Plan 7, Phase B, fix round 1): their tab most likely
- * cannot run, which says nothing about their build. It outlives their leaving.
+ * Shown once the host has refused the player at `port` (as the lobby shows
+ * it) for never answering through the relay (Plan 7, Phase B, fix round 1):
+ * their tab most likely cannot run, which says nothing about their build. It
+ * outlives their leaving.
  */
 export function seatNoAnswerNotice(port: number): string {
   return `P${port + 1} didn't answer, so they can't play in this room.`;
@@ -352,6 +365,13 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * still seats a player it refused, whose seat holds its Start; the notice
    * says why.
    */
+  /**
+   * The port a notice names a seat by, as the lobby shows it: before the
+   * Start, its place among the seated (`seatPlace`), and after it, the match
+   * port the begin gave it.
+   */
+  const shownPort = (port: number): number => (roster !== null ? port : seatPlace(port, online().localPort, online().seats));
+
   const freshNotice = (): string | null =>
     session.role === "host" && online().seats.some((seat) => seat.build === "mismatch") ? online().notice : null;
 
@@ -402,7 +422,8 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     }
     stopHelloTimer(seat.peerId);
     setBuild(seat.peerId, "mismatch");
-    online().patch({ notice: why === null ? seatNoAnswerNotice(seat.port) : seatMismatchNotice(seat.port) });
+    const shown = shownPort(seat.port);
+    online().patch({ notice: why === null ? seatNoAnswerNotice(shown) : seatMismatchNotice(shown) });
     settle();
     session.sendLobby({ kind: "refuse", reason: why === null ? "link-failed" : "engine-mismatch" }, seat.peerId);
   };
@@ -765,13 +786,15 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   const seatEmptied = (peerId: string, port: number) => {
     const refused = session.role === "host" && seatOf(peerId)?.build === "mismatch";
     const silent = silentSeats.has(peerId);
+    // Counted while the seat is still in: the number its row showed.
+    const shown = shownPort(port);
     forgetSeat(peerId);
     match().setFighter(port, null);
     match().setCostume(port, port);
     const seats = online().seats.filter((seat) => seat.peerId !== peerId);
     online().patch({ seats });
     sayAway();
-    const notice = refused ? (silent ? seatNoAnswerNotice(port) : seatMismatchNotice(port)) : (freshNotice() ?? seatLeftNotice(port));
+    const notice = refused ? (silent ? seatNoAnswerNotice(shown) : seatMismatchNotice(shown)) : (freshNotice() ?? seatLeftNotice(shown));
     online().patch({ notice });
     settle();
   };
@@ -795,7 +818,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
       status: "waiting",
       config: null,
       seats: seats.map((seat) => ({ ...seat, build: "pending" })),
-      notice: seats.length === 0 ? online().notice : seatLeftNotice(...seats.map((seat) => seat.port)),
+      notice: seats.length === 0 ? online().notice : seatLeftNotice(...seats.map((seat) => shownPort(seat.port))),
       remoteAway: false,
       hostStage: null,
     });

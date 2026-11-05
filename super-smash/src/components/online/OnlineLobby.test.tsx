@@ -882,6 +882,33 @@ describe("OnlineLobby", () => {
     expect(rows()).toEqual(["P1 · Host", "P2 · Checking the version…", "P3 · You"]);
   });
 
+  /** And its notices number them the same way, so the screen never says two numbers for one player. */
+  it("names a refused or departed player in its notice by the number its row shows, when a lower seat is empty", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { opened } = harness();
+    await create();
+    act(() => {
+      opened[0].emit({ type: "joined", role: "host" });
+      opened[0].emit({ type: "route", route: "relay" });
+      opened[0].emit({ type: "link", status: "open" });
+      opened[0].emit({ type: "peer", present: true, peer: { id: "g2", role: "guest", port: 2 } });
+      opened[0].emit({ type: "peer", present: true, peer: { id: "g3", role: "guest", port: 3 } });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" }, from: "g3" });
+    });
+    warn.mockRestore();
+    const rows = () => within(screen.getByRole("list", { name: "Players" })).getAllByRole("listitem").map((row) => row.textContent);
+    expect(rows()).toEqual(["P1 · Host (you)", "P2 · Checking the version…", "P3 · Different version"]);
+    expect(screen.getByText(seatMismatchNotice(2))).toHaveTextContent("P3 is running a different version");
+    // The refusal's notice outlives the leave, with the number it had.
+    act(() => opened[0].emit({ type: "peer", present: false, peer: { id: "g3", role: "guest", port: 3 } }));
+    expect(screen.getByText(seatMismatchNotice(2))).toBeInTheDocument();
+
+    // A player at room port 2, second in the room, leaves as P2.
+    act(() => opened[0].emit({ type: "peer", present: true, peer: { id: "g3", role: "guest", port: 3 } }));
+    act(() => opened[0].emit({ type: "peer", present: false, peer: { id: "g2", role: "guest", port: 2 } }));
+    expect(screen.getByText("P2 left the room.")).toBeInTheDocument();
+  });
+
   it("leaves the lobby on the begin, not on connecting", async () => {
     const host = harness();
     await create();
