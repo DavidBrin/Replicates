@@ -227,14 +227,15 @@ export function CharacterSelect() {
   // new set of picks; a model already in the page's cache costs nothing.
   // Random is decided by the host's start, so there is nothing to fetch for it
   // yet. Through `import()`, which keeps three.js out of this screen's own
-  // chunk (`chunkSplit.test.ts`). The picks as one string, so the effect runs
-  // when one changes and not on every render's new array.
-  const picks = players.map((p) => p.fighterId ?? "").join(" ");
+  // chunk (`chunkSplit.test.ts`). The picks as one JSON string, so the effect
+  // runs when one changes and not on every render's new array, whatever an id
+  // holds.
+  const picks = JSON.stringify(players.map((p) => p.fighterId));
   useEffect(() => {
     if (onlineRole === null) return;
-    const chosen = picks.split(" ");
-    if (chosen.some((id) => id === "")) return;
-    const ids = chosen.filter((id) => id !== RANDOM_FIGHTER);
+    const chosen = JSON.parse(picks) as (string | null)[];
+    if (chosen.some((id) => id === null)) return;
+    const ids = chosen.filter((id): id is string => id !== null && id !== RANDOM_FIGHTER);
     if (ids.length === 0) return;
     // A chunk that fails to load only means the match fetches the models itself.
     void import("@/game/world3d").then((w) => w.preloadModels(ids)).catch(() => {});
@@ -540,7 +541,10 @@ function PlayerPanel({
     <SkewCard
       data-port={player.port}
       className={cn(
-        "w-[12rem] shrink-0 border-[4px] transition-transform",
+        "shrink-0 border-[4px] transition-transform",
+        // Online, up to four panels share a phone's screen: two to a row below `sm`, and shorter
+        // (below), or four stacked ones leave the roster no height and push Ready off the bottom.
+        online ? "w-[calc(50%-0.375rem)] sm:w-[12rem]" : "w-[12rem]",
         active ? "-translate-y-1 shadow-[0_8px_0_rgb(0_0_0/0.45)]" : "",
       )}
       style={{
@@ -560,7 +564,7 @@ function PlayerPanel({
         aria-pressed={active}
         // Online each machine has its one panel, so there is no port to choose.
         disabled={online}
-        className="relative block h-28 w-full"
+        className={cn("relative block w-full", online ? "h-14 sm:h-28" : "h-28")}
         style={{ backgroundColor: isCpu ? "var(--cpu-grey-lit)" : "#12151a" }}
       >
         {fighter ? (
@@ -600,7 +604,7 @@ function PlayerPanel({
         </Unskew>
       </div>
 
-      <div className="flex h-11 items-center justify-between gap-2 px-4">
+      <div className={cn("flex items-center justify-between gap-2 px-4", online ? "h-8 sm:h-11" : "h-11")}>
         {isCpu ? (
           <>
             <Unskew className="font-display text-[0.7rem] tracking-[0.1em] text-panel-ink uppercase">

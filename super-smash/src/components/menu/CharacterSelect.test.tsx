@@ -19,6 +19,14 @@ beforeEach(() => {
 });
 
 describe("CharacterSelect", () => {
+  it("keeps its panels at full size on every screen offline: the compact phone layout is the online footer's", async () => {
+    await renderSelect();
+    const panel = document.querySelector("[data-port='0']")!;
+    expect(panel).toHaveClass("w-[12rem]");
+    expect(panel).not.toHaveClass("w-[calc(50%-0.375rem)]");
+    expect(screen.getByRole("button", { name: "Choose for P1" })).toHaveClass("h-28");
+  });
+
   it("orders the grid by fighter number, as Ultimate does", async () => {
     await renderSelect();
 

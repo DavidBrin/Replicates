@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_PAD_SETTINGS, PAD_BUTTON_LIMIT, rebind } from "@/input/gamepad";
 import { useMatchConfig } from "@/lib/matchConfig";
-import { bindSession, leaveOnline } from "@/lib/onlineStore";
+import { bindSession, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
 import type { Role } from "@/net/signalProtocol";
@@ -211,8 +211,8 @@ describe("PadOptions listens to the pad that drives the seat", () => {
 });
 
 /**
- * Online (ruling R-T20a), this machine owns one port, the host P1 and the
- * guest P2, and only that one has pad options. Every pad on this machine
+ * Online (ruling R-T20a), this machine owns one port, the one the room gave it
+ * (a room of two: the host P1, the guest P2), and only that one has pad options. Every pad on this machine
  * drives it (`/play` maps every pad to the local port), so the capture hears
  * any of them. The change is kept for after the session (`localOptions`), and
  * nothing is sent: the pad is read here, and only the packed frame travels.
@@ -260,10 +260,14 @@ describe("PadOptions online (R-T20a)", () => {
     expect(useMatchConfig.getState().localOptions.pad).toEqual(DEFAULT_PAD_SETTINGS);
   });
 
-  /** Plan 7, Phase B: a match of four seats four ports, and the room says which is this machine's. */
-  it("shows only this machine's own seat, at its port from the room", () => {
-    const fake = seated("guest", 2);
-    act(() => useMatchConfig.getState().configureOnline(4));
+  /** Plan 7, Phase B: as for the Stick Jump, this machine's port is its match port (here room port 3, match port 2). */
+  it("shows only this machine's own seat, at its match port rather than its room seat's", () => {
+    const fake = seated("guest", 3);
+    act(() => {
+      useMatchConfig.getState().configureOnline(4);
+      useOnlineStore.getState().patch({ localPort: 2 });
+    });
+    expect(fake.session.seatPort).toBe(3);
     render(<PadOptions />);
     expect(screen.getAllByRole("combobox").map((s) => s.getAttribute("aria-label"))).toEqual(["P3 right stick"]);
     fireEvent.change(screen.getByRole("combobox", { name: "P3 right stick" }), { target: { value: "off" } });

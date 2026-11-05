@@ -605,6 +605,20 @@ describe("CharacterSelect, online, up to four", () => {
     expect(fake.sent.at(-1)).toEqual({ kind: "pick", fighterId: null, costume: 3 });
   });
 
+  /**
+   * Four 12rem panels stacked on a phone leave the roster no height and push Ready off the screen
+   * (e2e-online, "fits a phone"). Layout is the browser's; this pins that every online panel carries
+   * the compact classes, and the offline footer's test (CharacterSelect.test.tsx) that it does not.
+   */
+  it("makes every panel two to a row, and shorter, below sm, so four fit a phone", async () => {
+    goOnlineOf("host", 0, 4);
+    await renderSelect();
+    for (const port of [0, 1, 2, 3]) {
+      expect(document.querySelector(`[data-port="${port}"]`)).toHaveClass("w-[calc(50%-0.375rem)]", "sm:w-[12rem]");
+    }
+    expect(screen.getByRole("button", { name: "Choose for P4" })).toHaveClass("h-14", "sm:h-28");
+  });
+
   it("lets the host start four only when every seat is connected", async () => {
     const fake = goOnlineOf("host", 0, 4);
     for (const [port, id] of ["mario", "fox", "marth", "kirby"].entries()) useMatchConfig.getState().setFighter(port, id);
@@ -627,9 +641,9 @@ describe("CharacterSelect, online, up to four", () => {
 });
 
 /**
- * Plan 4: once both picks are known, both machines start fetching the two
- * fighters' models, so the match starts with them rather than stand-ins.
- * Through `import()`, keeping three.js out of this screen's chunk.
+ * Plan 4: once every pick is known (Plan 7: every seat's), all the machines
+ * start fetching the fighters' models, so the match starts with them rather
+ * than stand-ins. Through `import()`, keeping three.js out of this screen's chunk.
  */
 describe("CharacterSelect, online, the models", () => {
   beforeEach(() => world.preloadModels.mockClear());

@@ -946,8 +946,10 @@ export function sendOwnPick(port: number): boolean {
  * seat's `session.seatPort`): the other ports are the other peers', set by their
  * picks. The change is kept for after the session (`localOptions`) and said again in
  * this machine's pick, so the host's next start carries it. A match under way plays
- * its start's `controls` and never changes. False, changing nothing, with no session
- * or one the room has not seated.
+ * its start's `controls` and never changes. False, changing nothing, while this
+ * machine has no port: no session, or one the room has not seated (`localPort` is
+ * null). A room that has failed but not been left still holds it: the change is
+ * kept, and its pick goes nowhere.
  */
 export function setOwnStickJump(on: boolean): boolean {
   const port = useOnlineStore.getState().localPort;
@@ -962,8 +964,8 @@ export function setOwnStickJump(on: boolean): boolean {
  * session (Plan 5, Task 21; ruling R-T20a, as `setOwnStickJump`): only this
  * machine's port is its to change, and the change is kept for after the
  * session (`localOptions`). Nothing is said: the pad is read on this machine,
- * and only the packed frame crosses the wire. False, changing nothing, with no
- * session or one the room has not seated.
+ * and only the packed frame crosses the wire. False, changing nothing, while this
+ * machine has no port (as `setOwnStickJump`).
  */
 export function setOwnPad(pad: PadSettings): boolean {
   const port = useOnlineStore.getState().localPort;

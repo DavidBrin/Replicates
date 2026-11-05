@@ -189,6 +189,49 @@ test("the guest's character select fits a phone: a short stage tag, and room for
   expect((await roster.boundingBox())!.height).toBeGreaterThan(140);
 });
 
+/**
+ * Plan 7, Phase B: the character select seats three or four online players, each with a panel, and a
+ * phone is a supported screen. Below `sm` the panels go two to a row and shorter; at full size four
+ * stacked panels pushed the roster's box to nothing and the Ready row past the bottom of the screen.
+ * Lobby pages only: nobody starts, so nothing draws a match.
+ */
+for (const seats of [3, 4]) {
+  test(`${seats} online players' character select fits a phone: the roster keeps room and Ready stays on screen (Plan 7, Phase B)`, async ({
+    browser,
+  }) => {
+    const host = await player(browser);
+    const guests: Page[] = [];
+    for (let i = 1; i < seats; i++) guests.push(await player(browser));
+    const code = await createRoom(host);
+    for (const guest of guests) await joinRoom(guest, code);
+    await expect(host.getByRole("list", { name: "Players" }).getByRole("listitem")).toHaveCount(seats, { timeout: 30_000 });
+    await startRoom(host, seats);
+    await host.waitForURL(`**${ROUTES.stage}`, { timeout: 30_000 });
+    for (const guest of guests) await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
+    await host.getByLabel("Stages", { exact: true }).getByRole("button", { name: "Battlefield", exact: true }).click();
+    await host.getByRole("button", { name: /choose fighters/i }).click();
+    await host.waitForURL(`**${ROUTES.fighters}`);
+
+    const viewport = { width: 390, height: 844 };
+    for (const [i, page] of [host, ...guests].entries()) {
+      await page.setViewportSize(viewport);
+      const who = i === 0 ? "host" : `guest ${i}`;
+      // The roster's scroll box keeps room for both rows of portraits. Measured at 390x844: 297 px with the panels
+      // compact, 161 with only their width compact (the height is the other half of the fix), 24 with neither; the bar
+      // sits between the first two, well over the 140 px that holds both rows.
+      const roster = page.getByLabel("Fighters", { exact: true }).locator("..");
+      await expect.poll(async () => (await roster.boundingBox())!.height, { message: `${who}'s roster box`, timeout: 5_000 }).toBeGreaterThan(250);
+      // And the row that starts or waits stays inside the screen, not clipped below it.
+      const ready = page.getByRole("button", { name: i === 0 ? /ready to fight/i : /waiting for host/i });
+      const box = (await ready.boundingBox())!;
+      expect(box.x, `${who}'s button, left`).toBeGreaterThanOrEqual(0);
+      expect(box.y, `${who}'s button, top`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${who}'s button, right`).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height, `${who}'s button, bottom`).toBeLessThanOrEqual(viewport.height);
+    }
+  });
+}
+
 test("two browsers play a match to its result, and both see the same one", async ({ browser }) => {
   const host = await player(browser);
   const guest = await player(browser);

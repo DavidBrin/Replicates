@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { CONTROL_STICK_JUMP_OFF } from "@/engine/types";
 import { DEFAULT_PAD_SETTINGS } from "@/input/gamepad";
 import { controlsOf, useMatchConfig } from "@/lib/matchConfig";
-import { bindSession, leaveOnline } from "@/lib/onlineStore";
+import { bindSession, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
 import type { Role } from "@/net/signalProtocol";
@@ -49,8 +49,9 @@ describe("PlayerOptions (Plan 5)", () => {
 
 /**
  * Plan 5, Task 20 fix round 1 (ruling R-T20a): online, each machine owns one
- * port's Stick Jump, the host P1 and the guest P2. The other port's is the
- * other peer's, set by their pick, so it has no switch here.
+ * port's Stick Jump, the one the room gave it (a room of two: the host P1, the
+ * guest P2). The other ports' are the other peers', set by their picks, so they
+ * have no switch here.
  */
 describe("PlayerOptions online (R-T20a)", () => {
   function seated(role: Role, seatPort?: number) {
@@ -76,10 +77,17 @@ describe("PlayerOptions online (R-T20a)", () => {
     expect(fake.sent).toEqual([{ kind: "pick", fighterId: null, costume: own, stickJump: false }]);
   });
 
-  /** Plan 7, Phase B: a match of four seats four ports, and the room says which is this machine's. */
-  it("shows only this machine's own seat, at its port from the room", () => {
-    const fake = seated("guest", 2);
-    act(() => useMatchConfig.getState().configureOnline(4));
+  /**
+   * Plan 7, Phase B: a match of four seats four ports, and the Start says which is this machine's:
+   * its match port, which can differ from its room seat's (here room port 3, match port 2).
+   */
+  it("shows only this machine's own seat, at its match port rather than its room seat's", () => {
+    const fake = seated("guest", 3);
+    act(() => {
+      useMatchConfig.getState().configureOnline(4);
+      useOnlineStore.getState().patch({ localPort: 2 });
+    });
+    expect(fake.session.seatPort).toBe(3);
     render(<PlayerOptions />);
     expect(screen.getAllByRole("switch").map((s) => s.getAttribute("aria-label"))).toEqual(["P3 stick jump"]);
     fireEvent.click(screen.getByRole("switch", { name: "P3 stick jump" }));
