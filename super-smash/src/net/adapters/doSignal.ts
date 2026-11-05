@@ -74,8 +74,8 @@ export type Route = "direct" | "relay";
  * in seconds, even through TURN; ICE that hangs rather than fails would
  * otherwise leave both players on "Connecting…" for good. Missing it counts as
  * the channel lost before it opened: the session retries a channel that had
- * opened before, and calls a first one that never did no direct link (Plan 6,
- * Task 40b), which is when the relay takes over (`useRelay`).
+ * opened before, and moves a first one that never did to the room relay
+ * (`useRelay`; Plan 7, D60).
  */
 export const NEGOTIATION_TIMEOUT_MS = 15_000;
 

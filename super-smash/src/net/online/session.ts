@@ -156,6 +156,13 @@ export class OnlineSession implements OnlineSessionLike {
   /** Running while a negotiation outlives the room; see `roomDropped`. */
   private grace: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  /**
+   * A use-relay went out during the room message being delivered now. A host
+   * with no WebRTC fails its offer inside the transport's own `peer-joined`,
+   * and so tells the room before this session hears that join: the join then
+   * needs no second one. Cleared once the delivery is over.
+   */
+  private toldRelay = false;
   private readonly off: Unsubscribe;
 
   private constructor(
@@ -182,7 +189,7 @@ export class OnlineSession implements OnlineSessionLike {
           this.events.emit({ type: "peer", present: true });
           // The relay is sticky for the room, and only this side knows it: the
           // newcomer waits for an offer that will never come until it is told.
-          if (this.transport.route === "relay") this.signalling.send({ t: "lobby", payload: { kind: USE_RELAY } });
+          if (this.transport.route === "relay" && !this.toldRelay) this.tellRelay();
           break;
         case "peer-left":
           // `linked` stays: a held channel can outlive its peer's room socket, and a link
@@ -435,11 +442,20 @@ export class OnlineSession implements OnlineSessionLike {
    */
   private goRelay(tell: boolean): void {
     if (this.closed || this.roomGone || this.transport.route === "relay") return;
-    if (tell) this.signalling.send({ t: "lobby", payload: { kind: USE_RELAY } });
+    if (tell) this.tellRelay();
     this.cancelReconnect();
     this.endGrace();
     this.events.emit({ type: "route", route: "relay" });
     this.transport.useRelay();
+  }
+
+  /** Tell the room's other side to use the relay; see `toldRelay`. */
+  private tellRelay(): void {
+    this.signalling.send({ t: "lobby", payload: { kind: USE_RELAY } });
+    this.toldRelay = true;
+    queueMicrotask(() => {
+      this.toldRelay = false;
+    });
   }
 
   /**

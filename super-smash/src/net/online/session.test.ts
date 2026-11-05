@@ -850,7 +850,9 @@ describe("OnlineSession", () => {
      * Review Focus 1. The host's deadline starts before the guest's, so it can
      * run out just as the guest's channel opens. The guest must follow onto
      * the relay with the peer it already announced kept, neither left nor
-     * announced again, and no error.
+     * announced again, and no error. This is order (A): the use-relay lands
+     * first. In order (B), below, the host's side closing reaches this channel
+     * first, and the peer is left and announced again.
      */
     it("Review Focus: a use-relay that lands while this side's direct channel is open moves it to the relay, and announces the peer once", async () => {
       vi.useFakeTimers();
@@ -875,6 +877,72 @@ describe("OnlineSession", () => {
       await vi.advanceTimersByTimeAsync(60_000);
       expect(errors(g.events)).toEqual([]);
       expect(useRelays(g.signalling)).toBe(0);
+    });
+
+    /**
+     * Order (B) of Review Focus 1, likely the commoner one live: the host lets
+     * its peer connection go, and that close reaches this channel peer to peer
+     * before the use-relay crosses the room. This side then leaves the peer,
+     * asks for a fresh offer and waits for it, and the relay announces the
+     * peer again. Safe because it all happens before the start: nothing
+     * listens for joins and leaves until the play page's rollback session.
+     */
+    it("Review Focus, order (B): a use-relay that lands after this side's open channel closed moves it to the relay, with no error and one route", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      const joins: string[] = [];
+      const leaves: string[] = [];
+      g.session.transport.onPeerJoin((id) => joins.push(id));
+      g.session.transport.onPeerLeave((id) => leaves.push(id));
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[0].open();
+      g.channels[0].drop();
+      expect(leaves).toEqual(["h1"]);
+
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
+
+      expect(g.session.route).toBe("relay");
+      expect(g.session.transport.status).toBe("open");
+      expect(joins).toEqual(["h1", "h1"]);
+      expect(leaves).toEqual(["h1"]);
+      expect(g.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(errors(g.events)).toEqual([]);
+      expect(useRelays(g.signalling)).toBe(0);
+    });
+
+    /**
+     * A browser with no WebRTC at all: the transport cannot build a peer
+     * connection, and says so (`failed`) inside the room's own message, before
+     * the session has heard it. That is a first link that cannot open, so the
+     * match goes through the room, and the guest is told once.
+     */
+    it("moves a host without WebRTC to the relay, with no error, and tells each guest once", async () => {
+      const noWebRtc = (): PeerConnectionLike => {
+        throw new Error("no RTCPeerConnection here");
+      };
+      const later = await open("create", noWebRtc);
+      later.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+      later.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+      expect(later.session.route).toBe("relay");
+      expect(later.session.transport.status).toBe("open");
+      expect(useRelays(later.signalling)).toBe(1);
+      expect(later.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
+
+      const seated = await open("create", noWebRtc);
+      seated.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      expect(seated.session.route).toBe("relay");
+      expect(useRelays(seated.signalling)).toBe(1);
+
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      expect([...errors(later.events), ...errors(seated.events)]).toEqual([]);
+      expect([later.signalling.closed, seated.signalling.closed]).toEqual([false, false]);
+      // A later newcomer is told too: only the delivery that moved the room said it already.
+      later.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      later.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      expect(useRelays(later.signalling)).toBe(2);
     });
 
     it("moves a newcomer's first link that fails to the relay too", async () => {
