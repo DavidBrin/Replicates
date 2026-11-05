@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * The online suite: two (or three) browser contexts in one room.
+ * The online suite: two to four browser contexts in one room.
  *
  * It needs the Worker, not `next dev` — rooms and /api/ice live there — so it
  * builds the static export and serves it with wrangler's dev server

@@ -4,7 +4,7 @@ import { SILENCE_LOST_MS } from "../src/net/online/watchdog";
 import { ROUTES, frame, readFighters, withoutModels } from "../e2e/helpers";
 
 /**
- * Two browsers, one room, one match — the whole online path end to end.
+ * Two to four browsers, one room, one match — the whole online path end to end.
  *
  * Locally this runs against `wrangler dev`; with SMASH_URL it runs against the
  * deployed Worker, and SMASH_FORCE_RELAY=1 forces both peers through
@@ -31,9 +31,11 @@ const LOBBY = FORCE_RELAY ? "/online?ice=relay" : "/online";
  * proves the watchdog rather than a 30 s wait. Imported, not re-declared like
  * `ROUTES`: this is a bound on the app's own timer, and must move with it.
  *
- * Through the room relay the room's `peer-left` does end the match, at once, and
- * the watchdog stays behind it as the backstop: the four-browser test below
- * keeps the same bound, which it meets either way.
+ * Through the room relay it is different: the room's `peer-left` ends the match at
+ * once, and the two ten-second watchdogs (silence, and the stall that follows a
+ * missing input) are only the backstop. This bound would be met by either, so the
+ * four-browser leave test below also asserts it ended before `SILENCE_LOST_MS`
+ * could have, which only the `peer-left` can do.
  */
 const LINK_LOST_LIMIT_MS = SILENCE_LOST_MS + 4_000;
 
@@ -41,6 +43,8 @@ interface NetHandle {
   stats(): { peers: number; desyncs: number; hashesCompared: number } | null;
   /** Where the match's packets go: through a WebRTC channel, or through the room. */
   readonly route: "direct" | "relay";
+  /** The match port this page plays, which is its seat in the room. */
+  readonly localPort: number;
 }
 
 /** Every context a test opened, closed after it so a failed test leaves no match running. */
@@ -64,6 +68,10 @@ const seat = (i: number) => (i === 0 ? "the host" : `guest ${i}`);
 
 async function netStats(page: Page) {
   return page.evaluate(() => (window as unknown as { __smashNet?: NetHandle }).__smashNet?.stats() ?? null);
+}
+
+async function netPort(page: Page) {
+  return page.evaluate(() => (window as unknown as { __smashNet?: NetHandle }).__smashNet?.localPort ?? null);
 }
 
 async function netRoute(page: Page) {
@@ -100,7 +108,7 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   const code = await createRoom(host);
   await joinRoom(guest, code);
   await startRoom(host, 2);
-  await pickAndStart(host, [guest], [5]);
+  await pickAndStart(host, [[guest, 5]]);
 }
 
 /**
@@ -112,36 +120,43 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
 async function startFourPlayerMatch(pages: readonly Page[]): Promise<void> {
   const [host, ...guests] = pages;
   const code = await createRoom(host);
-  for (const guest of guests) await joinRoom(guest, code);
+  // One at a time, each seated before the next joins, so guest i is seat i and port i: the room
+  // gives each guest the lowest free port in the order the joins reach it, which two guests
+  // loading at once would not fix.
+  const seated = host.getByRole("list", { name: "Players" }).getByRole("listitem");
+  for (const [i, guest] of guests.entries()) {
+    await joinRoom(guest, code);
+    await expect(seated, `guest ${i + 1} seated`).toHaveCount(i + 2, { timeout: 30_000 });
+  }
   await startRoom(host, pages.length);
   // The host takes the first fighter and guest i the roster's button i + 1, so every seat has its own.
-  await pickAndStart(host, guests, guests.map((_, i) => i + 1));
+  await pickAndStart(host, guests.map((guest, i): [Page, number] => [guest, i + 1]));
 }
 
 /**
  * From linked lobbies (however they linked) to a running match: the host picks
- * the stage and the first fighter, guest i picks the roster's button `slots[i]`,
- * and the host starts.
+ * the stage and the first fighter, each guest picks the roster button beside
+ * its page, and the host starts.
  */
-async function pickAndStart(host: Page, guests: readonly Page[], slots: readonly number[]): Promise<void> {
+async function pickAndStart(host: Page, guests: readonly (readonly [guest: Page, rosterButton: number])[]): Promise<void> {
   await host.waitForURL(`**${ROUTES.stage}`, { timeout: 30_000 });
-  for (const guest of guests) await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
+  for (const [guest] of guests) await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
 
   // exact: "Small Battlefield" also matches a substring query.
   await host.getByLabel("Stages", { exact: true }).getByRole("button", { name: "Battlefield", exact: true }).click();
   await host.getByRole("button", { name: /choose fighters/i }).click();
   await host.waitForURL(`**${ROUTES.fighters}`);
-  for (const guest of guests) await expect(guest.getByText(/stage: battlefield/i)).toBeVisible();
+  for (const [guest] of guests) await expect(guest.getByText(/stage: battlefield/i)).toBeVisible();
 
   await host.getByLabel("Fighters", { exact: true }).getByRole("button").nth(0).click();
-  for (const [i, guest] of guests.entries()) {
-    await guest.getByLabel("Fighters", { exact: true }).getByRole("button").nth(slots[i]).click();
+  for (const [guest, rosterButton] of guests) {
+    await guest.getByLabel("Fighters", { exact: true }).getByRole("button").nth(rosterButton).click();
     await expect(guest.getByRole("button", { name: /waiting for host/i })).toBeDisabled();
   }
   await host.getByRole("button", { name: /ready to fight/i }).click();
 
   await host.waitForURL(`**${ROUTES.play}`);
-  for (const guest of guests) await guest.waitForURL(`**${ROUTES.play}`);
+  for (const [guest] of guests) await guest.waitForURL(`**${ROUTES.play}`);
 }
 
 // Forced through TURN with no TURN to go through, both peers would fall back to
@@ -384,7 +399,7 @@ test("a direct connection that cannot open falls back to the relay, and the matc
   // The deadline (15 s) runs out, both move to the relay, and the lobby goes on to the
   // stage and the fighters at the host's Start, as it would on a direct link.
   await startRoom(host, 2);
-  await pickAndStart(host, [guest], [5]);
+  await pickAndStart(host, [[guest, 5]]);
   for (const page of [host, guest]) {
     await expect.poll(() => frame(page), { timeout: 30_000 }).toBeGreaterThan(60);
     await expect.poll(() => netRoute(page), { timeout: 10_000 }).toBe("relay");
@@ -441,9 +456,9 @@ test("four browsers play a match through the relay", async ({ browser }) => {
 
   for (const [i, page] of pages.entries()) {
     expect(await netRoute(page), `${seat(i)}'s route`).toBe("relay");
-    const stats = await netStats(page);
-    expect(stats?.peers, `${seat(i)}'s peers`).toBe(3);
-    expect(stats?.desyncs, `${seat(i)}'s desyncs`).toBe(0);
+    // Seat i plays port i (the joins were taken in order), which the fighter below relies on.
+    expect(await netPort(page), `${seat(i)}'s port`).toBe(i);
+    expect((await netStats(page))?.peers, `${seat(i)}'s peers`).toBe(3);
     await expect(page.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+ · RELAY$/), `${seat(i)}'s HUD`).toBeVisible();
   }
   // The host heard each guest's hashes and compared them with its own.
@@ -456,6 +471,10 @@ test("four browsers play a match through the relay", async ({ browser }) => {
   await guest3.keyboard.down("ArrowRight");
   await expect.poll(async () => (await readFighters(host))[3].x, { message: "guest 3's fighter on the host's screen", timeout: 10_000 }).toBeGreaterThan(before + 5);
   await guest3.keyboard.up("ArrowRight");
+
+  // Last, so a count of none means none were found: the hashes were compared (above) and
+  // the pages have been through a stretch of play with a guest's input.
+  for (const [i, page] of pages.entries()) expect((await netStats(page))?.desyncs, `${seat(i)}'s desyncs`).toBe(0);
 });
 
 test("one of four closing their tab ends the match for the other three", async ({ browser }) => {
@@ -468,7 +487,15 @@ test("one of four closing their tab ends the match for the other three", async (
   // Guest 2 closes its tab. The room tells the rest, and any one of four
   // leaving ends the match for all (Plan 7, Task 16): nobody is crowned, and
   // nobody is left to play on without them.
+  const closedAt = Date.now();
   await guest2.context().close();
   await Promise.all([host, guest1, guest3].map((page) => page.waitForURL(`**${ROUTES.results}`, { timeout: LINK_LOST_LIMIT_MS })));
   for (const page of [host, guest1, guest3]) await expect(page.getByText("Connection Lost", { exact: true })).toBeVisible();
+  // The silence watchdog and the stall watchdog both need ten seconds, and either would
+  // satisfy the bound above: only the room's `peer-left`, through the monitor, ends it sooner.
+  const elapsed = Date.now() - closedAt;
+  expect(
+    elapsed,
+    `the match took ${elapsed} ms to end after guest 2 closed: that is a watchdog's ten seconds, so the room's peer-left did not end it`,
+  ).toBeLessThan(SILENCE_LOST_MS - 2_000);
 });
