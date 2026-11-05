@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_UNRELIABLE_CHANNEL_ID, INPUT_CHANNEL_LABEL } from "../channel";
 import { STUN_ONLY } from "../iceConfig";
 import { toRtcIceServers } from "../iceServers";
+import { PacketType, encodePacket } from "../packet";
+import { decodeRelayBatch, encodeRelayBatch } from "../relayFrame";
 import type { WireIceCandidate } from "../signalProtocol";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import {
@@ -761,5 +763,234 @@ describe("a linked match", () => {
     expect(t.peers[0].closed).toBe(true);
     expect(t.signalling.sent).toEqual([]);
     expect(t.statuses).toEqual(["negotiating", "closed"]);
+  });
+});
+
+/* ------------------------------------------------------- relay mode (Plan 7) -- */
+
+describe("relay mode (Plan 7)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const input = (frame: number) =>
+    encodePacket({ type: PacketType.Input, port: 0, senderFrame: frame, startFrame: frame, ack: -1, inputs: [0] });
+  const ping = (token: number) => encodePacket({ type: PacketType.Ping, token });
+
+  /** A host still negotiating with the guest the room seated; the guest has not answered. */
+  async function negotiatingHost() {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    await settle();
+    return t;
+  }
+
+  /** A host on the relay with the guest seated, the direct channel never having opened. */
+  async function relayedHost() {
+    const t = await negotiatingHost();
+    t.transport.useRelay();
+    return t;
+  }
+
+  it("switches a negotiating host to the relay: the peer connection closes, the guest is announced, and the status is open", async () => {
+    const t = await negotiatingHost();
+    expect(t.transport.route).toBe("direct");
+    t.transport.useRelay();
+
+    expect(t.transport.route).toBe("relay");
+    expect(t.peers).toHaveLength(1);
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.peers[0].channels[0].closed).toBe(true);
+    expect(t.joins).toEqual(["g1"]);
+    expect(t.leaves).toEqual([]);
+    expect(t.transport.status).toBe("open");
+    expect(t.statuses).toEqual(["negotiating", "open"]);
+  });
+
+  it("ends the negotiation's deadline, so it never touches the relay", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    expect(vi.getTimerCount()).toBe(1);
+    t.transport.useRelay();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS * 2);
+    expect(t.transport.status).toBe("open");
+    expect(t.leaves).toEqual([]);
+  });
+
+  it("keeps a peer the direct channel had announced: no leave, no second join", async () => {
+    const t = await linkedHost();
+    t.transport.useRelay();
+
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.joins).toEqual(["g1"]);
+    expect(t.leaves).toEqual([]);
+    expect(t.transport.status).toBe("open");
+    expect(t.statuses).toEqual(["negotiating", "open"]);
+    // Still the one peer the session knows: its leave is said once, when the room says so.
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    expect(t.leaves).toEqual(["g1"]);
+  });
+
+  it("does nothing once relaying, or once closed", async () => {
+    const t = await relayedHost();
+    t.transport.useRelay();
+    expect(t.joins).toEqual(["g1"]);
+    expect(t.statuses).toEqual(["negotiating", "open"]);
+
+    const closed = await negotiatingHost();
+    closed.transport.close();
+    closed.transport.useRelay();
+    expect(closed.transport.route).toBe("direct");
+    expect(closed.joins).toEqual([]);
+    expect(closed.statuses).toEqual(["negotiating", "closed"]);
+  });
+
+  it("sends packets as one game message per two input packets, through the room", async () => {
+    const t = await linkedHost();
+    t.transport.useRelay();
+    const packets = [input(1), ping(7), input(2)];
+
+    t.transport.send(packets[0]);
+    t.transport.send(packets[1]);
+    expect(t.signalling.sentGame).toHaveLength(0);
+    t.transport.send(packets[2]);
+
+    expect(t.signalling.sentGame).toHaveLength(1);
+    expect(decodeRelayBatch(t.signalling.sentGame[0])).toEqual(packets);
+    // The direct channel is closed and never written to.
+    expect(t.peers[0].channels[0].sent).toEqual([]);
+  });
+
+  it("sends nothing after close()", async () => {
+    const t = await relayedHost();
+    t.transport.send(input(1));
+    t.transport.close();
+    t.transport.send(input(2));
+    expect(t.signalling.sentGame).toHaveLength(0);
+  });
+
+  it("emits relayed packets with the room's sender, and ignores game data from anyone the room does not seat, or while direct", async () => {
+    const direct = await linkedHost();
+    direct.signalling.deliver({ t: "game", from: "g1", bytes: encodeRelayBatch([ping(1)]) });
+    expect(direct.received).toEqual([]);
+
+    const t = await linkedHost();
+    t.transport.useRelay();
+    const [a, b] = [input(3), ping(9)];
+    t.signalling.deliver({ t: "game", from: "g1", bytes: encodeRelayBatch([a, b]) });
+    expect(t.received).toEqual([[[...a], "g1"], [[...b], "g1"]]);
+
+    // Not seated by the room, however well framed.
+    t.signalling.deliver({ t: "game", from: "stranger", bytes: encodeRelayBatch([ping(2)]) });
+    // Seated, but a truncated batch is refused whole.
+    t.signalling.deliver({ t: "game", from: "g1", bytes: encodeRelayBatch([ping(3)]).subarray(0, 4) });
+    expect(t.received).toHaveLength(2);
+
+    // Gone from the room: nothing more from it either.
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    t.signalling.deliver({ t: "game", from: "g1", bytes: encodeRelayBatch([ping(4)]) });
+    expect(t.received).toHaveLength(2);
+  });
+
+  it("hears a seated peer leave, even while the match holds the channel", async () => {
+    const t = await linkedHost();
+    t.transport.holdChannel();
+    t.transport.useRelay();
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+
+    expect(t.leaves).toEqual(["g1"]);
+    expect(t.transport.status).toBe("waiting");
+  });
+
+  it("stays open while another peer is still seated, and ignores the leave of one it never seated", async () => {
+    const t = await relayedHost();
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    t.signalling.deliver({ t: "peer-left", peerId: "stranger" });
+    expect(t.leaves).toEqual(["g1"]);
+    expect(t.transport.status).toBe("open");
+
+    t.signalling.deliver({ t: "peer-left", peerId: "g2" });
+    expect(t.leaves).toEqual(["g1", "g2"]);
+    expect(t.transport.status).toBe("waiting");
+  });
+
+  it("announces a newcomer on the relay without offering it a peer connection", async () => {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    t.transport.useRelay();
+    expect(t.transport.status).toBe("waiting");
+    expect(t.joins).toEqual([]);
+
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    await settle();
+    expect(t.joins).toEqual(["g1"]);
+    expect(t.transport.status).toBe("open");
+    expect(t.peers).toHaveLength(0);
+    expect(t.signalling.sent).toEqual([]);
+  });
+
+  it("seats and announces the peer of a welcome that comes after the relay was chosen", async () => {
+    const t = setup();
+    t.transport.useRelay();
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    await settle();
+
+    expect(t.joins).toEqual(["h1"]);
+    expect(t.transport.status).toBe("open");
+    expect(t.peers).toHaveLength(0);
+    t.signalling.deliver({ t: "game", from: "h1", bytes: encodeRelayBatch([ping(5)]) });
+    expect(t.received).toHaveLength(1);
+  });
+
+  it("answers no offer once relaying", async () => {
+    const guest = setup();
+    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    guest.transport.useRelay();
+    guest.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
+    guest.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "ice", candidate: CANDIDATE } });
+
+    // A host that gave up on its own offer gets the answer, and the candidates, too late.
+    const host = await relayedHost();
+    host.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "answer", sdp: "answer-sdp" } });
+    host.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "ice", candidate: CANDIDATE } });
+    await settle();
+
+    expect(guest.peers).toHaveLength(0);
+    expect(guest.signalling.sent).toEqual([]);
+    expect(host.peers[0].remote).toBeNull();
+    expect(host.peers[0].added).toEqual([]);
+    expect(host.transport.status).toBe("open");
+  });
+
+  it("offers nothing again once relaying", async () => {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    t.transport.useRelay();
+    t.transport.offerAgain("g1");
+    await settle();
+    expect(t.peers).toHaveLength(0);
+  });
+
+  /**
+   * A Worker deploy (1006), the daily budget running out (any code) or a proxy
+   * timeout takes the room socket. Relayed, that socket is the link: the match
+   * must end at once rather than freeze on a peer nobody can hear.
+   */
+  it("Review Focus: a room socket that closes mid-relay, with any close code, is every relayed peer leaving", async () => {
+    for (const code of [1006, 1011, 1000, 4008]) {
+      const t = await linkedHost();
+      t.transport.holdChannel();
+      t.transport.useRelay();
+      expect(t.transport.status).toBe("open");
+
+      t.signalling.deliver({ t: "closed", code, reason: "" });
+
+      expect(t.leaves, `close code ${code}`).toEqual(["g1"]);
+      expect(t.transport.status, `close code ${code}`).toBe("waiting");
+    }
   });
 });

@@ -5,7 +5,9 @@
  * Same contract as the Trystero adapter (`webrtc.ts`), different matchmaker:
  * instead of public Nostr relays, the two browsers meet in a room on our own
  * Worker, which relays one offer, one answer and their ICE candidates and then
- * has nothing more to do. Game traffic never touches it.
+ * has nothing more to do. Game traffic goes straight between the browsers,
+ * unless no direct link can be made: then `useRelay` moves it onto the room
+ * socket too (relay mode, below).
  *
  * The host offers; the guest answers. Roles come from the room, so there is
  * no glare to resolve. There is exactly one data channel, the input channel —
@@ -14,17 +16,18 @@
  * opens with the connection. Nothing here needs a reliable channel: the lobby
  * goes over the room socket, and inputs are redundant by design (packet.ts).
  *
- * The data channel is the authority on whether the peer is there. The room
- * socket is not: every Worker deploy restarts every Durable Object and drops
- * its sockets (Cloudflare's WebSocket docs say so), and a match in progress
- * must shrug that off. So once the match holds the channel, `peer-left` from
- * the room means nothing, and neither does a newcomer: the room's two-peer cap
- * counts live sockets, so after a drop it admits anyone else with the code,
- * and an open match ignores their `peer-joined` or offer rather than dropping
- * its peer. In the lobby it is the other way round. The lobby rides the room
- * socket, so a peer the room no longer seats cannot be talked to, and the
- * channel to it is let go: kept, it would make this side ignore the newcomer
- * the room seats next, and the lobby would wait on a link that never comes.
+ * While the route is direct, the data channel is the authority on whether the
+ * peer is there. The room socket is not: every Worker deploy restarts every
+ * Durable Object and drops its sockets (Cloudflare's WebSocket docs say so),
+ * and a match in progress must shrug that off. So once the match holds the
+ * channel, `peer-left` from the room means nothing, and neither does a
+ * newcomer: the room's two-peer cap counts live sockets, so after a drop it
+ * admits anyone else with the code, and an open match ignores their
+ * `peer-joined` or offer rather than dropping its peer. In the lobby it is the
+ * other way round. The lobby rides the room socket, so a peer the room no
+ * longer seats cannot be talked to, and the channel to it is let go: kept, it
+ * would make this side ignore the newcomer the room seats next, and the lobby
+ * would wait on a link that never comes.
  *
  * A lobby channel can also close with both room sockets still open, and then
  * nobody joins or leaves to start a new negotiation. So the host can offer the
@@ -33,17 +36,30 @@
  * it holds a connection, replacing it. A guest whose side closed alone says so
  * (`renegotiate`), and its host lets its own side go. Once the match starts,
  * `holdChannel` ends all three: the match's channel is never replaced.
+ *
+ * Relay mode (`useRelay`, Plan 7) is the other route. The peer connection is
+ * gone and the room socket carries the game: a binary frame per send batch
+ * (`relayFrame.ts`), stamped by the room with its sender. Now the room socket
+ * is the link, so the roles above reverse: the room's `peer-joined` and
+ * `peer-left` are the peers arriving and leaving (it seats them; there is
+ * nothing to negotiate), and the socket closing, with any code, is every peer
+ * leaving at once, because a relayed match with no room socket has no way to
+ * hear anyone. The relay is sticky: there is no way back to direct.
  */
 
 import { asBytes } from "../bytes";
 import { DEFAULT_UNRELIABLE_CHANNEL_ID, INPUT_CHANNEL_LABEL } from "../channel";
 import { STUN_ONLY } from "../iceConfig";
 import { toRtcIceServers } from "../iceServers";
+import { createRelayBatcher, decodeRelayBatch } from "../relayFrame";
 import type { SignallingClient } from "../signalling";
 import type { Role, WireIceCandidate } from "../signalProtocol";
 import { createEmitter, type Transport } from "../transport";
 
 export type DoSignalStatus = "waiting" | "negotiating" | "open" | "closed" | "failed";
+
+/** Where game packets go: straight to the peer, or through the room's Durable Object. */
+export type Route = "direct" | "relay";
 
 /**
  * How long a new peer connection gets to open its channel. A healthy one opens
@@ -51,7 +67,7 @@ export type DoSignalStatus = "waiting" | "negotiating" | "open" | "closed" | "fa
  * otherwise leave both players on "Connecting…" for good. Missing it counts as
  * the channel lost before it opened: the session retries a channel that had
  * opened before, and calls a first one that never did no direct link (Plan 6,
- * Task 40b).
+ * Task 40b), which is when the relay takes over (`useRelay`).
  */
 export const NEGOTIATION_TIMEOUT_MS = 15_000;
 
@@ -128,6 +144,15 @@ export interface DoSignalTransport extends Transport {
   holdChannel(): void;
   /** The seat the match was for emptied before it began: a lobby again (see `holdChannel`). */
   releaseChannel(): void;
+  /** Where packets go now. Starts direct; `useRelay` makes it relay, for good. */
+  readonly route: Route;
+  /**
+   * No direct link: carry the match through the room socket instead. The peer
+   * connection is let go, every peer the room seats is announced (one the
+   * direct channel had announced is not announced again), and the status is
+   * open if anyone is seated. A no-op once relaying or closed.
+   */
+  useRelay(): void;
 }
 
 /** One cast at the boundary, for the reason webrtc.ts gives for `RoomLike`. */
@@ -141,6 +166,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   const messages = createEmitter<[Uint8Array, string]>();
   const joins = createEmitter<[string]>();
   const leaves = createEmitter<[string]>();
+  const batcher = createRelayBatcher((batch) => options.signalling.sendGame(batch));
 
   let selfId = "pending";
   let role: Role | null = null;
@@ -159,6 +185,11 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   let remoteId: string | null = null;
   let announced = false;
   let remoteDescriptionSet = false;
+  let route: Route = "direct";
+  /** The peers the room seats, in either route: `welcome`'s, then `peer-joined` and `peer-left`. */
+  const seated = new Set<string>();
+  /** Relay mode: the peers announced so far, so each is announced once and its leave is said once. */
+  const relayAnnounced = new Set<string>();
   /** The current connection's deadline to open its channel; see `NEGOTIATION_TIMEOUT_MS`. */
   let deadline: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -239,6 +270,34 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     } catch {
       return null; // no WebRTC here at all
     }
+  }
+
+  /** Relay mode: a seated peer is here. Said once. */
+  function announceRelayed(peerId: string): void {
+    if (relayAnnounced.has(peerId)) return;
+    relayAnnounced.add(peerId);
+    joins.emit(peerId);
+  }
+
+  /** Relay mode: the room socket is gone, so every peer announced is gone with it. */
+  function loseRelayedPeers(): void {
+    const gone = [...relayAnnounced];
+    relayAnnounced.clear();
+    seated.clear();
+    for (const id of gone) leaves.emit(id);
+    setStatus("waiting");
+  }
+
+  function useRelay(): void {
+    if (closed || route === "relay") return;
+    // The peer the direct channel had announced stays announced: the relay only
+    // changes how it is reached, so neither a leave nor a second join goes out.
+    const carried = announced ? remoteId : null;
+    teardown();
+    route = "relay";
+    if (carried !== null) relayAnnounced.add(carried);
+    for (const id of seated) announceRelayed(id);
+    setStatus(seated.size > 0 ? "open" : "waiting");
   }
 
   function openPeer(peerId: string): PeerConnectionLike | null {
@@ -382,11 +441,24 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       case "welcome":
         selfId = event.self.id;
         role = event.self.role;
+        if (event.peer) seated.add(event.peer.id);
         // A guest is only ever admitted beside a host, so its welcome's peer is that host.
         hostId = role === "guest" ? (event.peer?.id ?? null) : null;
-        if (role === "host" && event.peer) void offerTo(event.peer.id);
+        if (route === "relay") {
+          // Nothing to negotiate: the room seats the peer, and that is the link.
+          if (event.peer) {
+            announceRelayed(event.peer.id);
+            setStatus("open");
+          }
+        } else if (role === "host" && event.peer) void offerTo(event.peer.id);
         break;
       case "peer-joined":
+        seated.add(event.peer.id);
+        if (route === "relay") {
+          announceRelayed(event.peer.id);
+          setStatus("open");
+          break;
+        }
         // While a channel is open it decides (see the header): a newcomer does not replace the peer.
         if (announced) break;
         if (role === "host") void offerTo(event.peer.id);
@@ -394,6 +466,8 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         else if (role === "guest" && event.peer.role === "host") hostId = event.peer.id;
         break;
       case "signal": {
+        // The relay has no peer connection to negotiate, and a late message from the old one is stale.
+        if (route === "relay") break;
         const payload = event.payload;
         if (payload.kind === "offer") {
           // Only from our own host. Once open, only in the lobby: our host
@@ -414,6 +488,13 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       case "peer-left":
         // Nothing it sent early can be used now.
         pendingIce.delete(event.peerId);
+        seated.delete(event.peerId);
+        if (route === "relay") {
+          // The room is the link, so its word is final, match or lobby.
+          if (relayAnnounced.delete(event.peerId)) leaves.emit(event.peerId);
+          if (seated.size === 0) setStatus("waiting");
+          break;
+        }
         if (event.peerId !== remoteId) break;
         if (!announced) {
           teardown();
@@ -425,8 +506,20 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
           lose("waiting");
         }
         break;
+      case "game": {
+        // Only the relay carries game data, and only from a peer the room seats.
+        if (route !== "relay" || !seated.has(event.from)) break;
+        const packets = decodeRelayBatch(event.bytes);
+        if (packets) for (const packet of packets) messages.emit(packet, event.from);
+        break;
+      }
+      case "closed":
+        // Direct, the channel is the link and a dropped room socket means nothing (see the
+        // header). Relayed, it was the link: every peer is gone, whatever the close code.
+        if (route === "relay") loseRelayedPeers();
+        break;
       default:
-        // lobby, error and closed belong to the session, not the transport.
+        // lobby and error belong to the session, not the transport.
         break;
     }
   });
@@ -441,7 +534,14 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     get status() {
       return status;
     },
+    get route() {
+      return route;
+    },
     send(bytes) {
+      if (route === "relay") {
+        if (!closed) batcher.push(bytes);
+        return;
+      }
       const ch = channel;
       if (closed || ch === null || ch.readyState !== "open") return;
       try {
@@ -455,7 +555,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     onPeerJoin: (cb) => joins.add(cb),
     onPeerLeave: (cb) => leaves.add(cb),
     offerAgain(peerId) {
-      if (closed || held || role !== "host" || status !== "waiting") return;
+      if (closed || route === "relay" || held || role !== "host" || status !== "waiting") return;
       void offerTo(peerId);
     },
     holdChannel() {
@@ -464,12 +564,16 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     releaseChannel() {
       held = false;
     },
+    useRelay,
     close() {
       if (closed) return;
       closed = true;
       off();
       teardown();
+      batcher.clear();
       pendingIce.clear();
+      seated.clear();
+      relayAnnounced.clear();
       setStatus("closed");
       messages.clear();
       joins.clear();
