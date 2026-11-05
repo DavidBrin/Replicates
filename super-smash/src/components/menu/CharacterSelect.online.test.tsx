@@ -308,7 +308,7 @@ describe("CharacterSelect, online", () => {
     setActiveSession(session);
     bindSession(session);
     act(() => {
-      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
       channel.open();
       signalling.deliver({ t: "lobby", from: "g1", payload: HELLO });
     });
@@ -427,7 +427,7 @@ describe("CharacterSelect, online", () => {
       vi.useFakeTimers();
       const g = await realSession("guest");
       await act(async () => {
-        g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+        g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
         g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
         await vi.advanceTimersByTimeAsync(0);
         g.channels[0].open();
@@ -464,7 +464,7 @@ describe("CharacterSelect, online", () => {
       vi.useFakeTimers();
       const h = await realSession("host");
       await act(async () => {
-        h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+        h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
         await vi.advanceTimersByTimeAsync(0);
         h.channels[0].open();
         h.signalling.deliver({ t: "lobby", from: "g1", payload: HELLO });

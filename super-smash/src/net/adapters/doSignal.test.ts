@@ -155,8 +155,8 @@ function setup({ forceRelay = false, iceServers = STUN, vet, refuseChannel = fal
 
 async function linkedHost() {
   const t = setup();
-  t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-  t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+  t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+  t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
   await settle();
   t.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "answer", sdp: "answer-sdp" } });
   await settle();
@@ -166,7 +166,7 @@ async function linkedHost() {
 
 async function linkedGuest() {
   const t = setup();
-  t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+  t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
   t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
   await settle();
   t.peers[0].channels[0].open();
@@ -178,9 +178,9 @@ async function linkedGuest() {
 describe("the host", () => {
   it("offers as soon as a guest is in the room, on the negotiated unreliable channel", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
     expect(t.peers).toHaveLength(0);
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     await settle();
 
     expect(t.peers).toHaveLength(1);
@@ -188,7 +188,7 @@ describe("the host", () => {
     expect(t.peers[0].channels[0].label).toBe(INPUT_CHANNEL_LABEL);
     expect(t.peers[0].channels[0].init).toEqual({ negotiated: true, id: DEFAULT_UNRELIABLE_CHANNEL_ID, ordered: false, maxRetransmits: 0 });
     expect(t.peers[0].local).toEqual({ type: "offer", sdp: "offer-sdp" });
-    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "offer", sdp: "offer-sdp" } });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", to: "g1", payload: { kind: "offer", sdp: "offer-sdp" } });
     expect(t.transport.selfId).toBe("h1");
     expect(t.transport.role).toBe("host");
     expect(t.statuses).toEqual(["negotiating"]);
@@ -196,26 +196,26 @@ describe("the host", () => {
 
   it("forces the TURN relay when asked to", async () => {
     const t = setup({ forceRelay: true });
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
     expect(t.peers[0].config.iceTransportPolicy).toBe("relay");
   });
 
   it("relays its own ICE candidates, but not the end-of-candidates marker", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
     t.peers[0].emitCandidate(CANDIDATE.candidate);
     t.peers[0].emitCandidate("");
     const ice = t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "ice");
-    expect(ice).toEqual([{ t: "signal", payload: { kind: "ice", candidate: CANDIDATE } }]);
+    expect(ice).toEqual([{ t: "signal", to: "g1", payload: { kind: "ice", candidate: CANDIDATE } }]);
   });
 
   it("holds the guest's candidates until its answer is set, then applies them in order", async () => {
     const SECOND: WireIceCandidate = { ...CANDIDATE, candidate: "candidate:2 1 udp 1 10.0.0.3 5001 typ host" };
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     await settle();
     // One before the answer, one while its description is still being set.
     t.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "ice", candidate: CANDIDATE } });
@@ -231,7 +231,7 @@ describe("the host", () => {
 describe("the guest", () => {
   it("answers the host's offer, holding early candidates until it can use them", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "ice", candidate: CANDIDATE } });
     await settle();
@@ -239,13 +239,13 @@ describe("the guest", () => {
     expect(t.peers).toHaveLength(1);
     expect(t.peers[0].remote).toEqual({ type: "offer", sdp: "offer-sdp" });
     expect(t.peers[0].added).toEqual([CANDIDATE]);
-    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "answer", sdp: "answer-sdp" } });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", to: "h1", payload: { kind: "answer", sdp: "answer-sdp" } });
   });
 
   it("holds candidates that outrun the offer itself, and applies them once the offer is in", async () => {
     const STALE: WireIceCandidate = { ...CANDIDATE, candidate: "candidate:9 1 udp 1 10.0.0.9 5009 typ host" };
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "ice", candidate: CANDIDATE } });
     t.signalling.deliver({ t: "signal", from: "h0", payload: { kind: "ice", candidate: STALE } });
     await settle();
@@ -256,12 +256,12 @@ describe("the guest", () => {
     expect(t.peers[0].remote).toEqual({ type: "offer", sdp: "offer-sdp" });
     // Filed by sender: h1's candidate reaches h1's connection, h0's does not.
     expect(t.peers[0].added).toEqual([CANDIDATE]);
-    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "answer", sdp: "answer-sdp" } });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", to: "h1", payload: { kind: "answer", sdp: "answer-sdp" } });
   });
 
   it("forgets the held candidates of a sender who leaves the room", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "ice", candidate: CANDIDATE } });
     t.signalling.deliver({ t: "peer-left", peerId: "h1" });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
@@ -271,7 +271,7 @@ describe("the guest", () => {
 
   it("takes an offer only from the host its welcome named", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "signal", from: "stranger", payload: { kind: "offer", sdp: "stranger-sdp" } });
     await settle();
     expect(t.peers).toHaveLength(0);
@@ -285,20 +285,20 @@ describe("the guest", () => {
 
   it("answers the room's replacement host when the first one left before connecting", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "peer-left", peerId: "h1" });
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host", port: 0 } });
     t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "replacement-sdp" } });
     await settle();
 
     expect(t.peers).toHaveLength(1);
     expect(t.peers[0].remote).toEqual({ type: "offer", sdp: "replacement-sdp" });
-    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "answer", sdp: "answer-sdp" } });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", to: "h2", payload: { kind: "answer", sdp: "answer-sdp" } });
   });
 
   it("does not adopt a host that joined mid-match, even once the channel has closed", async () => {
     const t = await linkedGuest();
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host", port: 0 } });
     t.peers[0].channels[0].remoteClose();
     t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "newcomer-sdp" } });
     await settle();
@@ -310,7 +310,7 @@ describe("the guest", () => {
 
   it("does not apply candidates from anyone but the peer it is negotiating with", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
     await settle();
     t.signalling.deliver({ t: "signal", from: "intruder", payload: { kind: "ice", candidate: CANDIDATE } });
@@ -323,7 +323,7 @@ describe("the guest", () => {
     const NO_SUCH_LINE: WireIceCandidate = { ...CANDIDATE, sdpMid: null, sdpMLineIndex: 7 };
     const LATER: WireIceCandidate = { ...CANDIDATE, candidate: "candidate:2 1 udp 1 10.0.0.3 5001 typ host" };
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
     // Held: the offer's description is still being set.
     for (const candidate of [NO_LINE, NO_SUCH_LINE, CANDIDATE]) {
@@ -339,7 +339,7 @@ describe("the guest", () => {
     expect(t.peers[0].added).toEqual([CANDIDATE, LATER]);
     expect(t.peers[0].closed).toBe(false);
     expect(t.transport.status).toBe("negotiating");
-    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "answer", sdp: "answer-sdp" } });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", to: "h1", payload: { kind: "answer", sdp: "answer-sdp" } });
   });
 });
 
@@ -463,7 +463,7 @@ describe("a replacement opponent while the old one's channel is still open", () 
     expect(t.transport.status).toBe("waiting");
     expect(t.leaves).toEqual(["g1"]);
 
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     await settle();
     expect(t.peers).toHaveLength(2);
     expect(offers(t)).toBe(2);
@@ -482,7 +482,7 @@ describe("a replacement opponent while the old one's channel is still open", () 
     expect(t.transport.status).toBe("waiting");
     expect(t.leaves).toEqual(["h1"]);
 
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host", port: 0 } });
     t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "second-sdp" } });
     await settle();
     expect(t.peers).toHaveLength(2);
@@ -496,7 +496,7 @@ describe("a replacement opponent while the old one's channel is still open", () 
     const t = await linkedHost();
     t.transport.holdChannel();
     t.signalling.deliver({ t: "peer-left", peerId: "g1" });
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     await settle();
 
     expect(t.peers).toHaveLength(1);
@@ -525,7 +525,7 @@ describe("a negotiation's deadline", () => {
   function negotiating() {
     vi.useFakeTimers();
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     return t;
   }
 
@@ -554,7 +554,7 @@ describe("a negotiation's deadline", () => {
     await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1_000);
     // The guest leaves and another arrives: a new connection, with a deadline of its own.
     t.signalling.deliver({ t: "peer-left", peerId: "g1" });
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
     expect(t.peers).toHaveLength(2);
     expect(t.transport.status).toBe("negotiating");
@@ -575,18 +575,18 @@ describe("a peer connection the browser will not build", () => {
     ["an ICE server with no urls", [{ urls: [] }]],
   ])("falls back to STUN only for %s, and still offers", async (_, iceServers) => {
     const t = setup({ iceServers, vet: refuseLikeABrowser });
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
 
     expect(t.peers).toHaveLength(1);
     expect(t.peers[0].config).toEqual({ iceServers: toRtcIceServers(STUN_ONLY), iceTransportPolicy: "all" });
-    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "offer", sdp: "offer-sdp" } });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", to: "g1", payload: { kind: "offer", sdp: "offer-sdp" } });
     expect(t.transport.status).toBe("negotiating");
   });
 
   it("keeps a forced relay forced on the fallback, so a broken TURN config fails rather than quietly going direct", async () => {
     const t = setup({ forceRelay: true, iceServers: [{ urls: "turn:turn.example.com:3478" }], vet: refuseLikeABrowser });
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
     expect(t.peers[0].config).toEqual({ iceServers: toRtcIceServers(STUN_ONLY), iceTransportPolicy: "relay" });
   });
@@ -597,7 +597,7 @@ describe("a peer connection the browser will not build", () => {
         throw new ReferenceError("RTCPeerConnection is not defined");
       },
     });
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
     expect(t.peers).toEqual([]);
     expect(t.statuses).toEqual(["failed"]);
@@ -606,9 +606,9 @@ describe("a peer connection the browser will not build", () => {
 
   it("reports failure, and closes the connection, when the browser refuses the input channel", async () => {
     const host = setup({ refuseChannel: true });
-    host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     const guest = setup({ refuseChannel: true });
-    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     guest.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
     await settle();
 
@@ -638,7 +638,7 @@ describe("a linked match", () => {
     const t = setup();
     expect(() => t.transport.send(new Uint8Array([1]))).not.toThrow();
 
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
     const channel = t.peers[0].channels[0];
     expect(channel.readyState).toBe("connecting");
@@ -678,7 +678,7 @@ describe("a linked match", () => {
   // anyone else with the code: as guest if the guest's socket went, as host if the host's did.
   it("keeps the host's match when the room lets a newcomer in after a socket drop", async () => {
     const t = await linkedHost();
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     await settle();
 
     expect(t.peers).toHaveLength(1);
@@ -728,8 +728,8 @@ describe("a linked match", () => {
 
   it("sends the host back to waiting if the guest leaves before the channel opens", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     await settle();
     t.signalling.deliver({ t: "peer-left", peerId: "g1" });
     expect(t.peers[0].closed).toBe(true);
@@ -748,15 +748,15 @@ describe("a linked match", () => {
     expect(t.received).toEqual([]);
 
     expect(t.signalling.listenerCount).toBe(0);
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     await settle();
     expect(t.peers).toHaveLength(1);
   });
 
   it("sends no offer when closed mid-negotiation", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     t.transport.close();
     await settle();
 
@@ -780,7 +780,7 @@ describe("relay mode (Plan 7)", () => {
   /** A host still negotiating with the guest the room seated; the guest has not answered. */
   async function negotiatingHost() {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     await settle();
     return t;
   }
@@ -810,7 +810,7 @@ describe("relay mode (Plan 7)", () => {
   it("ends the negotiation's deadline, so it never touches the relay", async () => {
     vi.useFakeTimers();
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     expect(vi.getTimerCount()).toBe(1);
     t.transport.useRelay();
     expect(vi.getTimerCount()).toBe(0);
@@ -850,7 +850,7 @@ describe("relay mode (Plan 7)", () => {
     const joined = await linkedHost();
     joined.transport.holdChannel();
     joined.signalling.deliver({ t: "peer-left", peerId: "g1" });
-    joined.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    joined.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     joined.transport.useRelay();
     expect(joined.joins).toEqual(["g1", "g2"]);
     expect(joined.leaves).toEqual(["g1"]);
@@ -931,7 +931,7 @@ describe("relay mode (Plan 7)", () => {
 
   it("stays open while another peer is still seated, and ignores the leave of one it never seated", async () => {
     const t = await relayedHost();
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     t.signalling.deliver({ t: "peer-left", peerId: "g1" });
     t.signalling.deliver({ t: "peer-left", peerId: "stranger" });
     expect(t.leaves).toEqual(["g1"]);
@@ -944,12 +944,12 @@ describe("relay mode (Plan 7)", () => {
 
   it("announces a newcomer on the relay without offering it a peer connection", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
     t.transport.useRelay();
     expect(t.transport.status).toBe("waiting");
     expect(t.joins).toEqual([]);
 
-    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     await settle();
     expect(t.joins).toEqual(["g1"]);
     expect(t.transport.status).toBe("open");
@@ -960,7 +960,7 @@ describe("relay mode (Plan 7)", () => {
   it("seats and announces the peer of a welcome that comes after the relay was chosen", async () => {
     const t = setup();
     t.transport.useRelay();
-    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     await settle();
 
     expect(t.joins).toEqual(["h1"]);
@@ -972,7 +972,7 @@ describe("relay mode (Plan 7)", () => {
 
   it("answers no offer once relaying", async () => {
     const guest = setup();
-    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     guest.transport.useRelay();
     guest.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "offer-sdp" } });
     guest.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "ice", candidate: CANDIDATE } });
@@ -992,7 +992,7 @@ describe("relay mode (Plan 7)", () => {
 
   it("offers nothing again once relaying", async () => {
     const t = setup();
-    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
     t.transport.useRelay();
     t.transport.offerAgain("g1");
     await settle();

@@ -177,9 +177,9 @@ export class OnlineSession implements OnlineSessionLike {
       switch (event.t) {
         case "welcome":
           this.welcomed = true;
-          this.seatedPeer = event.peer?.id ?? null;
+          this.seatedPeer = event.peers[0]?.id ?? null;
           this.events.emit({ type: "joined", role: event.self.role });
-          if (event.peer) this.events.emit({ type: "peer", present: true });
+          if (event.peers.length > 0) this.events.emit({ type: "peer", present: true });
           break;
         case "peer-joined":
           // A newcomer gets the transport's ordinary offer, not the old seat's retries.

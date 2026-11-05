@@ -77,7 +77,7 @@ export class RoomDO extends DurableObject<Env> {
     const entry = livePeerFor(attachment, Date.now());
     if (entry) this.live.set(server, entry);
     send(server, decision.welcome);
-    if (decision.notify) this.deliver(decision.notify);
+    for (const delivery of decision.notify) this.deliver(delivery);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -97,7 +97,7 @@ export class RoomDO extends DurableObject<Env> {
     ws.serializeAttachment(counted);
     switch (outcome.type) {
       case "forward":
-        this.deliver(outcome.delivery);
+        for (const delivery of outcome.deliveries) this.deliver(delivery);
         break;
       case "reply":
         send(ws, outcome.message);

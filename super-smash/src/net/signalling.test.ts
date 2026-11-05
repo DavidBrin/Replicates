@@ -78,10 +78,10 @@ describe("the signalling client", () => {
   it("emits what the room says, and ignores what it cannot read", () => {
     const { socket, events } = client();
     socket.open();
-    socket.receive({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    socket.receive({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
     socket.receive("{not json");
     socket.receive({ t: "mystery" });
-    expect(events).toEqual([{ t: "welcome", self: { id: "h1", role: "host" }, peer: null }]);
+    expect(events).toEqual([{ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] }]);
   });
 
   it("emits a binary frame from the room as game data from its stamped sender", () => {

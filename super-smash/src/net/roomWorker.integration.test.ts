@@ -8,6 +8,7 @@ import {
   RELAY_BURST,
   RELAY_ID_BYTES,
   RELAY_KICK_DROPS,
+  RELAY_MAX_FRAME_BYTES,
   RELAY_RATE_PER_SECOND,
   ROOM_CLOSE_CODES,
   type RoomIntent,
@@ -63,11 +64,15 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
   it("admits a host and a guest, relays between them, and turns a third away", async () => {
     const code = makeRoomCode();
     const host = connect(code, "create");
-    expect(await host.next("welcome")).toMatchObject({ self: { role: "host" }, peer: null });
+    const hostWelcome = await host.next("welcome");
+    expect(hostWelcome).toMatchObject({ self: { role: "host", port: 0 }, peers: [] });
     const guest = connect(code, "join");
     const guestWelcome = await guest.next("welcome");
-    expect(guestWelcome).toMatchObject({ self: { role: "guest" }, peer: { role: "host" } });
-    expect(await host.next("peer-joined")).toMatchObject({ peer: { role: "guest" } });
+    expect(guestWelcome).toMatchObject({
+      self: { role: "guest", port: 1 },
+      peers: [{ id: (hostWelcome.self as { id: string }).id, role: "host", port: 0 }],
+    });
+    expect(await host.next("peer-joined")).toMatchObject({ peer: { role: "guest", port: 1 } });
 
     host.send({ t: "signal", payload: { kind: "offer", sdp: "v=0" } });
     expect(await guest.next("signal")).toMatchObject({ payload: { kind: "offer", sdp: "v=0" } });
@@ -151,6 +156,98 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
     expect(await guest.next("peer-left")).toEqual({ t: "peer-left", peerId: (hostWelcome.self as { id: string }).id });
 
     guest.close();
+  });
+
+  it("closes a socket whose binary frame is over RELAY_MAX_FRAME_BYTES with bad-message, and tells the other peer it left", async () => {
+    const code = makeRoomCode();
+    const host = connect(code, "create");
+    const hostWelcome = await host.next("welcome");
+    const guest = connect(code, "join");
+    await guest.next("welcome");
+    await host.next("peer-joined");
+
+    // One frame exactly at the cap goes through, so the cap is what the next one is refused for.
+    const atCap = new Uint8Array(RELAY_MAX_FRAME_BYTES).fill(7);
+    host.sendBinary(atCap);
+    for (let waited = 0; waited < 5000 && guest.games.length === 0; waited += 25) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(guest.games).toHaveLength(1);
+    expect(guest.games[0]).toHaveLength(RELAY_ID_BYTES + RELAY_MAX_FRAME_BYTES);
+
+    // Sent in one go with three ordinary frames right behind it: a socket that has been closed for
+    // this is gone from the room, so what it had already put on the wire goes nowhere either.
+    host.sendBinary(new Uint8Array(RELAY_MAX_FRAME_BYTES + 1).fill(7));
+    for (let i = 0; i < 3; i++) host.sendBinary(new Uint8Array([1, 2, 3]));
+    expect(await host.next("error")).toEqual({ t: "error", reason: "bad-message" });
+    expect(await host.closed).toBe(ROOM_CLOSE_CODES["bad-message"]);
+    expect(await guest.next("peer-left")).toEqual({ t: "peer-left", peerId: (hostWelcome.self as { id: string }).id });
+    // Neither the oversize frame nor those behind it was forwarded: the guest has only the one at the cap.
+    expect(guest.games).toHaveLength(1);
+
+    guest.close();
+  });
+
+  it("never forwards a binary frame from a socket that was never seated", async () => {
+    const code = makeRoomCode();
+    const host = connect(code, "create");
+    await host.next("welcome");
+    const guest = connect(code, "join");
+    await guest.next("welcome");
+    await host.next("peer-joined");
+
+    // A third is refused: accepted only to be told "full" and closed, never a peer. It sends game
+    // frames the moment its socket opens, which is as early as a client can, and again whenever it
+    // can before the close lands.
+    const third = connect(code, "join");
+    const body = new Uint8Array([9, 9, 9, 9]);
+    for (let i = 0; i < 5; i++) third.sendBinary(body);
+    expect(await third.next("error")).toEqual({ t: "error", reason: "full" });
+    expect(await third.closed).toBe(ROOM_CLOSE_CODES.full);
+
+    // A signal queued behind whatever the room could have forwarded: when it lands on each side, the
+    // frames the refused socket sent have had every chance to land first.
+    host.send({ t: "signal", payload: { kind: "offer", sdp: "v=0" } });
+    expect(await guest.next("signal")).toMatchObject({ payload: { kind: "offer", sdp: "v=0" } });
+    guest.send({ t: "signal", payload: { kind: "answer", sdp: "v=0" } });
+    expect(await host.next("signal")).toMatchObject({ payload: { kind: "answer", sdp: "v=0" } });
+    expect(guest.games).toHaveLength(0);
+    expect(host.games).toHaveLength(0);
+    expect(third.games).toHaveLength(0);
+
+    guest.close();
+    // The refused socket was never a peer, so the only exit the host hears is the guest's.
+    expect((await host.next("peer-left")).t).toBe("peer-left");
+    host.close();
+  });
+
+  it("delivers an addressed message to its peer, drops one addressed to nobody seated or to its sender, and refuses a malformed address", async () => {
+    const code = makeRoomCode();
+    const host = connect(code, "create");
+    const hostId = ((await host.next("welcome")).self as { id: string }).id;
+    const guest = connect(code, "join");
+    const guestId = ((await guest.next("welcome")).self as { id: string }).id;
+    await host.next("peer-joined");
+
+    host.send({ t: "signal", to: guestId, payload: { kind: "offer", sdp: "to-guest" } });
+    expect(await guest.next("signal")).toMatchObject({ payload: { kind: "offer", sdp: "to-guest" } });
+
+    // Nobody seated has that id, or it is the sender's own: the room drops both. An unaddressed one
+    // queued behind them is the next the guest hears, so neither was delivered late or widened.
+    host.send({ t: "signal", to: "nobody01", payload: { kind: "offer", sdp: "to-nobody" } });
+    host.send({ t: "signal", to: hostId, payload: { kind: "offer", sdp: "to-self" } });
+    host.send({ t: "signal", payload: { kind: "offer", sdp: "to-everyone" } });
+    expect(await guest.next("signal")).toMatchObject({ payload: { kind: "offer", sdp: "to-everyone" } });
+    // The guest's reply is the next thing the host hears: the room did not echo "to-self" back.
+    guest.send({ t: "signal", to: hostId, payload: { kind: "answer", sdp: "to-host" } });
+    expect(await host.next("signal")).toMatchObject({ from: guestId, payload: { kind: "answer", sdp: "to-host" } });
+
+    // Not a string of 1-16 characters: the sender is told, and nothing is delivered.
+    host.send({ t: "signal", to: "", payload: { kind: "offer", sdp: "bad-address" } });
+    expect(await host.next("error")).toEqual({ t: "error", reason: "bad-message" });
+
+    guest.close();
+    host.close();
   });
 
   it("tells a mistyped code there is no such room", async () => {

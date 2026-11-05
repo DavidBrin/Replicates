@@ -3,9 +3,10 @@
  *
  * Compiled twice — into the Worker (worker/tsconfig.json) and into the app —
  * so it imports nothing and touches no DOM type. The room understands only the
- * envelope: who you are, who else is here, and "deliver this to the other
- * one". SDP, ICE and lobby payloads pass through it untouched, which is what
- * keeps the Durable Object a dumb pipe with nothing to keep in sync.
+ * envelope: who you are and at which port, who else is here, and "deliver this
+ * to that one" (or to every other one). SDP, ICE and lobby payloads pass
+ * through it untouched, which is what keeps the Durable Object a dumb pipe with
+ * nothing to keep in sync.
  *
  * Parsers return null rather than throwing, for the reason `decodePacket`
  * does: these bytes come from a machine we do not control.
@@ -89,10 +90,22 @@ export const RELAY_KICK_DROPS = 4 * RELAY_BURST;
  */
 export const RELAY_MAX_FRAMES_PER_SOCKET = 108_000;
 
+/**
+ * One seat in a room. The room gives each newcomer the lowest free port, and
+ * the host is whoever holds port 0: `role === "host"` exactly when `port === 0`.
+ */
 export interface PeerInfo {
   readonly id: string;
   readonly role: Role;
+  /** An integer, 0 to MAX_PORT. */
+  readonly port: number;
 }
+
+/** The highest port a room seats: ports are 0-3, the match's four slots. */
+export const MAX_PORT = 3;
+
+/** A peer id is 1-16 characters where one names a recipient (the room's own are 8). */
+export const MAX_PEER_ID_LENGTH = 16;
 
 export interface WireIceCandidate {
   readonly candidate: string;
@@ -114,12 +127,18 @@ export interface OpaquePayload {
   readonly [key: string]: unknown;
 }
 
+/**
+ * `to` addresses the message to one peer by id. The room delivers it to that
+ * peer alone when it is seated and is not the sender, and drops it otherwise;
+ * without `to` it goes to every other peer.
+ */
 export type ClientMessage =
-  | { readonly t: "signal"; readonly payload: SignalPayload }
-  | { readonly t: "lobby"; readonly payload: OpaquePayload };
+  | { readonly t: "signal"; readonly payload: SignalPayload; readonly to?: string }
+  | { readonly t: "lobby"; readonly payload: OpaquePayload; readonly to?: string };
 
 export type ServerMessage =
-  | { readonly t: "welcome"; readonly self: PeerInfo; readonly peer: PeerInfo | null }
+  /** `peers`: the others already seated, sorted by port. */
+  | { readonly t: "welcome"; readonly self: PeerInfo; readonly peers: readonly PeerInfo[] }
   | { readonly t: "peer-joined"; readonly peer: PeerInfo }
   | { readonly t: "peer-left"; readonly peerId: string }
   | { readonly t: "signal"; readonly from: string; readonly payload: SignalPayload }
@@ -151,13 +170,17 @@ export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | n
     return null;
   }
   if (!isRecord(value)) return null;
+  // An address that is present must be a peer id's shape, whether or not the rest is good.
+  const to = value.to;
+  if (to !== undefined && !isPeerId(to)) return null;
+  const address = to === undefined ? {} : { to };
   if (value.t === "signal") {
     const payload = parseSignalPayload(value.payload);
-    return payload ? { t: "signal", payload } : null;
+    return payload ? { t: "signal", payload, ...address } : null;
   }
   if (value.t === "lobby") {
     const payload = value.payload;
-    return isOpaquePayload(payload) ? { t: "lobby", payload } : null;
+    return isOpaquePayload(payload) ? { t: "lobby", payload, ...address } : null;
   }
   return null;
 }
@@ -181,10 +204,14 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
   switch (value.t) {
     case "welcome": {
       const self = parsePeer(value.self);
-      if (!self) return null;
-      if (value.peer === null) return { t: "welcome", self, peer: null };
-      const peer = parsePeer(value.peer);
-      return peer ? { t: "welcome", self, peer } : null;
+      if (!self || !Array.isArray(value.peers)) return null;
+      const peers: PeerInfo[] = [];
+      for (const entry of value.peers as unknown[]) {
+        const peer = parsePeer(entry);
+        if (!peer) return null;
+        peers.push(peer);
+      }
+      return { t: "welcome", self, peers };
     }
     case "peer-joined": {
       const peer = parsePeer(value.peer);
@@ -244,8 +271,16 @@ function parsePeer(value: unknown): PeerInfo | null {
   if (!isRecord(value)) return null;
   const id = value.id;
   const role = value.role;
+  const port = value.port;
   if (typeof id !== "string" || (role !== "host" && role !== "guest")) return null;
-  return { id, role };
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > MAX_PORT) return null;
+  // The host is the seat on port 0: a peer that says otherwise is not one this room made.
+  if ((role === "host") !== (port === 0)) return null;
+  return { id, role, port };
+}
+
+function isPeerId(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 1 && value.length <= MAX_PEER_ID_LENGTH;
 }
 
 function isOpaquePayload(value: unknown): value is OpaquePayload {

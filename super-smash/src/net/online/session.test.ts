@@ -55,7 +55,7 @@ async function negotiatingHost() {
   const channel = new OpenableChannel();
   const peer = { ...inertPeer(), connectionState: "new", createDataChannel: () => channel };
   const opened = await open("create", () => peer);
-  opened.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+  opened.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
   expect(opened.session.transport.status).toBe("negotiating");
   const fail = () => {
     peer.connectionState = "failed";
@@ -80,7 +80,7 @@ async function opened(intent: RoomIntent) {
 async function hostMeetingGuest() {
   vi.useFakeTimers();
   const h = await opened("create");
-  h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+  h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
   await vi.advanceTimersByTimeAsync(0);
   expect(h.offers()).toBe(1);
   return h;
@@ -90,7 +90,7 @@ async function hostMeetingGuest() {
 async function relayedGuest() {
   vi.useFakeTimers();
   const g = await opened("join");
-  g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+  g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
   g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
   await vi.advanceTimersByTimeAsync(0);
   g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
@@ -124,21 +124,21 @@ describe("OnlineSession", () => {
 
   it("learns its role and port from the room", async () => {
     const host = await open();
-    host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+    host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
     expect(host.events).toContainEqual({ type: "joined", role: "host" });
     expect(host.session.role).toBe("host");
     expect(host.session.localPort).toBe(0);
 
     const guest = await open("join");
-    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     expect(guest.session.localPort).toBe(1);
     expect(guest.events).toContainEqual({ type: "peer", present: true });
   });
 
   it("reports the other player arriving and leaving", async () => {
     const { signalling, events } = await open();
-    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-    signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+    signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     signalling.deliver({ t: "peer-left", peerId: "g1" });
     expect(events.filter((e) => e.type === "peer")).toEqual([
       { type: "peer", present: true },
@@ -157,7 +157,7 @@ describe("OnlineSession", () => {
   /** Dropped, it would leave the guest waiting while the host played alone; passed on, the guest refuses it (Plan 2 Task 27). */
   it("passes on a start it cannot read, with the build it claims, for the guest to refuse", async () => {
     const { signalling, events } = await open("join");
-    signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
     const newer = { ...CONFIG, protocol: PROTOCOL_VERSION + 1, fighters: ["mario", "mewtwo-from-the-future"] };
     signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: newer } });
     expect(events.at(-1)).toEqual({
@@ -182,7 +182,7 @@ describe("OnlineSession", () => {
   describe("when the room drops after the welcome", () => {
     it("while it waits for a peer, the room is lost at once", async () => {
       const { signalling, events } = await open();
-      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
       signalling.deliver(ROOM_DROP);
       expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
     });
@@ -333,7 +333,7 @@ describe("OnlineSession", () => {
     async function linkedHost() {
       vi.useFakeTimers();
       const h = await opened("create");
-      h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
       await vi.advanceTimersByTimeAsync(0);
       h.channels[0].open();
       expect(h.offers()).toBe(1);
@@ -343,7 +343,7 @@ describe("OnlineSession", () => {
     async function linkedGuest() {
       vi.useFakeTimers();
       const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(0);
       g.channels[0].open();
@@ -397,7 +397,7 @@ describe("OnlineSession", () => {
       const h = await linkedHost();
       h.channels[0].drop();
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
-      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       await vi.advanceTimersByTimeAsync(0);
       // The newcomer gets the ordinary offer, and nothing else follows.
       expect(h.offers()).toBe(2);
@@ -416,7 +416,7 @@ describe("OnlineSession", () => {
       const h = await linkedHost();
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
       expect(h.session.transport.status).toBe("waiting");
-      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       await vi.advanceTimersByTimeAsync(0);
       expect(h.offers()).toBe(2);
       h.channels[1].open();
@@ -431,7 +431,7 @@ describe("OnlineSession", () => {
       const h = await linkedHost();
       expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
-      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       await vi.advanceTimersByTimeAsync(60_000);
       expect(h.offers()).toBe(1);
       expect(h.channels).toHaveLength(1);
@@ -465,7 +465,7 @@ describe("OnlineSession", () => {
       expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
       h.channels[0].drop();
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
-      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       await vi.advanceTimersByTimeAsync(0);
       expect(h.offers()).toBe(2);
       h.channels[1].open();
@@ -479,7 +479,7 @@ describe("OnlineSession", () => {
       g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: CONFIG } });
       g.signalling.deliver({ t: "peer-left", peerId: "h1" });
       g.channels[0].drop();
-      g.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+      g.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host", port: 0 } });
       g.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "o2" } });
       await vi.advanceTimersByTimeAsync(0);
       g.channels[1].open();
@@ -534,9 +534,9 @@ describe("OnlineSession", () => {
       };
       relay(host, "h1", guest);
       relay(guest, "g1", host);
-      host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-      guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
-      host.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+      host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+      guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
+      host.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
       await vi.advanceTimersByTimeAsync(0);
       host.channels[0].open();
       guest.channels[0].open();
@@ -650,7 +650,7 @@ describe("OnlineSession", () => {
     it("sends a guest whose re-answer never opens back to waiting for its host's next offer", async () => {
       vi.useFakeTimers();
       const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(0);
       g.channels[0].open();
@@ -699,7 +699,7 @@ describe("OnlineSession", () => {
     it("moves a guest's first answer, unopened after the deadline, to the relay without asking for another offer", async () => {
       vi.useFakeTimers();
       const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
       expect(renegotiates(g.signalling)).toEqual([]);
@@ -729,7 +729,7 @@ describe("OnlineSession", () => {
     it("follows the other side's use-relay, and does not say it back", async () => {
       vi.useFakeTimers();
       const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 50);
       g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
@@ -780,7 +780,7 @@ describe("OnlineSession", () => {
       await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
       expect(useRelays(h.signalling)).toBe(1);
       h.signalling.deliver({ t: "peer-left", peerId: "g1" });
-      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "use-relay" } });
       expect(useRelays(h.signalling)).toBe(2);
       await vi.advanceTimersByTimeAsync(60_000);
@@ -832,7 +832,7 @@ describe("OnlineSession", () => {
     it("ends a guest's wait for its host's fresh offer once it moves to the relay", async () => {
       vi.useFakeTimers();
       const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(0);
       g.channels[0].open();
@@ -861,7 +861,7 @@ describe("OnlineSession", () => {
       const leaves: string[] = [];
       g.session.transport.onPeerJoin((id) => joins.push(id));
       g.session.transport.onPeerLeave((id) => leaves.push(id));
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(0);
       g.channels[0].open();
@@ -894,7 +894,7 @@ describe("OnlineSession", () => {
       const leaves: string[] = [];
       g.session.transport.onPeerJoin((id) => joins.push(id));
       g.session.transport.onPeerLeave((id) => leaves.push(id));
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
       await vi.advanceTimersByTimeAsync(0);
       g.channels[0].open();
@@ -924,15 +924,15 @@ describe("OnlineSession", () => {
         throw new Error("no RTCPeerConnection here");
       };
       const later = await open("create", noWebRtc);
-      later.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-      later.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+      later.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+      later.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
       expect(later.session.route).toBe("relay");
       expect(later.session.transport.status).toBe("open");
       expect(useRelays(later.signalling)).toBe(1);
       expect(later.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
 
       const seated = await open("create", noWebRtc);
-      seated.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      seated.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
       expect(seated.session.route).toBe("relay");
       expect(useRelays(seated.signalling)).toBe(1);
 
@@ -941,7 +941,7 @@ describe("OnlineSession", () => {
       expect([later.signalling.closed, seated.signalling.closed]).toEqual([false, false]);
       // A later newcomer is told too: only the delivery that moved the room said it already.
       later.signalling.deliver({ t: "peer-left", peerId: "g1" });
-      later.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      later.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       expect(useRelays(later.signalling)).toBe(2);
     });
 
@@ -950,7 +950,7 @@ describe("OnlineSession", () => {
       channel.open();
       expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
       signalling.deliver({ t: "peer-left", peerId: "g1" });
-      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       fail();
       expect(events).not.toContainEqual({ type: "link", status: "failed" });
       expect(session.route).toBe("relay");
@@ -999,7 +999,7 @@ describe("OnlineSession", () => {
       expect(session.transport.status).toBe("closed");
       const sent = signalling.sent.length;
       const heard = events.length;
-      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
       expect(signalling.sent).toHaveLength(sent);
       expect(events).toHaveLength(heard);
     });
@@ -1062,7 +1062,7 @@ describe("OnlineSession", () => {
 
   it("sends a start the guest's parser will take", async () => {
     const { session, signalling, events } = await open();
-    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
     expect(signalling.sent.filter((m) => m.t === "lobby")).toEqual([{ t: "lobby", payload: { kind: "start", config: CONFIG } }]);
     expect(errors(events)).toEqual([]);
@@ -1100,8 +1100,8 @@ describe("OnlineSession", () => {
 
     it("goes once somebody is in the seat again", async () => {
       const { session, signalling, events } = await open();
-      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-      signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [] });
+      signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
       expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
       expect(errors(events)).toEqual([]);
     });
@@ -1134,7 +1134,7 @@ describe("OnlineSession", () => {
     expect(signalling.closed).toBe(true);
     expect(session.transport.status).toBe("closed");
     expect(signalling.listenerCount).toBe(0);
-    signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+    signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest", port: 1 } });
     expect(events).toEqual([]);
   });
 

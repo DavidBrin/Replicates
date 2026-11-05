@@ -99,21 +99,52 @@ describe("the size cap on a client frame", () => {
 });
 
 describe("server messages, as the browser reads them", () => {
-  it("reads a welcome with and without somebody already in the room", () => {
-    expect(parseServerMessage({ t: "welcome", self: { id: "a", role: "host" }, peer: null })).toEqual({
+  it("reads a welcome's seated peers with their ports, and refuses a port outside 0-3 or a non-string to", () => {
+    const host = { id: "a", role: "host", port: 0 };
+    const guest = { id: "b", role: "guest", port: 1 };
+    const third = { id: "c", role: "guest", port: 3 };
+    expect(parseServerMessage({ t: "welcome", self: host, peers: [] })).toEqual({ t: "welcome", self: host, peers: [] });
+    expect(parseServerMessage({ t: "welcome", self: guest, peers: [host] })).toEqual({
       t: "welcome",
-      self: { id: "a", role: "host" },
-      peer: null,
+      self: guest,
+      peers: [host],
     });
-    expect(
-      parseServerMessage({ t: "welcome", self: { id: "b", role: "guest" }, peer: { id: "a", role: "host" } }),
-    ).toEqual({ t: "welcome", self: { id: "b", role: "guest" }, peer: { id: "a", role: "host" } });
+    // The room sorts the others by port; the reader keeps the order it is given.
+    expect(parseServerMessage({ t: "welcome", self: third, peers: [host, guest] })).toEqual({
+      t: "welcome",
+      self: third,
+      peers: [host, guest],
+    });
+
+    // A port is an integer 0-3, on the one who is welcomed and on every peer listed.
+    for (const port of [-1, 4, 1.5, "1", null, undefined]) {
+      expect(parseServerMessage({ t: "welcome", self: { ...guest, port }, peers: [host] })).toBeNull();
+      expect(parseServerMessage({ t: "welcome", self: guest, peers: [{ ...third, port }] })).toBeNull();
+      expect(parseServerMessage({ t: "peer-joined", peer: { ...guest, port } })).toBeNull();
+    }
+    // The host is the one on port 0, and only that one.
+    expect(parseServerMessage({ t: "welcome", self: { ...host, port: 1 }, peers: [] })).toBeNull();
+    expect(parseServerMessage({ t: "welcome", self: { ...guest, port: 0 }, peers: [] })).toBeNull();
+    // The old shape, one peer or none, is not a welcome any more.
+    expect(parseServerMessage({ t: "welcome", self: host, peer: null })).toBeNull();
+    expect(parseServerMessage({ t: "welcome", self: guest, peers: host })).toBeNull();
+
+    // An addressed message names a peer id of 1-16 characters, and nothing else.
+    const payload = { kind: "offer", sdp: "v=0" };
+    for (const t of ["signal", "lobby"] as const) {
+      const body = t === "signal" ? payload : { kind: "pick" };
+      expect(parseClientMessage(JSON.stringify({ t, payload: body, to: "g1" }))).toEqual({ t, payload: body, to: "g1" });
+      expect(parseClientMessage(JSON.stringify({ t, payload: body, to: "x".repeat(16) }))).toMatchObject({ to: "x".repeat(16) });
+      for (const to of [5, null, true, ["g1"], { id: "g1" }, "", "x".repeat(17)]) {
+        expect(parseClientMessage(JSON.stringify({ t, payload: body, to }))).toBeNull();
+      }
+    }
   });
 
   it("reads joins, leaves, relayed signals, lobby payloads and errors", () => {
-    expect(parseServerMessage({ t: "peer-joined", peer: { id: "b", role: "guest" } })).toEqual({
+    expect(parseServerMessage({ t: "peer-joined", peer: { id: "b", role: "guest", port: 1 } })).toEqual({
       t: "peer-joined",
-      peer: { id: "b", role: "guest" },
+      peer: { id: "b", role: "guest", port: 1 },
     });
     expect(parseServerMessage({ t: "peer-left", peerId: "b" })).toEqual({ t: "peer-left", peerId: "b" });
     expect(parseServerMessage({ t: "signal", from: "a", payload: { kind: "offer", sdp: "v=0" } })).toEqual({
@@ -135,7 +166,7 @@ describe("server messages, as the browser reads them", () => {
   });
 
   it("rejects a malformed role, a missing sender or an unknown error", () => {
-    expect(parseServerMessage({ t: "welcome", self: { id: "a", role: "boss" }, peer: null })).toBeNull();
+    expect(parseServerMessage({ t: "welcome", self: { id: "a", role: "boss", port: 0 }, peers: [] })).toBeNull();
     expect(parseServerMessage({ t: "signal", payload: { kind: "offer", sdp: "v=0" } })).toBeNull();
     expect(parseServerMessage({ t: "error", reason: "on-fire" })).toBeNull();
     expect(parseServerMessage("welcome")).toBeNull();

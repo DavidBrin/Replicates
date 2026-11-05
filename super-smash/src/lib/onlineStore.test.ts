@@ -507,9 +507,9 @@ describe("with a real session, when the lobby channel is lost", () => {
     setActiveSession(session);
     bindSession(session);
     if (role === "host") {
-      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     } else {
-      signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest", port: 1 }, peers: [{ id: "h1", role: "host", port: 0 }] });
       signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
     }
     await vi.advanceTimersByTimeAsync(0);
@@ -567,7 +567,7 @@ describe("with a real session, when the lobby channel is lost", () => {
     h.signalling.deliver({ t: "peer-left", peerId: "g1" });
     expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE });
 
-    h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest", port: 1 } });
     await vi.advanceTimersByTimeAsync(0);
     expect(h.channels).toHaveLength(2);
     expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
@@ -984,7 +984,7 @@ describe("the build handshake", () => {
     });
     setActiveSession(session);
     bindSession(session);
-    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });
     // A Worker deploy drops the room mid-negotiation, and the channel opens within the session's grace.
     signalling.deliver({ t: "closed", code: 1006, reason: "" });
     channel.open();

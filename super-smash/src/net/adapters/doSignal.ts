@@ -331,7 +331,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     conn.onicecandidate = (event) => {
       if (conn !== pc || event.candidate === null) return;
       const candidate = toWire(event.candidate.toJSON());
-      if (candidate) options.signalling.send({ t: "signal", payload: { kind: "ice", candidate } });
+      if (candidate) options.signalling.send({ t: "signal", to: peerId, payload: { kind: "ice", candidate } });
     };
     conn.onconnectionstatechange = () => {
       if (conn === pc && conn.connectionState === "failed") lose("failed");
@@ -377,7 +377,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       const sdp = offer.sdp ?? "";
       await conn.setLocalDescription({ type: "offer", sdp });
       if (conn !== pc) return;
-      options.signalling.send({ t: "signal", payload: { kind: "offer", sdp } });
+      options.signalling.send({ t: "signal", to: peerId, payload: { kind: "offer", sdp } });
     } catch {
       if (conn === pc) lose("failed");
     }
@@ -396,7 +396,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       const sdp = reply.sdp ?? "";
       await conn.setLocalDescription({ type: "answer", sdp });
       if (conn !== pc) return;
-      options.signalling.send({ t: "signal", payload: { kind: "answer", sdp } });
+      options.signalling.send({ t: "signal", to: peerId, payload: { kind: "answer", sdp } });
     } catch {
       if (conn === pc) lose("failed");
     }
@@ -457,16 +457,14 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       case "welcome":
         selfId = event.self.id;
         role = event.self.role;
-        if (event.peer) seated.add(event.peer.id);
-        // A guest is only ever admitted beside a host, so its welcome's peer is that host.
-        hostId = role === "guest" ? (event.peer?.id ?? null) : null;
+        for (const peer of event.peers) seated.add(peer.id);
+        // A guest is only ever admitted beside a host, so the host is among its welcome's peers.
+        hostId = role === "guest" ? (event.peers.find((p) => p.role === "host")?.id ?? null) : null;
         if (route === "relay") {
-          // Nothing to negotiate: the room seats the peer, and that is the link.
-          if (event.peer) {
-            announceRelayed(event.peer.id);
-            setStatus("open");
-          }
-        } else if (role === "host" && event.peer) void offerTo(event.peer.id);
+          // Nothing to negotiate: the room seats the peers, and that is the link.
+          for (const peer of event.peers) announceRelayed(peer.id);
+          if (event.peers.length > 0) setStatus("open");
+        } else if (role === "host" && event.peers.length === 1) void offerTo(event.peers[0].id);
         break;
       case "peer-joined":
         seated.add(event.peer.id);

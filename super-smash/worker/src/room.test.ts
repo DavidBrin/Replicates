@@ -13,6 +13,7 @@ import {
   type PeerInfo,
 } from "../../src/net/signalProtocol";
 import {
+  ROOM_CAPACITY,
   decideJoin,
   departures,
   livePeerFor,
@@ -23,28 +24,73 @@ import {
   type PeerAttachment,
 } from "./room";
 
-const host: PeerInfo = { id: "h1", role: "host" };
-const guest: PeerInfo = { id: "g1", role: "guest" };
+const host: PeerInfo = { id: "h1", role: "host", port: 0 };
+const guest: PeerInfo = { id: "g1", role: "guest", port: 1 };
+const third: PeerInfo = { id: "t1", role: "guest", port: 2 };
 const attach = (peer: PeerInfo, received = 0): PeerAttachment => ({ ...peer, received });
 const offer = JSON.stringify({ t: "signal", payload: { kind: "offer", sdp: "v=0" } });
 
 describe("joining a room", () => {
-  it("makes whoever creates an empty room the host", () => {
+  it("makes whoever creates an empty room the host, on port 0", () => {
     expect(decideJoin([], "create", "h1")).toEqual({
       type: "admit",
       peer: host,
-      welcome: { t: "welcome", self: host, peer: null },
-      notify: null,
+      welcome: { t: "welcome", self: host, peers: [] },
+      notify: [],
     });
   });
 
-  it("makes the second arrival the guest, and tells the host", () => {
+  it("makes the second arrival the guest, on port 1, and tells the host", () => {
     expect(decideJoin([host], "join", "g1")).toEqual({
       type: "admit",
       peer: guest,
-      welcome: { t: "welcome", self: guest, peer: host },
-      notify: { to: "h1", message: { t: "peer-joined", peer: guest } },
+      welcome: { t: "welcome", self: guest, peers: [host] },
+      notify: [{ to: "h1", message: { t: "peer-joined", peer: guest } }],
     });
+  });
+
+  it("gives each newcomer the lowest free port, and the host seat to whoever takes port 0", () => {
+    const seat = (existing: readonly PeerInfo[], id: string): PeerInfo => {
+      const decision = decideJoin(existing, existing.length === 0 ? "create" : "join", id, 4);
+      if (decision.type !== "admit") throw new Error(`${id} was refused: ${decision.reason}`);
+      return decision.peer;
+    };
+    const room: PeerInfo[] = [];
+    for (const [id, port] of [["p0", 0], ["p1", 1], ["p2", 2], ["p3", 3]] as const) {
+      const peer = seat(room, id);
+      expect(peer).toEqual({ id, role: port === 0 ? "host" : "guest", port });
+      room.push(peer);
+    }
+    // A seat that empties is the next one filled, whichever port it was.
+    const withoutPortOne = room.filter((p) => p.port !== 1);
+    expect(seat(withoutPortOne, "n1")).toEqual({ id: "n1", role: "guest", port: 1 });
+    const withoutPortTwo = room.filter((p) => p.port !== 2);
+    expect(seat(withoutPortTwo, "n2")).toEqual({ id: "n2", role: "guest", port: 2 });
+    // The host's port empties: its seat, and the host role with it, go to the next arrival.
+    const withoutHost = room.filter((p) => p.port !== 0);
+    expect(seat(withoutHost, "n0")).toEqual({ id: "n0", role: "host", port: 0 });
+    // With both ports 0 and 1 free, the lowest goes first.
+    expect(seat(room.filter((p) => p.port >= 2), "n01")).toEqual({ id: "n01", role: "host", port: 0 });
+  });
+
+  it("lists the others in a welcome by port, whatever order the room holds them in", () => {
+    const decision = decideJoin([third, host, guest], "join", "x1", 4);
+    expect(decision).toMatchObject({ type: "admit", peer: { id: "x1", port: 3 } });
+    expect(decision.type === "admit" ? decision.welcome : null).toEqual({
+      t: "welcome",
+      self: { id: "x1", role: "guest", port: 3 },
+      peers: [host, guest, third],
+    });
+  });
+
+  it("tells every peer already seated that somebody joined", () => {
+    const decision = decideJoin([host, guest, third], "join", "x1", 4);
+    const newcomer: PeerInfo = { id: "x1", role: "guest", port: 3 };
+    expect(decision.type === "admit" ? decision.notify : null).toEqual([
+      { to: "h1", message: { t: "peer-joined", peer: newcomer } },
+      { to: "g1", message: { t: "peer-joined", peer: newcomer } },
+      { to: "t1", message: { t: "peer-joined", peer: newcomer } },
+    ]);
   });
 
   it("turns a third peer away with 'full' and leaves the two alone", () => {
@@ -57,6 +103,15 @@ describe("joining a room", () => {
     expect(decideJoin([host, guest], "create", "x1")).toMatchObject({ type: "reject", reason: "full" });
   });
 
+  it("holds ROOM_CAPACITY peers, two until the room is raised, and the capacity parameter moves the line", () => {
+    expect(ROOM_CAPACITY).toBe(2);
+    expect(decideJoin([host, guest, third], "join", "x1", 4)).toMatchObject({ type: "admit", peer: { port: 3 } });
+    expect(decideJoin([host, guest, third, { id: "x1", role: "guest", port: 3 }], "join", "x2", 4)).toMatchObject({
+      type: "reject",
+      reason: "full",
+    });
+  });
+
   it("refuses to create a room somebody is already in", () => {
     expect(decideJoin([host], "create", "h2")).toMatchObject({ type: "reject", reason: "taken" });
   });
@@ -65,14 +120,20 @@ describe("joining a room", () => {
     expect(decideJoin([], "join", "g1")).toMatchObject({ type: "reject", reason: "not-found" });
   });
 
-  it("never leaks the room's own bookkeeping into a welcome", () => {
+  it("never leaks the room's own bookkeeping into a welcome or a join notice", () => {
     const attachment = { ...host, received: 41 };
     const decision = decideJoin([attachment], "join", "g1");
-    expect(decision.type === "admit" && decision.welcome.t === "welcome" ? decision.welcome.peer : null).toEqual(host);
+    expect(decision.type === "admit" && decision.welcome.t === "welcome" ? decision.welcome.peers : null).toEqual([host]);
+    expect(decision.type === "admit" ? decision.notify : null).toEqual([
+      { to: "h1", message: { t: "peer-joined", peer: guest } },
+    ]);
   });
 
-  it("hands the host seat to a newcomer if the host left first", () => {
-    expect(decideJoin([guest], "join", "h2")).toMatchObject({ type: "admit", peer: { id: "h2", role: "host" } });
+  it("hands the host seat, port 0, to a newcomer if the host left first", () => {
+    expect(decideJoin([guest], "join", "h2")).toMatchObject({
+      type: "admit",
+      peer: { id: "h2", role: "host", port: 0 },
+    });
   });
 });
 
@@ -80,7 +141,7 @@ describe("relaying", () => {
   it("forwards a signal to the other peer, stamped with who sent it", () => {
     expect(relay(attach(host), offer, [host, guest])).toEqual({
       type: "forward",
-      delivery: { to: "g1", message: { t: "signal", from: "h1", payload: { kind: "offer", sdp: "v=0" } } },
+      deliveries: [{ to: "g1", message: { t: "signal", from: "h1", payload: { kind: "offer", sdp: "v=0" } } }],
     });
   });
 
@@ -88,7 +149,7 @@ describe("relaying", () => {
     const renegotiate = JSON.stringify({ t: "signal", payload: { kind: "renegotiate" } });
     expect(relay(attach(guest), renegotiate, [host, guest])).toEqual({
       type: "forward",
-      delivery: { to: "h1", message: { t: "signal", from: "g1", payload: { kind: "renegotiate" } } },
+      deliveries: [{ to: "h1", message: { t: "signal", from: "g1", payload: { kind: "renegotiate" } } }],
     });
   });
 
@@ -96,8 +157,48 @@ describe("relaying", () => {
     const forged = JSON.stringify({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 0 } });
     expect(relay(attach(host), forged, [host, guest])).toEqual({
       type: "forward",
-      delivery: { to: "g1", message: { t: "lobby", from: "h1", payload: { kind: "pick", fighterId: "fox", costume: 0 } } },
+      deliveries: [
+        { to: "g1", message: { t: "lobby", from: "h1", payload: { kind: "pick", fighterId: "fox", costume: 0 } } },
+      ],
     });
+  });
+
+  it("delivers an unaddressed message to every other peer", () => {
+    expect(relay(attach(guest), offer, [host, guest, third])).toEqual({
+      type: "forward",
+      deliveries: [
+        { to: "h1", message: { t: "signal", from: "g1", payload: { kind: "offer", sdp: "v=0" } } },
+        { to: "t1", message: { t: "signal", from: "g1", payload: { kind: "offer", sdp: "v=0" } } },
+      ],
+    });
+  });
+
+  it("delivers an addressed message to that peer alone, and drops one addressed to nobody seated or to the sender itself", () => {
+    const room = [host, guest, third];
+    const addressed = (t: "signal" | "lobby", to: string): string =>
+      JSON.stringify({ t, to, payload: t === "signal" ? { kind: "offer", sdp: "v=0" } : { kind: "pick" } });
+    // To one peer, and not to the other: the sender is stamped, the address is not passed on.
+    expect(relay(attach(host), addressed("signal", "t1"), room)).toEqual({
+      type: "forward",
+      deliveries: [{ to: "t1", message: { t: "signal", from: "h1", payload: { kind: "offer", sdp: "v=0" } } }],
+    });
+    expect(relay(attach(host), addressed("lobby", "g1"), room)).toEqual({
+      type: "forward",
+      deliveries: [{ to: "g1", message: { t: "lobby", from: "h1", payload: { kind: "pick" } } }],
+    });
+    // Nobody seated by that id (a peer that left, or one that never was).
+    expect(relay(attach(host), addressed("signal", "gone0001"), room)).toEqual({ type: "drop" });
+    expect(relay(attach(host), addressed("lobby", "gone0001"), room)).toEqual({ type: "drop" });
+    // The sender itself is not a recipient: it is dropped, not echoed and not widened to the others.
+    expect(relay(attach(host), addressed("signal", "h1"), room)).toEqual({ type: "drop" });
+    expect(relay(attach(guest), addressed("lobby", "g1"), room)).toEqual({ type: "drop" });
+  });
+
+  it("refuses an address that is not a peer id's shape with bad-message, as it does any other garbage", () => {
+    const bad = { type: "reply", message: { t: "error", reason: "bad-message" } };
+    for (const to of [5, null, "", "x".repeat(17)]) {
+      expect(relay(attach(host), JSON.stringify({ t: "signal", to, payload: { kind: "offer", sdp: "v=0" } }), [host, guest])).toEqual(bad);
+    }
   });
 
   it("answers garbage with bad-message instead of passing it on", () => {

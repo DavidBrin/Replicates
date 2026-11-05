@@ -3,9 +3,11 @@
  *
  * The Durable Object (roomDO.ts) is a thin shell that maps these decisions onto
  * sockets; everything that can be wrong lives here, where a plain vitest run
- * can see it. A room holds two peers: the first in is the host (P1, picks the
- * stage), the second the guest. It relays envelopes and understands nothing
- * inside them.
+ * can see it. A room seats each peer at a port: the first in takes port 0 and
+ * is the host (P1, picks the stage), and each later one takes the lowest free
+ * port and is a guest. It relays envelopes, to one peer when they are
+ * addressed and to every other peer when not, and understands nothing inside
+ * them.
  */
 
 import {
@@ -37,36 +39,55 @@ export interface Delivery {
 }
 
 export type JoinDecision =
-  | { readonly type: "admit"; readonly peer: PeerInfo; readonly welcome: ServerMessage; readonly notify: Delivery | null }
+  | {
+      readonly type: "admit";
+      readonly peer: PeerInfo;
+      readonly welcome: ServerMessage;
+      /** One `peer-joined` for each peer already seated. */
+      readonly notify: readonly Delivery[];
+    }
   | { readonly type: "reject"; readonly reason: RoomError; readonly closeCode: number; readonly message: ServerMessage };
 
 export type RelayOutcome =
-  | { readonly type: "forward"; readonly delivery: Delivery }
+  | { readonly type: "forward"; readonly deliveries: readonly Delivery[] }
   | { readonly type: "reply"; readonly message: ServerMessage }
   | { readonly type: "drop" }
   | { readonly type: "kick"; readonly reason: RoomError; readonly closeCode: number; readonly message: ServerMessage };
 
-/** v1 online is two players (spec §3.3). */
+/** Online is two players (spec §3.3) until Plan 7 Phase B raises it. */
 export const ROOM_CAPACITY = 2;
 
-export function decideJoin(existing: readonly PeerInfo[], intent: RoomIntent, newId: string): JoinDecision {
-  if (existing.length >= ROOM_CAPACITY) return { type: "reject", ...refusal("full") };
+/**
+ * `capacity` is a parameter so the port rule can be tested at four seats while
+ * the room itself still seats `ROOM_CAPACITY`.
+ */
+export function decideJoin(
+  existing: readonly PeerInfo[],
+  intent: RoomIntent,
+  newId: string,
+  capacity: number = ROOM_CAPACITY,
+): JoinDecision {
+  if (existing.length >= capacity) return { type: "reject", ...refusal("full") };
   // A fresh code that is already in use: the creator makes another one.
   if (intent === "create" && existing.length > 0) return { type: "reject", ...refusal("taken") };
   // Joining an empty room means the code was misheard or the host has gone.
   if (intent === "join" && existing.length === 0) return { type: "reject", ...refusal("not-found") };
 
-  const role: Role = existing.some((p) => p.role === "host") ? "guest" : "host";
-  const peer: PeerInfo = { id: newId, role };
+  // Fewer peers than seats, so a port in 0..capacity-1 is free: the lowest one.
+  let port = 0;
+  while (existing.some((p) => p.port === port)) port += 1;
+  const role: Role = port === 0 ? "host" : "guest";
+  const peer: PeerInfo = { id: newId, role, port };
   // Rebuilt rather than passed through: the room hands in its socket
   // attachments, which also carry the private `received` counter.
-  const first = existing[0];
-  const other: PeerInfo | null = first ? { id: first.id, role: first.role } : null;
+  const others: PeerInfo[] = existing
+    .map((p): PeerInfo => ({ id: p.id, role: p.role, port: p.port }))
+    .sort((a, b) => a.port - b.port);
   return {
     type: "admit",
     peer,
-    welcome: { t: "welcome", self: peer, peer: other },
-    notify: other ? { to: other.id, message: { t: "peer-joined", peer } } : null,
+    welcome: { t: "welcome", self: peer, peers: others },
+    notify: others.map((other) => ({ to: other.id, message: { t: "peer-joined", peer } })),
   };
 }
 
@@ -74,14 +95,16 @@ export function relay(from: PeerAttachment, raw: string | ArrayBuffer, peers: re
   if (from.received >= MAX_MESSAGES_PER_PEER) return { type: "kick", ...refusal("too-many-messages") };
   const message = parseClientMessage(raw);
   if (!message) return { type: "reply", message: { t: "error", reason: "bad-message" } };
-  const other = peers.find((p) => p.id !== from.id);
-  if (!other) return { type: "drop" };
+  // Addressed: that peer alone, if it is seated and is not the sender. Otherwise: everyone else.
+  const { to } = message;
+  const recipients = peers.filter((p) => p.id !== from.id && (to === undefined || p.id === to));
+  if (recipients.length === 0) return { type: "drop" };
   // The sender is stamped here, never read from the message.
   const relayed: ServerMessage =
     message.t === "signal"
       ? { t: "signal", from: from.id, payload: message.payload }
       : { t: "lobby", from: from.id, payload: message.payload };
-  return { type: "forward", delivery: { to: other.id, message: relayed } };
+  return { type: "forward", deliveries: recipients.map((p) => ({ to: p.id, message: relayed })) };
 }
 
 /**
