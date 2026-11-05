@@ -120,7 +120,8 @@ export function parseRoomIntent(value: string | null): RoomIntent | null {
 }
 
 /**
- * One raw WebSocket frame from a browser. Binary frames are never valid.
+ * One raw WebSocket frame from a browser. A binary frame is never valid here:
+ * binary is game data, which the room relays before this is called.
  *
  * The cap is in UTF-8 bytes, which is what the wire carries and the free tier
  * bills. `raw.length` counts UTF-16 code units, and each takes one to three

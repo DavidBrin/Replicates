@@ -5086,6 +5086,13 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
 - a relayed 8-minute match costs about 1,442 requests for 2 players at 30 messages/s, and about
   2,884 for 4 players at 30 messages/s (480 s × 30 × players ÷ 20, plus one request per socket
   upgrade; derived from the lines above, not quoted).
+- *Duration is the second, looser limit.* UNVERIFIED: from the Phase A seam review's
+  recollection of the free tier, not re-read. Durable Object duration (GB-s, at 128 MB) is
+  metered alongside requests, and a relayed match keeps the object awake for its whole length,
+  since a frame arrives every 33 ms and hibernation never starts. At about 13,000 GB-s a day,
+  an 8-minute match (480 s × 0.125 GB, about 60 GB-s) allows about 210 relayed matches a day;
+  requests (100,000 ÷ 1,442) allow about 69, so requests run out first. The Deploy checkpoint
+  reads both meters for the measured match.
 
 **Limits and framing** (`signalProtocol.ts`, `relayFrame.ts`).
 - *What the room does with a frame.* It stamps the sender, never echoes it back, never reads it,
@@ -5096,7 +5103,13 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
 - *The limits.* `RELAY_MAX_FRAME_BYTES` 2,048, the client's payload; a larger frame kicks the
   socket with `bad-message`. `RELAY_RATE_PER_SECOND` 40 with `RELAY_BURST` 80, a per-socket token
   bucket; a frame over the rate is dropped silently. The client sends 30 a second, so this is
-  headroom, not a budget. The prefix is `RELAY_ID_BYTES` 8: the room's peer ids are
+  headroom, not a budget. A dropped frame was still billed on arrival, so a socket that keeps
+  sending over the rate is closed: once `RELAY_KICK_DROPS` (320, four bursts) frames have been
+  dropped since its bucket was last full, its next frame over the rate kicks it with
+  `too-many-messages` (4008), and it must come back through the upgrade limiter (60 a minute per
+  IP). The count is in memory with the bucket. An honest client refills to full long before
+  that: only a backlog of more than about 13 s could reach it, and by then the other side has
+  called the match lost (10 s of silence). The prefix is `RELAY_ID_BYTES` 8: the room's peer ids are
   `crypto.randomUUID().slice(0, 8)`, eight ASCII bytes.
 - *Two inputs to a message.* In relay mode the client puts two frames' packets in each WebSocket
   message (`RELAY_INPUTS_PER_MESSAGE` 2), which halves the incoming-message bill at about one
@@ -5147,7 +5160,8 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
   join or leave. Nothing listens for them before the start, so nothing reads it today.
 - *The hello timer is re-armed for a relayed newcomer.* Its link opens before the room seats
   it, which stopped the store's hello timer; seating restarts it, so a peer that never says
-  hello is refused after `HELLO_TIMEOUT_MS` (5 s) and not held on linking.
+  hello is not held on linking: after `HELLO_TIMEOUT_MS` (5 s) it is refused, or called a failed
+  link if it has said nothing at all (below).
 - *The copy and the HUD.* The lobby reads "Connecting through the relay…" while a relayed link
   waits for the hello, on either side; the net HUD's numbers line ends `· RELAY` or `· DIRECT`
   (one no-wrap span with its dot), read from the store; `window.__smashNet.route` publishes
@@ -5163,6 +5177,26 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
 - *A hidden tab sends nothing.* It ticks nothing, so it sends no Input, and its Pongs and Hashes
   wait in the batch until it returns; the size flush bounds the wait. This matches the `away`
   rules: the tab says `away` through the room first, and the other side waits 60 s, not 10.
+  A Pong held that way would measure the time the tab was hidden, so the rollback session
+  ignores any round trip above `MAX_RTT_SAMPLE_MS` (1,000 ms, far above a playable link) and
+  still retires its ping; before that, a 20 s absence took the measured ping to about 4 s and
+  the input delay to its cap for about ten seconds. It also covers a frozen mobile tab on a
+  direct link.
+- *A frame's Ping leaves before its inputs* (`heartbeat()`). Queued after them, it waited for
+  one or two more Inputs before the batch flushed, so the measured round trip grew by about
+  40 ms while each Input's one-way delay grew by about 8, and the auto input delay ran about a
+  frame above what the route needs. The Ping now waits as an Input does; the peer's Pong still
+  waits for that side's next flush, so the measured round trip stays a little above the route's
+  (an estimate, not measured). The Deploy checkpoint compares the HUD's DELAY on the relay with
+  a direct link for the same pair and records it here. Order within a tick does not matter to
+  the direct route.
+- *A relayed seat that says nothing at all is a failed link.* The side that moves to the relay
+  first starts its hello wait at once, and the other's hello leaves only when that page handles
+  `use-relay`; a tab that cannot run (a phone switched to another app, which may be why the
+  direct link failed too) says nothing. When the wait runs out on the relay with no lobby
+  message from the seat since the link opened or the seat was taken, the lobby fails with
+  `link-failed` ("The connection to the other player failed…") and leaves the room, rather than
+  the version sentence; a seat that talked but sent no hello is still refused as another build.
 - *After a match, the linger re-sends every 50 ms* (`LINGER_RESEND_MS`): 20 sends a second, and
   the batcher flushes on every second one, so about 10 messages a second, far under the 40 cap.
   Steady play is 30 a second (60 frames, two to a message). Catch-up after a stall is clamped
@@ -5183,7 +5217,11 @@ recommendations work", 2026-11-04), each with its cost if wrong.
 
 **Residual risks.**
 - *A hostile client can spend the daily budget*, as D54 says of signalling. The frame size and
-  rate caps bound one socket, not the account.
+  rate caps bound one socket, not the account. A socket flooding past the rate is kicked after
+  `RELAY_KICK_DROPS` and must reconnect through the upgrade limiter, so a runaway client cannot
+  be billed without bound; but one that keeps to the cap, 40 frames a second, is never kicked:
+  that is 2 requests a second, which spends the 100,000 in about 14 hours from one socket, and
+  sooner from several. The kick bounds the rate, not the total.
 - *Whether the free plan applies the 20:1 ratio to this traffic is unverified.* The budget
   facts above come from the documentation named there; the Deploy checkpoint measures the bill
   of one relayed match against 30 messages/s × 2 ÷ 20, and the delay the relay adds on both
@@ -5197,3 +5235,9 @@ recommendations work", 2026-11-04), each with its cost if wrong.
   match that connects directly (the plan's estimate is about 90% of matches, UNVERIFIED: not
   measured), to save at most the 15 s deadline for the rest.
 - *Paid TURN.* David has no payment card.
+
+**For David.** A product note, not a defect. A room is one match long (`Results.tsx` leaves it
+after the results), and the relay is sticky only for the room, so a pair whose networks need the
+relay waits the full 15 s on "Opening a direct connection…" before every match. If testers find
+that tedious, one cheap option is to remember in `sessionStorage` that this browser's last room
+fell back to the relay, and shorten that side's first deadline. Your call.
