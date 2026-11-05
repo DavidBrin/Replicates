@@ -198,9 +198,11 @@ export class OnlineSession implements OnlineSessionLike {
           for (const peer of event.peers) this.seated.set(peer.id, peer);
           this.events.emit({ type: "joined", role: event.self.role });
           for (const peer of event.peers) this.events.emit({ type: "peer", present: true, peer });
-          // A newcomer welcomed into three seats moves without a word: the
-          // members already seated each hear it join and decide for themselves.
-          this.relayIfThree(false);
+          // A newcomer welcomed into three seats moves and tells the room, as
+          // whoever moves it does: the members seated count against their own
+          // lock, and a stranger the begin has not yet sent away is a seat to
+          // the newcomer and not to the host (Phase B final review M-1).
+          this.relayIfThree(true);
           break;
         case "peer-joined": {
           const relayed = this.transport.route === "relay";

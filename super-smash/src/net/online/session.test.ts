@@ -1156,8 +1156,9 @@ describe("OnlineSession", () => {
 /**
  * Phase B (Plan 7): a room seats up to four. Two players try a direct channel
  * first; a third seat moves everyone to the room relay, a star through the
- * Durable Object, with no WebRTC mesh and no message needed (every member
- * sees the same joins).
+ * Durable Object, with no WebRTC mesh. Whoever a join moves tells the room
+ * too: members count seats against their own roster lock, so they can
+ * disagree about a stranger.
  */
 describe("rooms of three and four (Plan 7)", () => {
   const HOST = { id: "h1", role: "host", port: 0 } as const;
@@ -1194,7 +1195,7 @@ describe("rooms of three and four (Plan 7)", () => {
     return { ...h, built, offers };
   }
 
-  it("puts a room that seats three on the relay at once, without a message", async () => {
+  it("puts a room that seats three on the relay at once, and tells the room once", async () => {
     vi.useFakeTimers();
     const g = await opened("join");
     g.signalling.deliver({ t: "welcome", self: G2, peers: [HOST, G1] });
@@ -1202,7 +1203,8 @@ describe("rooms of three and four (Plan 7)", () => {
     expect(g.session.route).toBe("relay");
     expect(g.session.transport.status).toBe("open");
     expect(g.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
-    expect(g.signalling.sent).toEqual([]);
+    // Members already relayed ignore the word; see the stranger-split test below (M-1).
+    expect(g.signalling.sent).toEqual([{ t: "lobby", payload: { kind: "use-relay" } }]);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(g.channels).toHaveLength(0);
     expect(errors(g.events)).toEqual([]);
@@ -1445,6 +1447,39 @@ describe("rooms of three and four (Plan 7)", () => {
     expect(h.session.transport.status).toBe("open");
     await vi.advanceTimersByTimeAsync(60_000);
     expect([...errors(h.events), ...errors(g.events)]).toEqual([]);
+  });
+
+  /**
+   * Phase B final review M-1: a begun direct room of two still seats a
+   * stranger the begin has not yet sent away when its guest leaves and a
+   * newcomer takes the port. The newcomer's welcome counts three seats, so it
+   * moves; told, the host the begin has given it to follows at once, rather
+   * than offer a direct link the newcomer ignores until its own deadline.
+   */
+  it("has a newcomer welcomed into three seats tell the room, so a begun direct host with a stranger still seated follows it", async () => {
+    const N1 = { id: "n1", role: "guest", port: 1 } as const;
+    const h = await hostMeetingGuest();
+    h.channels[0].open();
+    h.session.lockRoster(["g1"]);
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    h.signalling.deliver({ t: "peer-joined", peer: N1 });
+    // The host's begin, sent again, seats the newcomer on the vacated port.
+    h.session.lockRoster(["n1"]);
+    expect(h.session.route).toBe("direct");
+
+    const n = await opened("join");
+    n.signalling.deliver({ t: "welcome", self: N1, peers: [HOST, G2] });
+    expect(n.session.route).toBe("relay");
+    expect(n.signalling.sent.filter((m) => m.t === "lobby")).toEqual([{ t: "lobby", payload: { kind: "use-relay" } }]);
+
+    // The room orders it after the newcomer's join, stamped with the newcomer.
+    h.signalling.deliver({ t: "lobby", from: "n1", payload: { kind: "use-relay" } });
+    expect(h.session.route).toBe("relay");
+    expect(h.session.transport.status).toBe("open");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
+    expect([...errors(h.events), ...errors(n.events)]).toEqual([]);
   });
 
   it("lets no stranger in a begun room move it to the relay or start it", async () => {
