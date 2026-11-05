@@ -894,10 +894,10 @@ function initialPlayers(local: ControlOptions = DEFAULT_CONTROL_OPTIONS, saved: 
 }
 
 /**
- * An online port. Both start with this machine's player's control options —
- * the local port keeps them, and the remote one's Stick Jump is overwritten by
- * the other peer's pick (`onlineStore`). The remote one's pad settings are
- * never read here: the other peer's pad is on their machine.
+ * An online port. Every port starts with this machine's player's control
+ * options — the local port keeps them, and a remote port's Stick Jump is
+ * overwritten by that peer's pick (`onlineStore`). A remote port's pad
+ * settings are never read here: that peer's pad is on their machine.
  */
 function onlinePlayer(port: number, local: ControlOptions): PlayerSlot {
   return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows", stickJump: local.stickJump, pad: local.pad, joinedPad: null };
@@ -1101,7 +1101,8 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   configureOnline: (playerCount = MIN_PLAYERS) =>
     set((s) => {
       const local = localOptionsOf(s);
-      const count = Number.isFinite(playerCount) ? Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, Math.trunc(playerCount))) : MIN_PLAYERS;
+      // NaN would clamp to NaN and seat nobody; Infinity clamps to the most. `Array.from` floors a fractional count.
+      const count = Number.isNaN(playerCount) ? MIN_PLAYERS : Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, playerCount));
       const players = Array.from({ length: count }, (_, port) => onlinePlayer(port, local));
       return { players, rules: withDerivedRules(s.rules, players), result: null, online: true, localOptions: local };
     }),

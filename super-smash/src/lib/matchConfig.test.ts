@@ -353,6 +353,12 @@ describe("online mode", () => {
     expect(useMatchConfig.getState().players).toHaveLength(MAX_PLAYERS);
     useMatchConfig.getState().configureOnline(Number.NaN);
     expect(useMatchConfig.getState().players).toHaveLength(MIN_PLAYERS);
+    useMatchConfig.getState().configureOnline(Number.POSITIVE_INFINITY);
+    expect(useMatchConfig.getState().players).toHaveLength(MAX_PLAYERS);
+    useMatchConfig.getState().configureOnline(Number.NEGATIVE_INFINITY);
+    expect(useMatchConfig.getState().players).toHaveLength(MIN_PLAYERS);
+    useMatchConfig.getState().configureOnline(3.9);
+    expect(useMatchConfig.getState().players.map((p) => p.port)).toEqual([0, 1, 2]);
   });
 
   it("goes back to one human and a CPU on leaving", () => {

@@ -374,4 +374,29 @@ describe("lobby messages from a hostile or mismatched peer", () => {
       expect(parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config })))).toEqual({ kind: "start", config });
     }
   });
+
+  /** The third and fourth ports are the new surface: a bad entry there is as unplayable as one at port 0 or 1. */
+  it("refuses a bad entry at the third or fourth port, in any of the three arrays", () => {
+    const three = { fighters: ["mario", "fox", "kirby"], costumes: [0, 1, 2], controls: [0, 0, 0] };
+    const four = { fighters: ["mario", "fox", "kirby", "mario"], costumes: [0, 1, 2, 3], controls: [0, 0, 0, 0] };
+    for (const [players, ports] of [
+      [three, [2]],
+      [four, [2, 3]],
+    ] as const) {
+      expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, ...players } })).toMatchObject({ kind: "start" });
+      for (const port of ports) {
+        const bad = (array: keyof typeof players, entry: unknown) =>
+          ({ ...CONFIG, ...players, [array]: players[array].map((e, i) => (i === port ? entry : e)) });
+        expectUnplayable(bad("fighters", "not-a-fighter"));
+        expectUnplayable(bad("fighters", "random"));
+        expectUnplayable(bad("fighters", 3));
+        expectUnplayable(bad("costumes", 16));
+        expectUnplayable(bad("costumes", -1));
+        expectUnplayable(bad("costumes", 1.5));
+        expectUnplayable(bad("controls", 7));
+        expectUnplayable(bad("controls", 2));
+        expectUnplayable(bad("controls", "0"));
+      }
+    }
+  });
 });

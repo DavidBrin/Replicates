@@ -1,5 +1,5 @@
 /**
- * What the two players say to each other before a match, through the room.
+ * What the players (two to four) say to each other before a match, through the room.
  *
  * The host is authoritative: it picks the stage, resolves every Random, draws
  * the seed and sends one `start` carrying the whole match. Both peers then
