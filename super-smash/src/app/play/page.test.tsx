@@ -480,7 +480,7 @@ describe("the play page, online", () => {
     await renderPage();
     only(mocks.runners).runner.netStats = STATS;
     act(() => vi.advanceTimersByTime(250));
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT")).toBeInTheDocument();
+    expect(screen.getByText(/^PING /)).toHaveTextContent(/^PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT$/);
     act(() => only(mocks.monitors).options.onHealth("waiting", true));
     expect(screen.getByRole("status")).toHaveTextContent("Opponent switched tabs…");
   });
@@ -490,9 +490,9 @@ describe("the play page, online", () => {
     await renderPage();
     only(mocks.runners).runner.netStats = STATS;
     act(() => vi.advanceTimersByTime(250));
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT")).toBeInTheDocument();
+    expect(screen.getByText(/^PING /)).toHaveTextContent(/^PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT$/);
     act(() => useOnlineStore.getState().patch({ route: "relay" }));
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · RELAY")).toBeInTheDocument();
+    expect(screen.getByText(/^PING /)).toHaveTextContent(/^PING 42 ms · DELAY 3f · ROLLBACKS 12 · RELAY$/);
   });
 
   it("says it is waiting when the match has been held at the prediction cap for over a second", async () => {
@@ -841,6 +841,15 @@ describe("the play page, local", () => {
     expect(screen.queryByText("PAUSED")).toBeNull();
     expect(runner.start).toHaveBeenCalledTimes(2);
     expect(runner.start).toHaveBeenLastCalledWith(overlay());
+  });
+
+  it("shows no net HUD, and so no route tag, even with a route left in the store", async () => {
+    useOnlineStore.getState().patch({ route: "relay" });
+    await renderPage();
+    only(mocks.runners).runner.netStats = STATS;
+    act(() => vi.advanceTimersByTime(250));
+    expect(screen.queryByRole("group", { name: "Connection" })).toBeNull();
+    expect(screen.queryByText(/PING|RELAY|DIRECT/)).toBeNull();
   });
 
   it("does not bounce to the results after quitting during the KO's play-out", async () => {

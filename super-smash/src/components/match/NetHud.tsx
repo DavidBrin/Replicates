@@ -61,7 +61,9 @@ export function NetHud({ stats, route, health, peerAway, stalled }: NetHudProps)
     >
       {stats ? (
         <p className="rounded bg-black/55 px-2 py-1 tabular-nums">
-          {`PING ${Math.round(stats.rttMs)} ms · DELAY ${stats.inputDelay}f · ROLLBACKS ${stats.rollbacks} · ${route === "relay" ? "RELAY" : "DIRECT"}`}
+          {`PING ${Math.round(stats.rttMs)} ms · DELAY ${stats.inputDelay}f · ROLLBACKS ${stats.rollbacks} `}
+          {/* One unit, so a narrow screen wraps before the `·`, never between it and the tag. */}
+          <span className="whitespace-nowrap">{`· ${route === "relay" ? "RELAY" : "DIRECT"}`}</span>
         </p>
       ) : null}
       <p role="status" className={cn(message && "rounded bg-smash-red px-2 py-1 text-white")}>

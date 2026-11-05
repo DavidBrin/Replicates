@@ -8,16 +8,29 @@ const STATS = { rttMs: 41.6, inputDelay: 3, rollbacks: 12 };
 describe("NetHud", () => {
   it("shows ping, input delay and rollbacks", () => {
     render(<NetHud route="direct" stats={STATS} health="ok" peerAway={false} stalled={false} />);
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT")).toBeInTheDocument();
+    expect(screen.getByText(/^PING /)).toHaveTextContent(/^PING 42 ms · DELAY 3f · ROLLBACKS 12 · DIRECT$/);
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("names the route after the numbers", () => {
     const stats = { rttMs: 41.6, inputDelay: 3, rollbacks: 2 };
     const { rerender } = render(<NetHud stats={stats} route="relay" health="ok" peerAway={false} stalled={false} />);
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 2 · RELAY")).toBeInTheDocument();
+    expect(screen.getByText(/^PING /)).toHaveTextContent(/^PING 42 ms · DELAY 3f · ROLLBACKS 2 · RELAY$/);
     rerender(<NetHud stats={stats} route="direct" health="ok" peerAway={false} stalled={false} />);
-    expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 2 · DIRECT")).toBeInTheDocument();
+    expect(screen.getByText(/^PING /)).toHaveTextContent(/^PING 42 ms · DELAY 3f · ROLLBACKS 2 · DIRECT$/);
+  });
+
+  /**
+   * On a narrow phone the numbers wrap. The tag and its separator are one
+   * unbreakable unit, so the line breaks before the `·`, never between it and
+   * the word, which would strand a dot at the end of a line.
+   */
+  it("keeps the route tag and its separator in one element that does not wrap", () => {
+    const stats = { rttMs: 41.6, inputDelay: 3, rollbacks: 2 };
+    const { rerender } = render(<NetHud stats={stats} route="relay" health="ok" peerAway={false} stalled={false} />);
+    expect(screen.getByText("· RELAY")).toHaveClass("whitespace-nowrap");
+    rerender(<NetHud stats={stats} route="direct" health="ok" peerAway={false} stalled={false} />);
+    expect(screen.getByText("· DIRECT")).toHaveClass("whitespace-nowrap");
   });
 
   it("is a labelled group", () => {
