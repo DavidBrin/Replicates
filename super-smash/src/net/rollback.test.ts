@@ -1551,30 +1551,40 @@ describe("three and four machines (Plan 7)", () => {
     inputs: new Array<InputFrame>(through + 1).fill(0),
   });
 
+  /**
+   * One ping interval of a port-0 session whose peers B (port 1) and C (port 2)
+   * keep pace: the session pings on the first frame, and each peer in
+   * `answers` answers that ping after its round trip, in ms, from `at`.
+   */
+  function pingRound(hand: ReturnType<typeof handDriven>, at: number, answers: readonly [string, number][]) {
+    hand.setNow(at);
+    // Both peers keep pace and have input in hand, so nothing stalls.
+    for (let i = 0; i < 30; i++) {
+      const frame = hand.session.frame;
+      hand.deliver(neutral(1, frame, frame + 8), "B");
+      hand.deliver(neutral(2, frame, frame + 8), "C");
+      hand.session.advance(0);
+      if (i === 0) {
+        const token = hand.lastPingToken();
+        for (const [peerId, rtt] of answers) {
+          hand.setNow(at + rtt);
+          hand.deliver({ type: PacketType.Pong, token }, peerId);
+        }
+      }
+    }
+  }
+
   it("takes the slowest peer's round trip for the delay and the HUD", () => {
     const hand = handDriven(0);
     hand.join("B");
     hand.join("C");
-    const pingRound = (at: number) => {
-      hand.setNow(at);
-      // Both peers keep pace and have input in hand, so nothing stalls.
-      for (let i = 0; i < 30; i++) {
-        const frame = hand.session.frame;
-        hand.deliver(neutral(1, frame, frame + 8), "B");
-        hand.deliver(neutral(2, frame, frame + 8), "C");
-        hand.session.advance(0);
-        if (i === 0) {
-          const token = hand.lastPingToken();
-          hand.setNow(at + 20);
-          hand.deliver({ type: PacketType.Pong, token }, "B");
-          hand.setNow(at + 120);
-          hand.deliver({ type: PacketType.Pong, token }, "C");
-        }
-      }
-    };
-    pingRound(0);
+    const both: [string, number][] = [
+      ["B", 20],
+      ["C", 120],
+    ];
+    pingRound(hand, 0, both);
     expect(hand.session.stats().rttMs).toBe(120);
-    pingRound(1000);
+    pingRound(hand, 1000, both);
     hand.session.advance(0);
     expect(hand.session.stats().rttMs).toBe(120);
     // 60 ms each way is between three and four frames; B's 20 ms would be the floor of 2.
@@ -1612,5 +1622,49 @@ describe("three and four machines (Plan 7)", () => {
     }
     expect(hand.session.stats().stalls.timesync).toBeGreaterThan(0);
     expect(hand.session.stats().stalls.prediction).toBe(0);
+  });
+
+  it("adds back each peer's own round trip in time sync, not the slowest peer's", () => {
+    /** A port-0 session that has one round trip from each of B and C, then plays 30 rounds with each `lag` frames behind it. */
+    const timesyncStalls = (rtts: { B: number; C: number }, lag: { B: number; C: number }) => {
+      const hand = handDriven(0);
+      hand.join("B");
+      hand.join("C");
+      hand.session.advance(0);
+      const token = hand.lastPingToken();
+      for (const peerId of ["B", "C"] as const) {
+        hand.setNow(rtts[peerId]);
+        hand.deliver({ type: PacketType.Pong, token }, peerId);
+      }
+      for (let round = 0; round < 30; round++) {
+        const frame = hand.session.frame;
+        hand.deliver(neutral(1, Math.max(0, frame - lag.B), Math.max(1, frame - lag.B + 2)), "B");
+        hand.deliver(neutral(2, Math.max(0, frame - lag.C), Math.max(1, frame - lag.C + 2)), "C");
+        hand.session.advance(0);
+      }
+      expect(hand.session.stats().stalls.prediction).toBe(0);
+      return hand.session.stats().stalls.timesync;
+    };
+    // B's 200 ms is six frames of addback. C, on a near link, is four frames
+    // behind: that lead is real, and B's slow link must not explain it away.
+    expect(timesyncStalls({ B: 200, C: 0 }, { B: 0, C: 4 })).toBeGreaterThan(0);
+    // B four frames behind is its own 100 ms in flight: nothing to give back.
+    expect(timesyncStalls({ B: 200, C: 0 }, { B: 4, C: 0 })).toBe(0);
+  });
+
+  it("waits for the slowest peer's second round trip before tuning the delay from it", () => {
+    const hand = handDriven(0);
+    hand.join("B");
+    hand.join("C");
+    pingRound(hand, 0, [
+      ["B", 20],
+      ["C", 120],
+    ]);
+    // B has two samples now, C, the slowest, still one: no retune yet.
+    pingRound(hand, 1000, [["B", 20]]);
+    expect(hand.session.stats().rttMs).toBe(120);
+    expect(hand.session.delay).toBe(2);
+    pingRound(hand, 2000, [["C", 120]]);
+    expect(hand.session.delay).toBe(4);
   });
 });

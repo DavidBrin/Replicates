@@ -1034,6 +1034,10 @@ export class RollbackSession<S = GameState> {
         break;
       case PacketType.Pong: {
         // Another machine's ping, answered to everyone (see `maybePing`).
+        // Defence in depth: every key in `pings` carries this machine's port,
+        // so the lookup below would miss it anyway. Kept so the star's rule
+        // reads where a Pong lands, and holds if the map is ever keyed by the
+        // bare count.
         if (packet.token >>> 24 !== this.pingPort()) break;
         const ping = this.pings.get(packet.token);
         // Unknown, pruned, or this peer has answered it already.
