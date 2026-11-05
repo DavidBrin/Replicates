@@ -5543,3 +5543,20 @@ deploy: the packets, `step()`, the engine version and the protocol version are u
 8. *Phase B is not deployed by this entry.* The deploy is the controller's, on your go (the scope
    you approved named it), and then the live online suite runs with `SMASH_URL`, the four-browser
    tests included; its figures are added to this entry.
+
+**Phase B deployed (2026-11-05).** `main` at `8784453` was pushed and deployed as Worker
+version `229f3720-303e-40dd-9910-0fc529596d09`. Before it, the Phase B final review found one
+Critical, which was fixed and re-reviewed: a regression against Phase A, in which a direct
+two-player match ended when a room socket dropped while the fighters loaded.
+
+The gate ran at a machine load of 9-31, and every run was green:
+- unit tests: 8,847 passed / 10 skipped;
+- local e2e: 45 passed / 7 skipped;
+- online e2e: 11/11.
+
+Against the live site:
+- `/api/ice` still answers `"turn":false`;
+- the bake answers 200 `application/gzip`;
+- the live online e2e passed 11/11, including the four-browser match through the relay and one
+  of four leaving;
+- the live e2e passed 45 / 7 skipped.
