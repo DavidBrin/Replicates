@@ -30,11 +30,15 @@ const LOBBY = FORCE_RELAY ? "/online?ice=relay" : "/online";
  * tick, the hand-off to the results screen and a slow machine, and still
  * proves the watchdog rather than a 30 s wait. Imported, not re-declared like
  * `ROUTES`: this is a bound on the app's own timer, and must move with it.
+ *
+ * Through the room relay the room's `peer-left` does end the match, at once, and
+ * the watchdog stays behind it as the backstop: the four-browser test below
+ * keeps the same bound, which it meets either way.
  */
 const LINK_LOST_LIMIT_MS = SILENCE_LOST_MS + 4_000;
 
 interface NetHandle {
-  stats(): { peers: number; desyncs: number } | null;
+  stats(): { peers: number; desyncs: number; hashesCompared: number } | null;
   /** Where the match's packets go: through a WebRTC channel, or through the room. */
   readonly route: "direct" | "relay";
 }
@@ -49,6 +53,14 @@ async function player(browser: Browser): Promise<Page> {
   await withoutModels(context);
   return context.newPage();
 }
+
+/** Four pages in four contexts of their own: the host first, then guests 1 to 3. */
+async function fourPlayers(browser: Browser): Promise<Page[]> {
+  return [await player(browser), await player(browser), await player(browser), await player(browser)];
+}
+
+/** How a failure names the page at index `i` of a room's pages: 0 is the host. */
+const seat = (i: number) => (i === 0 ? "the host" : `guest ${i}`);
 
 async function netStats(page: Page) {
   return page.evaluate(() => (window as unknown as { __smashNet?: NetHandle }).__smashNet?.stats() ?? null);
@@ -88,27 +100,48 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   const code = await createRoom(host);
   await joinRoom(guest, code);
   await startRoom(host, 2);
-  await pickAndStart(host, guest);
+  await pickAndStart(host, [guest], [5]);
 }
 
-/** From two linked lobbies (however they linked) to a running match. */
-async function pickAndStart(host: Page, guest: Page): Promise<void> {
+/**
+ * Four people to a running match (Plan 7, Phase B): the host creates the room,
+ * three join, the host presses `Start (4 players)`, and the picks follow as for
+ * two. `pages[0]` is the host. The pages' contexts answer `/models/` with a 404
+ * (`player`), so only stand-ins draw and no real model is on four screens at once.
+ */
+async function startFourPlayerMatch(pages: readonly Page[]): Promise<void> {
+  const [host, ...guests] = pages;
+  const code = await createRoom(host);
+  for (const guest of guests) await joinRoom(guest, code);
+  await startRoom(host, pages.length);
+  // The host takes the first fighter and guest i the roster's button i + 1, so every seat has its own.
+  await pickAndStart(host, guests, guests.map((_, i) => i + 1));
+}
+
+/**
+ * From linked lobbies (however they linked) to a running match: the host picks
+ * the stage and the first fighter, guest i picks the roster's button `slots[i]`,
+ * and the host starts.
+ */
+async function pickAndStart(host: Page, guests: readonly Page[], slots: readonly number[]): Promise<void> {
   await host.waitForURL(`**${ROUTES.stage}`, { timeout: 30_000 });
-  await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
+  for (const guest of guests) await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
 
   // exact: "Small Battlefield" also matches a substring query.
   await host.getByLabel("Stages", { exact: true }).getByRole("button", { name: "Battlefield", exact: true }).click();
   await host.getByRole("button", { name: /choose fighters/i }).click();
   await host.waitForURL(`**${ROUTES.fighters}`);
-  await expect(guest.getByText(/stage: battlefield/i)).toBeVisible();
+  for (const guest of guests) await expect(guest.getByText(/stage: battlefield/i)).toBeVisible();
 
   await host.getByLabel("Fighters", { exact: true }).getByRole("button").nth(0).click();
-  await guest.getByLabel("Fighters", { exact: true }).getByRole("button").nth(5).click();
-  await expect(guest.getByRole("button", { name: /waiting for host/i })).toBeDisabled();
+  for (const [i, guest] of guests.entries()) {
+    await guest.getByLabel("Fighters", { exact: true }).getByRole("button").nth(slots[i]).click();
+    await expect(guest.getByRole("button", { name: /waiting for host/i })).toBeDisabled();
+  }
   await host.getByRole("button", { name: /ready to fight/i }).click();
 
   await host.waitForURL(`**${ROUTES.play}`);
-  await guest.waitForURL(`**${ROUTES.play}`);
+  for (const guest of guests) await guest.waitForURL(`**${ROUTES.play}`);
 }
 
 // Forced through TURN with no TURN to go through, both peers would fall back to
@@ -351,7 +384,7 @@ test("a direct connection that cannot open falls back to the relay, and the matc
   // The deadline (15 s) runs out, both move to the relay, and the lobby goes on to the
   // stage and the fighters at the host's Start, as it would on a direct link.
   await startRoom(host, 2);
-  await pickAndStart(host, guest);
+  await pickAndStart(host, [guest], [5]);
   for (const page of [host, guest]) {
     await expect.poll(() => frame(page), { timeout: 30_000 }).toBeGreaterThan(60);
     await expect.poll(() => netRoute(page), { timeout: 10_000 }).toBe("relay");
@@ -388,4 +421,54 @@ test("a fifth browser is turned away from a full room", async ({ browser }) => {
   // The four are still in the waiting room, the host's Start counting all of them.
   await expect(host.getByRole("button", { name: "Start (4 players)" })).toBeVisible();
   await expect(host).not.toHaveURL(new RegExp(`${ROUTES.stage}$`));
+});
+
+/**
+ * Plan 7, Phase B: a room of four plays through the relay, a star through the
+ * room's Durable Object with no WebRTC mesh. Four WebGL pages at once are a real
+ * load on one machine; `fourPages.spec.ts` proves the machine carries them, so a
+ * failure here is the code's.
+ */
+test("four browsers play a match through the relay", async ({ browser }) => {
+  const pages = await fourPlayers(browser);
+  const [host, , , guest3] = pages;
+
+  await startFourPlayerMatch(pages);
+  // Together, so the 60 s is one window for all four and not 60 s each.
+  await Promise.all(
+    pages.map((page, i) => expect.poll(() => frame(page), { message: `${seat(i)}'s frame`, timeout: 60_000 }).toBeGreaterThanOrEqual(180)),
+  );
+
+  for (const [i, page] of pages.entries()) {
+    expect(await netRoute(page), `${seat(i)}'s route`).toBe("relay");
+    const stats = await netStats(page);
+    expect(stats?.peers, `${seat(i)}'s peers`).toBe(3);
+    expect(stats?.desyncs, `${seat(i)}'s desyncs`).toBe(0);
+    await expect(page.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+ · RELAY$/), `${seat(i)}'s HUD`).toBeVisible();
+  }
+  // The host heard each guest's hashes and compared them with its own.
+  await expect.poll(async () => (await netStats(host))?.hashesCompared ?? 0, { message: "the host's compared hashes", timeout: 10_000 }).toBeGreaterThan(0);
+
+  // The last guest's key moves its fighter (port 3) on the host's screen, through
+  // the room: guest 3 to the room to the host, and the host's step to match.
+  const before = (await readFighters(host))[3].x;
+  await guest3.bringToFront();
+  await guest3.keyboard.down("ArrowRight");
+  await expect.poll(async () => (await readFighters(host))[3].x, { message: "guest 3's fighter on the host's screen", timeout: 10_000 }).toBeGreaterThan(before + 5);
+  await guest3.keyboard.up("ArrowRight");
+});
+
+test("one of four closing their tab ends the match for the other three", async ({ browser }) => {
+  const pages = await fourPlayers(browser);
+  const [host, guest1, guest2, guest3] = pages;
+
+  await startFourPlayerMatch(pages);
+  await Promise.all(pages.map((page, i) => expect.poll(() => frame(page), { message: `${seat(i)}'s frame`, timeout: 60_000 }).toBeGreaterThan(60)));
+
+  // Guest 2 closes its tab. The room tells the rest, and any one of four
+  // leaving ends the match for all (Plan 7, Task 16): nobody is crowned, and
+  // nobody is left to play on without them.
+  await guest2.context().close();
+  await Promise.all([host, guest1, guest3].map((page) => page.waitForURL(`**${ROUTES.results}`, { timeout: LINK_LOST_LIMIT_MS })));
+  for (const page of [host, guest1, guest3]) await expect(page.getByText("Connection Lost", { exact: true })).toBeVisible();
 });
