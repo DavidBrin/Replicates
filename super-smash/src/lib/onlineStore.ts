@@ -12,6 +12,7 @@ import { create } from "zustand";
 import type { MatchRules } from "@/engine/types";
 import { buildMismatch, describeMismatch, localBuild } from "@/game/onlineConfig";
 import type { PadSettings } from "@/input/gamepad";
+import type { Route } from "@/net/adapters/doSignal";
 import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage, RefuseReason } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
@@ -39,6 +40,9 @@ export const PEER_LEFT_NOTICE = "The other player left the room.";
 
 /** The select screens' status line while a newcomer's direct connection opens. */
 export const LINKING_STATUS = "Connecting to the other player…";
+
+/** The lobby's status line while the other player's link, which runs through the room, waits for their hello (Plan 7, D60). */
+export const RELAY_LINKING_STATUS = "Connecting through the relay…";
 
 /**
  * How long, once the channel is open, the other side has to say which build
@@ -82,6 +86,14 @@ export interface OnlineFields {
   /** The host's start config; set on both peers when the match begins. */
   config: OnlineMatchConfig | null;
   remoteAway: boolean;
+  /**
+   * Where the match's packets go. Null until a link opens; `"direct"` from the
+   * first open with no move to the room before it; `"relay"` from the session's
+   * `route` event on, and for the rest of the room, as the session's own route
+   * is (Plan 7, D60). It does not follow the other player's seat: it stays
+   * through a leave, and a newcomer starts from it.
+   */
+  route: Route | null;
 }
 
 interface OnlineStoreState extends OnlineFields {
@@ -99,6 +111,7 @@ const INITIAL: OnlineFields = {
   hostStage: null,
   config: null,
   remoteAway: false,
+  route: null,
 };
 
 export const useOnlineStore = create<OnlineStoreState>()((set) => ({
@@ -244,6 +257,11 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
       return;
     }
     online().patch({ status: "linking", notice: null });
+    startHelloTimer();
+  };
+
+  /** The wait for a hello, from now; one already running keeps its start. */
+  const startHelloTimer = () => {
     helloTimer ??= setTimeout(() => {
       helloTimer = null;
       // A start out since the channel opened is the match's to end, not this wait's.
@@ -366,6 +384,11 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
           if (online().status === "connected") break;
           // Somebody took the empty seat: that the last opponent left is no longer news.
           online().patch({ status: "linking", notice: null });
+          // Relayed, the link is the room's and opens before its seating reaches here (`Route`):
+          // the wait that opening started was stopped just above, and nothing else would restart
+          // it. Direct, an open link at this point is the last peer's, and the newcomer's own
+          // opening starts the wait.
+          if (linkOpen && online().route === "relay") startHelloTimer();
         } else if (online().config === null) {
           // They left the room, whatever the channel says, and in the lobby
           // that is news. Mid-match the channel decides (session.ts).
@@ -375,11 +398,16 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
           withdrawnStart = online().config;
         }
         break;
+      case "route":
+        online().patch({ route: event.route });
+        break;
       case "link":
         linkOpen = event.status === "open";
         // The wait for a hello runs only while the channel is open.
         if (!linkOpen) stopHelloTimer();
         if (event.status === "open") {
+          // Direct unless the session has said the match moved to the room, which it says first.
+          if (online().route === null) online().patch({ route: "direct" });
           channelOpened();
         } else if (event.status === "negotiating" && (online().status === "waiting" || online().status === "connected")) {
           // A fresh connection to whoever the room seats: a newcomer, or the

@@ -7,7 +7,8 @@ import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
 import { ensureBakeInstalled } from "@/game/bake";
 import { useBake } from "@/game/useBake";
 import { SkewButton, SkewPanel } from "@/components/ui/SkewPanel";
-import { bindSession, leaveOnline, roomErrorMessage, useOnlineStore, type OnlineStatus } from "@/lib/onlineStore";
+import { RELAY_LINKING_STATUS, bindSession, leaveOnline, roomErrorMessage, useOnlineStore, type OnlineStatus } from "@/lib/onlineStore";
+import type { Route } from "@/net/adapters/doSignal";
 import { OnlineSession, setActiveSession, type OnlineSessionLike, type OpenSessionOptions } from "@/net/online/session";
 import { makeRoomCode, normalizeRoomCode, roomCodeProblem } from "@/net/roomCode";
 import type { Role, RoomIntent } from "@/net/signalProtocol";
@@ -41,6 +42,7 @@ export function OnlineLobby({
   const storeStatus = useOnlineStore((s) => s.status);
   const role = useOnlineStore((s) => s.role);
   const roomCode = useOnlineStore((s) => s.roomCode);
+  const route = useOnlineStore((s) => s.route);
   const storeError = useOnlineStore((s) => s.error);
   const errorReason = useOnlineStore((s) => s.errorReason);
 
@@ -290,7 +292,7 @@ export function OnlineLobby({
 
         {/* Always mounted: a live region only announces what changes inside one that was already there. */}
         <p role="status" aria-live="polite" className="text-white/80">
-          {statusText(status, role, roomCode)}
+          {statusText(status, role, roomCode, route)}
         </p>
 
         {message ? (
@@ -304,11 +306,13 @@ export function OnlineLobby({
 }
 
 /** What the status line says at each step of the handshake; nothing when there is nothing going on. */
-function statusText(status: OnlineStatus, role: Role | null, roomCode: string | null): string {
+function statusText(status: OnlineStatus, role: Role | null, roomCode: string | null, route: Route | null): string {
   switch (status) {
     case "waiting":
       return role === "host" ? "Read it to the other player. Waiting for them to join…" : connecting(roomCode);
     case "linking":
+      // The route comes before the role: a relayed link needs the same words on either side.
+      if (route === "relay") return RELAY_LINKING_STATUS;
       return role === "host" ? "They are in. Opening a direct connection…" : "Opening a direct connection…";
     case "loading":
       return "Loading game data…";

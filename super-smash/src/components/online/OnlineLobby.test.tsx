@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { routerMock } from "../../../vitest.setup";
 import { localBuild } from "@/game/onlineConfig";
 import { useMatchConfig } from "@/lib/matchConfig";
-import { PEER_LEFT_NOTICE, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { PEER_LEFT_NOTICE, RELAY_LINKING_STATUS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession } from "@/net/online/session";
 import { NO_WEBGL, webglCheck } from "@/render3d/webgl";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
@@ -558,6 +558,45 @@ describe("OnlineLobby", () => {
         opened[0].emit({ type: "peer", present: true });
       });
       expect(screen.getByRole("status")).toHaveTextContent(/^Opening a direct connection…$/);
+    });
+
+    it("says it is connecting through the relay while a relayed link waits for the hello, on either side", async () => {
+      const host = harness();
+      await create();
+      act(() => {
+        host.opened[0].emit({ type: "joined", role: "host" });
+        host.opened[0].emit({ type: "route", route: "relay" });
+        host.opened[0].emit({ type: "link", status: "open" });
+        host.opened[0].emit({ type: "peer", present: true });
+      });
+      expect(useOnlineStore.getState()).toMatchObject({ status: "linking", role: "host", route: "relay" });
+      expect(screen.getByRole("status").textContent).toBe(RELAY_LINKING_STATUS);
+      expect(RELAY_LINKING_STATUS).toBe("Connecting through the relay…");
+      host.unmount();
+
+      // The guest is moved by the host's word, while its own direct link was still opening.
+      leaveOnline();
+      const guest = harness();
+      await join("ABCD");
+      act(() => {
+        guest.opened[0].emit({ type: "joined", role: "guest" });
+        guest.opened[0].emit({ type: "peer", present: true });
+        guest.opened[0].emit({ type: "route", route: "relay" });
+      });
+      expect(useOnlineStore.getState()).toMatchObject({ status: "linking", role: "guest", route: "relay" });
+      expect(screen.getByRole("status").textContent).toBe(RELAY_LINKING_STATUS);
+    });
+
+    it("keeps saying a direct connection is opening while the link that opened is direct", async () => {
+      const { opened } = harness();
+      await create();
+      act(() => {
+        opened[0].emit({ type: "joined", role: "host" });
+        opened[0].emit({ type: "peer", present: true });
+        opened[0].emit({ type: "link", status: "open" });
+      });
+      expect(useOnlineStore.getState()).toMatchObject({ status: "linking", route: "direct" });
+      expect(screen.getByRole("status").textContent).toBe("They are in. Opening a direct connection…");
     });
 
     it("moves focus to the room code once there is one, and spells it out", async () => {

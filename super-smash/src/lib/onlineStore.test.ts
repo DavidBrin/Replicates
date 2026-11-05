@@ -115,6 +115,43 @@ describe("binding a session to the stores", () => {
     expect(useOnlineStore.getState().status).toBe("connected");
   });
 
+  it("mirrors the route: null before a link, direct on a direct open, relay once the session moves", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    expect(useOnlineStore.getState().route).toBeNull();
+    emit({ type: "joined", role: "host" });
+    emit({ type: "peer", present: true });
+    emit({ type: "link", status: "negotiating" });
+    expect(useOnlineStore.getState().route).toBeNull();
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState().route).toBe("direct");
+    // The match moves to the room: the relay's own open is not a direct one, and a lost room's re-open is not either.
+    emit({ type: "route", route: "relay" });
+    expect(useOnlineStore.getState().route).toBe("relay");
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState().route).toBe("relay");
+    leaveOnline();
+    expect(useOnlineStore.getState().route).toBeNull();
+  });
+
+  /**
+   * A host whose browser has no WebRTC fails its offer inside the transport's own welcome, so
+   * the session reports the move, the relay's open, and only then the room's seating.
+   */
+  it("comes out right when the route and the link open arrive before the room's welcome and the peer", () => {
+    const { session, emit, sent } = fakeSession();
+    bindSession(session);
+    emit({ type: "route", route: "relay" });
+    emit({ type: "link", status: "open" });
+    emit({ type: "joined", role: "host" });
+    emit({ type: "peer", present: true });
+    expect(useOnlineStore.getState()).toMatchObject({ route: "relay", role: "host", status: "linking", error: null });
+    // Said once, as the link opened, and the other side's hello still settles the lobby.
+    expect(sent).toEqual([HELLO]);
+    emit({ type: "lobby", message: HELLO });
+    expect(useOnlineStore.getState()).toMatchObject({ route: "relay", status: "connected" });
+  });
+
   it("fills the opponent's panel from their pick, and only theirs", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
@@ -775,6 +812,39 @@ describe("the build handshake", () => {
     vi.advanceTimersByTime(1);
     await expectRefused(fake);
     expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+  });
+
+  /**
+   * Relayed, the transport opens the link before the session reports the peer
+   * (`Route`), so the peer's arrival finds the channel open already.
+   */
+  function relayedOpenThenSeated() {
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "host" });
+    fake.emit({ type: "route", route: "relay" });
+    fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "peer", present: true });
+    return fake;
+  }
+
+  it("refuses a relayed peer that never says hello, five seconds after the room seats it", async () => {
+    vi.useFakeTimers();
+    const fake = relayedOpenThenSeated();
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
+    vi.advanceTimersByTime(1);
+    await expectRefused(fake);
+    expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+  });
+
+  it("stops waiting for a relayed peer's hello once its matching one is in", () => {
+    vi.useFakeTimers();
+    const fake = relayedOpenThenSeated();
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    fake.emit({ type: "lobby", message: HELLO });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", error: null });
   });
 
   it("stops waiting for a hello once the other side's matching one is in", () => {
