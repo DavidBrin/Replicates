@@ -58,7 +58,15 @@ import { createEmitter, type Transport } from "../transport";
 
 export type DoSignalStatus = "waiting" | "negotiating" | "open" | "closed" | "failed";
 
-/** Where game packets go: straight to the peer, or through the room's Durable Object. */
+/**
+ * Where game packets go: straight to the peer, or through the room's Durable Object.
+ *
+ * The two routes order their events differently. Direct, the status changes
+ * first and then the peer is announced or lost (`onopen`, `lose`). Relayed,
+ * the join or leave is emitted first and the status changes after it. So a
+ * join or leave listener must not read `status`: it would see the old one on
+ * the relay and the new one on direct.
+ */
 export type Route = "direct" | "relay";
 
 /**
@@ -149,8 +157,12 @@ export interface DoSignalTransport extends Transport {
   /**
    * No direct link: carry the match through the room socket instead. The peer
    * connection is let go, every peer the room seats is announced (one the
-   * direct channel had announced is not announced again), and the status is
-   * open if anyone is seated. A no-op once relaying or closed.
+   * direct channel had announced is not announced again, unless the room has
+   * stopped seating it: then it leaves, as a peer the room says left does),
+   * and the status is open if anyone is seated. A no-op once relaying or
+   * closed. Joins and leaves are emitted before the status changes, the
+   * reverse of the direct route: listeners must not read `status` inside them
+   * (see `Route`).
    */
   useRelay(): void;
 }
@@ -290,13 +302,17 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
 
   function useRelay(): void {
     if (closed || route === "relay") return;
-    // The peer the direct channel had announced stays announced: the relay only
-    // changes how it is reached, so neither a leave nor a second join goes out.
+    // The peer the direct channel had announced stays announced while the room
+    // still seats it: the relay only changes how it is reached, so neither a
+    // leave nor a second join goes out. A held match keeps its channel through
+    // the room's `peer-left`, so the peer may be gone from the room by now. The
+    // relay cannot reach it and the room will not say so again: it leaves here.
     const carried = announced ? remoteId : null;
     teardown();
     route = "relay";
-    if (carried !== null) relayAnnounced.add(carried);
+    if (carried !== null && seated.has(carried)) relayAnnounced.add(carried);
     for (const id of seated) announceRelayed(id);
+    if (carried !== null && !seated.has(carried)) leaves.emit(carried);
     setStatus(seated.size > 0 ? "open" : "waiting");
   }
 
@@ -570,6 +586,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       closed = true;
       off();
       teardown();
+      // Only frees what is queued: `send` already drops everything once closed.
       batcher.clear();
       pendingIce.clear();
       seated.clear();

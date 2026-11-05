@@ -833,6 +833,30 @@ describe("relay mode (Plan 7)", () => {
     expect(t.leaves).toEqual(["g1"]);
   });
 
+  it("lets go of a carried peer the room no longer seats: it leaves, and the status follows who is still seated", async () => {
+    // A held match keeps its channel through the room's `peer-left`, so the room may not seat the peer by the time the relay starts.
+    const alone = await linkedHost();
+    alone.transport.holdChannel();
+    alone.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    expect(alone.leaves).toEqual([]);
+    alone.transport.useRelay();
+    expect(alone.joins).toEqual(["g1"]);
+    expect(alone.leaves).toEqual(["g1"]);
+    expect(alone.transport.status).toBe("waiting");
+    // Its leave was said once: the room has nothing more to say about it.
+    alone.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    expect(alone.leaves).toEqual(["g1"]);
+
+    const joined = await linkedHost();
+    joined.transport.holdChannel();
+    joined.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    joined.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    joined.transport.useRelay();
+    expect(joined.joins).toEqual(["g1", "g2"]);
+    expect(joined.leaves).toEqual(["g1"]);
+    expect(joined.transport.status).toBe("open");
+  });
+
   it("does nothing once relaying, or once closed", async () => {
     const t = await relayedHost();
     t.transport.useRelay();
