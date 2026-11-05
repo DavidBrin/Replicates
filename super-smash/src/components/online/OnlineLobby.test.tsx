@@ -846,6 +846,42 @@ describe("OnlineLobby", () => {
     expect(screen.queryByTestId("room-code")).toBeNull();
   });
 
+  /**
+   * Phase B final review M-2: the Start compacts the seats to match ports in
+   * port order, so a seat emptied below another one moves everyone above it
+   * down. The waiting room numbers players the way the match will.
+   */
+  it("numbers the waiting room's players by their place in the room, as the match will, when a lower seat is empty", async () => {
+    const host = harness();
+    await create();
+    act(() => {
+      host.opened[0].emit({ type: "joined", role: "host" });
+      host.opened[0].emit({ type: "route", route: "relay" });
+      host.opened[0].emit({ type: "link", status: "open" });
+      host.opened[0].emit({ type: "peer", present: true, peer: { id: "g2", role: "guest", port: 2 } });
+      host.opened[0].emit({ type: "peer", present: true, peer: { id: "g3", role: "guest", port: 3 } });
+    });
+    const rows = () => within(screen.getByRole("list", { name: "Players" })).getAllByRole("listitem").map((row) => row.textContent);
+    expect(rows()).toEqual(["P1 · Host (you)", "P2 · Checking the version…", "P3 · Checking the version…"]);
+    host.unmount();
+
+    leaveOnline();
+    const guest = harness();
+    await join("ABCD");
+    guest.opened[0].seatPort = 3;
+    guest.opened[0].selfId = "g3";
+    act(() => {
+      guest.opened[0].emit({ type: "joined", role: "guest" });
+      guest.opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
+      guest.opened[0].emit({ type: "peer", present: true, peer: { id: "g2", role: "guest", port: 2 } });
+      guest.opened[0].emit({ type: "route", route: "relay" });
+      guest.opened[0].emit({ type: "link", status: "open" });
+      guest.opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: HOST_PEER.id });
+    });
+    expect(screen.getByRole("status").textContent).toBe("You are P3. Waiting for the host to start…");
+    expect(rows()).toEqual(["P1 · Host", "P2 · Checking the version…", "P3 · You"]);
+  });
+
   it("leaves the lobby on the begin, not on connecting", async () => {
     const host = harness();
     await create();

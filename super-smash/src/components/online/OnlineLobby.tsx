@@ -278,7 +278,7 @@ export function OnlineLobby({
           <SkewPanel className="border-[3px] border-panel-ink bg-panel-bone" innerClassName="px-8 py-5 text-panel-ink">
             <ul aria-label="Players" className="flex flex-col gap-1 font-display text-lg tracking-[0.08em]">
               {seatRows(role, seats, localPort).map((row) => (
-                <li key={row.port}>{`P${row.port + 1} · ${row.label}`}</li>
+                <li key={row.port}>{`P${row.player} · ${row.label}`}</li>
               ))}
             </ul>
             {role === "host" && seats.length > 0 ? (
@@ -386,7 +386,7 @@ function statusText(
       return "Loading game data…";
     case "connected":
       if (role === "host") return "Everyone is ready. Press Start when all your players are in.";
-      return localPort === null ? connecting(roomCode) : `You are P${localPort + 1}. Waiting for the host to start…`;
+      return localPort === null ? connecting(roomCode) : `You are P${playerNumber(localPort, seats)}. Waiting for the host to start…`;
     case "connecting":
       return connecting(roomCode);
     case "idle":
@@ -395,20 +395,28 @@ function statusText(
   }
 }
 
-/** One line of the waiting room's list. */
+/** One line of the waiting room's list: its room port, the player number it will play as, and what it says. */
 interface SeatRow {
   readonly port: number;
+  readonly player: number;
   readonly label: string;
 }
 
 /**
  * Who is in the room, by port: this machine ("Host (you)" or "You"), the host
  * on a guest's screen, and every other seat by where its build check stands.
+ * Numbered by place, not room port: the Start compacts the seats in port
+ * order (`beginRoom`), so a seat emptied below moves everyone above it down.
  */
 function seatRows(role: Role | null, seats: readonly SeatView[], localPort: number | null): SeatRow[] {
-  const rows: SeatRow[] = seats.map((seat) => ({ port: seat.port, label: role === "guest" && seat.port === 0 ? "Host" : BUILD_LABEL[seat.build] }));
+  const rows = seats.map((seat) => ({ port: seat.port, label: role === "guest" && seat.port === 0 ? "Host" : BUILD_LABEL[seat.build] }));
   if (localPort !== null) rows.push({ port: localPort, label: role === "host" ? "Host (you)" : "You" });
-  return rows.sort((a, b) => a.port - b.port);
+  return rows.sort((a, b) => a.port - b.port).map((row, i) => ({ ...row, player: i + 1 }));
+}
+
+/** The player number the seat at room port `port` will play as: its place among this machine and the seats, by port. */
+function playerNumber(port: number, seats: readonly SeatView[]): number {
+  return 1 + seats.filter((seat) => seat.port < port).length;
 }
 
 const BUILD_LABEL: Record<SeatView["build"], string> = {
