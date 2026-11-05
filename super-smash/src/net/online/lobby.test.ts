@@ -136,6 +136,49 @@ describe("lobby messages", () => {
     expect(parseLobbyMessage({ kind: "away", away: true })).toEqual({ kind: "away", away: true });
   });
 
+  /** Plan 7, Phase B: the host's Start says who plays at which match port. */
+  it("reads a begin's seats only as two to four unique ids on ports 0 to n-1", () => {
+    const two = [
+      { id: "h1", port: 0 },
+      { id: "g1", port: 1 },
+    ];
+    const four = [
+      { id: "h1", port: 0 },
+      { id: "g3", port: 2 },
+      { id: "g1", port: 1 },
+      { id: "x".repeat(16), port: 3 },
+    ];
+    for (const seats of [two, four]) expect(parseLobbyMessage({ kind: "begin", seats })).toEqual({ kind: "begin", seats });
+    // Built fresh from what it read: nothing else in an entry or the message comes along.
+    const extra = parseLobbyMessage(JSON.parse('{"kind":"begin","extra":1,"seats":[{"id":"h1","port":0,"x":1},{"id":"g1","port":1,"__proto__":{"y":1}}]}'));
+    expect(extra).toEqual({ kind: "begin", seats: two });
+    expect(Object.keys(extra ?? {}).sort()).toEqual(["kind", "seats"]);
+
+    const bad: unknown[] = [
+      undefined,
+      [],
+      // One player, and five: outside two to four.
+      [{ id: "h1", port: 0 }],
+      [...four, { id: "g4", port: 4 }],
+      // The same port twice, the same id twice, and a port past the last.
+      [{ id: "h1", port: 0 }, { id: "g1", port: 0 }],
+      [{ id: "h1", port: 0 }, { id: "h1", port: 1 }],
+      [{ id: "h1", port: 0 }, { id: "g1", port: 2 }],
+      [{ id: "h1", port: 1 }, { id: "g1", port: 2 }],
+      [{ id: "h1", port: 0 }, { id: "g1", port: 1 }, { id: "g2", port: 1 }],
+      // Ids that are no room's: empty, too long, not a string.
+      [{ id: "", port: 0 }, { id: "g1", port: 1 }],
+      [{ id: "h1", port: 0 }, { id: "x".repeat(17), port: 1 }],
+      [{ id: 7, port: 0 }, { id: "g1", port: 1 }],
+      // Ports that are not whole numbers in range.
+      [{ id: "h1", port: 0 }, { id: "g1", port: 1.5 }],
+      [{ id: "h1", port: -1 }, { id: "g1", port: 1 }],
+      [{ id: "h1", port: "0" }, { id: "g1", port: 1 }],
+      [{ id: "h1", port: 0 }, null],
+    ];
+    for (const seats of bad) expect(parseLobbyMessage({ kind: "begin", seats })).toBeNull();
+  });
+
   it("refuses anything a peer could use to break the other side", () => {
     const bad: unknown[] = [
       null,

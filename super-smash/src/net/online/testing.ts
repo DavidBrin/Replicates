@@ -43,6 +43,12 @@ export interface FakeSession {
    * as a room of two seats it: the host at port 0 and the guest at port 1.
    */
   seatPort: number | null | undefined;
+  /**
+   * The room's id for this side (`session.transport.selfId`): what a begin
+   * names it by (Plan 7, Phase B). Undefined (the default) follows the role,
+   * as `HOST_PEER` and `GUEST_PEER` name the two seats of a room of two.
+   */
+  selfId: string | undefined;
   /** What `session.peers` answers. A `peer` event seats or unseats its peer here, as the real session does. */
   readonly peers: Map<string, PeerInfo>;
   /**
@@ -75,6 +81,7 @@ export function fakeSession(role: Role | null = null): FakeSession {
     accepts: true,
     route: "direct",
     seatPort: undefined,
+    selfId: undefined,
     peers: new Map(),
     session: {
       roomCode: "ABCD",
@@ -89,7 +96,12 @@ export function fakeSession(role: Role | null = null): FakeSession {
         return fake.peers;
       },
       turn: false,
-      transport: {} as unknown as DoSignalTransport,
+      transport: {
+        get selfId() {
+          if (fake.selfId !== undefined) return fake.selfId;
+          return current === "guest" ? GUEST_PEER.id : HOST_PEER.id;
+        },
+      } as unknown as DoSignalTransport,
       get route() {
         return fake.route;
       },

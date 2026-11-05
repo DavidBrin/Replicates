@@ -73,10 +73,21 @@ async function joinRoom(page: Page, code: string, lobby = LOBBY): Promise<void> 
   await page.getByRole("button", { name: /join room/i }).click();
 }
 
-/** From the lobby to a running match, the way two people get there: the host picks the stage and starts. */
+/**
+ * The host's Start in the waiting room (Plan 7, Phase B), pressed once every
+ * one of `players` is in and on this build, which is when it is enabled.
+ */
+async function startRoom(host: Page, players: number): Promise<void> {
+  const start = host.getByRole("button", { name: `Start (${players} players)` });
+  await expect(start).toBeEnabled({ timeout: 30_000 });
+  await start.click();
+}
+
+/** From the lobby to a running match, the way two people get there: the host presses Start, picks the stage and starts. */
 async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   const code = await createRoom(host);
   await joinRoom(guest, code);
+  await startRoom(host, 2);
   await pickAndStart(host, guest);
 }
 
@@ -164,6 +175,7 @@ test("the guest's character select fits a phone: a short stage tag, and room for
   await guest.setViewportSize({ width: 390, height: 844 });
   const code = await createRoom(host);
   await joinRoom(guest, code);
+  await startRoom(host, 2);
   await host.waitForURL(`**${ROUTES.stage}`, { timeout: 30_000 });
   await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
   await host.getByLabel("Stages", { exact: true }).getByRole("button", { name: "Battlefield", exact: true }).click();
@@ -247,7 +259,7 @@ test("a peer on the same build with other combat rules is refused at the hello: 
   const refused = host.getByText("P2 is running a different version, so they can't play in this room.");
   await expect(refused).toBeVisible({ timeout: 30_000 });
   // The guest's leave empties the seat (the host waits for somebody again), and the notice stays.
-  await expect(host.getByRole("status")).toHaveText("Read it to the other player. Waiting for them to join…", { timeout: 10_000 });
+  await expect(host.getByRole("status")).toHaveText("Read the code to the other players. Waiting for them to join…", { timeout: 10_000 });
   await expect(refused).toBeVisible();
   // For a developer, the console says which part differs; the player is told only the sentence.
   await expect
@@ -294,7 +306,8 @@ test("a direct connection that cannot open falls back to the relay, and the matc
   await expect(host.getByRole("status")).toHaveText("They are in. Opening a direct connection…", { timeout: 15_000 });
 
   // The deadline (15 s) runs out, both move to the relay, and the lobby goes on to the
-  // stage and the fighters as it would on a direct link.
+  // stage and the fighters at the host's Start, as it would on a direct link.
+  await startRoom(host, 2);
   await pickAndStart(host, guest);
   for (const page of [host, guest]) {
     await expect.poll(() => frame(page), { timeout: 30_000 }).toBeGreaterThan(60);
@@ -316,19 +329,20 @@ test("a direct connection that cannot open falls back to the relay, and the matc
   }
 });
 
-test("a third browser is turned away from a full room", async ({ browser }) => {
+/** Plan 7, Phase B: a room holds four. These are lobby pages only: nobody starts, so nothing draws a match. */
+test("a fifth browser is turned away from a full room", async ({ browser }) => {
   const host = await player(browser);
-  const guest = await player(browser);
-  const third = await player(browser);
+  const guests = [await player(browser), await player(browser), await player(browser)];
+  const fifth = await player(browser);
 
   const code = await createRoom(host);
-  await joinRoom(guest, code);
-  await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
+  for (const guest of guests) await joinRoom(guest, code);
+  await expect(host.getByRole("list", { name: "Players" }).getByRole("listitem")).toHaveCount(4, { timeout: 30_000 });
 
-  await joinRoom(third, code);
+  await joinRoom(fifth, code);
   // filter: Next's route announcer is also role=alert.
-  await expect(third.getByRole("alert").filter({ hasText: "already has two players" })).toHaveText(
-    `Room ${code} already has two players.`,
-  );
-  await expect(host).toHaveURL(new RegExp(`${ROUTES.stage}$`));
+  await expect(fifth.getByRole("alert").filter({ hasText: "already has four players" })).toHaveText(`Room ${code} already has four players.`);
+  // The four are still in the waiting room, the host's Start counting all of them.
+  await expect(host.getByRole("button", { name: "Start (4 players)" })).toBeVisible();
+  await expect(host).not.toHaveURL(new RegExp(`${ROUTES.stage}$`));
 });

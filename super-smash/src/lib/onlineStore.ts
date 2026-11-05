@@ -13,7 +13,7 @@ import type { MatchRules } from "@/engine/types";
 import { buildMismatch, describeMismatch, localBuild } from "@/game/onlineConfig";
 import type { PadSettings } from "@/input/gamepad";
 import type { Route } from "@/net/adapters/doSignal";
-import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage, RefuseReason } from "@/net/online/lobby";
+import type { BeginSeat, BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage, RefuseReason } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { PeerInfo, Role } from "@/net/signalProtocol";
 import type { Unsubscribe } from "@/net/transport";
@@ -34,12 +34,20 @@ export type OnlineStatus = "idle" | "loading" | "connecting" | "waiting" | "link
  * "unreadable-start": a start from this very build that its parser cannot read
  * (the stamps agree, so it is not another version).
  * "host-left": a guest's host left the lobby, which closes the room (Plan 7, Phase B).
+ * "room-begun": the host had already pressed Start, and this side was not
+ * among its players (Plan 7, Phase B).
  */
-export type OnlineErrorReason = SessionError | "link-failed" | "engine-mismatch" | "unreadable-start" | "host-left";
+export type OnlineErrorReason = SessionError | "link-failed" | "engine-mismatch" | "unreadable-start" | "host-left" | "room-begun";
 
-/** Shown once the player at `port` has left the room; the seat stands empty. */
-export function seatLeftNotice(port: number): string {
-  return `P${port + 1} left the room.`;
+/**
+ * Shown once the players at `ports` have left the room; their seats stand
+ * empty. One port is the common case; a channel that goes with a start out
+ * takes every seat at once, and names them all.
+ */
+export function seatLeftNotice(...ports: readonly number[]): string {
+  const names = ports.map((port) => `P${port + 1}`);
+  const who = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names.join("");
+  return `${who} left the room.`;
 }
 
 /**
@@ -121,14 +129,31 @@ export interface OnlineFields {
    * refused player still sits in the host's room.
    */
   notice: string | null;
-  /** The others the room seats, by port. Mid-match a leave does not change them: the link monitor decides. */
+  /**
+   * The others the room seats, by port: their room seat ports until the
+   * host's Start, their match ports from it (`begun`), and then only the begun
+   * room's players. Mid-match a leave does not change them: the link monitor
+   * decides.
+   */
   seats: readonly SeatView[];
-  /** This machine's port: the room's seat port (`session.seatPort`) from the welcome on. Null before it. */
+  /**
+   * This machine's port: the room's seat port (`session.seatPort`) from the
+   * welcome, and its match port from the begin on, which the play page plays.
+   * Null before the welcome.
+   */
   localPort: number | null;
+  /**
+   * The host has pressed Start (`beginRoom`; a `begin`, Plan 7, Phase B): who
+   * plays is settled, and each player's match port. The lobby moves on to the
+   * select screens on it. A peer the room seats after it is no player until a
+   * re-sent begin lists them on a vacated port.
+   */
+  begun: boolean;
   /** The stage the host chose, on the guest, with the host's rules when they came along. */
   hostStage: { readonly stageId: string; readonly form: StageForm; readonly rules?: MatchRules } | null;
   /** The host's start config; set on both peers when the match begins. */
   config: OnlineMatchConfig | null;
+  /** Whether any seated player said they switched tabs; each seat's own say, cleared when it empties. */
   remoteAway: boolean;
   /**
    * Where the match's packets go. Null until a link opens; `"direct"` from the
@@ -154,6 +179,7 @@ const INITIAL: OnlineFields = {
   notice: null,
   seats: [],
   localPort: null,
+  begun: false,
   hostStage: null,
   config: null,
   remoteAway: false,
@@ -183,7 +209,7 @@ const UNREACHABLE_DEV_HINT =
 function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
   switch (reason) {
     case "full":
-      return `Room ${roomCode} already has two players.`;
+      return `Room ${roomCode} already has four players.`;
     case "not-found":
       return `There is no room ${roomCode}. Check the code with the host.`;
     case "taken":
@@ -200,6 +226,8 @@ function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
       return "The other player is running a different version. Both reload the page.";
     case "host-left":
       return "The host left, so the room has closed. Create or join another.";
+    case "room-begun":
+      return "That room has already started its match. Ask the host for a new room.";
     case "unreadable-start":
       return "The match settings could not be read, so leave the room and start again.";
     case "bad-message":
@@ -216,6 +244,9 @@ function pageHostname(): string {
 const HOST_PORT = 0;
 
 let unbind: Unsubscribe | null = null;
+
+/** The bound session's Start, for `beginRoom`; null with no session bound. */
+let startBound: (() => boolean) | null = null;
 
 /** Mirror one session into the stores. Replaces any earlier binding. */
 export function bindSession(session: OnlineSessionLike): Unsubscribe {
@@ -247,6 +278,20 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   /** The seats the host refused for never answering (`refuseSeat`), rather than for their build. */
   const silentSeats = new Set<string>();
   /**
+   * The begun room's players, this side included, by match port (Plan 7,
+   * Phase B): the begin this side sent or last followed. Null before it.
+   */
+  let roster: readonly BeginSeat[] | null = null;
+  /**
+   * The hellos of peers the room seats that a guest's begun room has not yet
+   * listed: a newcomer greets the room as it arrives, before the host's begin
+   * that seats it reaches here. Heard once a begin lists them.
+   */
+  const unlistedHellos = new Map<string, BuildStamp>();
+  /** The seated players who last said they switched tabs (`away`). */
+  const awayPeers = new Set<string>();
+  const sayAway = () => online().patch({ remoteAway: awayPeers.size > 0 });
+  /**
    * The waits for a hello, by peer id, each `HELLO_TIMEOUT_MS` from when its
    * seat had the link open: one per seat on the host, which plays them all,
    * and the host's alone on a guest, which plays only if its host does.
@@ -260,9 +305,16 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     for (const timer of helloTimers.values()) clearTimeout(timer);
     helloTimers.clear();
   };
+  /** Everything this side keeps about a seat, gone with it. */
+  const forgetSeat = (peerId: string) => {
+    stopHelloTimer(peerId);
+    heardFrom.delete(peerId);
+    silentSeats.delete(peerId);
+    awayPeers.delete(peerId);
+  };
 
   const seatOf = (peerId: string): SeatView | undefined => online().seats.find((seat) => seat.peerId === peerId);
-  /** The port the room seats `peerId` at; null for a peer it does not seat. */
+  /** The seat's port (its match port once the room has begun); null for a peer with no seat. */
   const portOf = (peerId: string): number | null => seatOf(peerId)?.port ?? null;
   const setBuild = (peerId: string, build: SeatView["build"]) =>
     online().patch({ seats: online().seats.map((seat) => (seat.peerId === peerId ? { ...seat, build } : seat)) });
@@ -275,6 +327,10 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   const ready = (): boolean => {
     if (!linkOpen) return false;
     const { seats } = online();
+    // Once the room has begun, its every player must be seated too: a port a player left
+    // waits for the next joiner (Plan 7, Phase B).
+    const self = session.transport.selfId;
+    if (roster !== null && !roster.every((entry) => entry.id === self || seats.some((seat) => seat.peerId === entry.id))) return false;
     if (session.role === "host") return seats.length > 0 && seats.every((seat) => seat.build === "ok");
     return seats.some((seat) => seat.port === HOST_PORT && seat.build === "ok");
   };
@@ -306,7 +362,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   };
 
   /** Said for good, a start not yet played withdrawn, and the room left. */
-  const leaveWith = (reason: RefuseReason | "link-failed" | "host-left") => {
+  const leaveWith = (reason: RefuseReason | "link-failed" | "host-left" | "room-begun") => {
     fail(reason);
     online().patch({ config: null });
     // Once this delivery is over, not in the middle of it (session.ts, `leaveSoon`).
@@ -416,11 +472,19 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     helloTimers.set(peerId, timer);
   };
 
-  /** A seat's hello: the build it runs. One from a peer the room does not seat says nothing about the room. */
+  /**
+   * A seat's hello: the build it runs. One from a peer the room does not seat
+   * says nothing about the room; on a begun guest it is kept, for a begin that
+   * lists them.
+   */
   const heardHello = (theirs: BuildStamp, from: string) => {
     const seat = seatOf(from);
+    if (seat === undefined) {
+      if (session.role === "guest" && roster !== null) unlistedHellos.set(from, theirs);
+      return;
+    }
     // A seat the host refused stays refused until it leaves.
-    if (seat === undefined || seat.build === "mismatch") return;
+    if (seat.build === "mismatch") return;
     const why = buildMismatch(theirs);
     if (why === null) {
       setBuild(from, "ok");
@@ -492,36 +556,161 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         }
         return;
       }
+      case "begin":
+        followBegin(message.seats, from);
+        return;
+      case "away":
+        // Each seated player's own say (Plan 7, Phase B); a peer with no seat is no player.
+        if (seatOf(from) === undefined) return;
+        if (message.away) awayPeers.add(from);
+        else awayPeers.delete(from);
+        sayAway();
+        return;
+      case "pick":
+        // A player the host refused is leaving: their pick is not the room's to show.
+        if (seatOf(from)?.build === "mismatch") return;
+        applyLobby(message, portOf(from), session);
+        return;
       default:
         applyLobby(message, portOf(from), session);
     }
   };
 
   /**
+   * The host's Start (`beginRoom`): itself at port 0 and every seat after it in
+   * seat order, compacted to the match ports `1..n-1`, sent to the room. Then
+   * the seats take their match ports, the match config seats that many, and
+   * the session locks the roster to these players. False, changing nothing,
+   * unless this is the host, connected (every seat said this build), with at
+   * least one other player in, and the begin reached the room.
+   */
+  const begin = (): boolean => {
+    const { status, seats } = online();
+    if (!live || session.role !== "host" || status !== "connected" || seats.length === 0) return false;
+    const entries: BeginSeat[] = [{ id: session.transport.selfId, port: HOST_PORT }, ...seats.map((seat, i) => ({ id: seat.peerId, port: i + 1 }))];
+    if (!session.sendLobby({ kind: "begin", seats: entries })) return false;
+    roster = entries;
+    match().configureOnline(entries.length);
+    online().patch({ seats: seats.map((seat, i) => ({ ...seat, port: i + 1 })), localPort: HOST_PORT });
+    lockRoster();
+    online().patch({ begun: true });
+    return true;
+  };
+
+  /** The session's roster, said again on every begin this side sends or follows: the begun room's other players. */
+  const lockRoster = () => {
+    const self = session.transport.selfId;
+    session.lockRoster((roster ?? []).filter((entry) => entry.id !== self).map((entry) => entry.id));
+  };
+
+  /**
+   * The room seats `peer` after the Start, or mid-match (Plan 7, Phase B): not
+   * a player, so no seat of their own yet, and never over one already
+   * seated. The host gives them the lowest match port a player left, if a
+   * port stands empty and no match is under way, and sends the begin again
+   * with them on it; otherwise it sends them the begin unchanged, which does
+   * not list them, so they leave. A guest waits for its host's word.
+   */
+  const arrivedAfterBegin = (peer: PeerInfo) => {
+    if (session.role !== "host" || roster === null) return;
+    const { seats } = online();
+    const vacant = roster.filter((entry) => entry.port !== HOST_PORT && !seats.some((seat) => seat.port === entry.port));
+    if (online().config !== null || vacant.length === 0) {
+      session.sendLobby({ kind: "begin", seats: roster }, peer.id);
+      lockRoster();
+      return;
+    }
+    const port = Math.min(...vacant.map((entry) => entry.port));
+    roster = roster.map((entry) => (entry.port === port ? { id: peer.id, port } : entry));
+    // Their panel starts empty, whatever the last player at this port left in it.
+    match().setFighter(port, null);
+    match().setCostume(port, port);
+    const seat: SeatView = { peerId: peer.id, port, build: "pending" };
+    online().patch({ seats: [...seats, seat].sort((a, b) => a.port - b.port), notice: freshNotice() });
+    if (!session.sendLobby({ kind: "begin", seats: roster })) return;
+    lockRoster();
+    settle();
+    greet(seat);
+  };
+
+  /**
+   * A begin from this guest's host (Plan 7, Phase B). Listed, this side plays
+   * its entry's port: the seats take their match ports, a peer the begin does
+   * not list is no player, and one it lists that this side has not seated yet
+   * (a newcomer on a vacated port) is seated now, its hello heard if it came
+   * first. The first begin seats the match config for that many; a re-sent one
+   * only remaps. Not listed, the room began without this side: it leaves.
+   */
+  const followBegin = (entries: readonly BeginSeat[], from: string) => {
+    if (session.role !== "guest" || portOf(from) !== HOST_PORT) return;
+    const self = session.transport.selfId;
+    const own = entries.find((entry) => entry.id === self);
+    if (own === undefined) {
+      leaveWith("room-begun");
+      return;
+    }
+    const first = roster === null;
+    roster = entries;
+    const before = online().seats;
+    for (const seat of before) if (!entries.some((entry) => entry.id === seat.peerId)) forgetSeat(seat.peerId);
+    const seats: SeatView[] = [];
+    const added: SeatView[] = [];
+    for (const entry of entries) {
+      // A player the room no longer seats has left: their port waits for the next joiner.
+      if (entry.id === self || !session.peers.has(entry.id)) continue;
+      const had = before.find((seat) => seat.peerId === entry.id);
+      const seat: SeatView = { peerId: entry.id, port: entry.port, build: had?.build ?? "pending" };
+      seats.push(seat);
+      if (had === undefined) added.push(seat);
+    }
+    if (first) match().configureOnline(entries.length);
+    online().patch({ seats: seats.sort((a, b) => a.port - b.port), localPort: own.port });
+    sayAway();
+    lockRoster();
+    for (const seat of added) {
+      const hello = unlistedHellos.get(seat.peerId);
+      unlistedHellos.delete(seat.peerId);
+      if (hello !== undefined) heardHello(hello, seat.peerId);
+      greet(seat);
+      if (online().errorReason !== null) return;
+    }
+    settle();
+    online().patch({ begun: true });
+  };
+
+  /**
    * The room seats `peer`: a newcomer, or the same player back from a reload,
-   * who says its build afresh before anything can start. A seat at the same
-   * port is theirs now (mid-match, the one before kept it through its leave).
+   * who says its build afresh before anything can start. Before the Start, a
+   * seat at the same port is theirs now; after it, and mid-match, the seats
+   * are the begun room's (`arrivedAfterBegin`).
    */
   const seatArrived = (peer: PeerInfo) => {
+    // After the Start, or mid-match, a newcomer is no player until a begin says so.
+    if (roster !== null || online().config !== null) {
+      arrivedAfterBegin(peer);
+      return;
+    }
     const seat: SeatView = { peerId: peer.id, port: peer.port, build: "pending" };
     const replaced = online().seats.filter((other) => other.peerId === peer.id || other.port === peer.port);
-    for (const other of replaced) {
-      stopHelloTimer(other.peerId);
-      heardFrom.delete(other.peerId);
-      silentSeats.delete(other.peerId);
-    }
+    for (const other of replaced) forgetSeat(other.peerId);
     const seats = [...online().seats.filter((other) => !replaced.includes(other)), seat].sort((a, b) => a.port - b.port);
     online().patch({ seats });
-    // Mid-match the channel is the match's: nothing to say, and nothing to wait for.
-    if (online().config !== null) return;
+    sayAway();
     // Somebody took a seat: that the last player left is no longer news.
     online().patch({ notice: freshNotice() });
     settle();
+    greet(seat);
+  };
+
+  /**
+   * A newcomer seated in an open lobby. The open link brings them no `link:
+   * open` of its own (relayed, the link is the room's, and stays open), so
+   * nothing else would say this build to them: said to them alone, as the
+   * others have heard it.
+   */
+  const greet = (seat: SeatView) => {
     if (!linkOpen) return;
-    // An open link brings the newcomer no `link: open` of its own (relayed, the link is the
-    // room's, and stays open), so nothing else would say this build to them: said to them
-    // alone, as the others have heard it.
-    sayHello(peer.id);
+    sayHello(seat.peerId);
     if (online().errorReason !== null) return;
     // Relayed, the link opened before this seating reached here (`Route`), so the wait starts
     // now. Direct, an open link at this point is the last peer's, and the newcomer's own
@@ -535,17 +724,22 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * guest whose host left has no room any more.
    */
   const seatLeft = (peer: PeerInfo) => {
+    unlistedHellos.delete(peer.id);
+    // A stranger in a begun room was never seated, and their leave touches nothing.
+    const seat = seatOf(peer.id);
+    if (seat === undefined) return;
     if (online().config !== null) {
       // The start went to (or came from) the player who left; the session withdraws it too.
       // A direct link outlives the host's room socket (D54): no host-left here.
       withdrawnStart = online().config;
       return;
     }
-    if (session.role === "guest" && peer.port === HOST_PORT) {
+    if (session.role === "guest" && seat.port === HOST_PORT) {
       leaveWith("host-left");
       return;
     }
-    seatEmptied(peer.id, peer.port);
+    // The seat's own port: its match port once the room has begun.
+    seatEmptied(peer.id, seat.port);
   };
 
   /**
@@ -558,14 +752,14 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * so a guest says only that they left.
    */
   const seatEmptied = (peerId: string, port: number) => {
-    stopHelloTimer(peerId);
-    heardFrom.delete(peerId);
     const refused = session.role === "host" && seatOf(peerId)?.build === "mismatch";
-    const silent = silentSeats.delete(peerId);
+    const silent = silentSeats.has(peerId);
+    forgetSeat(peerId);
     match().setFighter(port, null);
     match().setCostume(port, port);
     const seats = online().seats.filter((seat) => seat.peerId !== peerId);
-    online().patch({ seats, remoteAway: false });
+    online().patch({ seats });
+    sayAway();
     const notice = refused ? (silent ? seatNoAnswerNotice(port) : seatMismatchNotice(port)) : (freshNotice() ?? seatLeftNotice(port));
     online().patch({ notice });
     settle();
@@ -574,22 +768,23 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   /**
    * The channel went with a start out: as far as the lobby goes, every seat
    * is empty, and whoever the room still seats says its build again. Their
-   * panels clear and the start is withdrawn, as for a leave.
+   * panels clear, the notice names every one of them, and the start is
+   * withdrawn, as for a leave.
    */
   const channelLost = () => {
     stopHelloTimers();
     silentSeats.clear();
+    awayPeers.clear();
     const { seats } = online();
     for (const seat of seats) {
       match().setFighter(seat.port, null);
       match().setCostume(seat.port, seat.port);
     }
-    const last = seats.at(-1);
     online().patch({
       status: "waiting",
       config: null,
       seats: seats.map((seat) => ({ ...seat, build: "pending" })),
-      notice: last === undefined ? online().notice : seatLeftNotice(last.port),
+      notice: seats.length === 0 ? online().notice : seatLeftNotice(...seats.map((seat) => seat.port)),
       remoteAway: false,
       hostStage: null,
     });
@@ -667,14 +862,26 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     stopHelloTimers();
     off();
     if (unbind === release) unbind = null;
+    if (startBound === begin) startBound = null;
   };
   unbind = release;
+  startBound = begin;
   return release;
+}
+
+/**
+ * The host's Start (Plan 7, Phase B): sends `begin` and settles who plays at
+ * which port. True when it was sent; false, changing nothing, unless this
+ * side is the host of a bound session, `connected`, with at least one other
+ * player seated.
+ */
+export function beginRoom(): boolean {
+  return startBound?.() ?? false;
 }
 
 /** The lobby talk that only fills in the screens. `port` is the sender's seat: null for a peer the room does not seat. */
 function applyLobby(
-  message: Extract<LobbyMessage, { kind: "pick" | "stage" | "away" }>,
+  message: Extract<LobbyMessage, { kind: "pick" | "stage" }>,
   port: number | null,
   session: OnlineSessionLike,
 ): void {
@@ -701,9 +908,6 @@ function applyLobby(
       useOnlineStore.getState().patch({ hostStage: rules ? { stageId, form, rules } : { stageId, form } });
       return;
     }
-    case "away":
-      useOnlineStore.getState().patch({ remoteAway: message.away });
-      return;
   }
 }
 

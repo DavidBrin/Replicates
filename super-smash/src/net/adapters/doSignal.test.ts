@@ -1114,6 +1114,47 @@ describe("rooms of three and four (Plan 7)", () => {
     expect(direct.joins).toEqual(["g1"]);
   });
 
+  /**
+   * Task 14 (from Task 12's review): a begun room of two counts its players,
+   * not its seats. A stranger who typed the code blocks no offer to a player,
+   * and is never offered to; a newcomer the begin seats on a vacated port is
+   * offered to as the begin locks it in, the stranger still seated.
+   */
+  it("counts a begun room's players, not its seats: a stranger blocks no offer, and is never offered one", async () => {
+    const t = await linkedHost();
+    t.transport.lockRoster(["g1"]);
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "s1", role: "guest", port: 2 } });
+    t.peers[0].channels[0].remoteClose();
+    t.transport.offerAgain("g1");
+    await settle();
+    expect(t.peers).toHaveLength(2);
+    expect(offers(t.signalling).map((m) => m.t === "signal" && m.to)).toEqual(["g1", "g1"]);
+
+    // The only player leaves: the stranger is offered nothing, and neither is a newcomer until the begin lists it.
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    t.transport.offerAgain("s1");
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "n1", role: "guest", port: 1 } });
+    await settle();
+    expect(t.peers).toHaveLength(2);
+    t.transport.lockRoster(["n1"]);
+    await settle();
+    expect(t.peers).toHaveLength(3);
+    expect(offers(t.signalling).map((m) => m.t === "signal" && m.to)).toEqual(["g1", "g1", "n1"]);
+
+    // The stranger leaving changes nobody's count: no second offer.
+    t.signalling.deliver({ t: "peer-left", peerId: "s1" });
+    await settle();
+    expect(t.peers).toHaveLength(3);
+    t.signalling.deliver({ t: "signal", from: "n1", payload: { kind: "answer", sdp: "answer-sdp" } });
+    await settle();
+    t.peers[2].channels[0].open();
+    expect(t.joins).toEqual(["g1", "n1"]);
+    // A re-sent lock with the player already linked offers nobody.
+    t.transport.lockRoster(["n1"]);
+    await settle();
+    expect(t.peers).toHaveLength(3);
+  });
+
   it("is open on the relay only while a player is announced: a seated stranger opens nothing", async () => {
     const t = setup();
     t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [{ id: "g1", role: "guest", port: 1 }] });

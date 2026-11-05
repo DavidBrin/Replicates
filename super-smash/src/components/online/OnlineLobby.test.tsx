@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { routerMock } from "../../../vitest.setup";
@@ -56,6 +56,21 @@ async function create() {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: /create room/i }));
   });
+}
+
+/** The host's begin for a room of two, as a guest hears it: the Start pressed (Plan 7, Phase B). */
+const BEGIN_TWO = {
+  kind: "begin",
+  seats: [
+    { id: HOST_PEER.id, port: 0 },
+    { id: GUEST_PEER.id, port: 1 },
+  ],
+} as const;
+
+/** The Start, as `role` meets it: the host presses it, and a guest hears its host's begin. */
+function begin(fake: FakeSession, role: Role) {
+  if (role === "host") fireEvent.click(screen.getByRole("button", { name: "Start (2 players)" }));
+  else act(() => fake.emit({ type: "lobby", message: BEGIN_TWO, from: HOST_PEER.id }));
 }
 
 async function join(code: string) {
@@ -265,7 +280,7 @@ describe("OnlineLobby", () => {
     const { opened } = harness();
     await join("ABCD");
     act(() => opened[0].emit({ type: "error", reason: "full" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Room ABCD already has two players.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Room ABCD already has four players.");
     expect(screen.getByRole("button", { name: /join room/i })).toBeInTheDocument();
   });
 
@@ -293,7 +308,7 @@ describe("OnlineLobby", () => {
     expect(screen.getByRole("button", { name: /create room/i })).toBeInTheDocument();
   });
 
-  it("sends the host to the stage select once the direct link is open and the guest runs this build", async () => {
+  it("sends the host to the stage select once the direct link is open, the guest runs this build, and the host presses Start", async () => {
     const { opened } = harness();
     await create();
     act(() => {
@@ -301,12 +316,15 @@ describe("OnlineLobby", () => {
       opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
       opened[0].emit({ type: "link", status: "open" });
     });
-    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Start (2 players)" })).toBeDisabled();
     act(() => opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: GUEST_PEER.id }));
+    expect(routerMock.push).not.toHaveBeenCalled();
+    begin(opened[0], "host");
+    expect(opened[0].sent.at(-1)).toEqual(BEGIN_TWO);
     expect(routerMock.push).toHaveBeenCalledWith("/stage");
   });
 
-  it("sends the guest to the character select once the direct link is open and the host runs this build", async () => {
+  it("sends the guest to the character select once the direct link is open, the host runs this build, and the host begins", async () => {
     const { opened } = harness();
     await join("ABCD");
     act(() => {
@@ -315,6 +333,8 @@ describe("OnlineLobby", () => {
       opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: HOST_PEER.id });
       opened[0].emit({ type: "link", status: "open" });
     });
+    expect(routerMock.push).not.toHaveBeenCalled();
+    begin(opened[0], "guest");
     expect(routerMock.push).toHaveBeenCalledWith("/fighters");
   });
 
@@ -408,9 +428,18 @@ describe("OnlineLobby", () => {
       route: "relay",
       seats: [{ peerId: "g1", port: 1, build: "ok" }],
       localPort: 0,
+      begun: true,
     });
     await start();
-    expect(useOnlineStore.getState()).toMatchObject({ status: "connecting", notice: null, remoteAway: false, route: null, seats: [], localPort: null });
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "connecting",
+      notice: null,
+      remoteAway: false,
+      route: null,
+      seats: [],
+      localPort: null,
+      begun: false,
+    });
   });
 
   it.each([
@@ -529,6 +558,7 @@ describe("OnlineLobby", () => {
         opened[0].emit({ type: "link", status: "open" });
         opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: otherPeer(role).id });
       });
+      begin(opened[0], role);
       expect(routerMock.push).toHaveBeenCalledWith(role === "host" ? "/stage" : "/fighters");
 
       unmount();
@@ -572,7 +602,7 @@ describe("OnlineLobby", () => {
       expect(status).toHaveTextContent(`Connecting to room ${opened[0].code}…`);
 
       act(() => opened[0].emit({ type: "joined", role: "host" }));
-      expect(status).toHaveTextContent("Read it to the other player. Waiting for them to join…");
+      expect(status).toHaveTextContent("Read the code to the other players. Waiting for them to join…");
 
       act(() => opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER }));
       expect(status).toHaveTextContent("They are in. Opening a direct connection…");
@@ -667,7 +697,7 @@ describe("OnlineLobby", () => {
     });
 
     it.each([
-      ["full", "Room ABCD already has two players."],
+      ["full", "Room ABCD already has four players."],
       ["not-found", "There is no room ABCD. Check the code with the host."],
     ] as const)("does the same when the room turns the code away as %s", async (reason, said) => {
       const { opened } = harness();
@@ -708,7 +738,7 @@ describe("OnlineLobby", () => {
 
   describe("errors that are not the player's to see", () => {
     it("does not draw an error left over from an earlier visit, even for the first frame", async () => {
-      useOnlineStore.getState().patch({ status: "error", errorReason: "full", error: "Room ABCD already has two players." });
+      useOnlineStore.getState().patch({ status: "error", errorReason: "full", error: "Room ABCD already has four players." });
       // The mount effect resets the store; this looks at the screen at that moment, before React redraws it.
       let drawnAtReset: string | null = null;
       const unsubscribe = useOnlineStore.subscribe(() => {
@@ -737,6 +767,114 @@ describe("OnlineLobby", () => {
       expect(alerts.seen).toEqual([]);
       expect(screen.queryByRole("alert")).toBeNull();
     });
+  });
+
+  /** Plan 7, Phase B: the waiting room. */
+  it("shows the host the seats, and the Start once every seat is ready", async () => {
+    const { opened } = harness();
+    await create();
+    act(() => {
+      opened[0].emit({ type: "joined", role: "host" });
+      opened[0].emit({ type: "route", route: "relay" });
+    });
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Read the code to the other players. Waiting for them to join…");
+    const rows = () => within(screen.getByRole("list", { name: "Players" })).getAllByRole("listitem").map((row) => row.textContent);
+    expect(rows()).toEqual(["P1 · Host (you)"]);
+    // Nobody to start with yet.
+    expect(screen.queryByRole("button", { name: /^Start/ })).toBeNull();
+
+    act(() => {
+      opened[0].emit({ type: "link", status: "open" });
+      opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
+      opened[0].emit({ type: "peer", present: true, peer: { id: "g2", role: "guest", port: 2 } });
+      opened[0].emit({ type: "peer", present: true, peer: { id: "g3", role: "guest", port: 3 } });
+    });
+    expect(rows()).toEqual(["P1 · Host (you)", "P2 · Checking the version…", "P3 · Checking the version…", "P4 · Checking the version…"]);
+    const start = screen.getByRole("button", { name: "Start (4 players)" });
+    expect(start).toBeDisabled();
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    act(() => {
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: GUEST_PEER.id });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" }, from: "g3" });
+    });
+    warn.mockRestore();
+    expect(rows()).toEqual(["P1 · Host (you)", "P2 · Ready", "P3 · Checking the version…", "P4 · Different version"]);
+    expect(status.textContent).toBe("Waiting for every player to be ready…");
+    expect(start).toBeDisabled();
+
+    act(() => {
+      opened[0].emit({ type: "peer", present: false, peer: { id: "g3", role: "guest", port: 3 } });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: "g2" });
+    });
+    expect(rows()).toEqual(["P1 · Host (you)", "P2 · Ready", "P3 · Ready"]);
+    expect(status.textContent).toBe("Everyone is ready. Press Start when all your players are in.");
+    // The code stays up for whoever is still to come.
+    expect(screen.getByTestId("room-code")).toHaveTextContent(opened[0].code);
+    const ready = screen.getByRole("button", { name: "Start (3 players)" });
+    expect(ready).toBeEnabled();
+    fireEvent.click(ready);
+    expect(opened[0].sent.at(-1)).toEqual({
+      kind: "begin",
+      seats: [
+        { id: HOST_PEER.id, port: 0 },
+        { id: GUEST_PEER.id, port: 1 },
+        { id: "g2", port: 2 },
+      ],
+    });
+    expect(useOnlineStore.getState().begun).toBe(true);
+  });
+
+  it("shows a guest its seat while it waits", async () => {
+    const { opened } = harness();
+    await join("ABCD");
+    opened[0].seatPort = 2;
+    opened[0].selfId = "g2";
+    act(() => {
+      opened[0].emit({ type: "joined", role: "guest" });
+      opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
+      opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
+      opened[0].emit({ type: "route", route: "relay" });
+      opened[0].emit({ type: "link", status: "open" });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: HOST_PEER.id });
+    });
+    expect(screen.getByRole("status").textContent).toBe("You are P3. Waiting for the host to start…");
+    const rows = within(screen.getByRole("list", { name: "Players" })).getAllByRole("listitem").map((row) => row.textContent);
+    expect(rows).toEqual(["P1 · Host", "P2 · Checking the version…", "P3 · You"]);
+    expect(screen.queryByRole("button", { name: /^Start/ })).toBeNull();
+    expect(screen.queryByTestId("room-code")).toBeNull();
+  });
+
+  it("leaves the lobby on the begin, not on connecting", async () => {
+    const host = harness();
+    await create();
+    act(() => {
+      host.opened[0].emit({ type: "joined", role: "host" });
+      host.opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
+      host.opened[0].emit({ type: "link", status: "open" });
+      host.opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: GUEST_PEER.id });
+    });
+    expect(useOnlineStore.getState().status).toBe("connected");
+    expect(routerMock.push).not.toHaveBeenCalled();
+    begin(host.opened[0], "host");
+    expect(routerMock.push).toHaveBeenCalledExactlyOnceWith("/stage");
+    host.unmount();
+
+    leaveOnline();
+    routerMock.push.mockClear();
+    const guest = harness();
+    await join("ABCD");
+    act(() => {
+      guest.opened[0].emit({ type: "joined", role: "guest" });
+      guest.opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
+      guest.opened[0].emit({ type: "link", status: "open" });
+      guest.opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: HOST_PEER.id });
+    });
+    expect(useOnlineStore.getState().status).toBe("connected");
+    expect(routerMock.push).not.toHaveBeenCalled();
+    begin(guest.opened[0], "guest");
+    expect(routerMock.push).toHaveBeenCalledExactlyOnceWith("/fighters");
   });
 
   it("says what the host sees once the guest is in, in the status line", async () => {

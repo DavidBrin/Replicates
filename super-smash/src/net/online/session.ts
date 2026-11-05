@@ -111,7 +111,8 @@ export interface OnlineSessionLike {
   /**
    * The other players of a begun room, said again on every re-sent begin.
    * From then on a stranger who types the code is never counted toward the
-   * relay, announced to the match, or heard (`DoSignalTransport.lockRoster`).
+   * relay or the two-player link, offered to, announced to the match, or
+   * heard (`DoSignalTransport.lockRoster`).
    */
   lockRoster(ids: readonly string[]): void;
   close(): void;
@@ -334,7 +335,17 @@ export class OnlineSession implements OnlineSessionLike {
   }
 
   lockRoster(ids: readonly string[]): void {
+    const before = this.seatedPeer;
     this.roster = new Set(ids);
+    // A begin that seats a newcomer on a vacated port of a room of two makes them the one
+    // other player: their join counted for nothing, so this is their `peer-joined`. Their
+    // first link starts afresh (one that never opens moves to the relay), and the transport
+    // offers it.
+    const after = this.seatedPeer;
+    if (after !== null && after !== before) {
+      this.linked = false;
+      this.resetReconnect();
+    }
     this.transport.lockRoster(ids);
   }
 
@@ -461,11 +472,17 @@ export class OnlineSession implements OnlineSessionLike {
    * channel decides that), but whether the room can pass them a lobby
    * message, and whom a fresh offer goes to: their room socket can drop on
    * its own while the channel stays open, and the channel can close while
-   * their socket stays. Null with nobody seated, or more than one.
+   * their socket stays. Null with no player seated, or more than one.
+   * Players, not seats (Task 14): a stranger who typed the code into a begun
+   * room of two is neither counted nor offered to (`isPlayer`).
    */
   private get seatedPeer(): string | null {
-    if (this.seated.size !== 1) return null;
-    const [only] = this.seated.keys();
+    let only: string | null = null;
+    for (const id of this.seated.keys()) {
+      if (!this.isPlayer(id)) continue;
+      if (only !== null) return null;
+      only = id;
+    }
     return only;
   }
 

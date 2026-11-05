@@ -127,23 +127,20 @@ describe("joining a room", () => {
     expect(welcomeOf([third, guest, host], 4)).toMatchObject({ peer: host });
   });
 
-  it("turns a third peer away with 'full' and leaves the two alone", () => {
-    expect(decideJoin([host, guest], "join", "x1")).toEqual({
+  /** Plan 7, Phase B: a room holds four, and the capacity parameter still moves the line. */
+  it("seats four and turns a fifth away with full", () => {
+    expect(ROOM_CAPACITY).toBe(4);
+    expect(decideJoin([host, guest], "join", "t1")).toMatchObject({ type: "admit", peer: third });
+    const fourth: PeerInfo = { id: "f1", role: "guest", port: 3 };
+    expect(decideJoin([host, guest, third], "join", "f1")).toMatchObject({ type: "admit", peer: fourth });
+    expect(decideJoin([host, guest, third, fourth], "join", "x1")).toEqual({
       type: "reject",
       reason: "full",
       closeCode: ROOM_CLOSE_CODES.full,
       message: { t: "error", reason: "full" },
     });
-    expect(decideJoin([host, guest], "create", "x1")).toMatchObject({ type: "reject", reason: "full" });
-  });
-
-  it("holds ROOM_CAPACITY peers, two until the room is raised, and the capacity parameter moves the line", () => {
-    expect(ROOM_CAPACITY).toBe(2);
-    expect(decideJoin([host, guest, third], "join", "x1", 4)).toMatchObject({ type: "admit", peer: { port: 3 } });
-    expect(decideJoin([host, guest, third, { id: "x1", role: "guest", port: 3 }], "join", "x2", 4)).toMatchObject({
-      type: "reject",
-      reason: "full",
-    });
+    expect(decideJoin([host, guest, third, fourth], "create", "x1")).toMatchObject({ type: "reject", reason: "full" });
+    expect(decideJoin([host, guest], "join", "x1", 2)).toMatchObject({ type: "reject", reason: "full" });
   });
 
   it("refuses to create a room somebody is already in", () => {

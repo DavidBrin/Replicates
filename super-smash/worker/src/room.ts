@@ -54,13 +54,10 @@ export type RelayOutcome =
   | { readonly type: "drop" }
   | { readonly type: "kick"; readonly reason: RoomError; readonly closeCode: number; readonly message: ServerMessage };
 
-/** Online is two players (spec §3.3) until Plan 7 Phase B raises it. */
-export const ROOM_CAPACITY = 2;
+/** Online seats up to four (Plan 7, Phase B), as many as a local match (`MAX_PLAYERS`). */
+export const ROOM_CAPACITY = 4;
 
-/**
- * `capacity` is a parameter so the port rule can be tested at four seats while
- * the room itself still seats `ROOM_CAPACITY`.
- */
+/** `capacity` is a parameter so the full-room rule can be tested at other sizes. */
 export function decideJoin(
   existing: readonly PeerInfo[],
   intent: RoomIntent,

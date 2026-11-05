@@ -313,7 +313,7 @@ only the skin changes.
 | `/rules` | Stock/time, count, Smash Ball, timer |
 | `/stage` | Stage select, with the Normal / Battlefield / Ω toggle |
 | `/fighters` | Character select — the portrait grid and player panels |
-| `/online` | Create a room (a four-letter code to read out) or join one by its code. The status line says each step: loading the game data, the room, the direct connection, or "Connecting through the relay…" when no direct one could open (D60) |
+| `/online` | Create a room (a four-letter code to read out) or join one by its code; up to four players. A waiting room lists who is in, by port; the host starts once at least one other player is in and every one is on the same build (the hello), and everyone goes on to the select screens. The status line says each step, including "Connecting through the relay…" (D60) |
 | `/play` | The match itself. With no match to play it leaves at once. Nothing set up (a cold load, or browser Back from the results, or from the menu after a quit) goes to the menu. A seat still held for an online match whose start was withdrawn goes back to the online lobby (`/online`) when no room is left, and otherwise to the room's own select: the host's stage select (`/stage`), the guest's fighter select (`/fighters`) |
 | `/results` | Placings, KOs, falls, self-destructs |
 | `/controls` | The two schemes, and rebinding |

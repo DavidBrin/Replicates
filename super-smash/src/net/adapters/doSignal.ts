@@ -153,7 +153,8 @@ export interface DoSignalTransport extends Transport {
   readonly role: Role | null;
   /**
    * The host offers `peerId` a fresh peer connection, as when it joined. Only
-   * while the channel is down (`waiting`) and not held; a no-op otherwise.
+   * while the channel is down (`waiting`) and not held, and only to the room's
+   * one other player (`lockRoster`); a no-op otherwise.
    */
   offerAgain(peerId: string): void;
   /** The match has started: from now on its channel is never replaced, by either side. */
@@ -178,7 +179,9 @@ export interface DoSignalTransport extends Transport {
    * The other players of a begun room, said again on every re-sent begin.
    * Relayed, nobody outside them is announced or heard, and the seated ones
    * not yet announced (a newcomer on a vacated port) are announced now.
-   * Direct, it only records them, for a later move to the relay. Before any
+   * Direct, the offers count only them from then on (a stranger seated in a
+   * begun room of two is never offered to, and blocks no offer), and a waiting
+   * host offers to a newcomer the lock makes its one other player. Before any
    * lock, a held match counts only the peers already announced as players.
    */
   lockRoster(ids: readonly string[]): void;
@@ -311,6 +314,16 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   function isPlayer(peerId: string): boolean {
     if (roster !== null) return roster.has(peerId);
     return !held || relayAnnounced.has(peerId);
+  }
+
+  /**
+   * The direct route's players: the peers seated, and once a begin has locked
+   * the roster, only those on it (Task 14). Direct is for two, so it offers
+   * only while this is exactly one, and only to them: a stranger who typed the
+   * code into a begun room of two is neither counted nor offered to.
+   */
+  function seatedMembers(): string[] {
+    return [...seated].filter((id) => roster === null || roster.has(id));
   }
 
   /** Relay mode: a seated player is here. Said once. */
@@ -504,9 +517,11 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         }
         // While a channel is open it decides (see the header): a newcomer does not replace the peer.
         if (announced) break;
-        // Direct is for two: with another already seated, the room is moving to the relay.
+        // Direct is for two: with another player already seated, the room is moving to the
+        // relay. A stranger in a begun room is offered nothing (`seatedMembers`).
         if (role === "host") {
-          if (seated.size === 1) void offerTo(event.peer.id);
+          const members = seatedMembers();
+          if (members.length === 1 && members[0] === event.peer.id) void offerTo(event.peer.id);
         }
         // Before then, a host that left can be replaced: the room makes the next joiner host.
         else if (role === "guest" && event.peer.role === "host") hostId = event.peer.id;
@@ -601,7 +616,9 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     onPeerJoin: (cb) => joins.add(cb),
     onPeerLeave: (cb) => leaves.add(cb),
     offerAgain(peerId) {
-      if (closed || route === "relay" || held || role !== "host" || status !== "waiting" || seated.size !== 1) return;
+      if (closed || route === "relay" || held || role !== "host" || status !== "waiting") return;
+      const members = seatedMembers();
+      if (members.length !== 1 || members[0] !== peerId) return;
       void offerTo(peerId);
     },
     holdChannel() {
@@ -613,10 +630,20 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     useRelay,
     lockRoster(ids) {
       if (closed) return;
+      const before = roster;
       roster = new Set(ids);
-      if (route !== "relay") return;
-      for (const id of seated) announceRelayed(id);
-      if (relayAnnounced.size > 0) setStatus("open");
+      if (route === "relay") {
+        for (const id of seated) announceRelayed(id);
+        if (relayAnnounced.size > 0) setStatus("open");
+        return;
+      }
+      // Direct, a begin that seats a newcomer on a vacated port makes them the room's one
+      // other player, and nothing else would offer to them: their join came while they
+      // were nobody's (`seatedMembers`). The lone player already linked, or already a
+      // player before this lock, is the session's to offer again, not this.
+      const members = seatedMembers();
+      const newcomer = members.length === 1 && before !== null && !before.has(members[0]) ? members[0] : null;
+      if (newcomer !== null && role === "host" && !held && status === "waiting") void offerTo(newcomer);
     },
     close() {
       if (closed) return;

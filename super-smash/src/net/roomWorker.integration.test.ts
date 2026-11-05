@@ -64,32 +64,46 @@ function connect(code: string, intent: RoomIntent): Client {
 // 5 s default, which would fail a slow but correct room with a bare timeout rather than the helper's
 // "no X within 5 s; saw ...".
 describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", { timeout: 20_000 }, () => {
-  it("admits a host and a guest, relays between them, and turns a third away", async () => {
+  it("admits four, on ports 0 to 3, relays between them, and turns a fifth away", async () => {
     const code = makeRoomCode();
     const host = connect(code, "create");
     const hostWelcome = await host.next("welcome");
     // `peer` is the old welcome's field, still sent for one release (room.ts), so a stale tab reaches the build check.
     expect(hostWelcome).toMatchObject({ self: { role: "host", port: 0 }, peers: [], peer: null });
+    const hostId = (hostWelcome.self as { id: string }).id;
     const guest = connect(code, "join");
     const guestWelcome = await guest.next("welcome");
     expect(guestWelcome).toMatchObject({
       self: { role: "guest", port: 1 },
-      peers: [{ id: (hostWelcome.self as { id: string }).id, role: "host", port: 0 }],
-      peer: { id: (hostWelcome.self as { id: string }).id, role: "host", port: 0 },
+      peers: [{ id: hostId, role: "host", port: 0 }],
+      peer: { id: hostId, role: "host", port: 0 },
     });
     expect(await host.next("peer-joined")).toMatchObject({ peer: { role: "guest", port: 1 } });
 
     host.send({ t: "signal", payload: { kind: "offer", sdp: "v=0" } });
     expect(await guest.next("signal")).toMatchObject({ payload: { kind: "offer", sdp: "v=0" } });
 
+    // Plan 7, Phase B: two more guests, each on the lowest port free, each announced to everyone before them.
     const third = connect(code, "join");
-    expect(await third.next("error")).toEqual({ t: "error", reason: "full" });
-    expect(await third.closed).toBe(ROOM_CLOSE_CODES.full);
+    expect(await third.next("welcome")).toMatchObject({ self: { role: "guest", port: 2 } });
+    const fourth = connect(code, "join");
+    const fourthWelcome = await fourth.next("welcome");
+    expect(fourthWelcome).toMatchObject({ self: { role: "guest", port: 3 } });
+    expect((fourthWelcome.peers as { port: number }[]).map((p) => p.port).sort()).toEqual([0, 1, 2]);
+    for (const seated of [host, guest]) {
+      expect(await seated.next("peer-joined")).toMatchObject({ peer: { port: 2 } });
+      expect(await seated.next("peer-joined")).toMatchObject({ peer: { port: 3 } });
+    }
+    expect(await third.next("peer-joined")).toMatchObject({ peer: { port: 3 } });
+
+    const fifth = connect(code, "join");
+    expect(await fifth.next("error")).toEqual({ t: "error", reason: "full" });
+    expect(await fifth.closed).toBe(ROOM_CLOSE_CODES.full);
 
     guest.close();
-    // The refused third was never a peer, so the only exit the host hears is the guest's.
+    // The refused fifth was never a peer, so the only exit the host hears is the guest's.
     expect(await host.next("peer-left")).toEqual({ t: "peer-left", peerId: (guestWelcome.self as { id: string }).id });
-    host.close();
+    for (const client of [host, third, fourth]) client.close();
   });
 
   it("relays a binary frame to the other peer stamped with its sender, never back to it, and outside the signalling cap", async () => {
@@ -200,15 +214,18 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", { timeout: 20_000 }, ()
     const guest = connect(code, "join");
     await guest.next("welcome");
     await host.next("peer-joined");
+    // Two more fill the room of four (Plan 7, Phase B).
+    const others = [connect(code, "join"), connect(code, "join")];
+    for (const other of others) await other.next("welcome");
 
-    // A third is refused: accepted only to be told "full" and closed, never a peer. It sends game
+    // A fifth is refused: accepted only to be told "full" and closed, never a peer. It sends game
     // frames the moment its socket opens, which is as early as a client can, and again whenever it
     // can before the close lands.
-    const third = connect(code, "join");
+    const fifth = connect(code, "join");
     const body = new Uint8Array([9, 9, 9, 9]);
-    for (let i = 0; i < 5; i++) third.sendBinary(body);
-    expect(await third.next("error")).toEqual({ t: "error", reason: "full" });
-    expect(await third.closed).toBe(ROOM_CLOSE_CODES.full);
+    for (let i = 0; i < 5; i++) fifth.sendBinary(body);
+    expect(await fifth.next("error")).toEqual({ t: "error", reason: "full" });
+    expect(await fifth.closed).toBe(ROOM_CLOSE_CODES.full);
 
     // A signal queued behind whatever the room could have forwarded: when it lands on each side, the
     // frames the refused socket sent have had every chance to land first.
@@ -218,11 +235,13 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", { timeout: 20_000 }, ()
     expect(await host.next("signal")).toMatchObject({ payload: { kind: "answer", sdp: "v=0" } });
     expect(guest.games).toHaveLength(0);
     expect(host.games).toHaveLength(0);
-    expect(third.games).toHaveLength(0);
+    expect(fifth.games).toHaveLength(0);
+    for (const other of others) expect(other.games).toHaveLength(0);
 
+    for (const other of others) other.close();
     guest.close();
-    // The refused socket was never a peer, so the only exit the host hears is the guest's.
-    expect((await host.next("peer-left")).t).toBe("peer-left");
+    // The refused socket was never a peer, so the only exits the host hears are the seated players'.
+    for (let i = 0; i < 3; i++) expect((await host.next("peer-left")).t).toBe("peer-left");
     host.close();
   });
 

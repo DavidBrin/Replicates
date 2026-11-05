@@ -115,7 +115,21 @@ export type LobbyMessage =
    * ("engine-mismatch"), or that guest never answered through the room
    * ("link-failed": its tab most likely could not run), and the guest leaves.
    */
-  | { readonly kind: "refuse"; readonly reason: RefuseReason };
+  | { readonly kind: "refuse"; readonly reason: RefuseReason }
+  /**
+   * The host's Start (Plan 7, Phase B): who plays, and at which match port.
+   * The host is port 0 and the others follow in seat order, compacted to
+   * `1..n-1`, so a player can play on another port than the room seated them
+   * at. Sent again, with a vacated port filled, whenever a newcomer arrives
+   * after it; a newcomer it does not list has no place in the room, and leaves.
+   */
+  | { readonly kind: "begin"; readonly seats: readonly BeginSeat[] };
+
+/** One player of a begun room: the room's id for them, and the port they play. */
+export interface BeginSeat {
+  readonly id: string;
+  readonly port: number;
+}
 
 export type RefuseReason = "engine-mismatch" | "unreadable-start" | "link-failed";
 
@@ -198,9 +212,37 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
       const reason = payload.reason;
       return reason === "engine-mismatch" || reason === "unreadable-start" || reason === "link-failed" ? { kind: "refuse", reason } : null;
     }
+    case "begin": {
+      const seats = parseBeginSeats(payload.seats);
+      return seats ? { kind: "begin", seats } : null;
+    }
     default:
       return null;
   }
+}
+
+/** A peer id as the room makes them (`crypto.randomUUID().slice(0, 8)`), with room to spare. */
+const MAX_PEER_ID_LENGTH = 16;
+
+/**
+ * A begin's players: `ONLINE_MIN_PLAYERS` to `ONLINE_MAX_PLAYERS` of them,
+ * each a distinct id of 1 to 16 characters, on the ports `0..n-1`, each port
+ * once. Anything else would seat two players on one port, or leave a port of
+ * the match with nobody to play it.
+ */
+function parseBeginSeats(value: unknown): BeginSeat[] | null {
+  if (!Array.isArray(value) || value.length < ONLINE_MIN_PLAYERS || value.length > ONLINE_MAX_PLAYERS) return null;
+  const seats: BeginSeat[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const entry: unknown = value[i];
+    if (!isRecord(entry)) return null;
+    const { id, port } = entry;
+    if (typeof id !== "string" || id.length < 1 || id.length > MAX_PEER_ID_LENGTH) return null;
+    if (!isInRange(port, 0, value.length - 1)) return null;
+    if (seats.some((seat) => seat.id === id || seat.port === port)) return null;
+    seats.push({ id, port });
+  }
+  return seats;
 }
 
 function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineMatchConfig | null {

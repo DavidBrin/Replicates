@@ -7,7 +7,17 @@ import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
 import { ensureBakeInstalled } from "@/game/bake";
 import { useBake } from "@/game/useBake";
 import { SkewButton, SkewPanel } from "@/components/ui/SkewPanel";
-import { RELAY_LINKING_STATUS, bindSession, leaveOnline, roomErrorMessage, useOnlineStore, type OnlineStatus } from "@/lib/onlineStore";
+import { cn } from "@/lib/cn";
+import {
+  RELAY_LINKING_STATUS,
+  beginRoom,
+  bindSession,
+  leaveOnline,
+  roomErrorMessage,
+  useOnlineStore,
+  type OnlineStatus,
+  type SeatView,
+} from "@/lib/onlineStore";
 import type { Route } from "@/net/adapters/doSignal";
 import { OnlineSession, setActiveSession, type OnlineSessionLike, type OpenSessionOptions } from "@/net/online/session";
 import { makeRoomCode, normalizeRoomCode, roomCodeProblem } from "@/net/roomCode";
@@ -26,9 +36,10 @@ const NO_FREE_CODE = "Could not find a free room code. Try again.";
  * Online: make a room and read its code out, or type the code you were given.
  *
  * Nothing here plays. It opens the session, shows where the handshake has
- * got to, and once the direct connection is up hands over to the existing
- * screens — the host to stage select (the host picks the stage), the guest
- * straight to character select.
+ * got to and who is in the room (the waiting room, Plan 7, Phase B), and
+ * once the host presses Start hands over to the existing screens — the host
+ * to stage select (the host picks the stage), the guests straight to
+ * character select.
  */
 export function OnlineLobby({
   openSession = OnlineSession.open,
@@ -46,6 +57,9 @@ export function OnlineLobby({
   const storeError = useOnlineStore((s) => s.error);
   const errorReason = useOnlineStore((s) => s.errorReason);
   const storeNotice = useOnlineStore((s) => s.notice);
+  const seats = useOnlineStore((s) => s.seats);
+  const localPort = useOnlineStore((s) => s.localPort);
+  const begun = useOnlineStore((s) => s.begun);
 
   const [typed, setTyped] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -105,6 +119,7 @@ export function OnlineLobby({
       notice: null,
       seats: [],
       localPort: null,
+      begun: false,
       remoteAway: false,
       config: null,
       hostStage: null,
@@ -175,7 +190,10 @@ export function OnlineLobby({
 
   const status: OnlineStatus = tried === null ? "idle" : storeStatus;
   const busy = status === "loading" || status === "connecting" || status === "waiting" || status === "linking" || status === "connected";
-  const showCode = busy && role === "host" && status !== "connected";
+  /** In the room, with a role: the waiting room shows who is in. */
+  const seated = role !== null && (status === "waiting" || status === "linking" || status === "connected");
+  // The code stays up while the host waits: more players can come in until the Start.
+  const showCode = busy && role === "host";
   // A taken code is only ever shown once the quiet retries have run out.
   const storeMessage = tried === null ? null : errorReason === "taken" ? NO_FREE_CODE : storeError;
   const message = formError ?? storeMessage;
@@ -186,12 +204,13 @@ export function OnlineLobby({
   /** The code the player typed is what is wrong, as opposed to a room that would not open. */
   const codeInvalid = formError !== null || codeRefused;
 
+  // On at the host's Start (Plan 7, Phase B), not as soon as the link is up: everybody goes together.
   useEffect(() => {
-    if (tried !== null && status === "connected" && role !== null) {
+    if (tried !== null && begun && role !== null) {
       handedOn.current = true;
       router.push(role === "host" ? "/stage" : "/fighters");
     }
-  }, [role, router, status, tried]);
+  }, [begun, role, router, tried]);
 
   // The code is the one thing the host has to read out: put the reader there.
   useEffect(() => {
@@ -255,6 +274,30 @@ export function OnlineLobby({
           </SkewPanel>
         ) : null}
 
+        {seated ? (
+          <SkewPanel className="border-[3px] border-panel-ink bg-panel-bone" innerClassName="px-8 py-5 text-panel-ink">
+            <ul aria-label="Players" className="flex flex-col gap-1 font-display text-lg tracking-[0.08em]">
+              {seatRows(role, seats, localPort).map((row) => (
+                <li key={row.port}>{`P${row.port + 1} · ${row.label}`}</li>
+              ))}
+            </ul>
+            {role === "host" && seats.length > 0 ? (
+              <SkewButton
+                onClick={() => beginRoom()}
+                disabled={status !== "connected"}
+                aria-disabled={status !== "connected"}
+                className={cn(
+                  "mt-4 border-[4px] border-panel-ink px-8 py-3 shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform",
+                  status === "connected" ? "bg-smash-yellow text-panel-ink hover:-translate-y-1" : "bg-[#2a2d33] text-white/30",
+                )}
+                innerClassName="font-display text-xl tracking-[0.16em] uppercase"
+              >
+                {`Start (${seats.length + 1} players)`}
+              </SkewButton>
+            ) : null}
+          </SkewPanel>
+        ) : null}
+
         {!busy ? (
           <>
             <SkewButton
@@ -298,7 +341,7 @@ export function OnlineLobby({
 
         {/* Always mounted: a live region only announces what changes inside one that was already there. */}
         <p role="status" aria-live="polite" className="text-white/80">
-          {statusText(status, role, roomCode, route)}
+          {statusText(status, role, roomCode, route, seats, localPort)}
         </p>
 
         {notice ? (
@@ -317,25 +360,62 @@ export function OnlineLobby({
   );
 }
 
-/** What the status line says at each step of the handshake; nothing when there is nothing going on. */
-function statusText(status: OnlineStatus, role: Role | null, roomCode: string | null, route: Route | null): string {
+/**
+ * What the status line says at each step of the handshake; nothing when there
+ * is nothing going on. In the waiting room (Plan 7, Phase B) the host reads
+ * how far the room has got, and a guest its seat once its host's build is in.
+ */
+function statusText(
+  status: OnlineStatus,
+  role: Role | null,
+  roomCode: string | null,
+  route: Route | null,
+  seats: readonly SeatView[],
+  localPort: number | null,
+): string {
   switch (status) {
     case "waiting":
-      return role === "host" ? "Read it to the other player. Waiting for them to join…" : connecting(roomCode);
+      return role === "host" ? "Read the code to the other players. Waiting for them to join…" : connecting(roomCode);
     case "linking":
+      // A player through already shows the link works: the host waits on the rest.
+      if (role === "host" && seats.some((seat) => seat.build === "ok")) return "Waiting for every player to be ready…";
       // The route comes before the role: a relayed link needs the same words on either side.
       if (route === "relay") return RELAY_LINKING_STATUS;
       return role === "host" ? "They are in. Opening a direct connection…" : "Opening a direct connection…";
     case "loading":
       return "Loading game data…";
-    case "connecting":
     case "connected":
+      if (role === "host") return "Everyone is ready. Press Start when all your players are in.";
+      return localPort === null ? connecting(roomCode) : `You are P${localPort + 1}. Waiting for the host to start…`;
+    case "connecting":
       return connecting(roomCode);
     case "idle":
     case "error":
       return "";
   }
 }
+
+/** One line of the waiting room's list. */
+interface SeatRow {
+  readonly port: number;
+  readonly label: string;
+}
+
+/**
+ * Who is in the room, by port: this machine ("Host (you)" or "You"), the host
+ * on a guest's screen, and every other seat by where its build check stands.
+ */
+function seatRows(role: Role | null, seats: readonly SeatView[], localPort: number | null): SeatRow[] {
+  const rows: SeatRow[] = seats.map((seat) => ({ port: seat.port, label: role === "guest" && seat.port === 0 ? "Host" : BUILD_LABEL[seat.build] }));
+  if (localPort !== null) rows.push({ port: localPort, label: role === "host" ? "Host (you)" : "You" });
+  return rows.sort((a, b) => a.port - b.port);
+}
+
+const BUILD_LABEL: Record<SeatView["build"], string> = {
+  ok: "Ready",
+  pending: "Checking the version…",
+  mismatch: "Different version",
+};
 
 function connecting(roomCode: string | null): string {
   return `Connecting to room ${roomCode ?? ""}…`;

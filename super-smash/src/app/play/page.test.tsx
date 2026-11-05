@@ -177,7 +177,7 @@ function goOnline(role: Role): { fake: FakeSession; link: { status: DoSignalStat
   useMatchConfig.getState().configureOnline();
   useMatchConfig.getState().setFighter(0, "link");
   useMatchConfig.getState().setFighter(1, "samus");
-  useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD", config: CONFIG });
+  useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD", config: CONFIG, localPort: fake.session.seatPort, begun: true });
   return { fake, link };
 }
 
@@ -258,6 +258,15 @@ describe("the play page, online", () => {
     expect(options.net?.transport).toBe(fake.session.transport);
     expect(options.net?.localPorts).toEqual([port]);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  /** Plan 7, Phase B: the Start compacts the seats, so this machine plays its begin's port, which can differ from the room's. */
+  it("plays this machine's port from the begin, not its room seat", async () => {
+    const { fake } = goOnline("guest");
+    fake.seatPort = 2;
+    useOnlineStore.getState().patch({ localPort: 1 });
+    await renderPage();
+    expect(only(mocks.runners).options.net?.localPorts).toEqual([1]);
   });
 
   /** Plan 5, Task 21b: this machine's Tilt key, rebound on /controls, on its own port. */

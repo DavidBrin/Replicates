@@ -1478,6 +1478,46 @@ describe("rooms of three and four (Plan 7)", () => {
     expect(g.events.filter((e) => e.type === "lobby")).toEqual([{ type: "lobby", message: { kind: "start", config: CONFIG }, from: "h1" }]);
   });
 
+  /**
+   * Task 14 (from Task 12's review): a begun room of two counts its players,
+   * not its seats. With a stranger seated, a lost lobby channel is still
+   * offered again to the one player; once that player leaves, the stranger is
+   * never the one offered to; and a newcomer the begin seats on the vacated
+   * port gets a first link, which moves to the relay if it never opens.
+   */
+  it("counts a begun two-player lobby's players, not its seats, while a stranger sits in it", async () => {
+    const h = await hostMeetingGuest();
+    h.channels[0].open();
+    h.session.lockRoster(["g1"]);
+    h.signalling.deliver({ t: "peer-joined", peer: G2 });
+    h.channels[0].drop();
+    await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+    expect(h.offers()).toBe(2);
+    expect(h.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer").map((m) => m.t === "signal" && m.to)).toEqual([
+      "g1",
+      "g1",
+    ]);
+
+    // The player leaves; the stranger stays and is offered nothing, however long it sits.
+    h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.offers()).toBe(2);
+
+    // A newcomer the re-sent begin seats on the vacated port: offered as the lock lists it.
+    h.signalling.deliver({ t: "peer-joined", peer: G3 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.offers()).toBe(2);
+    h.session.lockRoster(["g3"]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.offers()).toBe(3);
+    expect(h.signalling.sent.at(-1)).toMatchObject({ t: "signal", to: "g3", payload: { kind: "offer" } });
+    // Its first link never opens: that is the relay, not a re-offer, and never the room lost.
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+    expect(h.session.route).toBe("relay");
+    expect(h.offers()).toBe(3);
+    expect(errors(h.events)).toEqual([]);
+  });
+
   it("counts only the roster's players toward a start once the roster is locked", async () => {
     const { session, signalling, events } = await open();
     signalling.deliver({ t: "welcome", self: HOST, peers: [G1] });

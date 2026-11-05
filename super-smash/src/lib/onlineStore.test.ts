@@ -25,6 +25,7 @@ import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { useMatchConfig } from "./matchConfig";
 import {
   HELLO_TIMEOUT_MS,
+  beginRoom,
   bindSession,
   leaveOnline,
   roomErrorMessage,
@@ -359,7 +360,7 @@ describe("binding a session to the stores", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
     emit({ type: "error", reason: "full" });
-    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "full", error: "Room ABCD already has two players." });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "full", error: "Room ABCD already has four players." });
   });
 
   it("says so when the opponent leaves the lobby, without calling it an error", () => {
@@ -509,6 +510,8 @@ describe("binding a session to the stores", () => {
   it("records the opponent switching tabs", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
+    emit({ type: "joined", role: "host" });
+    emit({ type: "peer", present: true, peer: GUEST_PEER });
     emit({ type: "lobby", message: { kind: "away", away: true }, from: GUEST_PEER.id });
     expect(useOnlineStore.getState().remoteAway).toBe(true);
   });
@@ -1422,6 +1425,325 @@ describe("every seat (Plan 7, Phase B)", () => {
   });
 });
 
+describe("the waiting room and the host's Start (Plan 7, Phase B)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A newcomer the room seats at port 1, which the Start had left behind. */
+  const NEWCOMER: PeerInfo = { id: "n1", role: "guest", port: 1 };
+
+  const begin = (...seats: readonly (readonly [string, number])[]): LobbyMessage => ({
+    kind: "begin",
+    seats: seats.map(([id, port]) => ({ id, port })),
+  });
+
+  /** The begins `fake` sent, each with its address (undefined: to everyone). */
+  const begins = (fake: ReturnType<typeof fakeSession>) =>
+    fake.session.sendLobby.mock.calls.filter(([message]) => message.kind === "begin").map(([message, to]) => [message, to]);
+
+  /** A host on the relay, its link open, as the room seats `peers`, each of whom has said this build. */
+  function readyHost(...peers: PeerInfo[]) {
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "host" });
+    fake.emit({ type: "route", route: "relay" });
+    fake.emit({ type: "link", status: "open" });
+    for (const peer of peers) fake.emit({ type: "peer", present: true, peer });
+    for (const peer of peers) fake.emit({ type: "lobby", message: HELLO, from: peer.id });
+    return fake;
+  }
+
+  /** Another machine, mid-test: its stores start as a fresh page's do. */
+  function anotherMachine() {
+    useOnlineStore.getState().reset();
+    useMatchConfig.getState().reset();
+  }
+
+  /** `self`, a guest welcomed into a room seating `peers`, relayed, and connected by its host's hello: on a machine of its own. */
+  function readyGuest(self: PeerInfo, ...peers: PeerInfo[]) {
+    anotherMachine();
+    const fake = fakeSession();
+    fake.seatPort = self.port;
+    fake.selfId = self.id;
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "guest" });
+    for (const peer of peers) fake.emit({ type: "peer", present: true, peer });
+    fake.emit({ type: "route", route: "relay" });
+    fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "lobby", message: HELLO, from: HOST_PEER.id });
+    return fake;
+  }
+
+  it("begins a room the host can start: compacts the seats to match ports and seats that many players", () => {
+    // Seated at room ports 0, 2 and 3: port 1's player left before the Start.
+    const fake = readyHost(SECOND_GUEST, THIRD_GUEST);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", begun: false, localPort: 0 });
+    expect(useMatchConfig.getState().players).toHaveLength(2);
+
+    expect(beginRoom()).toBe(true);
+    expect(begins(fake)).toEqual([[begin(["h1", 0], ["g2", 1], ["g3", 2]), undefined]]);
+    expect(useOnlineStore.getState()).toMatchObject({
+      begun: true,
+      localPort: 0,
+      status: "connected",
+      seats: [
+        { peerId: "g2", port: 1, build: "ok" },
+        { peerId: "g3", port: 2, build: "ok" },
+      ],
+    });
+    const { players, rules } = useMatchConfig.getState();
+    expect(players.map((p) => p.port)).toEqual([0, 1, 2]);
+    expect(rules.oneOnOne).toBe(false);
+    expect(fake.session.lockRoster).toHaveBeenCalledWith(["g2", "g3"]);
+  });
+
+  it("refuses to begin before everyone is connected, or with nobody in", () => {
+    // No room at all.
+    expect(beginRoom()).toBe(false);
+
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "host" });
+    expect(useOnlineStore.getState().status).toBe("waiting");
+    expect(beginRoom()).toBe(false);
+    // One seated, their build still to say.
+    fake.emit({ type: "route", route: "relay" });
+    fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "peer", present: true, peer: GUEST_PEER });
+    expect(useOnlineStore.getState().status).toBe("linking");
+    expect(beginRoom()).toBe(false);
+    // One ready and one refused, still seated.
+    fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
+    fake.emit({ type: "peer", present: true, peer: SECOND_GUEST });
+    fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" }, from: SECOND_GUEST.id });
+    expect(useOnlineStore.getState().status).toBe("linking");
+    expect(beginRoom()).toBe(false);
+    expect(begins(fake)).toEqual([]);
+    expect(fake.session.lockRoster).not.toHaveBeenCalled();
+    expect(useOnlineStore.getState()).toMatchObject({ begun: false, localPort: 0 });
+    expect(useMatchConfig.getState().players).toHaveLength(2);
+
+    // A room the begin cannot reach changes nothing either.
+    const lost = readyHost(GUEST_PEER);
+    lost.accepts = false;
+    expect(beginRoom()).toBe(false);
+    expect(useOnlineStore.getState().begun).toBe(false);
+    expect(lost.session.lockRoster).not.toHaveBeenCalled();
+
+    // A guest never begins, connected or not.
+    const guest = readyGuest(GUEST_PEER, HOST_PEER);
+    expect(useOnlineStore.getState().status).toBe("connected");
+    expect(beginRoom()).toBe(false);
+    expect(begins(guest)).toEqual([]);
+  });
+
+  it("follows the host's begin onto its own match port", () => {
+    // At room port 3, port 1's player having left: it plays at port 2.
+    const fake = readyGuest(THIRD_GUEST, HOST_PEER, SECOND_GUEST);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", localPort: 3, begun: false });
+    // Only the host begins a room.
+    fake.emit({ type: "lobby", message: begin(["g2", 0], ["h1", 1], ["g3", 2]), from: SECOND_GUEST.id });
+    expect(useOnlineStore.getState()).toMatchObject({ localPort: 3, begun: false });
+
+    fake.emit({ type: "lobby", message: begin(["h1", 0], ["g2", 1], ["g3", 2]), from: HOST_PEER.id });
+    expect(useOnlineStore.getState()).toMatchObject({
+      begun: true,
+      localPort: 2,
+      status: "connected",
+      seats: [
+        { peerId: "h1", port: 0, build: "ok" },
+        { peerId: "g2", port: 1, build: "pending" },
+      ],
+    });
+    expect(useMatchConfig.getState().players.map((p) => p.port)).toEqual([0, 1, 2]);
+    expect(fake.session.lockRoster).toHaveBeenCalledWith(["h1", "g2"]);
+    // Its picks go by match port from here.
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 4 }, from: SECOND_GUEST.id });
+    expect(useMatchConfig.getState().players[1]).toMatchObject({ fighterId: "fox", costume: 4 });
+
+    // A stranger the room seats after the begin is in nobody's list until a begin names them.
+    const stranger: PeerInfo = { id: "x1", role: "guest", port: 1 };
+    fake.emit({ type: "peer", present: true, peer: stranger });
+    fake.emit({ type: "lobby", message: HELLO, from: stranger.id });
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 7 }, from: stranger.id });
+    fake.emit({ type: "lobby", message: { kind: "away", away: true }, from: stranger.id });
+    expect(useOnlineStore.getState().seats.map((seat) => seat.peerId)).toEqual(["h1", "g2"]);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", remoteAway: false });
+    expect(useMatchConfig.getState().players.map((p) => p.fighterId)).toEqual([null, "fox", null]);
+
+    // g2 leaves: its match port waits for the next joiner, and this side for the host's word.
+    fake.emit({ type: "peer", present: false, peer: SECOND_GUEST });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: seatLeftNotice(1) });
+    expect(useMatchConfig.getState().players[1].fighterId).toBeNull();
+    // The host's re-sent begin seats the stranger there: the hello it said first counts now, and this side greets it.
+    fake.emit({ type: "lobby", message: begin(["h1", 0], ["x1", 1], ["g3", 2]), from: HOST_PEER.id });
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "connected",
+      localPort: 2,
+      seats: [
+        { peerId: "h1", port: 0, build: "ok" },
+        { peerId: "x1", port: 1, build: "ok" },
+      ],
+    });
+    expect(fake.session.sendLobby.mock.calls.at(-1)).toEqual([HELLO, stranger.id]);
+    expect(fake.session.lockRoster).toHaveBeenLastCalledWith(["h1", "x1"]);
+    expect(useMatchConfig.getState().players.map((p) => p.port)).toEqual([0, 1, 2]);
+  });
+
+  it("Review Focus: a joiner whose hello is pending holds the Start, and one seated after the begin with no seat free is told and leaves", async () => {
+    const fake = readyHost(GUEST_PEER);
+    fake.emit({ type: "peer", present: true, peer: SECOND_GUEST });
+    expect(beginRoom()).toBe(false);
+    fake.emit({ type: "lobby", message: HELLO, from: SECOND_GUEST.id });
+    expect(beginRoom()).toBe(true);
+    const begun = begin(["h1", 0], ["g1", 1], ["g2", 2]);
+    expect(begins(fake)).toEqual([[begun, undefined]]);
+
+    // A fourth arrives just after the Start: every match port is seated, so the begin goes to them unchanged.
+    fake.emit({ type: "peer", present: true, peer: THIRD_GUEST });
+    expect(begins(fake)).toEqual([
+      [begun, undefined],
+      [begun, THIRD_GUEST.id],
+    ]);
+    fake.emit({ type: "lobby", message: HELLO, from: THIRD_GUEST.id });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
+    expect(useOnlineStore.getState().seats.map((seat) => seat.peerId)).toEqual(["g1", "g2"]);
+
+    // On the newcomer's own screen, that begin, which does not list it, is the room gone.
+    const newcomer = readyGuest(THIRD_GUEST, HOST_PEER, GUEST_PEER, SECOND_GUEST);
+    newcomer.emit({ type: "lobby", message: overTheWire(begun), from: HOST_PEER.id });
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "room-begun",
+      error: "That room has already started its match. Ask the host for a new room.",
+      begun: false,
+    });
+    await Promise.resolve();
+    expect(newcomer.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("Review Focus: a seat emptied after the begin goes to the next joiner, on the same port, with an empty panel", async () => {
+    // Room ports 2 and 3 begin as match ports 1 and 2.
+    const fake = readyHost(SECOND_GUEST, THIRD_GUEST);
+    expect(beginRoom()).toBe(true);
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 6 }, from: THIRD_GUEST.id });
+    expect(useMatchConfig.getState().players[2].fighterId).toBe("fox");
+
+    fake.emit({ type: "peer", present: false, peer: THIRD_GUEST });
+    expect(useOnlineStore.getState()).toMatchObject({ notice: "P3 left the room.", status: "linking", errorReason: null });
+    expect(useMatchConfig.getState().players[2]).toMatchObject({ fighterId: null, costume: 2 });
+
+    // The next joiner, whom the room seats at port 1, takes match port 2.
+    fake.emit({ type: "peer", present: true, peer: NEWCOMER });
+    const refilled = begin(["h1", 0], ["g2", 1], ["n1", 2]);
+    expect(begins(fake).at(-1)).toEqual([refilled, undefined]);
+    expect(fake.session.sendLobby.mock.calls.at(-1)).toEqual([HELLO, NEWCOMER.id]);
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "linking",
+      notice: null,
+      seats: [
+        { peerId: "g2", port: 1, build: "ok" },
+        { peerId: "n1", port: 2, build: "pending" },
+      ],
+    });
+    expect(useMatchConfig.getState().players).toHaveLength(3);
+    expect(useMatchConfig.getState().players[2].fighterId).toBeNull();
+    fake.emit({ type: "lobby", message: HELLO, from: NEWCOMER.id });
+    expect(useOnlineStore.getState().status).toBe("connected");
+
+    // On the newcomer's own screen: the re-sent begin, then the host's hello addressed to it.
+    anotherMachine();
+    const own = fakeSession();
+    own.seatPort = NEWCOMER.port;
+    own.selfId = NEWCOMER.id;
+    bindSession(own.session);
+    own.emit({ type: "joined", role: "guest" });
+    own.emit({ type: "peer", present: true, peer: HOST_PEER });
+    own.emit({ type: "peer", present: true, peer: SECOND_GUEST });
+    own.emit({ type: "route", route: "relay" });
+    own.emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState()).toMatchObject({ localPort: 1, status: "linking", begun: false });
+    own.emit({ type: "lobby", message: overTheWire(refilled), from: HOST_PEER.id });
+    own.emit({ type: "lobby", message: HELLO, from: HOST_PEER.id });
+    expect(useOnlineStore.getState()).toMatchObject({ localPort: 2, status: "connected", begun: true });
+    expect(useMatchConfig.getState().players).toHaveLength(3);
+    expect(own.session.lockRoster).toHaveBeenCalledWith(["h1", "g2"]);
+    expect(fake.session.lockRoster).toHaveBeenLastCalledWith(["g2", "n1"]);
+  });
+
+  /** Carried from Task 13: a channel that goes with a start out takes every seat with it, and says so. */
+  it("names every seat the channel took when it goes with a start out", () => {
+    const fake = readyHost(GUEST_PEER, SECOND_GUEST, THIRD_GUEST);
+    expect(beginRoom()).toBe(true);
+    useOnlineStore.getState().patch({ config: { ...CONFIG, fighters: ["mario", "fox", "mario", "fox"], costumes: [0, 1, 2, 3], controls: [0, 0, 0, 0] } });
+    fake.emit({ type: "link", status: "waiting" });
+    expect(seatLeftNotice(1, 2, 3)).toBe("P2, P3 and P4 left the room.");
+    expect(seatLeftNotice(1, 3)).toBe("P2 and P4 left the room.");
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", config: null, notice: "P2, P3 and P4 left the room." });
+  });
+
+  /** Carried from Task 13: mid-match the seats are the match's; a newcomer at a departed player's room port takes nothing. */
+  it("never seats a newcomer over a seat mid-match", () => {
+    const fake = readyHost(GUEST_PEER, SECOND_GUEST);
+    expect(beginRoom()).toBe(true);
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 }, from: SECOND_GUEST.id });
+    useOnlineStore.getState().patch({ config: { ...CONFIG, fighters: ["mario", "fox", "fox"], costumes: [0, 1, 2], controls: [0, 0, 0] } });
+    fake.emit({ type: "peer", present: false, peer: SECOND_GUEST });
+    const stranger: PeerInfo = { id: "x1", role: "guest", port: 2 };
+    fake.emit({ type: "peer", present: true, peer: stranger });
+    expect(useOnlineStore.getState().seats).toEqual([
+      { peerId: "g1", port: 1, build: "ok" },
+      { peerId: "g2", port: 2, build: "ok" },
+    ]);
+    expect(begins(fake).at(-1)).toEqual([begin(["h1", 0], ["g1", 1], ["g2", 2]), stranger.id]);
+    expect(useMatchConfig.getState().players[2].fighterId).toBe("fox");
+  });
+
+  /** Carried from Task 13: each player's away is their own, and only a seated player's counts. */
+  it("keeps each seat's away apart, hears it only from a seat, and clears only the seat that empties", () => {
+    const fake = readyHost(GUEST_PEER, SECOND_GUEST);
+    const away = (from: string, isAway: boolean) => fake.emit({ type: "lobby", message: { kind: "away", away: isAway }, from });
+    away("x9", true);
+    expect(useOnlineStore.getState().remoteAway).toBe(false);
+    away(GUEST_PEER.id, true);
+    away(SECOND_GUEST.id, true);
+    away(GUEST_PEER.id, false);
+    expect(useOnlineStore.getState().remoteAway).toBe(true);
+    away(GUEST_PEER.id, true);
+    fake.emit({ type: "peer", present: false, peer: SECOND_GUEST });
+    expect(useOnlineStore.getState().remoteAway).toBe(true);
+    away(GUEST_PEER.id, false);
+    expect(useOnlineStore.getState().remoteAway).toBe(false);
+  });
+
+  /** Carried from Task 13: a refused player's pick is not the room's to show. */
+  it("fills no panel from the pick of a seat it refused", () => {
+    const fake = readyHost(GUEST_PEER);
+    fake.emit({ type: "peer", present: true, peer: SECOND_GUEST });
+    fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" }, from: SECOND_GUEST.id });
+    useMatchConfig.getState().configureOnline(3);
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 5 }, from: SECOND_GUEST.id });
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 4 }, from: GUEST_PEER.id });
+    expect(useMatchConfig.getState().players.map((p) => p.fighterId)).toEqual([null, "mario", null]);
+  });
+
+  /**
+   * Carried from Task 12 (its review's Minor 4): a relayed guest is never left
+   * seated in the lobby without a host. Its host leaving the lobby, before the
+   * Start or after it, closes its room (`host-left`).
+   */
+  it("closes a begun relayed guest's room when its host leaves the lobby", async () => {
+    const fake = readyGuest(GUEST_PEER, HOST_PEER, SECOND_GUEST);
+    fake.emit({ type: "lobby", message: begin(["h1", 0], ["g1", 1], ["g2", 2]), from: HOST_PEER.id });
+    expect(useOnlineStore.getState()).toMatchObject({ begun: true, status: "connected" });
+    fake.emit({ type: "peer", present: false, peer: HOST_PEER });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "host-left" });
+    await Promise.resolve();
+    expect(fake.session.close).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("an error, once recorded", () => {
   function connectedHost() {
     const fake = fakeSession();
@@ -1581,6 +1903,7 @@ describe("sending and leaving", () => {
       "engine-mismatch",
       "unreadable-start",
       "host-left",
+      "room-begun",
     ] as const;
     // The list is hand-written; tsc fails here when a reason is added without it.
     expectTypeOf<Exclude<OnlineErrorReason, (typeof reasons)[number]>>().toBeNever();
@@ -1592,6 +1915,8 @@ describe("sending and leaving", () => {
     // Plan 7 (D60): a direct link that cannot open moves to the room relay, so TURN advice no longer helps.
     expect(roomErrorMessage("link-failed", "QRST")).toBe("The connection to the other player failed. Leave the room and try again.");
     expect(roomErrorMessage("host-left", "QRST")).toBe("The host left, so the room has closed. Create or join another.");
+    expect(roomErrorMessage("room-begun", "QRST")).toBe("That room has already started its match. Ask the host for a new room.");
+    expect(roomErrorMessage("full", "QRST")).toBe("Room QRST already has four players.");
   });
 
   it("gives developers the wrangler hint on localhost only", () => {
