@@ -30,6 +30,7 @@ import {
   roomErrorMessage,
   seatLeftNotice,
   seatMismatchNotice,
+  seatNoAnswerNotice,
   sendLobby,
   sendOwnPick,
   setOwnPad,
@@ -58,6 +59,9 @@ const THIRD_GUEST: PeerInfo = { id: "g3", role: "guest", port: 3 };
 
 /** The refusal a host sends the one guest whose build it will not play. */
 const REFUSE: LobbyMessage = { kind: "refuse", reason: "engine-mismatch" };
+
+/** The refusal a host sends the one guest that never answered through the room (Plan 7, Phase B). */
+const REFUSE_SILENT: LobbyMessage = { kind: "refuse", reason: "link-failed" };
 
 /** What both players read when a start from this very build cannot be read: no "different version", the stamps agree. */
 const UNREADABLE_START_SENTENCE = "The match settings could not be read, so leave the room and start again.";
@@ -898,6 +902,12 @@ describe("the build handshake", () => {
     expect(fake.session.close).not.toHaveBeenCalled();
   });
 
+  /**
+   * The newcomer's silence is its own: what the last seat said is forgotten, so
+   * it is not taken for a talker on another build. The last seat's word did
+   * show the relay works (fix round 1, M3), so the newcomer is refused alone,
+   * as not answering.
+   */
   it("forgets what the last seat said when somebody new takes it on the relay", () => {
     vi.useFakeTimers();
     const fake = relayedOpenThenSeated();
@@ -905,7 +915,8 @@ describe("the build handshake", () => {
     fake.emit({ type: "peer", present: false, peer: GUEST_PEER });
     fake.emit({ type: "peer", present: true, peer: GUEST_PEER });
     vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
-    expect(useOnlineStore.getState().errorReason).toBe("link-failed");
+    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, notice: seatNoAnswerNotice(1) });
+    expect(fake.session.sendLobby.mock.calls.at(-1)).toEqual([REFUSE_SILENT, GUEST_PEER.id]);
   });
 
   it("stops waiting for a relayed peer's hello once its matching one is in", () => {
@@ -1218,6 +1229,11 @@ describe("every seat (Plan 7, Phase B)", () => {
     expect(useOnlineStore.getState().status).toBe("connected");
   });
 
+  /**
+   * Fix round 1 (I-2): relayed, a seat that has said nothing at all is not
+   * another build; with another seat heard the relay works, so it is that
+   * player's tab that does not answer. Refused alone, in those words.
+   */
   it("refuses only the seat whose hello never comes, after HELLO_TIMEOUT_MS", async () => {
     vi.useFakeTimers();
     const fake = relayedHost(GUEST_PEER, SECOND_GUEST);
@@ -1225,19 +1241,155 @@ describe("every seat (Plan 7, Phase B)", () => {
     vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
     expect(useOnlineStore.getState().seats[1]).toMatchObject({ peerId: "g2", build: "pending" });
     vi.advanceTimersByTime(1);
+    expect(seatNoAnswerNotice(2)).toBe("P3 didn't answer, so they can't play in this room.");
     expect(useOnlineStore.getState()).toMatchObject({
       status: "linking",
       errorReason: null,
-      notice: seatMismatchNotice(2),
+      notice: seatNoAnswerNotice(2),
       seats: [
         { peerId: "g1", port: 1, build: "ok" },
         { peerId: "g2", port: 2, build: "mismatch" },
       ],
     });
-    expect(fake.session.sendLobby.mock.calls).toContainEqual([REFUSE, SECOND_GUEST.id]);
-    expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+    expect(fake.session.sendLobby.mock.calls).toContainEqual([REFUSE_SILENT, SECOND_GUEST.id]);
+    expect(warn).not.toHaveBeenCalled();
     await Promise.resolve();
     expect(fake.session.close).not.toHaveBeenCalled();
+    // The notice outlives the seat, as a build refusal's does.
+    fake.emit({ type: "peer", present: false, peer: SECOND_GUEST });
+    expect(useOnlineStore.getState().notice).toBe(seatNoAnswerNotice(2));
+  });
+
+  it("refuses alone, as another build, a relayed seat that talks in the lobby but never says hello", async () => {
+    vi.useFakeTimers();
+    const fake = relayedHost(GUEST_PEER, SECOND_GUEST);
+    fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 }, from: SECOND_GUEST.id });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, notice: seatMismatchNotice(2) });
+    expect(useOnlineStore.getState().seats[1]).toMatchObject({ peerId: "g2", build: "mismatch" });
+    expect(fake.session.sendLobby.mock.calls).toContainEqual([REFUSE, SECOND_GUEST.id]);
+    expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+  });
+
+  /**
+   * Fix round 1 (I-1): a third joiner moves an open direct room to the relay.
+   * The session reports the seat first and the move after it, and the relay's
+   * open brings no new `link: open`, so the move itself starts the waits.
+   */
+  it("times every waiting seat once an open room turns to the relay", () => {
+    vi.useFakeTimers();
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "host" });
+    useMatchConfig.getState().configureOnline(4);
+    fake.emit({ type: "peer", present: true, peer: GUEST_PEER });
+    fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
+    fake.emit({ type: "peer", present: true, peer: SECOND_GUEST });
+    fake.emit({ type: "route", route: "relay" });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, notice: seatNoAnswerNotice(2) });
+    expect(useOnlineStore.getState().seats[1]).toMatchObject({ peerId: "g2", build: "mismatch" });
+    expect(fake.session.sendLobby.mock.calls).toContainEqual([REFUSE_SILENT, SECOND_GUEST.id]);
+  });
+
+  it("calls the link failed when no relayed seat at all has answered", async () => {
+    vi.useFakeTimers();
+    const fake = relayedHost(GUEST_PEER, SECOND_GUEST);
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "link-failed" });
+    await Promise.resolve();
+    expect(fake.session.close).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  /** Fix round 1 (M3): a seat that answered and then left still shows the relay works. */
+  it("counts a seat that answered and left as the relay working: the silent one is refused alone", async () => {
+    vi.useFakeTimers();
+    const fake = relayedHost(GUEST_PEER, SECOND_GUEST);
+    fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
+    fake.emit({ type: "peer", present: false, peer: GUEST_PEER });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState()).toMatchObject({ errorReason: null, notice: seatNoAnswerNotice(2) });
+    expect(fake.session.sendLobby.mock.calls).toContainEqual([REFUSE_SILENT, SECOND_GUEST.id]);
+    await Promise.resolve();
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
+
+  it("calls a guest's relayed link failed when its host never answers", async () => {
+    vi.useFakeTimers();
+    const fake = relayedGuest(2, HOST_PEER, GUEST_PEER);
+    // Another guest's word says nothing about the host's tab.
+    fake.emit({ type: "lobby", message: HELLO, from: GUEST_PEER.id });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", errorReason: null });
+    vi.advanceTimersByTime(1);
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "link-failed",
+      error: "The connection to the other player failed. Leave the room and try again.",
+    });
+    await Promise.resolve();
+    expect(fake.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves with the link-failed sentence when the host says this guest never answered", async () => {
+    const fake = relayedGuest(1, HOST_PEER, SECOND_GUEST);
+    fake.emit({ type: "lobby", message: REFUSE_SILENT, from: HOST_PEER.id });
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "link-failed",
+      error: "The connection to the other player failed. Leave the room and try again.",
+    });
+    await Promise.resolve();
+    expect(fake.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a guest connected when another guest leaves: only that panel clears, and it names their port", async () => {
+    const fake = relayedGuest(1, HOST_PEER, SECOND_GUEST);
+    fake.emit({ type: "lobby", message: HELLO, from: HOST_PEER.id });
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 4 }, from: HOST_PEER.id });
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 5 }, from: SECOND_GUEST.id });
+    fake.emit({ type: "peer", present: false, peer: SECOND_GUEST });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", errorReason: null, notice: seatLeftNotice(2), seats: [{ peerId: "h1", port: 0, build: "ok" }] });
+    expect(useMatchConfig.getState().players.map((p) => [p.fighterId, p.costume])).toEqual([
+      ["mario", 4],
+      [null, 1],
+      [null, 2],
+      [null, 3],
+    ]);
+    await Promise.resolve();
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
+
+  /** Fix round 1 (M4): only the host refuses, so only the host's screen names a refused build. */
+  it("says on a guest only that another guest on another build left, not why", () => {
+    const fake = relayedGuest(1, HOST_PEER, SECOND_GUEST);
+    fake.emit({ type: "lobby", message: HELLO, from: HOST_PEER.id });
+    fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" }, from: SECOND_GUEST.id });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
+    fake.emit({ type: "peer", present: false, peer: SECOND_GUEST });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: seatLeftNotice(2) });
+  });
+
+  /** B-1 through a real session: the hello reaches the room addressed to the newcomer alone. */
+  it("greets a newcomer to an open relayed room through the room, addressed to them alone", async () => {
+    vi.useFakeTimers();
+    const signalling = new FakeSignalling();
+    const session = await OnlineSession.open("ABCD", "create", {
+      fetchIce: async () => STUN_ONLY,
+      openSignalling: () => signalling,
+      createPeerConnection: () => inertPeer(),
+    });
+    setActiveSession(session);
+    bindSession(session);
+    // Three seated: the room is relayed from the welcome, and its link opens there.
+    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host", port: 0 }, peers: [GUEST_PEER, SECOND_GUEST] });
+    expect(useOnlineStore.getState()).toMatchObject({ route: "relay", status: "linking" });
+    signalling.sent.length = 0;
+    signalling.deliver({ t: "peer-joined", peer: THIRD_GUEST });
+    expect(signalling.sent).toContainEqual({ t: "lobby", to: THIRD_GUEST.id, payload: HELLO });
   });
 
   it("keeps the mismatch notice when the refused seat leaves, and says why in the console", () => {

@@ -110,11 +110,14 @@ export type LobbyMessage =
    * The guest cannot play the host's start: the host runs another build
    * ("engine-mismatch"), or sent one this build cannot read though its stamp
    * is this build's ("unreadable-start"), which no build that checks what it
-   * sends does (`OnlineSession.sendLobby`).
+   * sends does (`OnlineSession.sendLobby`). From the host to one guest, in
+   * the lobby (Plan 7, Phase B): the host will not play that guest's build
+   * ("engine-mismatch"), or that guest never answered through the room
+   * ("link-failed": its tab most likely could not run), and the guest leaves.
    */
   | { readonly kind: "refuse"; readonly reason: RefuseReason };
 
-export type RefuseReason = "engine-mismatch" | "unreadable-start";
+export type RefuseReason = "engine-mismatch" | "unreadable-start" | "link-failed";
 
 /**
  * A start this build cannot play as sent. `build` is the stamp it carries,
@@ -193,7 +196,7 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
     }
     case "refuse": {
       const reason = payload.reason;
-      return reason === "engine-mismatch" || reason === "unreadable-start" ? { kind: "refuse", reason } : null;
+      return reason === "engine-mismatch" || reason === "unreadable-start" || reason === "link-failed" ? { kind: "refuse", reason } : null;
     }
     default:
       return null;
