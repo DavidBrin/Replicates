@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { routerMock } from "../../../vitest.setup";
 import { localBuild } from "@/game/onlineConfig";
 import { RANDOM_STAGE, resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
-import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
+import { bindSession, leaveOnline, roomErrorMessage, seatLeftNotice, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
 import { GUEST_PEER, fakeSession, type FakeSession } from "@/net/online/testing";
 import { StageSelect } from "./StageSelect";
@@ -138,8 +138,8 @@ describe("StageSelect, hosting online", () => {
   it("holds the way on to fighters while the seat is empty, and says why", async () => {
     const { sent } = host();
     await renderStages();
-    act(() => useOnlineStore.getState().patch({ status: "waiting", notice: PEER_LEFT_NOTICE }));
-    expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
+    act(() => useOnlineStore.getState().patch({ status: "waiting", notice: seatLeftNotice(1) }));
+    expect(screen.getByRole("alert")).toHaveTextContent(seatLeftNotice(1));
     expect(chooseFighters()).toBeDisabled();
     fireEvent.click(chooseFighters());
     expect(sent).toEqual([]);

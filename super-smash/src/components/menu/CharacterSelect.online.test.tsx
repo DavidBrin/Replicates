@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { routerMock } from "../../../vitest.setup";
 import { localBuild } from "@/game/onlineConfig";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
-import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
+import { bindSession, leaveOnline, roomErrorMessage, seatLeftNotice, seatMismatchNotice, useOnlineStore } from "@/lib/onlineStore";
 import { STUN_ONLY } from "@/net/iceConfig";
 import type { MatchRules } from "@/engine/types";
 import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
@@ -41,6 +41,7 @@ function goOnline(role: Role): FakeSession {
   const fake = fakeSession(role);
   setActiveSession(fake.session);
   bindSession(fake.session);
+  fake.emit({ type: "peer", present: true, peer: otherPeer(role) });
   useMatchConfig.getState().configureOnline();
   useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD" });
   return fake;
@@ -258,7 +259,8 @@ describe("CharacterSelect, online", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
-  it("says the two versions differ, holds Ready shut and leaves, when the guest runs another build", async () => {
+  /** Plan 7, Phase B: the host turns that guest away alone and keeps its room; the notice says who. */
+  it("says the guest runs another version and holds Ready shut, keeping the room, when the guest runs another build", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fake = fakeSession();
     setActiveSession(fake.session);
@@ -272,10 +274,11 @@ describe("CharacterSelect, online", () => {
     useMatchConfig.getState().setFighter(1, "fox");
     await renderSelect();
     await act(async () => fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" }, from: GUEST_PEER.id }));
-    expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
+    expect(screen.getByRole("alert")).toHaveTextContent(seatMismatchNotice(1));
     expect(readyButton()).toBeDisabled();
-    expect(fake.session.close).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Leave the room" })).toBeInTheDocument();
+    expect(fake.session.close).not.toHaveBeenCalled();
+    // Still the host of its room, on its way through the lobby.
+    expect(screen.getByRole("button", { name: "Back to stage select" })).toBeInTheDocument();
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
@@ -318,7 +321,7 @@ describe("CharacterSelect, online", () => {
     await renderSelect();
 
     act(() => signalling.deliver({ t: "peer-left", peerId: "g1" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
+    expect(screen.getByRole("alert")).toHaveTextContent(seatLeftNotice(1));
     expect(readyButton()).toBeDisabled();
     fireEvent.click(readyButton());
 
@@ -333,8 +336,8 @@ describe("CharacterSelect, online", () => {
     useMatchConfig.getState().setFighter(1, "fox");
     await renderSelect();
     // The status alone: both panels stay filled.
-    act(() => useOnlineStore.getState().patch({ status: "waiting", notice: PEER_LEFT_NOTICE }));
-    expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
+    act(() => useOnlineStore.getState().patch({ status: "waiting", notice: seatLeftNotice(1) }));
+    expect(screen.getByRole("alert")).toHaveTextContent(seatLeftNotice(1));
     expect(readyButton()).toBeDisabled();
     fireEvent.click(readyButton());
     expect(sent.some((m) => m.kind === "start")).toBe(false);
@@ -376,13 +379,15 @@ describe("CharacterSelect, online", () => {
     expect(screen.getByText("Stage: Smashville · 2-stock match · 1v1 damage 1.2× · Smash Ball off")).toBeInTheDocument();
   });
 
-  it("tells the guest the host left, and forgets the host's stage", async () => {
+  /** Plan 7, Phase B: a guest's room is its host's, so the host leaving the lobby closes it. */
+  it("tells the guest the host left, in its own sentence, and closes the room", async () => {
     const fake = goOnline("guest");
     await renderSelect();
     act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal" }, from: HOST_PEER.id }));
-    act(() => fake.emit({ type: "link", status: "waiting" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
-    expect(screen.getByText("The host is picking the stage")).toBeInTheDocument();
+    await act(async () => fake.emit({ type: "peer", present: false, peer: HOST_PEER }));
+    expect(screen.getByRole("alert")).toHaveTextContent(roomErrorMessage("host-left", "ABCD"));
+    expect(fake.session.close).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Leave the room" })).toBeInTheDocument();
   });
 
   it("makes the guest's back button leave the room", async () => {

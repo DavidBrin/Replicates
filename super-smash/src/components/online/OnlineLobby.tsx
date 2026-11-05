@@ -45,6 +45,7 @@ export function OnlineLobby({
   const route = useOnlineStore((s) => s.route);
   const storeError = useOnlineStore((s) => s.error);
   const errorReason = useOnlineStore((s) => s.errorReason);
+  const storeNotice = useOnlineStore((s) => s.notice);
 
   const [typed, setTyped] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -102,6 +103,8 @@ export function OnlineLobby({
       error: null,
       errorReason: null,
       notice: null,
+      seats: [],
+      localPort: null,
       remoteAway: false,
       config: null,
       hostStage: null,
@@ -176,6 +179,8 @@ export function OnlineLobby({
   // A taken code is only ever shown once the quiet retries have run out.
   const storeMessage = tried === null ? null : errorReason === "taken" ? NO_FREE_CODE : storeError;
   const message = formError ?? storeMessage;
+  /** What the room has to tell that does not end it: a player left, or the host turned one away (Plan 7, Phase B). */
+  const notice = tried === null ? null : storeNotice;
   /** The room turned the code itself away: full, or no such room. Any other failure is not the code's fault. */
   const codeRefused = tried === "join" && (errorReason === "full" || errorReason === "not-found");
   /** The code the player typed is what is wrong, as opposed to a room that would not open. */
@@ -295,6 +300,12 @@ export function OnlineLobby({
         <p role="status" aria-live="polite" className="text-white/80">
           {statusText(status, role, roomCode, route)}
         </p>
+
+        {notice ? (
+          <p role="alert" className="text-sm font-bold text-white/80">
+            {notice}
+          </p>
+        ) : null}
 
         {message ? (
           <p id={errorId} role="alert" className="text-sm font-bold text-smash-yellow">

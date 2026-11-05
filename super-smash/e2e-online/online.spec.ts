@@ -215,7 +215,15 @@ function withOtherRules(message: string | Buffer): string | Buffer {
   return JSON.stringify({ ...frame, payload: { ...frame.payload, bones: OTHER_RULES, engineRules: OTHER_RULES } });
 }
 
-test("a peer on the same build with other combat rules is refused at the hello, with the one sentence", async ({ browser }) => {
+/**
+ * Plan 7, Phase B: the host refuses that one guest and keeps its room (a room
+ * of four must not close for one guest on another build). The guest is told
+ * the one sentence and leaves; the host says which seat it was, and that
+ * notice outlives the guest's leaving.
+ */
+test("a peer on the same build with other combat rules is refused at the hello: the guest is told the one sentence, the host keeps its room", async ({
+  browser,
+}) => {
   const host = await player(browser);
   const guest = await player(browser);
   const consoleLines: string[] = [];
@@ -229,11 +237,18 @@ test("a peer on the same build with other combat rules is refused at the hello, 
   const code = await createRoom(host);
   await joinRoom(guest, code);
 
-  // The host stays in the lobby: it goes on to the stage screen only once the guest's hello matches.
-  await expect(host.getByRole("alert").filter({ hasText: "running a different version" })).toHaveText(
+  // The guest is refused by the host, and leaves with the one sentence.
+  await expect(guest.getByRole("alert").filter({ hasText: "running a different version" })).toHaveText(
     "The other player is running a different version. Both reload the page.",
     { timeout: 30_000 },
   );
+  // The host stays in the lobby, which names the refused seat even once that guest has gone
+  // (`seatMismatchNotice(1)`): it goes on to the stage screen only once every guest's hello matches.
+  const refused = host.getByText("P2 is running a different version, so they can't play in this room.");
+  await expect(refused).toBeVisible({ timeout: 30_000 });
+  // The guest's leave empties the seat (the host waits for somebody again), and the notice stays.
+  await expect(host.getByRole("status")).toHaveText("Read it to the other player. Waiting for them to join…", { timeout: 10_000 });
+  await expect(refused).toBeVisible();
   // For a developer, the console says which part differs; the player is told only the sentence.
   await expect
     .poll(() => consoleLines.some((line) => line.includes(`its engine rules are ${OTHER_RULES}`)), { timeout: 10_000 })

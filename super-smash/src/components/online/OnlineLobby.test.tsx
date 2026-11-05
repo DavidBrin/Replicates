@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { routerMock } from "../../../vitest.setup";
 import { localBuild } from "@/game/onlineConfig";
 import { useMatchConfig } from "@/lib/matchConfig";
-import { PEER_LEFT_NOTICE, RELAY_LINKING_STATUS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { RELAY_LINKING_STATUS, leaveOnline, seatLeftNotice, seatMismatchNotice, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession } from "@/net/online/session";
 import { NO_WEBGL, webglCheck } from "@/render3d/webgl";
 import { GUEST_PEER, HOST_PEER, fakeSession, otherPeer, type FakeSession } from "@/net/online/testing";
@@ -311,6 +311,7 @@ describe("OnlineLobby", () => {
     await join("ABCD");
     act(() => {
       opened[0].emit({ type: "joined", role: "guest" });
+      opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
       opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: HOST_PEER.id });
       opened[0].emit({ type: "link", status: "open" });
     });
@@ -323,6 +324,7 @@ describe("OnlineLobby", () => {
     await join("ABCD");
     await act(async () => {
       opened[0].emit({ type: "joined", role: "guest" });
+      opened[0].emit({ type: "peer", present: true, peer: HOST_PEER });
       opened[0].emit({ type: "link", status: "open" });
       opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" }, from: HOST_PEER.id });
     });
@@ -330,6 +332,25 @@ describe("OnlineLobby", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
     expect(opened[0].session.close).toHaveBeenCalled();
     expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  /** Plan 7, Phase B: a host refuses one guest's build and stays; the lobby says so, under the status line. */
+  it("shows the room's notice under the status line", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { opened } = harness();
+    await create();
+    act(() => {
+      opened[0].emit({ type: "joined", role: "host" });
+      opened[0].emit({ type: "peer", present: true, peer: GUEST_PEER });
+      opened[0].emit({ type: "link", status: "open" });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" }, from: GUEST_PEER.id });
+    });
+    const notice = screen.getByText(seatMismatchNotice(1));
+    const status = screen.getByRole("status");
+    expect(status.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(opened[0].session.close).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 
@@ -381,9 +402,15 @@ describe("OnlineLobby", () => {
   ])("starts a new room clean when it is a %s: no notice, nobody away, no route left from the last room", async (_intent, start) => {
     harness();
     // A relayed room that ended in an error leaves its route behind; the next room opens on the same screen.
-    useOnlineStore.getState().patch({ notice: PEER_LEFT_NOTICE, remoteAway: true, route: "relay" });
+    useOnlineStore.getState().patch({
+      notice: seatLeftNotice(1),
+      remoteAway: true,
+      route: "relay",
+      seats: [{ peerId: "g1", port: 1, build: "ok" }],
+      localPort: 0,
+    });
     await start();
-    expect(useOnlineStore.getState()).toMatchObject({ status: "connecting", notice: null, remoteAway: false, route: null });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connecting", notice: null, remoteAway: false, route: null, seats: [], localPort: null });
   });
 
   it.each([
@@ -498,6 +525,7 @@ describe("OnlineLobby", () => {
       await start();
       act(() => {
         opened[0].emit({ type: "joined", role });
+        opened[0].emit({ type: "peer", present: true, peer: otherPeer(role) });
         opened[0].emit({ type: "link", status: "open" });
         opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() }, from: otherPeer(role).id });
       });

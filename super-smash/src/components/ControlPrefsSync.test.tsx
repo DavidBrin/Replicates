@@ -119,7 +119,10 @@ describe("only /controls saves (P5-R26)", () => {
     const fake = fakeSession();
     setActiveSession(fake.session);
     bindSession(fake.session);
-    act(() => fake.emit({ type: "joined", role }));
+    act(() => {
+      fake.emit({ type: "joined", role });
+      fake.emit({ type: "peer", present: true, peer: otherPeer(role) });
+    });
     return fake;
   }
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 import { useMatchConfig } from "@/lib/matchConfig";
-import { PEER_LEFT_NOTICE, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { leaveOnline, seatLeftNotice, useOnlineStore } from "@/lib/onlineStore";
 import { setActiveSession } from "@/net/online/session";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
 import type { Role } from "@/net/signalProtocol";
@@ -25,7 +25,7 @@ function seat(role: Role): FakeSession {
 
 /** The opponent leaves and somebody takes the seat: the store's status path back to `connected`. */
 function rejoin() {
-  act(() => useOnlineStore.getState().patch({ status: "waiting", notice: PEER_LEFT_NOTICE }));
+  act(() => useOnlineStore.getState().patch({ status: "waiting", notice: seatLeftNotice(1) }));
   act(() => useOnlineStore.getState().patch({ status: "linking", notice: null }));
   act(() => useOnlineStore.getState().patch({ status: "connected" }));
 }
