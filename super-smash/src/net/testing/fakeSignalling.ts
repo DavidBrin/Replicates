@@ -15,11 +15,16 @@ import { createEmitter, type Unsubscribe } from "../transport";
 export class FakeSignalling implements SignallingClient {
   readonly url = "ws://test/ws/room/ABCD?intent=create";
   readonly sent: ClientMessage[] = [];
+  /** Every batch handed to `sendGame`, in order. */
+  readonly sentGame: Uint8Array[] = [];
   closed = false;
   private readonly events = createEmitter<[SignallingEvent]>();
 
   send(message: ClientMessage): void {
     this.sent.push(message);
+  }
+  sendGame(batch: Uint8Array): void {
+    this.sentGame.push(batch);
   }
   on(cb: (event: SignallingEvent) => void): Unsubscribe {
     return this.events.add(cb);

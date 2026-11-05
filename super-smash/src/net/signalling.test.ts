@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { RELAY_MAX_BUFFERED_BYTES } from "./relayFrame";
 import { createSignallingClient, roomSocketUrl, type SignallingEvent, type WebSocketLike } from "./signalling";
 
 class FakeSocket implements WebSocketLike {
   readyState = 0;
+  bufferedAmount = 0;
+  binaryType = "blob";
   readonly sent: string[] = [];
+  readonly sentBinary: Uint8Array[] = [];
   closedWith: [number | undefined, string | undefined] | null = null;
   onopen: WebSocketLike["onopen"] = null;
   onmessage: WebSocketLike["onmessage"] = null;
@@ -13,8 +17,9 @@ class FakeSocket implements WebSocketLike {
 
   constructor(readonly url: string) {}
 
-  send(data: string): void {
-    this.sent.push(data);
+  send(data: string | Uint8Array<ArrayBuffer>): void {
+    if (typeof data === "string") this.sent.push(data);
+    else this.sentBinary.push(data);
   }
   close(code?: number, reason?: string): void {
     this.closedWith = [code, reason];
@@ -26,6 +31,9 @@ class FakeSocket implements WebSocketLike {
   }
   receive(value: unknown): void {
     this.onmessage?.({ data: typeof value === "string" ? value : JSON.stringify(value) });
+  }
+  receiveBinary(bytes: Uint8Array): void {
+    this.onmessage?.({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });
   }
   drop(code: number, reason = ""): void {
     this.readyState = 3;
@@ -74,6 +82,35 @@ describe("the signalling client", () => {
     socket.receive("{not json");
     socket.receive({ t: "mystery" });
     expect(events).toEqual([{ t: "welcome", self: { id: "h1", role: "host" }, peer: null }]);
+  });
+
+  it("emits a binary frame from the room as game data from its stamped sender", () => {
+    const { socket, events } = client();
+    socket.open();
+    socket.receiveBinary(new Uint8Array([...new TextEncoder().encode("a1b2c3d4"), 9, 8, 7]));
+    expect(events).toEqual([{ t: "game", from: "a1b2c3d4", bytes: new Uint8Array([9, 8, 7]) }]);
+    socket.receiveBinary(new TextEncoder().encode("a1b2c3d4"));
+    expect(events).toHaveLength(1);
+  });
+
+  it("sends game data only on an open socket with room in its buffer, and never queues it", () => {
+    const { signalling, socket } = client();
+    const batch = new Uint8Array([1, 2, 3]);
+    signalling.sendGame(batch);
+    expect(socket.sentBinary).toEqual([]);
+    socket.open();
+    expect(socket.sentBinary).toEqual([]);
+    socket.bufferedAmount = RELAY_MAX_BUFFERED_BYTES + 1;
+    signalling.sendGame(batch);
+    expect(socket.sentBinary).toEqual([]);
+    socket.bufferedAmount = 0;
+    signalling.sendGame(batch);
+    expect(socket.sentBinary).toEqual([batch]);
+  });
+
+  it("asks for binary frames as ArrayBuffers", () => {
+    const { socket } = client();
+    expect(socket.binaryType).toBe("arraybuffer");
   });
 
   it("reports how the room closed, so a full room can be told apart from a dead Worker", () => {
