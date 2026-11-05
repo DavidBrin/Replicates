@@ -741,10 +741,12 @@ export default function PlayPage() {
           // A link lost while the models loaded (the room gone, a player left)
           // told nobody: the monitor was not listening yet, and a started
           // match never reconnects. Lost now, not after the silence timeout.
-          // In a relayed room of three or four the link stays open while the
-          // others are there, so a player the room no longer seats is gone too;
-          // and a match with nobody to watch could never be called lost at all.
-          if (session.transport.status !== "open" || peers.length === 0 || peers.some((id) => !session.peers.has(id))) {
+          // Relayed, the room is the link and it stays open while the others are
+          // there, so a player the room no longer seats is gone too. On a direct
+          // link the channel decides, not the room socket, which can drop alone
+          // (D54). A match with nobody to watch could never be called lost at all.
+          const seatGone = session.route === "relay" && peers.some((id) => !session.peers.has(id));
+          if (session.transport.status !== "open" || peers.length === 0 || seatGone) {
             abandon("connectionLost");
             return;
           }

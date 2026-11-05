@@ -323,7 +323,9 @@ describe("the play page, online", () => {
    * silence timeout: the room no longer seats them, and that is lost now.
    */
   it("ends a match of three as Connection Lost at once when a player left the room while it loaded", async () => {
-    goOnline("host");
+    const { fake } = goOnline("host");
+    // A room of three is relayed from the start (Plan 7, Phase B): the room is the link.
+    fake.route = "relay";
     useOnlineStore.getState().patch({
       config: { ...CONFIG, fighters: ["mario", "fox", "link"], costumes: [3, 1, 0], controls: [0, 0, 0] },
       seats: [
@@ -338,6 +340,24 @@ describe("the play page, online", () => {
     expect(useMatchConfig.getState().result).toMatchObject({ kind: "connectionLost", fighters: { 0: "mario", 1: "fox", 2: "link" } });
     act(() => vi.advanceTimersByTime(0));
     expect(routerMock.push).toHaveBeenCalledWith("/results");
+  });
+
+  /**
+   * D54: on a direct link the data channel decides whether the other player is
+   * there, not the room socket. A room socket that dropped alone while the
+   * fighters loaded (an idle proxy or NAT timeout) leaves the room without
+   * that player, but the channel is open, so the match starts and is watched.
+   */
+  it("a direct match whose other player's room socket dropped while it loaded still starts and is watched, not lost (D54)", async () => {
+    const { fake } = goOnline("guest");
+    expect(fake.route).toBe("direct");
+    fake.peers.delete(HOST_PEER.id);
+    await renderPage();
+    expect(only(mocks.monitors).options.peers).toEqual([HOST_PEER.id]);
+    expect(only(mocks.runners).runner.stop).not.toHaveBeenCalled();
+    expect(useMatchConfig.getState().result).toBeNull();
+    flushTimers();
+    expect(routerMock.push).not.toHaveBeenCalledWith("/results");
   });
 
   /** With nobody listed, no silence and no leave could ever end it: a match with nobody to watch never starts. */
