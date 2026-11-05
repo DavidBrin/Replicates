@@ -47,8 +47,8 @@ Plans 2 and 3 do not deploy. Their changes go live with the next deploy David ap
 - Commit the research folder, the generated rubendal `game_` scripts (about 284 KB), the 8 derived skeleton JSONs and the bone bake (1.58 MB gzipped). No Nintendo-ripped file (`.blend`, `.glb`, textures) is ever committed; a git guard enforces this.
 - Interim online without a card: STUN-only if Cloudflare TURN asks for billing. Permanent since Plan 7 (D60): the room relays when no direct link opens.
 - Do not ship another session's uncommitted David-Internet edits along with the relink.
-- `Btn.Soft` (soft-stick button) lands in Plan 1. Online v1 has no rematch: both players return to the lobby.
-- On an engine-fingerprint mismatch, the guest tells the host and both see the error.
+- `Btn.Soft` (soft-stick button) lands in Plan 1. Online v1 has no rematch: both players return to the lobby (Plan 7: every player does, D60).
+- On an engine-fingerprint mismatch, the guest tells the host and both see the error (Plan 7: a bad-build guest is refused alone, and the host keeps its room with a notice, D60).
 - Fighters use SSBU model sizes; the legacy invented sizes are only the no-model fallback. Hurtboxes, ECB and reach change (DK grows from 15.0 to 26.3 units tall).
 - Blender is portable, inside `.model-cache/tools/`. Skeletons are read without Blender, so only the glb export needs it.
 - No bloom and no facial-expression swaps. Fighter `scale` scales limbs and hurtboxes, not ATTACK sizes.

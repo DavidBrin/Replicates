@@ -41,7 +41,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/render3d`](src/render3d) | The 3D world (three.js): the side camera, the stage, the models posed by the clips, sparks and shields, and the bone bake |
 | [`scripts/models`](scripts/models) | `pnpm models`: fetch, export and check the fighter models; only their hashes and bone numbers are committed |
 | [`docs/character-art.md`](docs/character-art.md) | How a fighter is drawn — the model pipeline, the retarget rule, the bake — and the gotchas |
-| [`src/net`](src/net) | Rollback session (for up to four peers), wire format, four transports, and the online lobby: a waiting room for up to four players, and the room relay's client |
+| [`src/net`](src/net) | Rollback session (for up to four players), wire format, four transports, and the online lobby: a waiting room for up to four players, and the room relay's client |
 | [`worker`](worker) | The Cloudflare Worker: static assets, a Durable Object per room (it seats up to four players by port, relays signalling, and relays the match itself for rooms of three or four and for a pair with no direct link), and TURN credentials if a key is ever set |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
 | [`src/input`](src/input) | Three control schemes and the latched keyboard reader |
@@ -385,7 +385,7 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 | `wrangler.jsonc` | Worker `david-smash`: serves `out/`, runs first only for `/api/*` and `/ws/*` |
 | `GET /api/ice` | Mints 1-hour Cloudflare TURN credentials for pages on this site; STUN-only without the two secrets |
 | `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets; fails open |
-| `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, up to 4 peers, no timers |
+| `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, up to 4 players, no timers |
 
 **Before a deploy**, in this order:
 
@@ -426,21 +426,23 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 (D60: the room relays when no direct link opens); if a key is ever set, it goes in with
 `wrangler secret put` (see `.env.example`). A deploy restarts every room, which drops lobby
 sockets and relayed matches (every match of three or four, and a pair that fell back), but not
-matches in progress over a direct link — those are peer to peer. Each build is stamped with an id that online players compare, so two different
-deploys refuse each other in the lobby: the commit, plus a hash of any uncommitted changes in
-`super-smash/`. Set `BUILD_ID` to name a build yourself; a build with no git checkout must set
-it (`BUILD_ID=dev` only on purpose, since every such build would pair with every other). The id
-fails closed: if git cannot say what the uncommitted changes are, a production build refuses
-(`next dev` marks the id `-dirty-unknown`), and it never calls such a tree clean.
+matches in progress over a direct link — those are peer to peer. Each build is stamped with an id
+that online players compare, so two different deploys refuse each other in the lobby: the
+commit, plus a hash of any uncommitted changes in `super-smash/`. Set `BUILD_ID` to name a build
+yourself; a build with no git checkout must set it (`BUILD_ID=dev` only on purpose, since every
+such build would pair with every other). The id fails closed: if git cannot say what the
+uncommitted changes are, a production build refuses (`next dev` marks the id `-dirty-unknown`),
+and it never calls such a tree clean.
 
 ---
 
 ## Known gaps
 
-1. **Online is up to four players, one match at a time.** A room holds up to four peers;
+1. **Online is up to four players, one match at a time.** A room holds up to four players;
    spectating, CPU players in online rooms and an online rematch are not built — after a match,
-   Play online again takes every player back through the lobby to a new room. KO/fall/SD credit on an online results screen
-   can be off after a rollback that changed a hit; the placings are always right
+   Play online again takes every player back through the lobby to a new room. KO/fall/SD credit
+   on an online results screen can be off after a rollback that changed a hit; the placings are
+   always right
    ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 2. **Fighters have no walk initial velocity.** Ultimate gives each fighter a small starting
    speed (Mario's is about 0.5) so the first walk frame is a step rather than a ramp from
