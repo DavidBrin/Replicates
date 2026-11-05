@@ -72,7 +72,10 @@ export const RELAY_BURST = 80;
  * must come back through the upgrade limiter. An honest client sends 30 a
  * second against a refill of 40, so it refills to full well before this; it
  * would take a backlog of more than about 13 s, longer than the 10 s the other
- * side waits before calling the match lost.
+ * side waits before calling the match lost. Accepted: while the other tab is
+ * hidden it waits AWAY_LOST_MS (60 s) instead, so a visible player whose socket
+ * stalls for over 13 s and then flushes is kicked, in a match that could have
+ * recovered. Both at once are rare.
  */
 export const RELAY_KICK_DROPS = 4 * RELAY_BURST;
 

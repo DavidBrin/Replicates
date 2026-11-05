@@ -96,7 +96,7 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
     // full between them, so the drops are forgotten and nothing is kicked.
     const body = new Uint8Array([1, 2, 3, 4, 5, 6]);
     const batch = RELAY_BURST + RELAY_KICK_DROPS / 2;
-    const refillMs = (RELAY_BURST / RELAY_RATE_PER_SECOND) * 1000 + 1000;
+    const refillMs = (RELAY_BURST / RELAY_RATE_PER_SECOND) * 1000 + 2000;
     const startedAt = Date.now();
     let sent = 0;
     while (sent <= MAX_MESSAGES_PER_PEER) {
@@ -132,7 +132,7 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
 
     guest.close();
     host.close();
-  }, 45_000);
+  }, 60_000);
 
   it("closes a socket that floods the relay with too-many-messages, and tells the other peer it left", async () => {
     const code = makeRoomCode();

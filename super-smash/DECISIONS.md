@@ -5109,7 +5109,10 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
   `too-many-messages` (4008), and it must come back through the upgrade limiter (60 a minute per
   IP). The count is in memory with the bucket. An honest client refills to full long before
   that: only a backlog of more than about 13 s could reach it, and by then the other side has
-  called the match lost (10 s of silence). And a socket is cut after
+  called the match lost (10 s of silence). Accepted residual: while the other player's tab is
+  hidden, that side waits `AWAY_LOST_MS` (60 s) instead, so a visible player whose socket stalls
+  for more than about 13 s and then flushes is kicked, ending a match that could have recovered.
+  It takes both rare conditions at once. And a socket is cut after
   `RELAY_MAX_FRAMES_PER_SOCKET` (108,000, one hour at the client's 30 a second) game frames,
   dropped or not, with the same `too-many-messages`: within the rate it would otherwise never be
   stopped. The count is in memory too, so a hibernation wake starts it again from 0, which is
@@ -5226,10 +5229,11 @@ recommendations work", 2026-11-04), each with its cost if wrong.
 
 **Residual risks.**
 - *A hostile client can spend the daily budget*, as D54 says of signalling. The frame size and
-  rate caps bound one socket, not the account. A socket flooding past the rate is kicked after
-  `RELAY_KICK_DROPS`, and any socket after `RELAY_MAX_FRAMES_PER_SOCKET` frames, so one socket
-  can no longer be billed without bound: at the 40-a-second cap it is cut after 45 minutes, about
-  5,400 requests. A flooder that reconnects is still bounded only by the upgrade limiter (60 a
+  rate caps bound one socket, not the account. The rate kick stops only a flooder that keeps
+  sending past the rate: one that sends 400 frames, pauses 2 s for a full refill and repeats
+  sustains about 200 frames a second (10 requests a second) and is never kicked for rate. What
+  bounds every socket is `RELAY_MAX_FRAMES_PER_SOCKET`: 108,000 frames, about 5,400 requests,
+  which such a flooder spends in about 9 minutes. A flooder that reconnects is still bounded only by the upgrade limiter (60 a
   minute per IP), and several sockets or addresses multiply it.
 - *A relayed match left running is cut after an hour.* The likely spender is accidental: two
   players who leave a relayed stock match running, away from their keyboards, send about 30
