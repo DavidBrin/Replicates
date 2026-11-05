@@ -42,6 +42,14 @@ describe("the relay batch", () => {
     expect(decodeRelayBatch(encodeRelayBatch(packets))).toEqual(packets);
   });
 
+  it("decodes copies, not views of the batch", () => {
+    const packets = [input(10), ping(7)];
+    const batch = encodeRelayBatch(packets);
+    const decoded = decodeRelayBatch(batch);
+    batch.fill(0xff);
+    expect(decoded).toEqual(packets);
+  });
+
   it("refuses a truncated or empty entry, whole", () => {
     const batch = encodeRelayBatch([ping(1), hash(2)]);
     expect(decodeRelayBatch(batch.subarray(0, batch.length - 1))).toBeNull();
@@ -82,7 +90,7 @@ describe("the relay batcher", () => {
     };
     push(input(0));
     for (let i = 0; i < 8; i++) push(filler(300, i + 1));
-    expect(flushes.length).toBeGreaterThanOrEqual(1);
+    expect(flushes).toHaveLength(1);
     for (const batch of flushes) expect(batch.length).toBeLessThanOrEqual(RELAY_MAX_FRAME_BYTES);
     const afterFillers = flushes.length;
 
@@ -93,6 +101,36 @@ describe("the relay batcher", () => {
 
     const delivered = flushes.flatMap((batch) => decodeRelayBatch(batch) ?? []);
     expect(delivered).toEqual(pushed);
+  });
+
+  it("builds a batch of exactly RELAY_MAX_FRAME_BYTES whole, and splits one byte more", () => {
+    // Entries are 2 + length, so 1022 + 1022 fills the cap exactly and 1022 + 1023 is one byte over.
+    const exact = batcher();
+    exact.queue.push(filler(1022, 1));
+    exact.queue.push(filler(1022, 2));
+    expect(exact.flushes).toHaveLength(0);
+    exact.queue.push(ping(1));
+    expect(exact.flushes).toHaveLength(1);
+    expect(exact.flushes[0].length).toBe(RELAY_MAX_FRAME_BYTES);
+    expect(decodeRelayBatch(exact.flushes[0])).toEqual([filler(1022, 1), filler(1022, 2)]);
+
+    const over = batcher();
+    over.queue.push(filler(1022, 1));
+    over.queue.push(filler(1023, 2));
+    expect(over.flushes).toHaveLength(1);
+    expect(decodeRelayBatch(over.flushes[0])).toEqual([filler(1022, 1)]);
+  });
+
+  it("ignores an empty packet, which the receiver would refuse the whole batch for", () => {
+    const { queue, flushes } = batcher();
+    const [first, second] = [input(0, 4), input(1, 4)];
+    queue.push(ping(1));
+    queue.push(new Uint8Array(0));
+    queue.push(first);
+    expect(flushes).toHaveLength(0);
+    queue.push(second);
+    expect(flushes).toHaveLength(1);
+    expect(decodeRelayBatch(flushes[0])).toEqual([ping(1), first, second]);
   });
 
   it("drops its queue on clear", () => {

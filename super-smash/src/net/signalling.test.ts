@@ -103,9 +103,12 @@ describe("the signalling client", () => {
     socket.bufferedAmount = RELAY_MAX_BUFFERED_BYTES + 1;
     signalling.sendGame(batch);
     expect(socket.sentBinary).toEqual([]);
-    socket.bufferedAmount = 0;
+    socket.bufferedAmount = RELAY_MAX_BUFFERED_BYTES;
     signalling.sendGame(batch);
     expect(socket.sentBinary).toEqual([batch]);
+    socket.bufferedAmount = 0;
+    signalling.sendGame(batch);
+    expect(socket.sentBinary).toEqual([batch, batch]);
   });
 
   it("asks for binary frames as ArrayBuffers", () => {

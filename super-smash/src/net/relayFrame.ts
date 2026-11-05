@@ -72,6 +72,11 @@ export interface RelayBatcher {
  * Ping, Pong or Hash queued before it. A packet that would take the batch past
  * `RELAY_MAX_FRAME_BYTES` sends the queue first, and every flush starts the
  * Input count again.
+ *
+ * Callers pass real packets: the largest is 272 bytes and `MAX_PACKET_BYTES` is
+ * 1200, so one packet that alone would pass the frame cap is not expected, and
+ * is not handled. An empty packet is ignored, because the receiver refuses a
+ * batch with a zero-length entry whole.
  */
 export function createRelayBatcher(flush: (batch: Uint8Array) => void): RelayBatcher {
   let queue: Uint8Array[] = [];
@@ -88,6 +93,7 @@ export function createRelayBatcher(flush: (batch: Uint8Array) => void): RelayBat
 
   return {
     push(packet) {
+      if (packet.length === 0) return;
       const entryBytes = LENGTH_BYTES + packet.length;
       if (queue.length > 0 && queuedBytes + entryBytes > RELAY_MAX_FRAME_BYTES) send();
       queue.push(packet);
