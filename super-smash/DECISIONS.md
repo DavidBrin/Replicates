@@ -5036,7 +5036,8 @@ with its reason.
 - *Set the TURN secrets*: `wrangler secret put TURN_KEY_ID` and `wrangler secret put
   TURN_KEY_API_TOKEN`. Without them players on separate networks cannot connect; Task 40b only
   makes that fail quickly and say why. Once they are set, the controller verifies that `/api/ice`
-  answers `turn: true` and runs the online e2e with the relay forced.
+  answers `turn: true` and runs the online e2e with the relay forced. *Withdrawn by D60: no TURN
+  secrets will be set, and the room relays when no direct link opens.*
 - *A real-gamepad check*: remap Attack and Special and play a match; flick the right stick each
   way standing, in the air, shielding (rolls, a spot dodge, an up smash) and holding someone
   (throws, D1); press A on the select screen with a second pad (Task 30), and with a keyboard
@@ -5062,9 +5063,11 @@ the relay wraps the packets and does not change their layout; the golden passes 
 
 **Why.** On 2026-11-02 David's testers on separate networks could not connect (D59's online
 finding): the live site has no TURN relay, and players behind a symmetric or carrier-grade NAT
-waited about 15 s to be told so. The fix D59 named was TURN secrets, and David has no payment
-card, which rules out Cloudflare TURN, Metered and the like. So D54's "STUN only without a key"
-interim is now permanent, and the room, which is already on the free plan and already holds both
+waited about 50 s and were then told the room was lost; Task 40b cut that to about 15 s and a
+sentence saying why. The fix D59 named was TURN secrets, and David has no payment card, which
+rules out Cloudflare TURN, Metered and the like. So D54's interim (its Decision says "STUN-only
+without a key"; its Known limits call it "the interim state if creating the key turns out to
+need a card") is now permanent, and the room, which is already on the free plan and already holds both
 players' sockets, carries the packets instead. D9's rejection of a relayed WebSocket stands for
 the primary path: it is TCP, so one lost packet stalls everything behind it, which is exactly
 the spike rollback exists to hide. A fallback that works, a little worse, beats a sentence that
@@ -5072,14 +5075,17 @@ says it cannot. The Worker still mints TURN credentials if the two secrets are e
 nothing sets them.
 
 **The budget.** The relay costs the shared Durable Objects free plan, so it is the thing to
-watch. The facts the plan was written from (platform research, not yet measured on this
-account):
+watch. The facts the plan was written from, not yet measured on this account. The source is
+Cloudflare's Durable Objects documentation, "Pricing"
+(<https://developers.cloudflare.com/durable-objects/platform/pricing/>), which Task 7's review
+re-read on 2026-11-04 for the first three lines and for a socket's one upgrade request:
 - the free plan allows 100,000 Durable Object requests a day;
 - incoming WebSocket messages are billed 20:1, and outgoing ones are free;
-- the budget resets at 00:00 UTC, and exceeding it fails every room until the reset;
+- the budget resets at 00:00 UTC, and exceeding it fails every room until the reset (the
+  consequence for every room is the plan's reading of the daily cap, not a quoted line);
 - a relayed 8-minute match costs about 1,442 requests for 2 players at 30 messages/s, and about
   2,884 for 4 players at 30 messages/s (480 s × 30 × players ÷ 20, plus one request per socket
-  upgrade).
+  upgrade; derived from the lines above, not quoted).
 
 **Limits and framing** (`signalProtocol.ts`, `relayFrame.ts`).
 - *What the room does with a frame.* It stamps the sender, never echoes it back, never reads it,
@@ -5121,8 +5127,9 @@ account):
 - *The room socket is the link.* In relay mode its closing, with any code, is every relayed
   peer leaving (Review Focus 2, pinned in `doSignal.test.ts`): a Worker deploy (1006), the daily
   budget running out, or a proxy timeout all end the match as Connection Lost at once, never a
-  freeze. So D54's "a deploy never ends a match" holds only for direct matches; a deploy ends
-  a relayed one. Relayed, a status back to `waiting` is the room saying the peer left, never a
+  freeze. So D54's rule that "a match in progress must not end because of a deploy" holds only
+  for direct matches; a deploy ends a relayed one, and D54's "a guest whose room socket drops
+  mid-match plays on" no longer holds once relayed. Relayed, a status back to `waiting` is the room saying the peer left, never a
   lost channel to re-offer or `renegotiate`.
 - *A direct peer is carried to the relay only while the room still seats it.* A held match keeps
   its direct channel through the room's `peer-left`, so a peer the channel had announced may be
@@ -5178,7 +5185,7 @@ recommendations work", 2026-11-04), each with its cost if wrong.
 - *A hostile client can spend the daily budget*, as D54 says of signalling. The frame size and
   rate caps bound one socket, not the account.
 - *Whether the free plan applies the 20:1 ratio to this traffic is unverified.* The budget
-  facts above come from the platform's documentation; the Deploy checkpoint measures the bill
+  facts above come from the documentation named there; the Deploy checkpoint measures the bill
   of one relayed match against 30 messages/s × 2 ÷ 20, and the delay the relay adds on both
   routes, and a documents-only commit adds both to this entry.
 - *The exact failure when the budget runs out is undocumented.* The client sees a closed
@@ -5186,6 +5193,7 @@ recommendations work", 2026-11-04), each with its cost if wrong.
   in the lobby.
 
 **Rejected.**
-- *Opening the relay alongside the direct attempt from the start.* It costs budget on the 90%
-  or so of matches that connect directly, to save at most 15 s for the rest.
+- *Opening the relay alongside the direct attempt from the start.* It costs budget on every
+  match that connects directly (the plan's estimate is about 90% of matches, UNVERIFIED: not
+  measured), to save at most the 15 s deadline for the rest.
 - *Paid TURN.* David has no payment card.

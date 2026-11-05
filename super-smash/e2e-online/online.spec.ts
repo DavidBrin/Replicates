@@ -283,8 +283,8 @@ test("a direct connection that cannot open falls back to the relay, and the matc
   // The deadline (15 s) runs out, both move to the relay, and the lobby goes on to the
   // stage and the fighters as it would on a direct link.
   await pickAndStart(host, guest);
-  await expect.poll(() => frame(host), { timeout: 30_000 }).toBeGreaterThan(60);
   for (const page of [host, guest]) {
+    await expect.poll(() => frame(page), { timeout: 30_000 }).toBeGreaterThan(60);
     await expect.poll(() => netRoute(page), { timeout: 10_000 }).toBe("relay");
     await expect(page.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+ · RELAY$/)).toBeVisible();
   }

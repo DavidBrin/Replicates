@@ -42,7 +42,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`scripts/models`](scripts/models) | `pnpm models`: fetch, export and check the fighter models; only their hashes and bone numbers are committed |
 | [`docs/character-art.md`](docs/character-art.md) | How a fighter is drawn — the model pipeline, the retarget rule, the bake — and the gotchas |
 | [`src/net`](src/net) | Rollback session, wire format, four transports, and the online lobby |
-| [`worker`](worker) | The Cloudflare Worker: static assets, TURN credentials, and a Durable Object per room |
+| [`worker`](worker) | The Cloudflare Worker: static assets, a Durable Object per room (signalling, and the relay when no direct link opens), and TURN credentials if a key is ever set |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
 | [`src/input`](src/input) | Three control schemes and the latched keyboard reader |
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
@@ -82,7 +82,7 @@ it), the match goes through the room instead, and the lobby says "Connecting thr
 |---|---|
 | `pnpm run dev` | Development server on :3000 |
 | `pnpm run build` | Static export into `out/` |
-| `pnpm preview` | Build, then serve `out/` with the Worker (rooms, TURN) on :8787 |
+| `pnpm preview` | Build, then serve `out/` with the Worker (rooms and the relay) on :8787 |
 | `pnpm test` | Unit and property tests (vitest) |
 | `pnpm run test:watch` | The same, watching |
 | `pnpm run test:e2e` | Playwright end-to-end |
