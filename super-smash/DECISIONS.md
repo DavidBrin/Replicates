@@ -5249,6 +5249,27 @@ recommendations work", 2026-11-04), each with its cost if wrong.
   socket, which reads as Connection Lost mid-match and as "Could not reach the online service"
   in the lobby.
 
+**Phase A deployed (2026-11-04).** `main` at `b059daa` was pushed and deployed as Worker
+version `ed4e6af7-3e77-4afa-931d-7516bbc418e9`. The gate before it ran at a machine load of
+8-37, and every run was green: unit 8,747 passed / 7 skipped, local e2e 45 / 7 skipped, online
+e2e 6/6. Against the live site:
+- `/api/ice` still answers `"turn":false`;
+- the bake answers 200 `application/gzip`;
+- the online e2e passed 6/6, including the relay test, which played a match through the room
+  to a result on both screens.
+
+The added delay was measured live, from two browsers on one machine, after about 15 s of play:
+
+| Route | Ping | Input delay |
+|---|---|---|
+| Direct | 31-33 ms | 2 frames |
+| Relay | 133-159 ms | 5 frames |
+
+So the room adds about 105-125 ms of round trip, and 3 frames of input delay, for players near
+each other. Players far apart pay their own distance to the room's location on top. The
+request count is read on the Cloudflare dashboard (Workers & Pages → Durable Objects), which
+is David's.
+
 **Rejected.**
 - *Opening the relay alongside the direct attempt from the start.* It costs budget on every
   match that connects directly (the plan's estimate is about 90% of matches, UNVERIFIED: not

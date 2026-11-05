@@ -5,7 +5,7 @@ Seven implementation plans turn the `super-smash` replica into **David-Smash**: 
 - **Why:** `../specs/2026-10-24-david-smash-design.md` (requirements, David's decisions).
 - **Evidence:** `../../../research/rebuild-2026-10/README.md` (repo analysis, physics gap table, compute budget, hosting comparison).
 
-**Status: Plans 1-6 are executed and deployed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plan 6 was deployed on 2026-11-03 (rules version 6). **Plan 7 Phase A executed** (the relay fallback, D60): its deploy checkpoint is the controller's and waits for David's go, and Phase B (three and four players) starts after it.
+**Status: Plans 1-6 are executed and deployed** (each plan's record is the decision in its row below). Each plan was drafted and replayed task by task in a scratch copy of the repo, then reviewed independently and revised before it ran. Plan 6 was deployed on 2026-11-03 (rules version 6). **Plan 7 Phase A is executed and deployed** (the relay fallback, D60; deployed 2026-11-04). Phase B (three and four players) is being executed.
 
 ## Order
 
