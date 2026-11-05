@@ -172,6 +172,12 @@ The simulation is deterministic by construction (§3), which buys rollback.
   Nostr relays — a code-only alternate that no screen selects), **BroadcastChannel** (two tabs
   on one machine, for development and for a second local window), and **loopback** (tests).
   The rollback session never learns which one it has.
+- **No direct link, then the room relays.** When a first direct channel cannot open
+  (`NEGOTIATION_TIMEOUT_MS`, 15 s, or a failed connection), the side that finds out tells the
+  other through the room (`use-relay`) and both carry the same packets over the room socket
+  instead, two frames to a message; the room stamps the sender and reads nothing (D60). A room
+  that has relayed keeps relaying. In relay mode the room socket is the link: losing it ends
+  the match.
 - **Input packets** carry every frame of input the receiver has not yet acknowledged (at most
   `MAX_INPUT_WINDOW_FRAMES`, 128), keyed by absolute frame number, plus an `ack`: the highest
   contiguous frame of the receiver's input the sender holds. They travel over an *unreliable,
@@ -185,7 +191,7 @@ The simulation is deterministic by construction (§3), which buys rollback.
 - **LAN comes free.** No code special-cases a local network: ICE gathers host candidates
   and prefers them automatically, so two laptops on the same WiFi negotiate a direct path
   without touching the open internet. That is the whole reason WebRTC was chosen over a
-  relayed WebSocket.
+  relayed WebSocket. The relay is the fallback, never the first try.
 - **Desync detection** hashes the state every 30 frames and compares; a mismatch is
   reported rather than left to manifest as two players seeing different winners.
 - **The lobby compares builds before a match.** Each peer's greeting carries its build id, the

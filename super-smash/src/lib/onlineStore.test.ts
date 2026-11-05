@@ -1061,7 +1061,6 @@ describe("sending and leaving", () => {
       "room-lost",
       "bad-start",
       "link-failed",
-      "no-direct-link",
       "engine-mismatch",
       "unreadable-start",
     ] as const;
@@ -1072,10 +1071,8 @@ describe("sending and leaving", () => {
     }
     expect(roomErrorMessage("not-found", "QRST")).toMatch(/QRST/);
     expect(roomErrorMessage("room-lost", "QRST")).toBe("Lost the room — create or join again.");
-    // Plan 6, Task 40b: what a player reads when the two browsers cannot reach each other directly.
-    expect(roomErrorMessage("no-direct-link", "QRST")).toBe(
-      "Couldn't connect directly to the other player — one of your networks may be blocking it. Try another network, or try again.",
-    );
+    // Plan 7 (D60): a direct link that cannot open moves to the room relay, so TURN advice no longer helps.
+    expect(roomErrorMessage("link-failed", "QRST")).toBe("The connection to the other player failed. Leave the room and try again.");
   });
 
   it("gives developers the wrangler hint on localhost only", () => {

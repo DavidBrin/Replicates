@@ -76,6 +76,34 @@ async function opened(intent: RoomIntent) {
   return { ...session, channels, offers };
 }
 
+/** A host welcomed beside a guest, with its first offer out, on fake timers. */
+async function hostMeetingGuest() {
+  vi.useFakeTimers();
+  const h = await opened("create");
+  h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.offers()).toBe(1);
+  return h;
+}
+
+/** A guest that answered its host's first offer and then followed it onto the relay, on fake timers. */
+async function relayedGuest() {
+  vi.useFakeTimers();
+  const g = await opened("join");
+  g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+  g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+  await vi.advanceTimersByTimeAsync(0);
+  g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
+  expect(g.session.transport.status).toBe("open");
+  return g;
+}
+
+const useRelays = (signalling: FakeSignalling) =>
+  signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "use-relay").length;
+
+const renegotiates = (signalling: FakeSignalling) =>
+  signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "renegotiate");
+
 /** A Worker deploy restarts the Durable Object and drops its sockets without a close frame. */
 const ROOM_DROP = { t: "closed", code: 1006, reason: "" } as const;
 
@@ -225,7 +253,7 @@ describe("OnlineSession", () => {
 
     it("with the link already failed, the room is lost at once", async () => {
       const { signalling, channel, events, fail } = await negotiatingHost();
-      // One that had opened: a first link failing is no direct link (Plan 6, Task 40b), below.
+      // One that had opened: a first link failing moves to the relay instead (below).
       channel.open();
       fail();
       expect(errors(events)).toEqual([]);
@@ -579,130 +607,6 @@ describe("OnlineSession", () => {
    * gets a deadline, and missing it is a channel lost before it opened.
    */
   describe("a negotiation that never finishes", () => {
-    async function hostMeetingGuest() {
-      vi.useFakeTimers();
-      const h = await opened("create");
-      h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(h.offers()).toBe(1);
-      return h;
-    }
-
-    /**
-     * Plan 6, Task 40b. David's testers on separate networks sat on "Opening a
-     * direct connection…" for about 50 s and were then told the room was lost:
-     * the re-offers meant for a channel that dropped ran for one that had never
-     * opened. A first link that cannot open now ends at its deadline, in its
-     * own words, and the other side is told why before this one leaves.
-     */
-    it("ends the host's first connect, unopened after the deadline, as no direct link: no re-offer, not the room lost", async () => {
-      const h = await hostMeetingGuest();
-      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
-      expect(errors(h.events)).toEqual([]);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(errors(h.events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
-      expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "no-direct-link" } });
-      expect(h.signalling.closed).toBe(true);
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(h.offers()).toBe(1);
-      expect(errors(h.events)).toHaveLength(1);
-      expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it("ends a guest's first answer, unopened after the deadline, as no direct link, without asking for another offer", async () => {
-      vi.useFakeTimers();
-      const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
-      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
-      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
-      expect(errors(g.events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
-      expect(g.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "renegotiate")).toEqual([]);
-      expect(g.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "no-direct-link" } });
-      expect(g.signalling.closed).toBe(true);
-    });
-
-    it("ends a first connect whose link fails as no direct link, at once", async () => {
-      const { events, fail } = await negotiatingHost();
-      fail();
-      expect(events.slice(-2)).toEqual([
-        { type: "link", status: "failed" },
-        { type: "error", reason: "no-direct-link" },
-      ]);
-    });
-
-    /**
-     * The side whose deadline runs out first leaves the room, and the room then
-     * says it left, a moment before the other side's own deadline: told first,
-     * that side says no direct link too, not that the other player left.
-     */
-    it("says no direct link when the other side says it first, and does not say it back", async () => {
-      vi.useFakeTimers();
-      const g = await opened("join");
-      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
-      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
-      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 50);
-      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "no-direct-link" } });
-      g.signalling.deliver({ t: "peer-left", peerId: "h1" });
-      expect(errors(g.events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
-      expect(g.events.filter((e) => e.type === "lobby")).toEqual([]);
-      expect(g.signalling.sent.filter((m) => m.t === "lobby")).toEqual([]);
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(errors(g.events)).toHaveLength(1);
-      expect(g.signalling.closed).toBe(true);
-    });
-
-    it("calls a player who leaves during the first negotiation gone, not no direct link", async () => {
-      const h = await hostMeetingGuest();
-      await vi.advanceTimersByTimeAsync(5_000);
-      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(errors(h.events)).toEqual([]);
-      expect(h.events.at(-1)).toEqual({ type: "peer", present: false });
-      expect(h.signalling.closed).toBe(false);
-    });
-
-    /**
-     * The final wave (Task 40b review Minor 1, final review item 35): a started match owns
-     * the channel, so a stray or hostile no-direct-link from the room cannot end it. Only
-     * a lobby session ends on one.
-     */
-    it("lets a no-direct-link that arrives after the start end nothing: no error, the channel and the room stay", async () => {
-      const { session, signalling, channel, events } = await negotiatingHost();
-      channel.open();
-      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
-      signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "no-direct-link" } });
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
-      expect(errors(events)).toEqual([]);
-      expect(signalling.closed).toBe(false);
-      expect(session.transport.status).toBe("open");
-    });
-
-    /**
-     * The final wave (Task 40b review Minor 2): mid-match the other player's room socket can
-     * drop while the held channel stays open. A link that worked and then fails is a failed
-     * link, not "couldn't connect directly": only a newcomer in the seat starts a first link.
-     */
-    it("calls a link that had opened, failing after its peer's room socket left mid-match, a failed link", async () => {
-      const { session, signalling, channel, events, fail } = await negotiatingHost();
-      channel.open();
-      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
-      signalling.deliver({ t: "peer-left", peerId: "g1" });
-      fail();
-      expect(events.at(-1)).toEqual({ type: "link", status: "failed" });
-      expect(errors(events)).toEqual([]);
-      expect(signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "no-direct-link")).toEqual([]);
-    });
-
-    it("still calls a newcomer's first link that fails no direct link", async () => {
-      const { session, signalling, channel, events, fail } = await negotiatingHost();
-      channel.open();
-      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
-      signalling.deliver({ t: "peer-left", peerId: "g1" });
-      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
-      fail();
-      expect(errors(events)).toEqual([{ type: "error", reason: "no-direct-link" }]);
-    });
-
     /** A channel that had opened and dropped is a reconnect, not a first link: its re-offers stand. */
     it("says the room is lost once every re-offer to a channel that had opened has timed out too", async () => {
       const h = await hostMeetingGuest();
@@ -765,6 +669,248 @@ describe("OnlineSession", () => {
   });
 
   /**
+   * Plan 6, Task 40b ended the room here: David's testers on separate networks
+   * waited out a deadline to read "Couldn't connect directly…". Plan 7 (D60)
+   * carries the match through the room instead. The side that finds out tells
+   * the other (`use-relay`), and both move their packets onto the room socket.
+   */
+  describe("a direct link that cannot open falls back to the relay", () => {
+    it("moves the host's first connect, unopened after the deadline, to the relay: tells the guest, makes no re-offer, raises no error", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
+      expect(useRelays(h.signalling)).toBe(0);
+      expect(h.session.route).toBe("direct");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.signalling.sent.filter((m) => m.t === "lobby")).toEqual([{ t: "lobby", payload: { kind: "use-relay" } }]);
+      // The route first, so the store never reads a direct link on the way to the relay.
+      expect(h.events.slice(-2)).toEqual([
+        { type: "route", route: "relay" },
+        { type: "link", status: "open" },
+      ]);
+      expect(h.session.route).toBe("relay");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(h.events)).toEqual([]);
+      expect(h.offers()).toBe(1);
+      expect(h.signalling.closed).toBe(false);
+      expect(h.session.transport.status).toBe("open");
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("moves a guest's first answer, unopened after the deadline, to the relay without asking for another offer", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      expect(renegotiates(g.signalling)).toEqual([]);
+      expect(useRelays(g.signalling)).toBe(1);
+      expect(g.session.route).toBe("relay");
+      expect(g.session.transport.status).toBe("open");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(g.events)).toEqual([]);
+      expect(g.signalling.closed).toBe(false);
+    });
+
+    it("moves a first connect whose link fails to the relay at once, and never reports the failed link", async () => {
+      const { session, signalling, events, fail } = await negotiatingHost();
+      fail();
+      expect(events).not.toContainEqual({ type: "link", status: "failed" });
+      expect(events.slice(-2)).toEqual([
+        { type: "route", route: "relay" },
+        { type: "link", status: "open" },
+      ]);
+      expect(useRelays(signalling)).toBe(1);
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      expect(errors(events)).toEqual([]);
+      expect(signalling.closed).toBe(false);
+      expect(session.route).toBe("relay");
+    });
+
+    it("follows the other side's use-relay, and does not say it back", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 50);
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
+      expect(g.session.route).toBe("relay");
+      expect(g.session.transport.status).toBe("open");
+      // The session's own word: it never reaches the store as a lobby message.
+      expect(g.events.filter((e) => e.type === "lobby")).toEqual([]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(g.signalling.sent.filter((m) => m.t === "lobby")).toEqual([]);
+      expect(errors(g.events)).toEqual([]);
+      expect(g.events.filter((e) => e.type === "route")).toHaveLength(1);
+    });
+
+    it("calls a player who leaves during the first negotiation gone, not the relay", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(5_000);
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(h.events)).toEqual([]);
+      expect(h.events.at(-1)).toEqual({ type: "peer", present: false });
+      expect(useRelays(h.signalling)).toBe(0);
+      expect(h.session.route).toBe("direct");
+      expect(h.signalling.closed).toBe(false);
+    });
+
+    /**
+     * A started match owns the channel (Task 40b review Minor 1, final review
+     * item 35), so a stray or hostile use-relay from the room cannot pull it
+     * off a working link. Only a lobby session follows one.
+     */
+    it("lets a use-relay that arrives after the start change nothing: the direct channel and the room stay", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "use-relay" } });
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      expect(session.route).toBe("direct");
+      expect(events.filter((e) => e.type === "route")).toEqual([]);
+      expect(errors(events)).toEqual([]);
+      expect(signalling.closed).toBe(false);
+      expect(session.transport.status).toBe("open");
+      session.transport.send(new Uint8Array([1, 2, 3]));
+      expect(channel.sent).toEqual([new Uint8Array([1, 2, 3])]);
+    });
+
+    it("tells a newcomer to a relayed seat to use the relay, and never offers it a direct connection", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      expect(useRelays(h.signalling)).toBe(1);
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      expect(h.signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "use-relay" } });
+      expect(useRelays(h.signalling)).toBe(2);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1);
+      expect(h.channels).toHaveLength(1);
+      expect(h.session.transport.status).toBe("open");
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    it("calls a room drop in the relayed lobby the room lost, with no re-offer and no renegotiate", async () => {
+      const g = await relayedGuest();
+      g.signalling.deliver(ROOM_DROP);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(errors(g.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      expect(renegotiates(g.signalling)).toEqual([]);
+
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      h.signalling.deliver(ROOM_DROP);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(h.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      expect(h.offers()).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    /**
+     * Relayed, the room's leave is the link going down (Task 3), and nothing
+     * direct is coming back: no fresh offer, no request for one, and no wait
+     * for one that could run out into the room lost.
+     */
+    it("takes a relayed peer's leave as a leave, not a lost channel to retry", async () => {
+      const g = await relayedGuest();
+      g.signalling.deliver({ t: "peer-left", peerId: "h1" });
+      expect(g.session.transport.status).toBe("waiting");
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(renegotiates(g.signalling)).toEqual([]);
+      expect(errors(g.events)).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1);
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    it("ends a guest's wait for its host's fresh offer once it moves to the relay", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[0].open();
+      g.channels[0].drop();
+      expect(renegotiates(g.signalling)).toHaveLength(1);
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
+      expect(g.session.route).toBe("relay");
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(errors(g.events)).toEqual([]);
+      expect(g.session.transport.status).toBe("open");
+    });
+
+    /**
+     * Review Focus 1. The host's deadline starts before the guest's, so it can
+     * run out just as the guest's channel opens. The guest must follow onto
+     * the relay with the peer it already announced kept, neither left nor
+     * announced again, and no error.
+     */
+    it("Review Focus: a use-relay that lands while this side's direct channel is open moves it to the relay, and announces the peer once", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      const joins: string[] = [];
+      const leaves: string[] = [];
+      g.session.transport.onPeerJoin((id) => joins.push(id));
+      g.session.transport.onPeerLeave((id) => leaves.push(id));
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[0].open();
+      expect(joins).toEqual(["h1"]);
+
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "use-relay" } });
+
+      expect(g.session.transport.route).toBe("relay");
+      expect(g.session.transport.status).toBe("open");
+      expect(joins).toEqual(["h1"]);
+      expect(leaves).toEqual([]);
+      expect(g.events.filter((e) => e.type === "route")).toEqual([{ type: "route", route: "relay" }]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(errors(g.events)).toEqual([]);
+      expect(useRelays(g.signalling)).toBe(0);
+    });
+
+    it("moves a newcomer's first link that fails to the relay too", async () => {
+      const { session, signalling, channel, events, fail } = await negotiatingHost();
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      fail();
+      expect(events).not.toContainEqual({ type: "link", status: "failed" });
+      expect(session.route).toBe("relay");
+      expect(useRelays(signalling)).toBe(1);
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      expect(errors(events)).toEqual([]);
+      expect(signalling.closed).toBe(false);
+    });
+
+    /**
+     * The final wave (Task 40b review Minor 2): mid-match the other player's room socket can
+     * drop while the held channel stays open. A link that worked and then fails is a failed
+     * link, not a first link to relay: only a newcomer in the seat starts a first link.
+     */
+    it("calls a link that had opened, failing after its peer's room socket left mid-match, a failed link", async () => {
+      const { session, signalling, channel, events, fail } = await negotiatingHost();
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      fail();
+      expect(events.at(-1)).toEqual({ type: "link", status: "failed" });
+      expect(errors(events)).toEqual([]);
+      expect(useRelays(signalling)).toBe(0);
+      expect(session.route).toBe("direct");
+    });
+  });
+
+  /**
    * An error the room cannot recover from leaves it: left open, the code would
    * stay joinable, and a newcomer could pair with a screen showing a dead
    * error. Deferred past the current delivery, so a lost channel's leave still
@@ -799,7 +945,9 @@ describe("OnlineSession", () => {
     });
 
     it("closes after the link fails", async () => {
-      const { session, signalling, events, fail } = await negotiatingHost();
+      const { session, signalling, channel, events, fail } = await negotiatingHost();
+      // One that had opened: a first link that fails moves to the relay instead.
+      channel.open();
       fail();
       expect(events).toContainEqual({ type: "link", status: "failed" });
       await flush();

@@ -10,7 +10,7 @@
 
 import { vi, type Mock } from "vitest";
 
-import type { DoSignalTransport } from "../adapters/doSignal";
+import type { DoSignalTransport, Route } from "../adapters/doSignal";
 import { ROLE_PORT, type Role } from "../signalProtocol";
 import { createEmitter } from "../transport";
 import type { LobbyMessage } from "./lobby";
@@ -28,6 +28,8 @@ export interface FakeSession {
    * it false to play a session that refuses (its room gone, or a bad start).
    */
   accepts: boolean;
+  /** What `session.route` answers; `"direct"` unless a test sets it. */
+  route: Route;
   /** Deliver a session event to its listeners. A `joined` sets the role first, as the real session's transport does. */
   emit(event: SessionEvent): void;
 }
@@ -46,6 +48,7 @@ export function fakeSession(role: Role | null = null): FakeSession {
   const fake: FakeSession = {
     sent: [],
     accepts: true,
+    route: "direct",
     session: {
       roomCode: "ABCD",
       get role() {
@@ -56,6 +59,9 @@ export function fakeSession(role: Role | null = null): FakeSession {
       },
       turn: false,
       transport: {} as unknown as DoSignalTransport,
+      get route() {
+        return fake.route;
+      },
       on: (cb) => events.add(cb),
       sendLobby: vi.fn((message: LobbyMessage) => {
         if (closed || !fake.accepts) return false;

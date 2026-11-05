@@ -136,9 +136,7 @@ function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
     case "bad-start":
       return "The match could not be sent to the other player. Leave the room and start again.";
     case "link-failed":
-      return "The direct connection could not be opened. Try again; strict networks need the TURN relay.";
-    case "no-direct-link":
-      return "Couldn't connect directly to the other player — one of your networks may be blocking it. Try another network, or try again.";
+      return "The connection to the other player failed. Leave the room and try again.";
     case "engine-mismatch":
       return "The other player is running a different version. Both reload the page.";
     case "unreadable-start":
