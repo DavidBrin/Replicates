@@ -76,6 +76,16 @@ export const RELAY_BURST = 80;
  */
 export const RELAY_KICK_DROPS = 4 * RELAY_BURST;
 
+/**
+ * A socket's lifetime allowance of game frames: one hour at the client's 30 a
+ * second. Past it the socket is closed with `too-many-messages`. Within the
+ * rate cap a socket is otherwise never stopped, and the likely spender is not
+ * a hostile one but two players who leave a relayed match running: 30 a
+ * second each, for as long as the tabs stay open. A relayed match is minutes
+ * long, so an honest one never meets this.
+ */
+export const RELAY_MAX_FRAMES_PER_SOCKET = 108_000;
+
 export interface PeerInfo {
   readonly id: string;
   readonly role: Role;

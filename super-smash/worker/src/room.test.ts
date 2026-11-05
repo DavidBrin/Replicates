@@ -7,6 +7,7 @@ import {
   RELAY_ID_BYTES,
   RELAY_KICK_DROPS,
   RELAY_MAX_FRAME_BYTES,
+  RELAY_MAX_FRAMES_PER_SOCKET,
   RELAY_RATE_PER_SECOND,
   ROOM_CLOSE_CODES,
   type PeerInfo,
@@ -191,6 +192,29 @@ describe("relaying game frames", () => {
     const partialMs = fullMs + ((RELAY_BURST - 1) / RELAY_RATE_PER_SECOND) * 1000;
     expect(runAt(partialMs, RELAY_BURST - 1).every((type) => type === "forward")).toBe(true);
     expect(runAt(partialMs, 1)).toEqual(["kick"]);
+  });
+
+  it("closes a socket with too-many-messages on its next game frame once it has sent RELAY_MAX_FRAMES_PER_SOCKET", () => {
+    expect(RELAY_MAX_FRAMES_PER_SOCKET).toBe(60 * 60 * 30);
+    const bucket = newRelayBucket(0);
+    bucket.frames = RELAY_MAX_FRAMES_PER_SOCKET;
+    expect(relayGameFrame(sender(), new Uint8Array([1]).buffer, bucket, 0)).toEqual({
+      type: "kick",
+      reason: "too-many-messages",
+      closeCode: ROOM_CLOSE_CODES["too-many-messages"],
+      message: { t: "error", reason: "too-many-messages" },
+    });
+  });
+
+  it("forwards a socket's game frames up to RELAY_MAX_FRAMES_PER_SOCKET, counting each one", () => {
+    const bucket = newRelayBucket(0);
+    expect(bucket.frames).toBe(0);
+    relayGameFrame(sender(), new Uint8Array([1]).buffer, bucket, 0);
+    expect(bucket.frames).toBe(1);
+    bucket.frames = RELAY_MAX_FRAMES_PER_SOCKET - 1;
+    // The last frame of the allowance goes through; only the one after it is kicked.
+    expect(relayGameFrame(sender(), new Uint8Array([1]).buffer, bucket, 0).type).toBe("forward");
+    expect(relayGameFrame(sender(), new Uint8Array([1]).buffer, bucket, 0).type).toBe("kick");
   });
 
   it("closes a socket whose game frame is over RELAY_MAX_FRAME_BYTES, and forwards one exactly at it", () => {

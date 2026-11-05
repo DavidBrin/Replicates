@@ -5109,7 +5109,12 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
   `too-many-messages` (4008), and it must come back through the upgrade limiter (60 a minute per
   IP). The count is in memory with the bucket. An honest client refills to full long before
   that: only a backlog of more than about 13 s could reach it, and by then the other side has
-  called the match lost (10 s of silence). The prefix is `RELAY_ID_BYTES` 8: the room's peer ids are
+  called the match lost (10 s of silence). And a socket is cut after
+  `RELAY_MAX_FRAMES_PER_SOCKET` (108,000, one hour at the client's 30 a second) game frames,
+  dropped or not, with the same `too-many-messages`: within the rate it would otherwise never be
+  stopped. The count is in memory too, so a hibernation wake starts it again from 0, which is
+  acceptable: a relayed match keeps the object awake, and a socket quiet long enough to let it
+  sleep cost nothing meanwhile. The prefix is `RELAY_ID_BYTES` 8: the room's peer ids are
   `crypto.randomUUID().slice(0, 8)`, eight ASCII bytes.
 - *Two inputs to a message.* In relay mode the client puts two frames' packets in each WebSocket
   message (`RELAY_INPUTS_PER_MESSAGE` 2), which halves the incoming-message bill at about one
@@ -5137,6 +5142,10 @@ re-read on 2026-11-04 for the first three lines and for a socket's one upgrade r
 - *The relay is sticky for the room.* There is no way back to direct, and a newcomer to a
   relayed room is told by the session that is already relaying, since the newcomer would wait
   for an offer that never comes.
+- *A link lost while the match loads ends it at once.* The link monitor starts when the match
+  is ready, so a room drop or a leave during the model wait reached nobody; a started match
+  never reconnects, so `/play` calls a link that is not open at ready Connection Lost then and
+  there, instead of after the 10 s silence timeout (Phase A fix, M-3).
 - *The room socket is the link.* In relay mode its closing, with any code, is every relayed
   peer leaving (Review Focus 2, pinned in `doSignal.test.ts`): a Worker deploy (1006), the daily
   budget running out, or a proxy timeout all end the match as Connection Lost at once, never a
@@ -5218,10 +5227,16 @@ recommendations work", 2026-11-04), each with its cost if wrong.
 **Residual risks.**
 - *A hostile client can spend the daily budget*, as D54 says of signalling. The frame size and
   rate caps bound one socket, not the account. A socket flooding past the rate is kicked after
-  `RELAY_KICK_DROPS` and must reconnect through the upgrade limiter, so a runaway client cannot
-  be billed without bound; but one that keeps to the cap, 40 frames a second, is never kicked:
-  that is 2 requests a second, which spends the 100,000 in about 14 hours from one socket, and
-  sooner from several. The kick bounds the rate, not the total.
+  `RELAY_KICK_DROPS`, and any socket after `RELAY_MAX_FRAMES_PER_SOCKET` frames, so one socket
+  can no longer be billed without bound: at the 40-a-second cap it is cut after 45 minutes, about
+  5,400 requests. A flooder that reconnects is still bounded only by the upgrade limiter (60 a
+  minute per IP), and several sockets or addresses multiply it.
+- *A relayed match left running is cut after an hour.* The likely spender is accidental: two
+  players who leave a relayed stock match running, away from their keyboards, send about 30
+  messages a second each for as long as the tabs stay open (3 requests a second, the day's
+  100,000 in about 9 hours). Each socket is now cut at `RELAY_MAX_FRAMES_PER_SOCKET`, and the
+  match ends as Connection Lost after an hour; a relayed match that really runs an hour ends
+  the same way.
 - *Whether the free plan applies the 20:1 ratio to this traffic is unverified.* The budget
   facts above come from the documentation named there; the Deploy checkpoint measures the bill
   of one relayed match against 30 messages/s × 2 ÷ 20, and the delay the relay adds on both

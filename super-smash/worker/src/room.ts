@@ -14,6 +14,7 @@ import {
   RELAY_ID_BYTES,
   RELAY_KICK_DROPS,
   RELAY_MAX_FRAME_BYTES,
+  RELAY_MAX_FRAMES_PER_SOCKET,
   RELAY_RATE_PER_SECOND,
   ROOM_CLOSE_CODES,
   parseClientMessage,
@@ -93,10 +94,18 @@ export interface RelayBucket {
   atMs: number;
   /** Frames dropped over the rate since the bucket was last full (RELAY_KICK_DROPS). */
   dropped: number;
+  /**
+   * Game frames this socket has sent, dropped or not (RELAY_MAX_FRAMES_PER_SOCKET).
+   * In memory like the rest, so a hibernation wake counts again from 0. That is
+   * acceptable: a relayed match sends a frame every 33 ms, which keeps the
+   * object awake, and a socket quiet long enough to let it sleep cost nothing
+   * meanwhile.
+   */
+  frames: number;
 }
 
 export function newRelayBucket(nowMs: number): RelayBucket {
-  return { tokens: RELAY_BURST, atMs: nowMs, dropped: 0 };
+  return { tokens: RELAY_BURST, atMs: nowMs, dropped: 0, frames: 0 };
 }
 
 /** A peer id as the bytes the relay prefixes onto its frames. */
@@ -122,6 +131,9 @@ export function relayGameFrame(
   bucket: RelayBucket,
   nowMs: number,
 ): GameFrameOutcome {
+  // Every frame is billed on arrival, whatever happens to it next, so every one counts.
+  if (bucket.frames >= RELAY_MAX_FRAMES_PER_SOCKET) return { type: "kick", ...refusal("too-many-messages") };
+  bucket.frames += 1;
   if (payload.byteLength === 0) return { type: "drop" };
   if (payload.byteLength > RELAY_MAX_FRAME_BYTES) return { type: "kick", ...refusal("bad-message") };
   bucket.tokens = Math.min(RELAY_BURST, bucket.tokens + ((nowMs - bucket.atMs) * RELAY_RATE_PER_SECOND) / 1000);
