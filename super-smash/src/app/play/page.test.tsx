@@ -269,6 +269,46 @@ describe("the play page, online", () => {
     expect(only(mocks.runners).options.net?.localPorts).toEqual([1]);
   });
 
+  /**
+   * Plan 7, Phase B: every port the host's start names plays, and the link
+   * monitor watches every other player the begin seated, so any one of them
+   * leaving or going silent ends the match.
+   */
+  it("mounts an online match of four with ports 0-3", async () => {
+    goOnline("host");
+    const four: OnlineMatchConfig = {
+      ...CONFIG,
+      rules: { ...CONFIG.rules, oneOnOne: false },
+      fighters: ["mario", "fox", "link", "samus"],
+      costumes: [3, 1, 0, 2],
+      controls: [0, 0, 0, 0],
+    };
+    useOnlineStore.getState().patch({
+      config: four,
+      seats: [
+        { peerId: "g1", port: 1, build: "ok" },
+        { peerId: "g2", port: 2, build: "ok" },
+        { peerId: "g3", port: 3, build: "ok" },
+      ],
+    });
+    await renderPage();
+    const { options } = only(mocks.runners);
+    expect(options.players).toEqual(runnerSlotsFor(four));
+    expect(only(mocks.monitors).options.peers).toEqual(["g1", "g2", "g3"]);
+    act(() => options.onEnd?.({ kind: "stockOut", placings: [2, 0, 3, 1] }));
+    const result = useMatchConfig.getState().result;
+    expect(result?.stats.map((s) => s.port)).toEqual([0, 1, 2, 3]);
+    expect(result?.fighters).toEqual({ 0: "mario", 1: "fox", 2: "link", 3: "samus" });
+  });
+
+  it("names all four fighters when a match of four is lost", async () => {
+    goOnline("guest");
+    useOnlineStore.getState().patch({ config: { ...CONFIG, fighters: ["mario", "fox", "link", "samus"], costumes: [3, 1, 0, 2], controls: [0, 0, 0, 0] } });
+    await renderPage();
+    act(() => only(mocks.monitors).options.onLost());
+    expect(useMatchConfig.getState().result).toMatchObject({ kind: "connectionLost", fighters: { 0: "mario", 1: "fox", 2: "link", 3: "samus" } });
+  });
+
   /** Plan 5, Task 21b: this machine's Tilt key, rebound on /controls, on its own port. */
   it("plays this machine's Tilt key as rebound on /controls, on its own port", async () => {
     rebindTiltOnControls("KeyB");

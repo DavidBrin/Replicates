@@ -181,6 +181,10 @@ The simulation is deterministic by construction (§3), which buys rollback.
 - **Rooms of three or four always relay.** A room that seats a third player moves everyone to
   the room relay, a star through the Durable Object, and stays there; only a two-player room
   tries a direct channel first. There is no WebRTC mesh.
+- **One player gone ends the match.** In a room of three or four, a player who leaves (their
+  room socket closes) or goes silent past `SILENCE_LOST_MS` (a minute when they said they
+  switched tabs) ends the match for everyone, as Connection Lost; nobody plays on with a
+  frozen port.
 - **Input packets** carry every frame of input the receiver has not yet acknowledged (at most
   `MAX_INPUT_WINDOW_FRAMES`, 128), keyed by absolute frame number, plus an `ack`: the highest
   contiguous frame of the receiver's input the sender holds. They travel over an *unreliable,

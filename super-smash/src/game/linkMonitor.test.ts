@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createDoSignalTransport } from "@/net/adapters/doSignal";
 import { GUEST_PEER, fakeSession } from "@/net/online/testing";
 import { AWAY_LOST_MS, SILENCE_LOST_MS, type LinkHealth } from "@/net/online/watchdog";
+import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { createEmitter } from "@/net/transport";
 import { LINK_CHECK_MS, STALL_LOST_MS, startLinkMonitor } from "./linkMonitor";
 
 /**
  * `confirmed` hands the monitor a confirmed frame to watch, which `confirm`
  * then moves; without it the monitor is given none, as before the backstop.
+ * `peers` are the match's other players: the one guest of a room of two unless
+ * a test names more.
  */
-function harness({ hidden = false, confirmed }: { hidden?: boolean; confirmed?: number } = {}) {
+function harness({ hidden = false, confirmed, peers = [GUEST_PEER.id] }: { hidden?: boolean; confirmed?: number; peers?: readonly string[] } = {}) {
   let clock = 0;
   let frame = confirmed ?? -1;
   const ticks: (() => void)[] = [];
@@ -31,6 +35,7 @@ function harness({ hidden = false, confirmed }: { hidden?: boolean; confirmed?: 
   const stop = startLinkMonitor({
     transport: { onMessage: (cb) => messages.add(cb), onPeerLeave: (cb) => leaves.add(cb) },
     session: session.session,
+    peers,
     onHealth: (h, away) => health.push([h, away]),
     onLost,
     now: () => clock,
@@ -64,7 +69,9 @@ function harness({ hidden = false, confirmed }: { hidden?: boolean; confirmed?: 
       advance(200);
     }
   };
-  return { advance, messages, leaves, session, sent: session.sent, health, onLost, visibility, listeners, ticks, stop, setHidden, confirm, heartbeats };
+  /** `peer` saying it switched tabs, or that it is back. */
+  const away = (peer: string, isAway: boolean) => session.emit({ type: "lobby", message: { kind: "away", away: isAway }, from: peer });
+  return { advance, messages, leaves, session, sent: session.sent, health, onLost, visibility, listeners, ticks, stop, setHidden, confirm, heartbeats, away };
 }
 
 describe("the online link monitor", () => {
@@ -264,6 +271,7 @@ describe("the stall backstop", () => {
     const stop = startLinkMonitor({
       transport: { onMessage: (cb) => messages.add(cb), onPeerLeave: () => () => {} },
       session: fakeSession("guest").session,
+      peers: ["h1"],
       onHealth: () => {},
       onLost,
       confirmedFrame: () => 12,
@@ -276,6 +284,120 @@ describe("the stall backstop", () => {
     expect(onLost).not.toHaveBeenCalled();
     messages.emit(new Uint8Array([1]), "h1");
     vi.advanceTimersByTime(LINK_CHECK_MS);
+    expect(onLost).toHaveBeenCalledTimes(1);
+    stop();
+  });
+});
+
+/**
+ * Plan 7, Phase B: a match of three or four. Each other player is watched on
+ * their own, so one gone quiet is not covered by the others' packets, and
+ * any one of them leaving or going silent ends the match for everyone.
+ */
+describe("a match of more than two", () => {
+  it("calls the match lost when one of three peers goes silent, though the others keep talking", () => {
+    const h = harness({ peers: ["b", "c", "d"] });
+    const talk = (ms: number) => {
+      for (let t = 0; t < ms; t += 100) {
+        h.messages.emit(new Uint8Array([1]), "b");
+        h.messages.emit(new Uint8Array([1]), "c");
+        h.advance(100);
+      }
+    };
+    talk(SILENCE_LOST_MS - 100);
+    expect(h.onLost).not.toHaveBeenCalled();
+    expect(h.health.at(-1)).toEqual(["waiting", false]);
+    talk(100);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the minute only to the peer who said it is away", () => {
+    const h = harness({ peers: ["b", "d"] });
+    h.away("d", true);
+    expect(h.health.at(-1)).toEqual(["waiting", true]);
+    for (let t = 0; t < SILENCE_LOST_MS - LINK_CHECK_MS; t += LINK_CHECK_MS) h.advance(LINK_CHECK_MS);
+    expect(h.onLost).not.toHaveBeenCalled();
+    // B never said it was away: its ten seconds are up, though D has most of its minute left.
+    h.advance(LINK_CHECK_MS);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the worst peer's health", () => {
+    const h = harness({ peers: ["b", "c"] });
+    const bTalks = (ms: number) => {
+      for (let t = 0; t < ms; t += 200) {
+        h.messages.emit(new Uint8Array([1]), "b");
+        h.advance(200);
+      }
+    };
+    bTalks(400);
+    expect(h.health).toEqual([["ok", false]]);
+    // C has been quiet a second; B is fine, and the match waits on C.
+    bTalks(600);
+    expect(h.health.at(-1)).toEqual(["waiting", false]);
+    h.messages.emit(new Uint8Array([1]), "c");
+    bTalks(200);
+    expect(h.health.at(-1)).toEqual(["ok", false]);
+    // One player in another tab is the match waiting on them, whoever else is there.
+    h.away("c", true);
+    expect(h.health.at(-1)).toEqual(["waiting", true]);
+    h.away("c", false);
+    expect(h.health.at(-1)).toEqual(["ok", false]);
+  });
+
+  it("ignores the leave of a peer who is not in the match", () => {
+    const h = harness({ peers: ["b", "c"] });
+    h.leaves.emit("stranger");
+    expect(h.onLost).not.toHaveBeenCalled();
+    expect(h.ticks).toHaveLength(1);
+    h.leaves.emit("c");
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A guest moved to the relay announces everyone the room seats, and only a
+   * begin locks its players in: a stranger who typed the code before then
+   * stays announced, so the room's word that they left reaches the monitor.
+   * They were never in the match, and their leaving ends nothing.
+   */
+  it("plays on when a stranger the relay announced before the roster locked leaves, and ends when a player does", () => {
+    const signalling = new FakeSignalling();
+    const transport = createDoSignalTransport({
+      signalling,
+      iceServers: [],
+      createPeerConnection: () => {
+        throw new Error("a relayed room builds no peer connection");
+      },
+    });
+    const joins: string[] = [];
+    transport.onPeerJoin((id) => joins.push(id));
+    signalling.deliver({
+      t: "welcome",
+      self: { id: "g1", role: "guest", port: 1 },
+      peers: [
+        { id: "h1", role: "host", port: 0 },
+        { id: "g2", role: "guest", port: 2 },
+        { id: "s1", role: "guest", port: 3 },
+      ],
+    });
+    transport.useRelay();
+    transport.lockRoster(["h1", "g2"]);
+    expect(joins).toEqual(["h1", "g2", "s1"]);
+
+    const onLost = vi.fn();
+    const stop = startLinkMonitor({
+      transport,
+      session: fakeSession("guest").session,
+      peers: ["h1", "g2"],
+      onHealth: () => {},
+      onLost,
+      now: () => 0,
+      visibility: null,
+      every: () => () => {},
+    });
+    signalling.deliver({ t: "peer-left", peerId: "s1" });
+    expect(onLost).not.toHaveBeenCalled();
+    signalling.deliver({ t: "peer-left", peerId: "g2" });
     expect(onLost).toHaveBeenCalledTimes(1);
     stop();
   });

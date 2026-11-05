@@ -39,8 +39,8 @@ const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
 
 /** What the status line says about an online match that could not finish. */
 const UNFINISHED_STATUS: Partial<Record<MatchResult["kind"], string>> = {
-  connectionLost: "The connection to the other player was lost before the match finished. Nobody wins this one.",
-  desync: "The two games went out of sync, so this match can't count.",
+  connectionLost: "The connection to another player was lost before the match finished. Nobody wins this one.",
+  desync: "The games went out of sync, so this match can't count.",
 };
 
 /**

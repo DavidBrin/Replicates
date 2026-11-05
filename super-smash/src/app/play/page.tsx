@@ -649,7 +649,7 @@ export default function PlayPage() {
           kind,
           placings: [],
           stats: [],
-          fighters: { 0: config.fighters[0], 1: config.fighters[1] },
+          fighters: Object.fromEntries(config.fighters.map((id, port) => [port, id])),
           rules: config.rules,
           online: true,
         },
@@ -700,11 +700,12 @@ export default function PlayPage() {
       keyboardRef.current = keyboard;
       gamepad.attach();
       // Built from the host's start config alone, never from this machine's
-      // seats: the two peers must start from the identical state.
+      // seats: every peer must start from the identical state, with a port for
+      // each fighter the start names (two to four, Plan 7).
       mounted = mountMatch({
         canvas,
         slots: runnerSlotsFor(config),
-        ports: [0, 1],
+        ports: config.fighters.map((_, port) => port),
         stage: resolveMatchStage(config.stageId, config.stageForm, config.seed),
         rules: config.rules,
         seed: config.seed,
@@ -744,6 +745,9 @@ export default function PlayPage() {
           stopMonitor = startLinkMonitor({
             transport: session.transport,
             session,
+            // The begun room's other players: any one of them leaving or going
+            // silent ends the match for everyone, and nobody else's leave counts.
+            peers: useOnlineStore.getState().seats.map((s) => s.peerId),
             // A match stuck with packets still arriving is lost too.
             confirmedFrame: () => runner.netStats?.confirmedFrame ?? -1,
             onHealth: (health, away) => {

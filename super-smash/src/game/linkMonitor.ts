@@ -1,13 +1,17 @@
 /**
- * Whether the other player is still there, during an online match.
+ * Whether the other players are still there, during an online match.
  *
- * Four signals, one verdict. The data channel closing is final. Silence is
- * judged by the watchdog (net/online/watchdog.ts). A tab going to the
- * background tells the opponent first — through the room, which a hidden tab
- * can still reach — so their watchdog waits a minute instead of ten seconds.
- * And a match that stops confirming frames is over even while packets arrive:
- * a peer stuck at its prediction cap still sends a heartbeat every frame, so
- * silence alone would wait on it forever.
+ * Four signals, one verdict. A player's link closing is final. Silence is
+ * judged by a watchdog per player (net/online/watchdog.ts), fed only by that
+ * player's packets, so the others talking never covers for one gone quiet. A
+ * tab going to the background tells the others first — through the room,
+ * which a hidden tab can still reach — so their watchdog for it waits a minute
+ * instead of ten seconds. And a match that stops confirming frames is over
+ * even while packets arrive: a peer stuck at its prediction cap still sends a
+ * heartbeat every frame, so silence alone would wait on it forever.
+ *
+ * Any one player lost is the match lost, for everyone (Plan 7, Phase B): the
+ * rollback session cannot play on with a port nobody drives.
  *
  * The verdict is given once. The first "lost" stops everything here, so a
  * packet straggling in afterwards cannot revive a match that has already been
@@ -42,6 +46,13 @@ export interface VisibilitySource {
 export interface LinkMonitorOptions {
   readonly transport: Pick<Transport, "onMessage" | "onPeerLeave">;
   readonly session: Pick<OnlineSessionLike, "on" | "sendLobby">;
+  /**
+   * The match's other players, by peer id: the begun room's roster. Each is
+   * watched on its own. A leave, a packet or an `away` from anyone else (a
+   * stranger who typed the code) changes nothing.
+   */
+  readonly peers: readonly string[];
+  /** The worst player's health, and whether any of them said they switched tabs. */
   readonly onHealth: (health: LinkHealth, peerAway: boolean) => void;
   readonly onLost: () => void;
   /**
@@ -72,15 +83,27 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
           (document as unknown as VisibilitySource)
       : options.visibility;
 
-  const dog = new ConnectionWatchdog(now());
+  const start = now();
+  const dogs = new Map(options.peers.map((peer) => [peer, new ConnectionWatchdog(start)]));
+  const anyAway = (): boolean => [...dogs.values()].some((dog) => dog.peerAway);
+  /** The worst of the players' readings: one lost is the match lost, one quiet is the match waiting. */
+  const worstHealth = (at: number): LinkHealth => {
+    let worst: LinkHealth = "ok";
+    for (const dog of dogs.values()) {
+      const health = dog.check(at);
+      if (health === "lost") return health;
+      if (health === "waiting") worst = health;
+    }
+    return worst;
+  };
   let lost = false;
   let stopped = false;
   let lastHealth: LinkHealth | null = null;
   let lastAway = false;
   // When the confirmed frame last moved, judged like silence: from the start,
-  // and afresh whenever this tab returns or the opponent says it left or came back.
+  // and afresh whenever this tab returns or a player says it left or came back.
   let confirmed = options.confirmedFrame?.() ?? -1;
-  let progressAt = now();
+  let progressAt = start;
 
   const stalledOut = (at: number): boolean => {
     if (!options.confirmedFrame) return false;
@@ -90,7 +113,7 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
       progressAt = at;
       return false;
     }
-    return at - progressAt >= (dog.peerAway ? AWAY_LOST_MS : STALL_LOST_MS);
+    return at - progressAt >= (anyAway() ? AWAY_LOST_MS : STALL_LOST_MS);
   };
 
   const declareLost = () => {
@@ -107,41 +130,45 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
     // again from the moment the tab is back (see `onVisibility`).
     if (visibility?.hidden) return;
     const at = now();
-    const health = dog.check(at);
+    const health = worstHealth(at);
     if (health === "lost" || stalledOut(at)) {
       declareLost();
       return;
     }
-    if (health !== lastHealth || dog.peerAway !== lastAway) {
+    const away = anyAway();
+    if (health !== lastHealth || away !== lastAway) {
       lastHealth = health;
-      lastAway = dog.peerAway;
-      options.onHealth(health, dog.peerAway);
+      lastAway = away;
+      options.onHealth(health, away);
     }
   };
 
   const onVisibility = () => {
     if (!visibility) return;
     options.session.sendLobby({ kind: "away", away: visibility.hidden });
-    // Back on screen: the opponent gets a fresh ten seconds from now, not
+    // Back on screen: each player gets a fresh ten seconds from now, not
     // whatever was left of them when this tab went away. So does the match,
     // which stopped confirming when this tab stopped drawing.
     if (!visibility.hidden) {
       const at = now();
-      dog.heard(at);
+      for (const dog of dogs.values()) dog.heard(at);
       progressAt = at;
     }
   };
 
   const offs = [
-    options.transport.onMessage(() => dog.heard(now())),
-    options.transport.onPeerLeave(() => declareLost()),
+    options.transport.onMessage((_bytes, peer) => dogs.get(peer)?.heard(now())),
+    options.transport.onPeerLeave((peer) => {
+      if (dogs.has(peer)) declareLost();
+    }),
     options.session.on((event) => {
-      if (event.type === "lobby" && event.message.kind === "away") {
-        const at = now();
-        dog.setPeerAway(event.message.away, at);
-        progressAt = at;
-        report();
-      }
+      if (event.type !== "lobby" || event.message.kind !== "away") return;
+      const dog = dogs.get(event.from);
+      if (!dog) return;
+      const at = now();
+      dog.setPeerAway(event.message.away, at);
+      progressAt = at;
+      report();
     }),
   ];
   visibility?.addEventListener("visibilitychange", onVisibility);

@@ -107,14 +107,16 @@ describe("Results after an online match", () => {
     useMatchConfig.getState().setResult(LOST);
     await renderResults();
     expect(screen.getByText("Connection Lost")).toBeInTheDocument();
-    expect(await screen.findByText(/connection to the other player was lost/i)).toBe(screen.getByRole("status"));
+    expect(await screen.findByText("The connection to another player was lost before the match finished. Nobody wins this one.")).toBe(
+      screen.getByRole("status"),
+    );
     expect(screen.queryByRole("button", { name: /rematch/i })).toBeNull();
   });
 
   it("gives the unfinished message its own centred panel, in larger type (Plan 6, Task 28)", async () => {
     useMatchConfig.getState().setResult(LOST);
     await renderResults();
-    const status = await screen.findByText(/connection to the other player was lost/i);
+    const status = await screen.findByText(/connection to another player was lost/i);
     expect(status).toBe(screen.getByRole("status"));
     expect(status.closest("[data-testid='unfinished-panel']")).not.toBeNull();
     expect(status).toHaveClass("text-lg");
@@ -131,17 +133,17 @@ describe("Results after an online match", () => {
       vi.advanceTimersByTime(0);
     });
     expect(screen.getByRole("status")).toBe(status);
-    expect(status).toHaveTextContent(/connection to the other player was lost/i);
+    expect(status).toHaveTextContent(/connection to another player was lost/i);
   });
 
-  describe("after the two games went out of sync", () => {
+  describe("after the games went out of sync", () => {
     const DESYNC: MatchResult = { kind: "desync", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true };
 
     it("says plainly the match cannot count, with no placings and no rules", async () => {
       useMatchConfig.getState().setResult(DESYNC);
       await renderResults();
       expect(screen.getByText("Out of Sync")).toBeInTheDocument();
-      expect(await screen.findByText("The two games went out of sync, so this match can't count.")).toBe(screen.getByRole("status"));
+      expect(await screen.findByText("The games went out of sync, so this match can't count.")).toBe(screen.getByRole("status"));
       expect(screen.queryByRole("list")).toBeNull();
       expect(screen.queryByText(/match ·/)).toBeNull();
       expect(screen.getByRole("button", { name: /play online again/i })).toBeInTheDocument();
