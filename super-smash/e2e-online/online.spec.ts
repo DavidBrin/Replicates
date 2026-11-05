@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import { SILENCE_LOST_MS } from "../src/net/online/watchdog";
-import { ROUTES, readFighters } from "../e2e/helpers";
+import { ROUTES, frame, readFighters, withoutModels } from "../e2e/helpers";
 
 /**
  * Two browsers, one room, one match — the whole online path end to end.
@@ -42,14 +42,12 @@ interface NetHandle {
 /** Every context a test opened, closed after it so a failed test leaves no match running. */
 const contexts: BrowserContext[] = [];
 
+/** A page of its own in a context of its own, with the models answered 404 so the fighters are stand-ins. */
 async function player(browser: Browser): Promise<Page> {
   const context = await browser.newContext();
   contexts.push(context);
+  await withoutModels(context);
   return context.newPage();
-}
-
-async function frame(page: Page): Promise<number> {
-  return page.evaluate(() => (window as unknown as { __smashDebug?: { frame: number } }).__smashDebug?.frame ?? -1);
 }
 
 async function netStats(page: Page) {

@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 
 /**
  * Routes and interactions, re-declared rather than imported from `src/`.
@@ -107,6 +107,16 @@ export async function simStageId(page: Page): Promise<string> {
 /** The simulation frame the match is on (0 before one is running). */
 export async function simFrame(page: Page): Promise<number> {
   return page.evaluate(() => (window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.frame ?? 0);
+}
+
+/**
+ * The simulation frame the match is on, or -1 where no match is running (no
+ * `__smashDebug`: before one starts, or after it ended or the page left
+ * `/play`). `simFrame` says 0 for both, which a test that must tell "this page's
+ * match is gone" from "this page has not advanced" cannot use.
+ */
+export async function frame(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.frame ?? -1);
 }
 
 /**
@@ -255,4 +265,21 @@ export async function waitForMatch(page: Page): Promise<void> {
   await page.waitForFunction(() => ((window as unknown as { __smashDebug?: { frame: number } }).__smashDebug?.frame ?? 0) >= 70, undefined, {
     timeout: 30_000,
   });
+}
+
+/**
+ * Answer every request for the models directory (`/models/index.json` or a glb)
+ * the way a static host answers a file it does not have: a 404 with an HTML
+ * page, never JSON. The fighters are then drawn as the project's own capsule
+ * stand-ins, so no frame a run leaves behind (a retained trace) holds a real
+ * model (the repo is public), and the run costs the same whether or not this
+ * checkout built the models.
+ *
+ * On the context and before its first page, so every page it opens is covered.
+ */
+export async function withoutModels(context: BrowserContext): Promise<void> {
+  await context.route(
+    (url) => url.pathname.startsWith("/models/"),
+    (route) => route.fulfill({ status: 404, contentType: "text/html", body: "<!doctype html><title>404</title>" }),
+  );
 }
