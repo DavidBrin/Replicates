@@ -321,6 +321,31 @@ describe("the play page, online", () => {
   });
 
   /**
+   * The room went, or the peer left, while the fighters loaded: nobody was
+   * listening yet, and the runner would start on a dead link to freeze until
+   * the silence timeout. A link that is not open when the match is ready is
+   * lost then and there (Phase A fix, M-3).
+   */
+  it("ends the match as Connection Lost at once when the link is no longer open by the time it is ready", async () => {
+    const { link } = goOnline("guest");
+    link.status = "waiting";
+    await renderPage();
+    const { runner } = only(mocks.runners);
+    expect(mocks.monitors).toHaveLength(0);
+    expect(runner.stop).toHaveBeenCalled();
+    expect(useMatchConfig.getState().result).toEqual({
+      kind: "connectionLost",
+      placings: [],
+      stats: [],
+      fighters: { 0: "mario", 1: "fox" },
+      rules: CONFIG.rules,
+      online: true,
+    });
+    act(() => vi.advanceTimersByTime(0));
+    expect(routerMock.push).toHaveBeenCalledWith("/results");
+  });
+
+  /**
    * Two machines that disagree about a confirmed frame are no longer playing
    * the same match: neither may crown anyone. Stopping here also stops the
    * inputs, so the other side finds out too — by its own check, or its link

@@ -731,6 +731,13 @@ export default function PlayPage() {
           // Watched from its start, not from mount (ruling R3): a model still
           // loading is not a stalled link. Nothing to watch once it is over.
           if (finished) return;
+          // A link lost while the models loaded (the room gone, the peer left)
+          // told nobody: the monitor was not listening yet, and a started
+          // match never reconnects. Lost now, not after the silence timeout.
+          if (session.transport.status !== "open") {
+            abandon("connectionLost");
+            return;
+          }
           stopMonitor = startLinkMonitor({
             transport: session.transport,
             session,
