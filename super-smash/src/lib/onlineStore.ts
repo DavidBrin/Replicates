@@ -47,9 +47,11 @@ export const RELAY_LINKING_STATUS = "Connecting through the relay…";
 /**
  * How long, once the channel is open, the other side has to say which build
  * it runs (`hello`, Plan 2 Task 27). A build from before the handshake never
- * says, and is refused when this runs out. A hello rides the room and takes a
- * round trip at most; until it lands, the screens show the connecting status,
- * so a quick one goes unnoticed.
+ * says, and is refused when this runs out. Relayed, a seat that has said
+ * nothing at all by then is a failed link instead (`link-failed`): its tab is
+ * not running, and nothing says its build differs. A hello rides the room and
+ * takes a round trip at most; until it lands, the screens show the connecting
+ * status, so a quick one goes unnoticed.
  */
 export const HELLO_TIMEOUT_MS = 5_000;
 
@@ -186,6 +188,13 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * be refusing it any more.
    */
   let withdrawnStart: OnlineMatchConfig | null = null;
+  /**
+   * Whether the seat has said anything in the lobby since the link opened or
+   * the seat was taken. Relayed, a seat that has said nothing at all when the
+   * wait for its hello runs out is a link that never worked (the other tab
+   * cannot run: a phone switched to another app, say), not another build.
+   */
+  let heardFromSeat = false;
   /** Runs out `HELLO_TIMEOUT_MS` after the channel opens with no matching hello in. */
   let helloTimer: ReturnType<typeof setTimeout> | null = null;
   const stopHelloTimer = () => {
@@ -200,7 +209,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   };
 
   /** Said for good, a start not yet played withdrawn, and the room left. */
-  const leaveRefused = (reason: RefuseReason) => {
+  const leaveWith = (reason: RefuseReason | "link-failed") => {
     fail(reason);
     online().patch({ config: null });
     // Once this delivery is over, not in the middle of it (session.ts, `leaveSoon`).
@@ -218,7 +227,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    */
   const refuseBuild = (why: string) => {
     console.warn("David-Smash: not playing the other player's build:", why);
-    leaveRefused("engine-mismatch");
+    leaveWith("engine-mismatch");
   };
 
   /**
@@ -233,7 +242,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     // Neutral about the seat: the guest cannot read the start it was sent, the host
     // is told that it could not, and each says which in `why`.
     console.warn("David-Smash: a start from this build could not be read:", why);
-    leaveRefused("unreadable-start");
+    leaveWith("unreadable-start");
   };
 
   const sayHello = () => session.sendLobby({ kind: "hello", ...localBuild() });
@@ -265,9 +274,9 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     helloTimer ??= setTimeout(() => {
       helloTimer = null;
       // A start out since the channel opened is the match's to end, not this wait's.
-      if (online().errorReason === null && online().config === null) {
-        refuseBuild(`it sent no hello within ${HELLO_TIMEOUT_MS} ms (a build from before the handshake sends none)`);
-      }
+      if (online().errorReason !== null || online().config !== null) return;
+      if (online().route === "relay" && !heardFromSeat) leaveWith("link-failed");
+      else refuseBuild(`it sent no hello within ${HELLO_TIMEOUT_MS} ms (a build from before the handshake sends none)`);
     }, HELLO_TIMEOUT_MS);
   };
 
@@ -379,6 +388,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         peerSeated = event.present;
         // Somebody arrived or left: whoever sits there next says its build afresh.
         peerBuildMatches = false;
+        heardFromSeat = false;
         stopHelloTimer();
         if (event.present) {
           if (online().status === "connected") break;
@@ -406,6 +416,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         // The wait for a hello runs only while the channel is open.
         if (!linkOpen) stopHelloTimer();
         if (event.status === "open") {
+          heardFromSeat = false;
           // Direct unless the session has said the match moved to the room, which it says first.
           if (online().route === null) online().patch({ route: "direct" });
           channelOpened();
@@ -428,6 +439,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         }
         break;
       case "lobby":
+        heardFromSeat = true;
         onLobby(event.message);
         break;
     }

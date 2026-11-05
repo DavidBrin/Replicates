@@ -828,14 +828,48 @@ describe("the build handshake", () => {
     return fake;
   }
 
-  it("refuses a relayed peer that never says hello, five seconds after the room seats it", async () => {
+  /**
+   * Relayed, a seat that has said nothing at all since the relay opened is not
+   * another version: the other tab most likely cannot run (a phone switched
+   * to another app), which may be why the direct link failed too. It is a
+   * failed link, said for good, and the room is left (Phase A fix, M-4).
+   */
+  it("calls a relayed seat that says nothing at all a failed link, not another version, five seconds after the room seats it", async () => {
     vi.useFakeTimers();
     const fake = relayedOpenThenSeated();
     vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
     expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
     vi.advanceTimersByTime(1);
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "link-failed",
+      error: "The connection to the other player failed. Leave the room and try again.",
+      notice: null,
+      config: null,
+    });
+    expect(fake.session.close).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(fake.session.close).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("refuses a relayed seat that talks in the lobby but never says hello as another build", async () => {
+    vi.useFakeTimers();
+    const fake = relayedOpenThenSeated();
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
     await expectRefused(fake);
     expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+  });
+
+  it("forgets what the last seat said when somebody new takes it on the relay", () => {
+    vi.useFakeTimers();
+    const fake = relayedOpenThenSeated();
+    fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
+    fake.emit({ type: "peer", present: false });
+    fake.emit({ type: "peer", present: true });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState().errorReason).toBe("link-failed");
   });
 
   it("stops waiting for a relayed peer's hello once its matching one is in", () => {
