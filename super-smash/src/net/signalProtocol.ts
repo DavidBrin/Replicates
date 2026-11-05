@@ -14,9 +14,6 @@
 
 export type Role = "host" | "guest";
 
-/** The host is P1 and picks the stage; the guest is P2. */
-export const ROLE_PORT: Readonly<Record<Role, number>> = { host: 0, guest: 1 };
-
 export type RoomIntent = "create" | "join";
 
 export type RoomError = "full" | "taken" | "not-found" | "bad-message" | "too-many-messages";

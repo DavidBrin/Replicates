@@ -218,8 +218,9 @@ describe("PadOptions listens to the pad that drives the seat", () => {
  * nothing is sent: the pad is read here, and only the packed frame travels.
  */
 describe("PadOptions online (R-T20a)", () => {
-  function seated(role: Role) {
+  function seated(role: Role, seatPort?: number) {
     const fake = fakeSession();
+    fake.seatPort = seatPort;
     setActiveSession(fake.session);
     bindSession(fake.session);
     act(() => fake.emit({ type: "joined", role }));
@@ -257,5 +258,22 @@ describe("PadOptions online (R-T20a)", () => {
     fireEvent.click(screen.getByRole("button", { name: "P2 reset gamepad" }));
     expect(padOf(1)).toEqual(DEFAULT_PAD_SETTINGS);
     expect(useMatchConfig.getState().localOptions.pad).toEqual(DEFAULT_PAD_SETTINGS);
+  });
+
+  /** Plan 7, Phase B: a match of four seats four ports, and the room says which is this machine's. */
+  it("shows only this machine's own seat, at its port from the room", () => {
+    const fake = seated("guest", 2);
+    act(() => useMatchConfig.getState().configureOnline(4));
+    render(<PadOptions />);
+    expect(screen.getAllByRole("combobox").map((s) => s.getAttribute("aria-label"))).toEqual(["P3 right stick"]);
+    fireEvent.change(screen.getByRole("combobox", { name: "P3 right stick" }), { target: { value: "off" } });
+    expect(useMatchConfig.getState().players.map((p) => p.pad.rightStick)).toEqual([
+      DEFAULT_PAD_SETTINGS.rightStick,
+      DEFAULT_PAD_SETTINGS.rightStick,
+      "off",
+      DEFAULT_PAD_SETTINGS.rightStick,
+    ]);
+    expect(useMatchConfig.getState().localOptions.pad.rightStick).toBe("off");
+    expect(fake.sent).toEqual([]);
   });
 });

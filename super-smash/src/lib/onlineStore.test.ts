@@ -2195,4 +2195,44 @@ describe("this machine's own Stick Jump during an online session (R-T20a)", () =
     expect(useMatchConfig.getState().players.map((p) => p.pad)).toEqual([DEFAULT_PAD_SETTINGS, DEFAULT_PAD_SETTINGS]);
     expect(useMatchConfig.getState().localOptions.pad).toEqual(DEFAULT_PAD_SETTINGS);
   });
+
+  /**
+   * Plan 7, Phase B: the Start compacts the room's ports to the match's, so a player's room port
+   * (`session.seatPort`) can differ from the port it plays, even in a room of two: here port 1's
+   * player left before the Start, and the guest at room port 2 plays port 1.
+   */
+  describe("once the Start has moved this machine off its room seat's port", () => {
+    function guestAtMatchPort1() {
+      const fake = fakeSession();
+      fake.seatPort = 2;
+      fake.selfId = "g2";
+      setActiveSession(fake.session);
+      bindSession(fake.session);
+      fake.emit({ type: "joined", role: "guest" });
+      fake.emit({ type: "peer", present: true, peer: HOST_PEER });
+      fake.emit({ type: "lobby", message: { kind: "begin", seats: [{ id: HOST_PEER.id, port: 0 }, { id: "g2", port: 1 }] }, from: HOST_PEER.id });
+      expect(useOnlineStore.getState()).toMatchObject({ begun: true, localPort: 1 });
+      expect(fake.session.seatPort).toBe(2);
+      useMatchConfig.getState().setFighter(1, "fox");
+      return fake;
+    }
+
+    it("changes Stick Jump on its match port and says it in the pick for that port", () => {
+      const fake = guestAtMatchPort1();
+      fake.sent.length = 0;
+      expect(setOwnStickJump(false)).toBe(true);
+      expect(useMatchConfig.getState().players.map((p) => p.stickJump)).toEqual([true, false]);
+      // Port 1's pick, with its fighter and costume: the host applies it to this guest's panel.
+      expect(fake.sent).toEqual([{ kind: "pick", fighterId: "fox", costume: 1, stickJump: false }]);
+    });
+
+    it("changes its pad on its match port", () => {
+      const fake = guestAtMatchPort1();
+      const pad = rebind(DEFAULT_PAD_SETTINGS, "attack", 3);
+      expect(setOwnPad(pad)).toBe(true);
+      expect(useMatchConfig.getState().players.map((p) => p.pad)).toEqual([DEFAULT_PAD_SETTINGS, pad]);
+      expect(useMatchConfig.getState().localOptions.pad).toEqual(pad);
+      expect(fake.sent).toEqual([]);
+    });
+  });
 });

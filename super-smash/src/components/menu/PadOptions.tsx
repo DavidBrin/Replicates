@@ -17,7 +17,6 @@ import {
 import { padIndexForSeat } from "@/input/padJoin";
 import { portColour, portTag, useMatchConfig } from "@/lib/matchConfig";
 import { setOwnPad, useOnlineStore } from "@/lib/onlineStore";
-import { ROLE_PORT } from "@/net/signalProtocol";
 
 const ACTION_NAMES: Readonly<Record<PadAction, string>> = {
   attack: "attack",
@@ -108,16 +107,15 @@ function useButtonCapture(source: PadSource | null, onPick: (button: number) => 
  * that human in the match (`padIndexForSeat`): a pad that pressed to join on the
  * select screen drives its own seat, and the rest go in connection order to the
  * humans nobody joined (Plan 6, Task 30). Online
- * (ruling R-T20a) only this machine's port has a row, the host P1 and the
- * guest P2; every pad on this machine drives it, so a capture hears them all,
+ * (ruling R-T20a) only this machine's port has a row, the one the room gave it
+ * (`localPort`); every pad on this machine drives it, so a capture hears them all,
  * and a change is kept for after the session (`setOwnPad`).
  */
 export function PadOptions() {
   const players = useMatchConfig((s) => s.players);
   const setPad = useMatchConfig((s) => s.setPad);
   const online = useMatchConfig((s) => s.online);
-  const role = useOnlineStore((s) => s.role);
-  const ownPort = role === null ? null : ROLE_PORT[role];
+  const ownPort = useOnlineStore((s) => s.localPort);
   const humans = players.filter((p) => p.kind === "human");
   const shown = online ? players.filter((p) => p.port === ownPort) : humans;
   const change = (port: number, pad: PadSettings) => {

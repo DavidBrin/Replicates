@@ -105,7 +105,7 @@ describe("StageSelect, hosting online", () => {
     setActiveSession(fake.session);
     bindSession(fake.session);
     useMatchConfig.getState().configureOnline();
-    useOnlineStore.getState().patch({ role: "host", status: "connected", roomCode: "ABCD" });
+    useOnlineStore.getState().patch({ role: "host", status: "connected", roomCode: "ABCD", localPort: fake.session.seatPort });
     return fake;
   }
 

@@ -3,7 +3,6 @@
 import { Toggle } from "@/components/ui/Toggle";
 import { portColour, portTag, useMatchConfig } from "@/lib/matchConfig";
 import { setOwnStickJump, useOnlineStore } from "@/lib/onlineStore";
-import { ROLE_PORT } from "@/net/signalProtocol";
 
 /**
  * Per-player control options (Plan 5): Ultimate's "Stick Jump" — whether up on
@@ -11,17 +10,16 @@ import { ROLE_PORT } from "@/net/signalProtocol";
  * the same keys, so it travels with the player's selection into the match,
  * and online to the other peer. CPUs play the default.
  *
- * Online (ruling R-T20a), this machine owns one port, the host P1 and the guest
- * P2, and only that one has a switch: the other port's option is the other
- * peer's, set by their pick. A change goes out in this machine's pick
+ * Online (ruling R-T20a), this machine owns one port, the one the room gave it
+ * (`localPort`), and only that one has a switch: the other ports' options are the
+ * other peers', set by their picks. A change goes out in this machine's pick
  * (`setOwnStickJump`) and is kept for after the session.
  */
 export function PlayerOptions() {
   const players = useMatchConfig((s) => s.players);
   const setStickJump = useMatchConfig((s) => s.setStickJump);
   const online = useMatchConfig((s) => s.online);
-  const role = useOnlineStore((s) => s.role);
-  const ownPort = role === null ? null : ROLE_PORT[role];
+  const ownPort = useOnlineStore((s) => s.localPort);
   const shown = online ? players.filter((p) => p.port === ownPort) : players.filter((p) => p.kind === "human");
   const change = (port: number, on: boolean) => {
     if (online) setOwnStickJump(on);

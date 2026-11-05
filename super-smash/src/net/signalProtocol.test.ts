@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   MAX_MESSAGE_BYTES,
-  ROLE_PORT,
   ROOM_CLOSE_CODES,
   parseClientMessage,
   parseRoomIntent,
@@ -174,10 +173,6 @@ describe("server messages, as the browser reads them", () => {
 });
 
 describe("room vocabulary", () => {
-  it("puts the host on port 0 and the guest on port 1", () => {
-    expect(ROLE_PORT).toEqual({ host: 0, guest: 1 });
-  });
-
   it("maps every close code back to its reason, and nothing else", () => {
     for (const [reason, code] of Object.entries(ROOM_CLOSE_CODES)) {
       expect(roomErrorForCloseCode(code)).toBe(reason as RoomError);

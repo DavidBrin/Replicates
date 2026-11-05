@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import { sendHostStage, sendOwnPick, useOnlineStore } from "@/lib/onlineStore";
-import { ROLE_PORT } from "@/net/signalProtocol";
 
 export interface RejoinResendOptions {
   /**
@@ -14,8 +13,9 @@ export interface RejoinResendOptions {
 
 /**
  * Whoever takes an empty seat starts from an empty page (lib/onlineStore), so
- * when the channel opens again this side repeats its own pick, and — if asked
- * — the host its stage.
+ * when the channel opens again this side repeats its own pick, from its own
+ * match port (`localPort`), and — if asked — the host its stage. Every move into
+ * `connected` counts, so each newcomer to a begun room's seat gets both.
  *
  * Only a transition into `connected` counts. Mounting says nothing: the select
  * screens are reached once the room is already open, from the lobby, before
@@ -27,10 +27,10 @@ export function useRejoinResend({ stage }: RejoinResendOptions): void {
 
   useEffect(() => {
     if (role === null) return;
-    const port = ROLE_PORT[role];
     return useOnlineStore.subscribe((now, before) => {
       if (now.status !== "connected" || before.status === "connected") return;
-      sendOwnPick(port);
+      // The port this machine plays, read as it moves in: the host's Start can have moved it off its room seat.
+      if (now.localPort !== null) sendOwnPick(now.localPort);
       if (stage && role === "host") sendHostStage();
     });
   }, [role, stage]);

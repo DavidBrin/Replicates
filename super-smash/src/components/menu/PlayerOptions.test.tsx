@@ -53,8 +53,9 @@ describe("PlayerOptions (Plan 5)", () => {
  * other peer's, set by their pick, so it has no switch here.
  */
 describe("PlayerOptions online (R-T20a)", () => {
-  function seated(role: Role) {
+  function seated(role: Role, seatPort?: number) {
     const fake = fakeSession();
+    fake.seatPort = seatPort;
     setActiveSession(fake.session);
     bindSession(fake.session);
     act(() => fake.emit({ type: "joined", role }));
@@ -73,5 +74,16 @@ describe("PlayerOptions online (R-T20a)", () => {
     expect(useMatchConfig.getState().players[1 - own].stickJump).toBe(true);
     expect(useMatchConfig.getState().localOptions).toEqual({ stickJump: false, pad: DEFAULT_PAD_SETTINGS });
     expect(fake.sent).toEqual([{ kind: "pick", fighterId: null, costume: own, stickJump: false }]);
+  });
+
+  /** Plan 7, Phase B: a match of four seats four ports, and the room says which is this machine's. */
+  it("shows only this machine's own seat, at its port from the room", () => {
+    const fake = seated("guest", 2);
+    act(() => useMatchConfig.getState().configureOnline(4));
+    render(<PlayerOptions />);
+    expect(screen.getAllByRole("switch").map((s) => s.getAttribute("aria-label"))).toEqual(["P3 stick jump"]);
+    fireEvent.click(screen.getByRole("switch", { name: "P3 stick jump" }));
+    expect(useMatchConfig.getState().players.map((p) => p.stickJump)).toEqual([true, true, false, true]);
+    expect(fake.sent).toEqual([{ kind: "pick", fighterId: null, costume: 2, stickJump: false }]);
   });
 });

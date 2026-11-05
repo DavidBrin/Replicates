@@ -11,7 +11,7 @@
 import { vi, type Mock } from "vitest";
 
 import type { DoSignalTransport, Route } from "../adapters/doSignal";
-import { ROLE_PORT, type PeerInfo, type Role } from "../signalProtocol";
+import type { PeerInfo, Role } from "../signalProtocol";
 import { createEmitter } from "../transport";
 import type { LobbyMessage } from "./lobby";
 import type { OnlineSessionLike, SessionEvent } from "./session";
@@ -90,7 +90,7 @@ export function fakeSession(role: Role | null = null): FakeSession {
       },
       get seatPort() {
         if (fake.seatPort !== undefined) return fake.seatPort;
-        return current === null ? null : ROLE_PORT[current];
+        return current === null ? null : (current === "host" ? HOST_PEER : GUEST_PEER).port;
       },
       get peers() {
         return fake.peers;

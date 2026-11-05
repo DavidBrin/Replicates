@@ -32,7 +32,6 @@ import {
 import { buildStartConfig, newMatchSeed } from "@/game/onlineConfig";
 import { drivingPads, joinPresses } from "@/input/padJoin";
 import { LINKING_STATUS, leaveOnline, sendLobby, sendOwnPick, useOnlineStore } from "@/lib/onlineStore";
-import { ROLE_PORT } from "@/net/signalProtocol";
 
 /**
  * Five, which puts the eight fighters and the random slot into two rows.
@@ -69,8 +68,9 @@ export function CharacterSelect() {
   const stageForm = useMatchConfig((s) => s.stageForm);
   const rules = useMatchConfig((s) => s.rules);
 
-  // Online, each machine owns exactly one panel: the host P1, the guest P2.
-  // The other panel is filled by the opponent's own pick (lib/onlineStore).
+  // Online, each machine owns exactly one panel, at the match port the room gave it
+  // (`localPort`: the host's Start can move it off its room seat). The others are
+  // filled by their players' own picks (lib/onlineStore).
   const onlineRole = useOnlineStore((s) => s.role);
   const onlineStatus = useOnlineStore((s) => s.status);
   const onlineConfig = useOnlineStore((s) => s.config);
@@ -78,7 +78,8 @@ export function CharacterSelect() {
   // One thing to say: an error outranks a notice (lib/onlineStore).
   const onlineMessage = useOnlineStore((s) => s.error ?? s.notice);
   const onlineFailed = useOnlineStore((s) => s.error !== null);
-  const onlinePort = onlineRole === null ? null : ROLE_PORT[onlineRole];
+  const localPort = useOnlineStore((s) => s.localPort);
+  const onlinePort = onlineRole === null ? null : localPort;
   // The guest has no stage select to go back to, and after an error the room
   // cannot go on: either way, going back is leaving.
   const backLeaves = onlineRole === "guest" || (onlineRole === "host" && onlineFailed);
@@ -220,23 +221,26 @@ export function CharacterSelect() {
   // pick, and the host its stage (chosen on the way here).
   useRejoinResend({ stage: true });
 
-  // Online, once both picks are known, both machines start fetching the two
-  // fighters' models (Plan 4), so the match starts with them rather than on
-  // stand-ins while a download finishes. Again for every new pair; a model
-  // already in the page's cache costs nothing. Random is decided by the
-  // host's start, so there is nothing to fetch for it yet. Through `import()`,
-  // which keeps three.js out of this screen's own chunk (`chunkSplit.test.ts`).
-  const hostPick = players[0]?.fighterId ?? null;
-  const guestPick = players[1]?.fighterId ?? null;
+  // Online, once every pick is known, all the machines start fetching the
+  // fighters' models (Plan 4; Plan 7: every seat's), so the match starts with
+  // them rather than on stand-ins while a download finishes. Again for every
+  // new set of picks; a model already in the page's cache costs nothing.
+  // Random is decided by the host's start, so there is nothing to fetch for it
+  // yet. Through `import()`, which keeps three.js out of this screen's own
+  // chunk (`chunkSplit.test.ts`). The picks as one string, so the effect runs
+  // when one changes and not on every render's new array.
+  const picks = players.map((p) => p.fighterId ?? "").join(" ");
   useEffect(() => {
-    if (onlineRole === null || hostPick === null || guestPick === null) return;
-    const ids = [hostPick, guestPick].filter((id) => id !== RANDOM_FIGHTER);
+    if (onlineRole === null) return;
+    const chosen = picks.split(" ");
+    if (chosen.some((id) => id === "")) return;
+    const ids = chosen.filter((id) => id !== RANDOM_FIGHTER);
     if (ids.length === 0) return;
     // A chunk that fails to load only means the match fetches the models itself.
     void import("@/game/world3d").then((w) => w.preloadModels(ids)).catch(() => {});
-  }, [onlineRole, hostPick, guestPick]);
+  }, [onlineRole, picks]);
 
-  // Online, only the host starts, and only with both players in the room.
+  // Online, only the host starts, and only with every seat connected.
   const canStart = ready && (onlineRole === null || (onlineRole === "host" && onlineStatus === "connected"));
 
   const startMatch = () => {
@@ -402,7 +406,7 @@ export function CharacterSelect() {
           </ul>
 
           <p className="mt-3 text-xs text-white/40">
-            {/* Online there is one panel to choose for and the two seats are fixed. */}
+            {/* Online there is one panel to choose for and the seats are fixed. */}
             {onlinePort === null
               ? "Arrows move · Enter chooses · 1–4 switches port · Backspace clears · + / − adds and removes a player"
               : "Arrows move · Enter chooses · Backspace clears"}

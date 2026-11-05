@@ -38,7 +38,6 @@ import { CONFIG_ARROWS } from "@/input/schemes";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
 import { PacketType, decodePacket, type InputPacket } from "@/net/packet";
 import { MAX_PREDICTION_FRAMES } from "@/net/rollback";
-import { ROLE_PORT } from "@/net/signalProtocol";
 import { createNullTransport, type Transport } from "@/net/transport";
 import { render } from "@/render/renderer";
 import { stepVfx } from "@/render/vfx";
@@ -621,8 +620,8 @@ describe("an online match ends once, on both machines", () => {
       (burst.from === role || burst.from === "both") &&
       wallFrame >= burst.at &&
       wallFrame < burst.at + burst.frames;
-    const peers = roles.map((role) => {
-      const port = ROLE_PORT[role];
+    // The host plays port 0 and the guest port 1.
+    const peers = roles.map((role, port) => {
       const transport = network.connect(role);
       const runner: MatchRunner = createMatchRunner({
         stage: getStageOrThrow("battlefield"),
@@ -645,8 +644,7 @@ describe("an online match ends once, on both machines", () => {
     const gone = [false, false];
     for (let i = 0; i < budget && !(gone[0] && gone[1]); i++) {
       wallFrame = i;
-      for (const role of roles) {
-        const port = ROLE_PORT[role];
+      for (const [port, role] of roles.entries()) {
         if (!gone[port]) {
           peers[port].advance(1);
           if (ends[port].length > 0) {

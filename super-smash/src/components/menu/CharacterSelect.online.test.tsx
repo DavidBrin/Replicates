@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
 import { localBuild } from "@/game/onlineConfig";
@@ -10,7 +10,7 @@ import type { MatchRules } from "@/engine/types";
 import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { GUEST_PEER, HOST_PEER, fakeSession, otherPeer, type FakeSession } from "@/net/online/testing";
-import { ROLE_PORT, type Role } from "@/net/signalProtocol";
+import type { Role } from "@/net/signalProtocol";
 import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
 import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { CharacterSelect } from "./CharacterSelect";
@@ -43,9 +43,29 @@ function goOnline(role: Role): FakeSession {
   bindSession(fake.session);
   fake.emit({ type: "peer", present: true, peer: otherPeer(role) });
   useMatchConfig.getState().configureOnline();
-  useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD" });
+  useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD", localPort: fake.session.seatPort });
   return fake;
 }
+
+/**
+ * A begun room of `count`, as the select screens find it: this machine's match port is
+ * `localPort`, the others sit at the rest, each said its build, and `fake.emit` hears them
+ * by the ids `p0`, `p1`, ... (their match ports).
+ */
+function goOnlineOf(role: Role, localPort: number, count: number): FakeSession {
+  const fake = fakeSession(role);
+  setActiveSession(fake.session);
+  bindSession(fake.session);
+  useMatchConfig.getState().configureOnline(count);
+  const seats = Array.from({ length: count }, (_, port) => port)
+    .filter((port) => port !== localPort)
+    .map((port) => ({ peerId: `p${port}`, port, build: "ok" as const }));
+  useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD", localPort, begun: true, seats });
+  return fake;
+}
+
+/** The panel at a match port. */
+const panel = (port: number) => within(document.querySelector<HTMLElement>(`[data-port="${port}"]`)!);
 
 async function renderSelect() {
   render(<CharacterSelect />);
@@ -442,7 +462,7 @@ describe("CharacterSelect, online", () => {
       render(<CharacterSelect />);
       await act(async () => {});
       fireEvent.click(portraits()[0]);
-      const mine = useMatchConfig.getState().players[ROLE_PORT.guest];
+      const mine = useMatchConfig.getState().players[GUEST_PEER.port];
       expect(g.lobby()).toEqual([HELLO, { kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
 
       // The host's side died; it offers again, and this side's channel is replaced.
@@ -524,7 +544,7 @@ describe("CharacterSelect, online", () => {
       useMatchConfig.getState().setStageForm("omega");
       await renderSelect();
       fireEvent.click(portraits()[0]);
-      const mine = useMatchConfig.getState().players[ROLE_PORT.host];
+      const mine = useMatchConfig.getState().players[HOST_PEER.port];
       // Arriving said nothing; the room opened in the lobby, before anything was picked.
       expect(fake.sent).toEqual([{ kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
       fake.sent.length = 0;
@@ -542,13 +562,67 @@ describe("CharacterSelect, online", () => {
       const fake = goOnline("guest");
       await renderSelect();
       fireEvent.click(portraits()[0]);
-      const mine = useMatchConfig.getState().players[ROLE_PORT.guest];
+      const mine = useMatchConfig.getState().players[GUEST_PEER.port];
       fake.sent.length = 0;
 
       rejoin(fake);
 
       expect(fake.sent).toEqual([HELLO, { kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
     });
+  });
+});
+
+/**
+ * Plan 7, Phase B: every seat of a begun room has its own panel. This machine owns the one at
+ * its match port, which the room's compaction can put anywhere from 0 to 3, and the others' picks
+ * fill theirs. The start is the host's, with everyone in.
+ */
+describe("CharacterSelect, online, up to four", () => {
+  it("gives a guest on port 3 its own panel among four, and the others' picks in theirs", async () => {
+    const fake = goOnlineOf("guest", 3, 4);
+    await renderSelect();
+    act(() => {
+      fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "mario", costume: 0 }, from: "p0" });
+      fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 }, from: "p1" });
+      fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "marth", costume: 2 }, from: "p2" });
+    });
+    expect(panel(3).getByText("You")).toBeInTheDocument();
+    for (const [port, name] of [[0, "Mario"], [1, "Fox"], [2, "Marth"]] as const) {
+      expect(panel(port).getByText("Opponent")).toBeInTheDocument();
+      expect(panel(port).getByText(name)).toBeInTheDocument();
+    }
+    for (const tag of ["P1", "P2", "P3", "P4"]) expect(screen.getByRole("button", { name: `Choose for ${tag}` })).toBeDisabled();
+
+    fireEvent.click(portraits()[0]);
+    const { players } = useMatchConfig.getState();
+    const mine = players[3].fighterId;
+    expect(mine).not.toBeNull();
+    // Only its own panel changed; the others' picks stand.
+    expect(players.map((p) => p.fighterId)).toEqual(["mario", "fox", "marth", mine]);
+    expect(fake.sent).toEqual([{ kind: "pick", fighterId: mine, costume: 3 }]);
+    fireEvent.keyDown(window, { key: "Backspace" });
+    expect(useMatchConfig.getState().players.map((p) => p.fighterId)).toEqual(["mario", "fox", "marth", null]);
+    expect(fake.sent.at(-1)).toEqual({ kind: "pick", fighterId: null, costume: 3 });
+  });
+
+  it("lets the host start four only when every seat is connected", async () => {
+    const fake = goOnlineOf("host", 0, 4);
+    for (const [port, id] of ["mario", "fox", "marth", "kirby"].entries()) useMatchConfig.getState().setFighter(port, id);
+    useOnlineStore.getState().patch({ status: "linking" });
+    await renderSelect();
+    expect(readyButton()).toBeDisabled();
+    fireEvent.click(readyButton());
+    expect(fake.sent.some((m) => m.kind === "start")).toBe(false);
+    expect(routerMock.push).not.toHaveBeenCalled();
+
+    act(() => useOnlineStore.getState().patch({ status: "connected" }));
+    expect(readyButton()).toBeEnabled();
+    fireEvent.click(readyButton());
+    expect(fake.sent.find((m) => m.kind === "start")).toMatchObject({
+      kind: "start",
+      config: { fighters: ["mario", "fox", "marth", "kirby"], costumes: [0, 1, 2, 3], stageId: "battlefield", rules: { oneOnOne: false } },
+    });
+    expect(routerMock.push).toHaveBeenCalledWith("/play");
   });
 });
 
@@ -572,6 +646,22 @@ describe("CharacterSelect, online, the models", () => {
     act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "marth", costume: 0 }, from: HOST_PEER.id }));
     await vi.waitFor(() => expect(world.preloadModels).toHaveBeenLastCalledWith(["marth", mine]));
     expect(world.preloadModels).toHaveBeenCalledTimes(2);
+  });
+
+  it("preloads every player's pick, not only the first two", async () => {
+    const fake = goOnlineOf("host", 0, 3);
+    await renderSelect();
+    act(() => {
+      fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 }, from: "p1" });
+      fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "marth", costume: 2 }, from: "p2" });
+    });
+    await act(async () => {});
+    // Nothing is fetched until everyone has picked, this side included.
+    expect(world.preloadModels).not.toHaveBeenCalled();
+    fireEvent.click(portraits()[0]);
+    const mine = useMatchConfig.getState().players[0].fighterId!;
+    await vi.waitFor(() => expect(world.preloadModels).toHaveBeenCalledWith([mine, "fox", "marth"]));
+    expect(world.preloadModels).toHaveBeenCalledTimes(1);
   });
 
   it("fetches nothing for Random, which only the host's start decides", async () => {
