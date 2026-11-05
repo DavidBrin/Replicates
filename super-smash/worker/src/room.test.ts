@@ -1,8 +1,25 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { MAX_MESSAGES_PER_PEER, ROOM_CLOSE_CODES, type PeerInfo } from "../../src/net/signalProtocol";
-import { decideJoin, departures, relay, type PeerAttachment } from "./room";
+import {
+  MAX_MESSAGES_PER_PEER,
+  RELAY_BURST,
+  RELAY_ID_BYTES,
+  RELAY_MAX_FRAME_BYTES,
+  RELAY_RATE_PER_SECOND,
+  ROOM_CLOSE_CODES,
+  type PeerInfo,
+} from "../../src/net/signalProtocol";
+import {
+  decideJoin,
+  departures,
+  livePeerFor,
+  newRelayBucket,
+  peerIdBytes,
+  relay,
+  relayGameFrame,
+  type PeerAttachment,
+} from "./room";
 
 const host: PeerInfo = { id: "h1", role: "host" };
 const guest: PeerInfo = { id: "g1", role: "guest" };
@@ -98,6 +115,65 @@ describe("relaying", () => {
       closeCode: ROOM_CLOSE_CODES["too-many-messages"],
       message: { t: "error", reason: "too-many-messages" },
     });
+  });
+});
+
+describe("relaying game frames", () => {
+  const sender = (): Uint8Array => peerIdBytes("h1abcd12");
+  const frameOf = (bytes: number): ArrayBuffer => new ArrayBuffer(bytes);
+
+  it("stamps a game frame with its sender and passes the bytes on unread", () => {
+    // Not JSON on purpose: the room must not care what is in it.
+    const payload = new Uint8Array([0xff, 0x7b, 0x6e, 0x00, 0x01]).buffer;
+    const outcome = relayGameFrame(sender(), payload, newRelayBucket(0), 0);
+    expect(outcome.type).toBe("forward");
+    if (outcome.type !== "forward") return;
+    expect(new TextDecoder().decode(outcome.frame.subarray(0, RELAY_ID_BYTES))).toBe("h1abcd12");
+    expect([...outcome.frame.subarray(RELAY_ID_BYTES)]).toEqual([0xff, 0x7b, 0x6e, 0x00, 0x01]);
+    expect(outcome.frame.length).toBe(RELAY_ID_BYTES + 5);
+  });
+
+  it("lets RELAY_BURST frames through at once, drops the next, and refills at RELAY_RATE_PER_SECOND", () => {
+    const bucket = newRelayBucket(0);
+    expect(bucket.tokens).toBe(RELAY_BURST);
+    const frame = new Uint8Array([1]).buffer;
+    const runAt = (nowMs: number, count: number): string[] =>
+      Array.from({ length: count }, () => relayGameFrame(sender(), frame, bucket, nowMs).type);
+    expect(runAt(0, RELAY_BURST).every((type) => type === "forward")).toBe(true);
+    expect(runAt(0, 1)).toEqual(["drop"]);
+    expect(runAt(1000, RELAY_RATE_PER_SECOND).every((type) => type === "forward")).toBe(true);
+    expect(runAt(1000, 1)).toEqual(["drop"]);
+    // A long quiet spell refills to the burst and no further.
+    expect(runAt(100_000, RELAY_BURST).every((type) => type === "forward")).toBe(true);
+    expect(runAt(100_000, 1)).toEqual(["drop"]);
+  });
+
+  it("closes a socket whose game frame is over RELAY_MAX_FRAME_BYTES, and forwards one exactly at it", () => {
+    expect(relayGameFrame(sender(), frameOf(RELAY_MAX_FRAME_BYTES + 1), newRelayBucket(0), 0)).toEqual({
+      type: "kick",
+      reason: "bad-message",
+      closeCode: ROOM_CLOSE_CODES["bad-message"],
+      message: { t: "error", reason: "bad-message" },
+    });
+    expect(relayGameFrame(sender(), frameOf(RELAY_MAX_FRAME_BYTES), newRelayBucket(0), 0).type).toBe("forward");
+    expect(relayGameFrame(sender(), frameOf(0), newRelayBucket(0), 0)).toEqual({ type: "drop" });
+  });
+
+  it("refuses a peer id that is not RELAY_ID_BYTES long", () => {
+    expect(peerIdBytes("h1abcd12")).toHaveLength(RELAY_ID_BYTES);
+    expect(() => peerIdBytes("abc")).toThrow();
+    expect(() => peerIdBytes("h1abcd1")).toThrow();
+    expect(() => peerIdBytes("h1abcd123")).toThrow();
+  });
+
+  it("builds a relay entry only for an admitted peer with a well-formed id, and never throws", () => {
+    expect(livePeerFor(null, 0)).toBeNull();
+    expect(livePeerFor(attach({ ...host, id: "abc" }), 0)).toBeNull();
+    const entry = livePeerFor(attach({ ...host, id: "h1abcd12" }), 0);
+    expect(entry?.id).toBe("h1abcd12");
+    expect(entry?.idBytes.length).toBe(RELAY_ID_BYTES);
+    expect(entry?.bucket).toEqual(newRelayBucket(0));
+    expect(entry?.bucket.tokens).toBe(RELAY_BURST);
   });
 });
 

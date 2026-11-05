@@ -10,6 +10,10 @@
 
 import {
   MAX_MESSAGES_PER_PEER,
+  RELAY_BURST,
+  RELAY_ID_BYTES,
+  RELAY_MAX_FRAME_BYTES,
+  RELAY_RATE_PER_SECOND,
   ROOM_CLOSE_CODES,
   parseClientMessage,
   type PeerInfo,
@@ -76,6 +80,72 @@ export function relay(from: PeerAttachment, raw: string | ArrayBuffer, peers: re
       ? { t: "signal", from: from.id, payload: message.payload }
       : { t: "lobby", from: from.id, payload: message.payload };
   return { type: "forward", delivery: { to: other.id, message: relayed } };
+}
+
+/**
+ * A socket's allowance for game frames. Kept in memory only: it is not worth a
+ * storage write per frame, and a hibernation wake refills it, which costs
+ * nothing a determined flooder could not already do by reconnecting.
+ */
+export interface RelayBucket {
+  tokens: number;
+  atMs: number;
+}
+
+export function newRelayBucket(nowMs: number): RelayBucket {
+  return { tokens: RELAY_BURST, atMs: nowMs };
+}
+
+/** A peer id as the bytes the relay prefixes onto its frames. */
+export function peerIdBytes(id: string): Uint8Array {
+  const bytes = new TextEncoder().encode(id);
+  if (bytes.length !== RELAY_ID_BYTES) throw new Error(`a peer id is ${RELAY_ID_BYTES} bytes, got ${bytes.length}`);
+  return bytes;
+}
+
+export type GameFrameOutcome =
+  | { readonly type: "forward"; readonly frame: Uint8Array }
+  | { readonly type: "drop" }
+  | { readonly type: "kick"; readonly reason: RoomError; readonly closeCode: number; readonly message: ServerMessage };
+
+/**
+ * One binary frame from a peer, for every other peer. The payload is copied
+ * after the sender's id and read by nothing: it is the rollback session's
+ * packets, and the room has no business in them.
+ */
+export function relayGameFrame(
+  sender: Uint8Array,
+  payload: ArrayBuffer,
+  bucket: RelayBucket,
+  nowMs: number,
+): GameFrameOutcome {
+  if (payload.byteLength === 0) return { type: "drop" };
+  if (payload.byteLength > RELAY_MAX_FRAME_BYTES) return { type: "kick", ...refusal("bad-message") };
+  bucket.tokens = Math.min(RELAY_BURST, bucket.tokens + ((nowMs - bucket.atMs) * RELAY_RATE_PER_SECOND) / 1000);
+  bucket.atMs = nowMs;
+  if (bucket.tokens < 1) return { type: "drop" };
+  bucket.tokens -= 1;
+  const frame = new Uint8Array(RELAY_ID_BYTES + payload.byteLength);
+  frame.set(sender, 0);
+  frame.set(new Uint8Array(payload), RELAY_ID_BYTES);
+  return { type: "forward", frame };
+}
+
+/** What the Durable Object keeps in memory per admitted socket, to relay its game frames. */
+export interface LivePeer {
+  readonly id: string;
+  readonly idBytes: Uint8Array;
+  readonly bucket: RelayBucket;
+}
+
+/** An entry for an admitted peer with a well-formed id; null for anything else. Never throws. */
+export function livePeerFor(attachment: PeerAttachment | null, nowMs: number): LivePeer | null {
+  if (!attachment) return null;
+  try {
+    return { id: attachment.id, idBytes: peerIdBytes(attachment.id), bucket: newRelayBucket(nowMs) };
+  } catch {
+    return null;
+  }
 }
 
 export function departures(left: PeerInfo, peers: readonly PeerInfo[]): Delivery[] {

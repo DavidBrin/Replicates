@@ -44,6 +44,27 @@ export const MAX_MESSAGE_BYTES = 16 * 1024;
  */
 export const MAX_MESSAGES_PER_PEER = 2000;
 
+/**
+ * Game data through the room (the relay fallback): a binary frame the room
+ * forwards without reading, as `[sender id][frame as sent]`. It is billed like
+ * any incoming message (20:1), so it has caps of its own, and it never counts
+ * toward MAX_MESSAGES_PER_PEER.
+ *
+ * The room's peer ids are `crypto.randomUUID().slice(0, 8)`: eight ASCII
+ * bytes, which is what lets the sender's id be a fixed-width prefix.
+ */
+export const RELAY_ID_BYTES = 8;
+
+/** The client's payload, not counting the prefix. A larger frame closes the socket with `bad-message`. */
+export const RELAY_MAX_FRAME_BYTES = 2048;
+
+/**
+ * Per socket, a token bucket: a frame beyond it is dropped silently. A relayed
+ * client sends 30 a second, so this is headroom for a burst, not a budget.
+ */
+export const RELAY_RATE_PER_SECOND = 40;
+export const RELAY_BURST = 80;
+
 export interface PeerInfo {
   readonly id: string;
   readonly role: Role;

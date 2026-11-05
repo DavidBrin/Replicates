@@ -2,7 +2,16 @@ import { DurableObject } from "cloudflare:workers";
 
 import { parseRoomIntent, type ServerMessage } from "../../src/net/signalProtocol";
 import type { Env } from "./env";
-import { decideJoin, departures, relay, type Delivery, type PeerAttachment } from "./room";
+import {
+  decideJoin,
+  departures,
+  livePeerFor,
+  relay,
+  relayGameFrame,
+  type Delivery,
+  type LivePeer,
+  type PeerAttachment,
+} from "./room";
 
 /**
  * One room: at most two sockets, and a pipe between them.
@@ -11,20 +20,31 @@ import { decideJoin, departures, relay, type Delivery, type PeerAttachment } fro
  * decisions onto sockets. It uses the WebSocket Hibernation API
  * (`ctx.acceptWebSocket`), so an idle lobby costs nothing, and it never sets a
  * timer: a 60 Hz loop here would keep the object awake, which spec §3.1
- * forbids. The match never touches it — once the DataChannel opens, inputs go
- * peer to peer — so the restart every deploy causes drops only the lobby
- * sockets, not a match in progress.
+ * forbids. A match over a direct link never touches it, so the restart every
+ * deploy causes drops only the lobby sockets; a relayed match runs through it
+ * and ends with the restart.
  *
  * A peer is an open socket carrying an attachment, and nothing else: a refused
  * socket never gets one, and a departing socket loses its own the moment its
  * departure is announced, so each peer leaves exactly once and only the peers
  * who saw it arrive hear that it left.
  *
+ * A binary message is game data (the relay fallback, for players whose network
+ * blocks a direct link). It is forwarded to the other peers prefixed with the
+ * sender's id and never parsed. It runs on the hot path, so it is served from
+ * `live`, an in-memory map: no attachment write and no storage per frame, and
+ * it does not count toward the signalling flood cap.
+ *
  * SQLite-backed because that is the only Durable Object storage the Free plan
  * offers. v1 keeps all its state in socket attachments and stores nothing.
  */
 export class RoomDO extends DurableObject<Env> {
+  /** The peers' relay entries (id bytes, rate bucket), in memory only. Rebuilt once after a hibernation wake. */
+  private readonly live = new Map<WebSocket, LivePeer>();
+  private liveBuilt = false;
+
   async fetch(request: Request): Promise<Response> {
+    this.ensureLive();
     const intent = parseRoomIntent(new URL(request.url).searchParams.get("intent"));
     if (request.headers.get("Upgrade") !== "websocket" || intent === null) {
       return new Response("Expected a WebSocket upgrade with ?intent=create|join", { status: 426 });
@@ -54,12 +74,20 @@ export class RoomDO extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server);
     const attachment: PeerAttachment = { ...decision.peer, received: 0 };
     server.serializeAttachment(attachment);
+    const entry = livePeerFor(attachment, Date.now());
+    if (entry) this.live.set(server, entry);
     send(server, decision.welcome);
     if (decision.notify) this.deliver(decision.notify);
     return new Response(null, { status: 101, webSocket: client });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    // Game data comes first and leaves the attachment alone: it is not
+    // signalling, so it does not count toward the cap and never writes.
+    if (typeof message !== "string") {
+      this.relayGame(ws, message);
+      return;
+    }
     const from = attachmentOf(ws);
     if (!from) return;
     const outcome = relay(from, message, this.peers());
@@ -97,8 +125,59 @@ export class RoomDO extends DurableObject<Env> {
     this.depart(ws);
   }
 
+  /** Forwards one game frame to every other open peer, stamped with the sender's id. */
+  private relayGame(ws: WebSocket, payload: ArrayBuffer): void {
+    this.ensureLive();
+    const from = this.live.get(ws);
+    if (!from) return;
+    const outcome = relayGameFrame(from.idBytes, payload, from.bucket, Date.now());
+    switch (outcome.type) {
+      case "forward":
+        for (const other of this.live.keys()) {
+          if (other === ws || other.readyState !== WebSocket.OPEN) continue;
+          try {
+            other.send(outcome.frame);
+          } catch {
+            // The socket is already closing; its own close handler tells the others.
+          }
+        }
+        break;
+      case "kick":
+        send(ws, outcome.message);
+        close(ws, outcome.closeCode, outcome.reason);
+        // Gone now, not whenever the client finishes the close handshake.
+        this.depart(ws);
+        break;
+      case "drop":
+        break;
+    }
+  }
+
+  /**
+   * Fills `live` from the sockets the runtime still holds, once per object
+   * lifetime: a hibernation wake re-runs the constructor, and the first thing
+   * to arrive after it may be a game frame. Departed sockets (no attachment),
+   * closing ones and malformed ids are skipped. Never throws.
+   */
+  private ensureLive(): void {
+    if (this.liveBuilt) return;
+    this.liveBuilt = true;
+    const now = Date.now();
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        if (ws.readyState !== WebSocket.OPEN) continue;
+        const entry = livePeerFor(attachmentOf(ws), now);
+        if (entry) this.live.set(ws, entry);
+      } catch {
+        // A socket torn down mid-read has no entry; the rest still get theirs.
+      }
+    }
+  }
+
   /** Tells the others once, then forgets the socket, so a later close or error is not a second exit. */
   private depart(ws: WebSocket): void {
+    this.ensureLive();
+    this.live.delete(ws);
     const left = attachmentOf(ws);
     if (!left) return;
     try {

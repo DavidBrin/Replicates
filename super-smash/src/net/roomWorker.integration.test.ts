@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseIceResponse } from "./iceConfig";
 import { makeRoomCode } from "./roomCode";
-import { ROOM_CLOSE_CODES, type RoomIntent } from "./signalProtocol";
+import { RELAY_BURST, RELAY_ID_BYTES, RELAY_RATE_PER_SECOND, ROOM_CLOSE_CODES, type RoomIntent } from "./signalProtocol";
 
 /**
  * Against a running Worker — `pnpm preview` locally, or the deployed URL.
@@ -14,7 +14,10 @@ const WORKER_URL = process.env.WORKER_URL;
 
 interface Client {
   readonly closed: Promise<number>;
+  /** Binary frames the room relayed to this client, in arrival order. */
+  readonly games: Uint8Array[];
   send(value: unknown): void;
+  sendBinary(bytes: Uint8Array): void;
   next(t: string): Promise<Record<string, unknown>>;
   close(): void;
 }
@@ -22,13 +25,20 @@ interface Client {
 function connect(code: string, intent: RoomIntent): Client {
   const base = (WORKER_URL ?? "").replace(/^http/, "ws");
   const ws = new WebSocket(`${base}/ws/room/${code}?intent=${intent}`);
+  ws.binaryType = "arraybuffer";
   const messages: Record<string, unknown>[] = [];
-  ws.addEventListener("message", (event) => messages.push(JSON.parse(String(event.data)) as Record<string, unknown>));
+  const games: Uint8Array[] = [];
+  ws.addEventListener("message", (event) => {
+    if (typeof event.data === "string") messages.push(JSON.parse(event.data) as Record<string, unknown>);
+    else games.push(new Uint8Array(event.data as ArrayBuffer));
+  });
   const opened = new Promise<void>((resolve) => ws.addEventListener("open", () => resolve()));
   const closed = new Promise<number>((resolve) => ws.addEventListener("close", (event) => resolve(event.code)));
   return {
     closed,
+    games,
     send: (value) => void opened.then(() => ws.send(JSON.stringify(value))),
+    sendBinary: (bytes) => void opened.then(() => ws.send(bytes)),
     async next(t) {
       for (let waited = 0; waited < 5000; waited += 25) {
         const index = messages.findIndex((m) => m.t === t);
@@ -61,6 +71,45 @@ describe.skipIf(!WORKER_URL)("a live room (WORKER_URL)", () => {
     guest.close();
     // The refused third was never a peer, so the only exit the host hears is the guest's.
     expect(await host.next("peer-left")).toEqual({ t: "peer-left", peerId: (guestWelcome.self as { id: string }).id });
+    host.close();
+  });
+
+  it("relays a binary frame to the other peer stamped with its sender, never back to it, and outside the signalling cap", async () => {
+    const code = makeRoomCode();
+    const host = connect(code, "create");
+    const hostWelcome = await host.next("welcome");
+    const guest = connect(code, "join");
+    await guest.next("welcome");
+    await host.next("peer-joined");
+
+    // Past MAX_MESSAGES_PER_PEER (2000) on purpose: game data is not signalling.
+    const body = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    for (let i = 0; i < 2100; i++) host.sendBinary(body);
+    for (let waited = 0; waited < 5000 && guest.games.length === 0; waited += 25) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(guest.games.length).toBeGreaterThanOrEqual(1);
+
+    // An offer queued behind the frames: when it lands, every frame the room
+    // forwarded has landed too (one socket, in order), and the host was not
+    // closed by the cap or a kick.
+    host.send({ t: "signal", payload: { kind: "offer", sdp: "v=0" } });
+    expect(await guest.next("signal")).toMatchObject({ payload: { kind: "offer", sdp: "v=0" } });
+    // Whatever the room would have echoed to the host was sent before the offer reached the guest,
+    // so it has arrived before the guest's reply does.
+    guest.send({ t: "signal", payload: { kind: "answer", sdp: "v=0" } });
+    expect(await host.next("signal")).toMatchObject({ payload: { kind: "answer", sdp: "v=0" } });
+
+    // The rate cap dropped most of the 2100: no more than a burst plus what 5 s refills.
+    expect(guest.games.length).toBeLessThanOrEqual(RELAY_BURST + RELAY_RATE_PER_SECOND * 5);
+    const hostId = (hostWelcome.self as { id: string }).id;
+    for (const game of guest.games) {
+      expect(new TextDecoder().decode(game.subarray(0, RELAY_ID_BYTES))).toBe(hostId);
+      expect([...game.subarray(RELAY_ID_BYTES)]).toEqual([...body]);
+    }
+    expect(host.games).toHaveLength(0);
+
+    guest.close();
     host.close();
   });
 
