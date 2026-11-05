@@ -5041,3 +5041,151 @@ with its reason.
   way standing, in the air, shielding (rolls, a spot dodge, an up smash) and holding someone
   (throws, D1); press A on the select screen with a second pad (Task 30), and with a keyboard
   player and one pad (the trade-off).
+
+## D60 — No TURN: the room relays the match, and rooms hold four
+
+**Decision.** Plan 7 (`docs/superpowers/plans/2026-11-04-plan-7-relay-and-four-player-online.md`,
+written against `b53ebdd`) has two phases: a relay for two players (Phase A), shipped and
+deployed on its own, and then rooms of up to four players, all of them through that relay
+(Phase B). This entry is written in two parts. Phase A's is below, as built at the end of its
+Task 7; Phase B's is added by Task 18, and the deploy checkpoint's measurements by a
+documents-only commit after the deploy. Phase A: when no direct WebRTC link opens, the room's
+Durable Object carries the match instead. The room forwards a binary game frame from one socket
+to every other, prefixed with the sender's id, and never parses it; the transport
+(`adapters/doSignal.ts`) sends the rollback session's packets through the room socket in that
+mode, and the session (`online/session.ts`) tells the other side through the room so both
+switch. The relay is a fallback and never the first try: a first direct link gets its full
+negotiation deadline (`NEGOTIATION_TIMEOUT_MS`, 15 s) as before, and the direct path is
+unchanged when it opens. `?ice=relay` keeps its meaning, "force TURN", which is a direct route.
+Nothing in `step()` moved: `ENGINE_RULES_VERSION` stays 6 and `PROTOCOL_VERSION` stays 2, since
+the relay wraps the packets and does not change their layout; the golden passes untouched.
+
+**Why.** On 2026-11-02 David's testers on separate networks could not connect (D59's online
+finding): the live site has no TURN relay, and players behind a symmetric or carrier-grade NAT
+waited about 15 s to be told so. The fix D59 named was TURN secrets, and David has no payment
+card, which rules out Cloudflare TURN, Metered and the like. So D54's "STUN only without a key"
+interim is now permanent, and the room, which is already on the free plan and already holds both
+players' sockets, carries the packets instead. D9's rejection of a relayed WebSocket stands for
+the primary path: it is TCP, so one lost packet stalls everything behind it, which is exactly
+the spike rollback exists to hide. A fallback that works, a little worse, beats a sentence that
+says it cannot. The Worker still mints TURN credentials if the two secrets are ever set;
+nothing sets them.
+
+**The budget.** The relay costs the shared Durable Objects free plan, so it is the thing to
+watch. The facts the plan was written from (platform research, not yet measured on this
+account):
+- the free plan allows 100,000 Durable Object requests a day;
+- incoming WebSocket messages are billed 20:1, and outgoing ones are free;
+- the budget resets at 00:00 UTC, and exceeding it fails every room until the reset;
+- a relayed 8-minute match costs about 1,442 requests for 2 players at 30 messages/s, and about
+  2,884 for 4 players at 30 messages/s (480 s × 30 × players ÷ 20, plus one request per socket
+  upgrade).
+
+**Limits and framing** (`signalProtocol.ts`, `relayFrame.ts`).
+- *What the room does with a frame.* It stamps the sender, never echoes it back, never reads it,
+  and never counts it toward `MAX_MESSAGES_PER_PEER` (2,000, the signalling cap). It keeps the
+  seated sockets in an in-memory map rebuilt once after a hibernation wake, so a game frame
+  writes no storage and no attachment, and the room sets no timer: it keeps the hibernation API.
+  The Durable Object never imports `packet.ts`.
+- *The limits.* `RELAY_MAX_FRAME_BYTES` 2,048, the client's payload; a larger frame kicks the
+  socket with `bad-message`. `RELAY_RATE_PER_SECOND` 40 with `RELAY_BURST` 80, a per-socket token
+  bucket; a frame over the rate is dropped silently. The client sends 30 a second, so this is
+  headroom, not a budget. The prefix is `RELAY_ID_BYTES` 8: the room's peer ids are
+  `crypto.randomUUID().slice(0, 8)`, eight ASCII bytes.
+- *Two inputs to a message.* In relay mode the client puts two frames' packets in each WebSocket
+  message (`RELAY_INPUTS_PER_MESSAGE` 2), which halves the incoming-message bill at about one
+  frame of added delay: the first Input of a pair waits for the second. The batcher flushes on
+  the second Input packet since the last flush, never on a timer, and sends any Ping, Pong or
+  Hash queued before it in the same message; a packet that would take the message past 2,048
+  bytes sends the queue first. A send while the socket already holds more than
+  `RELAY_MAX_BUFFERED_BYTES` (16 KiB) unsent is dropped, as a lost datagram would be.
+- *The wire.* `[sender id, 8 ASCII bytes, stamped by the room][batch]`, a batch being
+  `[u16 little-endian length][packet bytes]` once per packet, with no header and no count. A
+  receiver refuses a whole batch with a truncated or empty entry, and reads game frames only
+  from a peer the room seats.
+
+**Settled while building it.**
+- *The agreement is a lobby payload, `{kind: "use-relay"}`.* It replaces Task 40b's
+  `no-direct-link`, whose sentence ("Couldn't connect directly…") is gone, since the match now
+  plays on. Whichever side's first-channel deadline runs out first tells the other through the
+  room, which passes it unread (an older build ignores it), and the other follows at once
+  rather than waiting out its own; a side that was told says nothing back. The route is
+  announced (`route: relay`) before the transport moves, so the relay's `link: open` comes after
+  it and nobody reads a direct link on the way. The first link's failure is never reported as a
+  failed link. The host's deadline starts before the guest's, so it can fire as the guest's
+  channel opens: a `use-relay` that lands while this side's direct channel is open moves it to
+  the relay too, and announces the peer once (Review Focus 1, pinned in `session.test.ts`).
+- *The relay is sticky for the room.* There is no way back to direct, and a newcomer to a
+  relayed room is told by the session that is already relaying, since the newcomer would wait
+  for an offer that never comes.
+- *The room socket is the link.* In relay mode its closing, with any code, is every relayed
+  peer leaving (Review Focus 2, pinned in `doSignal.test.ts`): a Worker deploy (1006), the daily
+  budget running out, or a proxy timeout all end the match as Connection Lost at once, never a
+  freeze. So D54's "a deploy never ends a match" holds only for direct matches; a deploy ends
+  a relayed one. Relayed, a status back to `waiting` is the room saying the peer left, never a
+  lost channel to re-offer or `renegotiate`.
+- *A direct peer is carried to the relay only while the room still seats it.* A held match keeps
+  its direct channel through the room's `peer-left`, so a peer the channel had announced may be
+  gone by the time the relay starts. It is then said to have left, since the relay cannot reach
+  it and the room will not say so again.
+- *Exceptions to "relay is the fallback".*
+  - A newcomer who joins while a held match is dying (the direct channel to a departed peer is
+    still open) is relayed without a direct try. Known, and rare.
+  - A host with no WebRTC at all now ends on the relay instead of an error: it tells each guest
+    once, and a later newcomer is told again. For a host this closes D59's carried item that
+    such a browser saw the no-direct-link sentence, which did not fit it. Only the host's case
+    is pinned (`session.test.ts`).
+- *Event order differs by route.* In relay mode the transport emits join and leave before its
+  status change; the direct route is the reverse. A listener must not read `status` inside a
+  join or leave. Nothing listens for them before the start, so nothing reads it today.
+- *The hello timer is re-armed for a relayed newcomer.* Its link opens before the room seats
+  it, which stopped the store's hello timer; seating restarts it, so a peer that never says
+  hello is refused after `HELLO_TIMEOUT_MS` (5 s) and not held on linking.
+- *The copy and the HUD.* The lobby reads "Connecting through the relay…" while a relayed link
+  waits for the hello, on either side; the net HUD's numbers line ends `· RELAY` or `· DIRECT`
+  (one no-wrap span with its dot), read from the store; `window.__smashNet.route` publishes
+  the session's route, which is what the online e2e reads.
+- *The online e2e.* The 40b test became "a direct connection that cannot open falls back to the
+  relay, and the match plays to a result on both screens": the guest's route holds the host's
+  offer 3 s, `?ice=relay` forces TURN with none to go through, and both pages must reach
+  `__smashNet.route === "relay"`, a HUD line ending `· RELAY`, "Game Set" and the same winner.
+  The forced-TURN run (`SMASH_FORCE_RELAY=1`, against a deploy) asserts `"direct"`: a pass
+  through the room relay would not prove TURN.
+
+**Behaviour worth knowing.**
+- *A hidden tab sends nothing.* It ticks nothing, so it sends no Input, and its Pongs and Hashes
+  wait in the batch until it returns; the size flush bounds the wait. This matches the `away`
+  rules: the tab says `away` through the room first, and the other side waits 60 s, not 10.
+- *After a match, the linger re-sends every 50 ms* (`LINGER_RESEND_MS`): 20 sends a second, and
+  the batcher flushes on every second one, so about 10 messages a second, far under the 40 cap.
+  Steady play is 30 a second (60 frames, two to a message). Catch-up after a stall is clamped
+  by the runner's accumulator (`MAX_CATCHUP_FRAMES`), so there is no overrun.
+
+**The rulings.** Made by the controller on David's behalf (his "go A then B, defaults and
+recommendations work", 2026-11-04), each with its cost if wrong.
+- *Sticky relay*: a room that fell to the relay once stays there. Cost: a room that could have
+  gone direct after a transient failure spends budget; the players make a new room.
+- *A deploy ends a relayed match.* Cost: a relayed match in progress at a deploy is lost, where a
+  direct one was not; deploys are David's and rare.
+- *The limits and framing above* are the planner's numbers (2,048 B, 40 a second with burst 80,
+  two inputs a message, 16 KiB, a u16 length). Cost: a constant changes, not the shape.
+- *Task 40b's sentence is deleted*, not kept for a browser that can't relay. Cost: none, the
+  relay needs only the room socket.
+- *No version bump*: the packets and `step()` are unchanged, and peers on different builds
+  refuse each other at the hello anyway. Cost: none.
+
+**Residual risks.**
+- *A hostile client can spend the daily budget*, as D54 says of signalling. The frame size and
+  rate caps bound one socket, not the account.
+- *Whether the free plan applies the 20:1 ratio to this traffic is unverified.* The budget
+  facts above come from the platform's documentation; the Deploy checkpoint measures the bill
+  of one relayed match against 30 messages/s × 2 ÷ 20, and the delay the relay adds on both
+  routes, and a documents-only commit adds both to this entry.
+- *The exact failure when the budget runs out is undocumented.* The client sees a closed
+  socket, which reads as Connection Lost mid-match and as "Could not reach the online service"
+  in the lobby.
+
+**Rejected.**
+- *Opening the relay alongside the direct attempt from the start.* It costs budget on the 90%
+  or so of matches that connect directly, to save at most 15 s for the rest.
+- *Paid TURN.* David has no payment card.

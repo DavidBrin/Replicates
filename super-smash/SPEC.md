@@ -385,5 +385,6 @@ Load-bearing details, all from the reference screenshots:
 
 Spirits, items other than the Smash Ball, World of Light, Classic Mode, online
 matchmaking or ranking, replays, stage builder, amiibo, unlockables, Mii fighters, echo
-fighters, stage hazards, and touch controls. The last is not an oversight: every control
+fighters, stage hazards, a TURN server of our own (D60: the room relays instead), and touch
+controls. The last is not an oversight: every control
 in §6 is a physical key, and a phone has none.

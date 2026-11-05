@@ -48,7 +48,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
-| [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against a local Worker that never reloads (`scripts/e2e/wrangler-e2e.mjs`) or the deployed Worker |
+| [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against a local Worker that never reloads (`scripts/e2e/wrangler-e2e.mjs`) or the deployed Worker; one test blocks the direct link and plays a match to a result through the room's relay |
 | [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame, with the sim's hit- and hurtboxes |
 | [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — projectile, hit spark, the opponent flinching — by cranking a paused match by hand |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
@@ -75,7 +75,8 @@ words, so the other player is never left waiting on a match this browser cannot 
 
 Online play needs the Worker as well: `pnpm preview` builds the static export and serves it
 with the Worker on <http://localhost:8787>. Open it in two browsers, then Online → Create room in
-one and Join room in the other.
+one and Join room in the other. If the two browsers cannot open a direct link (some networks block
+it), the match goes through the room instead, and the lobby says "Connecting through the relay…".
 
 | Command | What it does |
 |---|---|
@@ -328,8 +329,12 @@ the code); the other player types it into Join room. The two browsers meet in a 
 on this project's own Cloudflare Worker, which relays one WebRTC offer, one answer and their ICE
 candidates — and then nothing: inputs go peer to peer over one unordered, unreliable
 DataChannel. The host picks the stage and starts; ping, input delay and rollbacks show in the corner. Where no direct path
-exists, Cloudflare TURN relays the same packets; without a TURN key the Worker hands out STUN
-only. The Trystero (Nostr) adapter is still in `src/net/adapters/webrtc.ts`, selectable in code.
+exists, the room's Durable Object carries the packets instead, over the same room socket: both
+sides agree through the room after the direct attempt's 15 s deadline, and the corner says
+`RELAY` rather than `DIRECT` ([D60](DECISIONS.md#d60--no-turn-the-room-relays-the-match-and-rooms-hold-four)).
+The room forwards each message without reading it, and a relayed match ends if the room socket
+drops. There is no TURN server: the Worker hands out STUN, and Cloudflare TURN credentials only if
+a TURN key is ever set. The Trystero (Nostr) adapter is still in `src/net/adapters/webrtc.ts`, selectable in code.
 
 **Shared WiFi needs no code.** ICE gathers host candidates for every local interface, and
 when two peers share a subnet the connectivity check succeeds on those alone — no STUN, no
@@ -407,10 +412,11 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
    is handed, still gzipped or already decoded, against the same digest, but the header should
    be fixed. Then `/models/index.json` and one glb it names both load.
 
-`pnpm run deploy` needs `wrangler login` on David's account, and the TURN secrets are set once
-with `wrangler secret put` (see `.env.example`). A
-deploy restarts every room, which drops lobby sockets but not matches in progress — those are
-peer to peer. Each build is stamped with an id that online players compare, so two different
+`pnpm run deploy` needs `wrangler login` on David's account. The TURN secrets are optional now
+(D60: the room relays when no direct link opens); if a key is ever set, it goes in with
+`wrangler secret put` (see `.env.example`). A deploy restarts every room, which drops lobby
+sockets and relayed matches, but not matches in progress over a direct link — those are peer to
+peer. Each build is stamped with an id that online players compare, so two different
 deploys refuse each other in the lobby: the commit, plus a hash of any uncommitted changes in
 `super-smash/`. Set `BUILD_ID` to name a build yourself; a build with no git checkout must set
 it (`BUILD_ID=dev` only on purpose, since every such build would pair with every other). The id

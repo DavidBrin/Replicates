@@ -8,8 +8,14 @@ import { ROUTES, readFighters } from "../e2e/helpers";
  *
  * Locally this runs against `wrangler dev`; with SMASH_URL it runs against the
  * deployed Worker, and SMASH_FORCE_RELAY=1 forces both peers through
- * Cloudflare TURN, which is how the deploy proves the relay works rather than
+ * Cloudflare TURN, which is how the deploy proves TURN works rather than
  * merely exists.
+ *
+ * Two relays are in play and they are not the same. TURN is the direct route:
+ * WebRTC, with Cloudflare relaying the packets. "The relay" in the app is the
+ * room's Durable Object carrying the match when no direct link opens (D60).
+ * So a forced-TURN run asserts the route is "direct": a pass through the room
+ * relay would prove nothing about TURN.
  */
 const FORCE_RELAY = process.env.SMASH_FORCE_RELAY === "1";
 const LOBBY = FORCE_RELAY ? "/online?ice=relay" : "/online";
@@ -29,6 +35,8 @@ const LINK_LOST_LIMIT_MS = SILENCE_LOST_MS + 4_000;
 
 interface NetHandle {
   stats(): { peers: number; desyncs: number } | null;
+  /** Where the match's packets go: through a WebRTC channel, or through the room. */
+  readonly route: "direct" | "relay";
 }
 
 /** Every context a test opened, closed after it so a failed test leaves no match running. */
@@ -46,6 +54,10 @@ async function frame(page: Page): Promise<number> {
 
 async function netStats(page: Page) {
   return page.evaluate(() => (window as unknown as { __smashNet?: NetHandle }).__smashNet?.stats() ?? null);
+}
+
+async function netRoute(page: Page) {
+  return page.evaluate(() => (window as unknown as { __smashNet?: NetHandle }).__smashNet?.route ?? null);
 }
 
 async function createRoom(host: Page, lobby = LOBBY): Promise<string> {
@@ -67,6 +79,11 @@ async function joinRoom(page: Page, code: string, lobby = LOBBY): Promise<void> 
 async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   const code = await createRoom(host);
   await joinRoom(guest, code);
+  await pickAndStart(host, guest);
+}
+
+/** From two linked lobbies (however they linked) to a running match. */
+async function pickAndStart(host: Page, guest: Page): Promise<void> {
   await host.waitForURL(`**${ROUTES.stage}`, { timeout: 30_000 });
   await guest.waitForURL(`**${ROUTES.fighters}`, { timeout: 30_000 });
 
@@ -85,9 +102,10 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
   await guest.waitForURL(`**${ROUTES.play}`);
 }
 
-// Forced through TURN with no TURN to go through, both peers would sit in
-// "negotiating" until a URL wait timed out, saying nothing of why. A forced
-// relay is a claim that the relay works, so its absence fails rather than skips.
+// Forced through TURN with no TURN to go through, both peers would fall back to
+// the room relay after 15 s (D60) and play on, so a forced-TURN run that found
+// no TURN would pass while proving nothing. A forced run is a claim that TURN
+// works, so its absence fails rather than skips.
 test.beforeEach(async ({ request }) => {
   if (!FORCE_RELAY) return;
   const res = await request.get("/api/ice");
@@ -117,6 +135,11 @@ test("two browsers play a match through a room, and one leaving ends it for the 
     expect(stats?.desyncs).toBe(0);
   }
   await expect(host.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+ · (DIRECT|RELAY)$/)).toBeVisible();
+  // A TURN path is the direct route, so a match that went through the room relay
+  // does not count as TURN working (see the header).
+  if (FORCE_RELAY) {
+    for (const page of [host, guest]) expect(await netRoute(page)).toBe("direct");
+  }
 
   // The guest's key moves the guest's fighter on the host's screen.
   const before = (await readFighters(host))[1].x;
@@ -223,23 +246,25 @@ test("a peer on the same build with other combat rules is refused at the hello, 
 /**
  * What David's testers on separate networks met (Plan 6, Task 40b): both in the
  * room, and the direct connection never opening. They waited about 50 s on
- * "Opening a direct connection…", to be told the room was lost. Now each side
- * says why within one negotiation deadline (15 s). Forcing the relay with no
- * TURN to relay through stands in for networks that block peer-to-peer; where
- * the server offers TURN (a SMASH_FORCE_RELAY=1 run against a deploy), the
- * relay connects and the first test proves it, so this one has nothing to show.
+ * "Opening a direct connection…", to be told the room was lost; Task 40b made
+ * that a sentence after one negotiation deadline (15 s). Now (Plan 7, D60) the
+ * room's Durable Object carries the match instead, and they play. Forcing
+ * WebRTC through TURN with no TURN to go through stands in for networks that
+ * block peer-to-peer; where the server offers TURN (a SMASH_FORCE_RELAY=1 run
+ * against a deploy), the forced path connects and the first test proves it, so
+ * this one has nothing to show.
  */
-const NO_DIRECT_LINK =
-  "Couldn't connect directly to the other player — one of your networks may be blocking it. Try another network, or try again.";
-
-test("a direct connection that cannot open is said on both screens within seconds, not as a lost room", async ({ browser, request }) => {
+test("a direct connection that cannot open falls back to the relay, and the match plays to a result on both screens", async ({
+  browser,
+  request,
+}) => {
   const ice = (await (await request.get("/api/ice")).json()) as { turn?: unknown };
-  test.skip(ice.turn === true, "the server offers a TURN relay, so a forced relay connects");
+  test.skip(ice.turn === true, "the server offers a TURN relay, so the forced WebRTC path connects");
   const host = await player(browser);
   const guest = await player(browser);
   // The host's offer reaches the guest 3 s late, as it can between two networks:
-  // the host's deadline then runs out first, and the room says it left before
-  // the guest's own deadline does. The guest must still read why.
+  // the host's deadline then runs out first and it tells the guest to use the
+  // room relay, before the guest's own deadline has. Both must end up on it.
   await guest.routeWebSocket(/\/ws\/room\//, (socket) => {
     const room = socket.connectToServer();
     socket.onMessage((message) => room.send(message));
@@ -252,17 +277,29 @@ test("a direct connection that cannot open is said on both screens within second
 
   const code = await createRoom(host, "/online?ice=relay");
   await joinRoom(guest, code, "/online?ice=relay");
+  // The relay is the fallback, never the first try: the direct attempt shows first.
   await expect(host.getByRole("status")).toHaveText("They are in. Opening a direct connection…", { timeout: 15_000 });
 
-  // filter: Next's route announcer is also role=alert.
-  await Promise.all(
-    [host, guest].map((page) =>
-      expect(page.getByRole("alert").filter({ hasText: "connect directly" })).toHaveText(NO_DIRECT_LINK, { timeout: 25_000 }),
-    ),
-  );
+  // The deadline (15 s) runs out, both move to the relay, and the lobby goes on to the
+  // stage and the fighters as it would on a direct link.
+  await pickAndStart(host, guest);
+  await expect.poll(() => frame(host), { timeout: 30_000 }).toBeGreaterThan(60);
   for (const page of [host, guest]) {
+    await expect.poll(() => netRoute(page), { timeout: 10_000 }).toBe("relay");
+    await expect(page.getByText(/^PING \d+ ms · DELAY \d+f · ROLLBACKS \d+ · RELAY$/)).toBeVisible();
+  }
+
+  // As the direct test above: the host walks off the left edge once per stock, away
+  // from the guest, and both screens reach the same result from the confirmed outcome.
+  await host.bringToFront();
+  await host.keyboard.down("ArrowLeft");
+  await Promise.all([host, guest].map((page) => page.waitForURL(`**${ROUTES.results}`, { timeout: 90_000 })));
+  await host.keyboard.up("ArrowLeft");
+
+  for (const page of [host, guest]) {
+    await expect(page.getByText("Game Set", { exact: true })).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ has: page.getByText("1st", { exact: true }) })).toContainText("P2");
     await expect(page.getByText("Lost the room", { exact: false })).toHaveCount(0);
-    await expect(page).toHaveURL(/\/online\?ice=relay$/);
   }
 });
 
