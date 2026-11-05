@@ -26,9 +26,9 @@ export const LINK_CHECK_MS = 250;
 
 /**
  * How long a match may confirm no frame, while this tab is on screen and the
- * opponent's is too, before it is lost however many packets still arrive.
+ * the other players' are too, before it is lost however many packets still arrive.
  *
- * The same ten seconds silence gets (`SILENCE_LOST_MS`), and an opponent who
+ * The same ten seconds silence gets (`SILENCE_LOST_MS`), and a player who
  * said it is away gets the same minute. Nothing in a running match stops the
  * confirmed frame for anywhere near this long on its own: it counts ticks,
  * which a KO's freeze does not stop (the simulation still steps), and an
@@ -113,6 +113,8 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
       progressAt = at;
       return false;
     }
+    // One player away stalls the confirmed frame for everyone, so with three
+    // or four the whole match gets their minute (and any player's away resets it).
     return at - progressAt >= (anyAway() ? AWAY_LOST_MS : STALL_LOST_MS);
   };
 
@@ -126,7 +128,7 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
   const report = () => {
     if (stopped) return;
     // While this tab is hidden its own timers and packets can stall, so any
-    // silence measured then says nothing about the opponent. It is judged
+    // silence measured then says nothing about the other players. It is judged
     // again from the moment the tab is back (see `onVisibility`).
     if (visibility?.hidden) return;
     const at = now();
@@ -174,7 +176,7 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
   visibility?.addEventListener("visibilitychange", onVisibility);
   const cancel = every(report, LINK_CHECK_MS);
   // A match that starts in a background tab never sees the change that would
-  // say so, and the opponent would give up on it after ten seconds.
+  // say so, and the other players would give up on it after ten seconds.
   if (visibility?.hidden) onVisibility();
 
   function stop(): void {

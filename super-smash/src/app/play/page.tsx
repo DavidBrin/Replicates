@@ -383,7 +383,7 @@ function mountMatch(args: MountArgs): Mounted {
   };
 
   // The match starts once every fighter has its model or a stand-in, so nobody
-  // plays the first second against an invisible opponent. Locally that can take
+  // plays the first second against an invisible fighter. Locally that can take
   // the loader's whole timeout twice over (the index, then the glb); it always
   // ends, in a model or a stand-in. A fighter that cannot be drawn at all is an
   // error the page shows, not a match that never starts.
@@ -430,8 +430,8 @@ export default function PlayPage() {
 
   const [online] = useState(onlineAtMount);
   // Seated for an online match with none to play: the start was withdrawn
-  // (the opponent left) before this page mounted. The seats are two humans on
-  // one keyboard, not a local match, so this goes back to where the room is.
+  // (a player left) before this page mounted. The seats on this machine are
+  // the online players', not a local match, so this goes back to where the room is.
   const [stranded] = useState(() => online === null && useMatchConfig.getState().online);
   // Nothing set up to play (Plan 6, Task 29): browser Back from the results or from
   // the menu after a quit, or a cold load. Read once, on the way in, as `stranded` is.
@@ -735,19 +735,23 @@ export default function PlayPage() {
           // Watched from its start, not from mount (ruling R3): a model still
           // loading is not a stalled link. Nothing to watch once it is over.
           if (finished) return;
-          // A link lost while the models loaded (the room gone, the peer left)
+          // The begun room's other players: any one of them leaving or going
+          // silent ends the match for everyone, and nobody else's leave counts.
+          const peers = useOnlineStore.getState().seats.map((s) => s.peerId);
+          // A link lost while the models loaded (the room gone, a player left)
           // told nobody: the monitor was not listening yet, and a started
           // match never reconnects. Lost now, not after the silence timeout.
-          if (session.transport.status !== "open") {
+          // In a relayed room of three or four the link stays open while the
+          // others are there, so a player the room no longer seats is gone too;
+          // and a match with nobody to watch could never be called lost at all.
+          if (session.transport.status !== "open" || peers.length === 0 || peers.some((id) => !session.peers.has(id))) {
             abandon("connectionLost");
             return;
           }
           stopMonitor = startLinkMonitor({
             transport: session.transport,
             session,
-            // The begun room's other players: any one of them leaving or going
-            // silent ends the match for everyone, and nobody else's leave counts.
-            peers: useOnlineStore.getState().seats.map((s) => s.peerId),
+            peers,
             // A match stuck with packets still arriving is lost too.
             confirmedFrame: () => runner.netStats?.confirmedFrame ?? -1,
             onHealth: (health, away) => {
@@ -802,7 +806,7 @@ export default function PlayPage() {
       if (e.code !== "Escape") return;
       setPaused((p) => {
         const next = !p;
-        // An online match cannot pause — the other player's game would stall
+        // An online match cannot pause — the other players' games would stall
         // behind this one — so Esc only brings up the way out.
         // Held rather than stopped: Esc while the fighters load keeps the match from starting behind the menu.
         if (!online) mountedRef.current?.hold("menu", next);

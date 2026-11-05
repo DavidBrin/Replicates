@@ -322,6 +322,21 @@ describe("a match of more than two", () => {
     expect(h.onLost).toHaveBeenCalledTimes(1);
   });
 
+  it("loses the match when an away peer's minute runs out, though the others keep talking", () => {
+    const h = harness({ peers: ["b", "d"] });
+    h.away("d", true);
+    // B talks at every check, up to the last one before D's minute is up.
+    for (let t = 0; t < AWAY_LOST_MS - LINK_CHECK_MS; t += LINK_CHECK_MS) {
+      h.messages.emit(new Uint8Array([1]), "b");
+      h.advance(LINK_CHECK_MS);
+    }
+    expect(h.onLost).not.toHaveBeenCalled();
+    expect(h.health.at(-1)).toEqual(["waiting", true]);
+    h.messages.emit(new Uint8Array([1]), "b");
+    h.advance(LINK_CHECK_MS);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
   it("reports the worst peer's health", () => {
     const h = harness({ peers: ["b", "c"] });
     const bTalks = (ms: number) => {

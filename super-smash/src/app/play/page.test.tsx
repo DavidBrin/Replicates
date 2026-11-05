@@ -37,7 +37,7 @@ import { ONLINE_RESULT_LINGER_MS, bindSession, leaveOnline, useOnlineStore } fro
 import type { DoSignalStatus } from "@/net/adapters/doSignal";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
-import { GUEST_PEER, HOST_PEER, fakeSession, type FakeSession } from "@/net/online/testing";
+import { GUEST_PEER, HOST_PEER, fakeSession, otherPeer, type FakeSession } from "@/net/online/testing";
 import type { NetStats } from "@/net/rollback";
 import type { Role } from "@/net/signalProtocol";
 import PlayPage from "./page";
@@ -168,16 +168,29 @@ const CONFIG: OnlineMatchConfig = {
 
 const STATS = { rttMs: 41.6, inputDelay: 3, rollbacks: 12 } as NetStats;
 
-/** In a room, the start received, with this machine's own seats set to something else entirely. */
+/**
+ * In a room, the start received, with this machine's own seats set to something
+ * else entirely. The room seats the other player of two, as the store does.
+ */
 function goOnline(role: Role): { fake: FakeSession; link: { status: DoSignalStatus } } {
   const fake = fakeSession(role);
+  const other = otherPeer(role);
+  fake.peers.set(other.id, other);
   const link = { status: "open" as DoSignalStatus };
   Object.assign(fake.session, { transport: link });
   setActiveSession(fake.session);
   useMatchConfig.getState().configureOnline();
   useMatchConfig.getState().setFighter(0, "link");
   useMatchConfig.getState().setFighter(1, "samus");
-  useOnlineStore.getState().patch({ role, status: "connected", roomCode: "ABCD", config: CONFIG, localPort: fake.session.seatPort, begun: true });
+  useOnlineStore.getState().patch({
+    role,
+    status: "connected",
+    roomCode: "ABCD",
+    config: CONFIG,
+    localPort: fake.session.seatPort,
+    begun: true,
+    seats: [{ peerId: other.id, port: other.port, build: "ok" }],
+  });
   return { fake, link };
 }
 
@@ -257,6 +270,8 @@ describe("the play page, online", () => {
     expect(options.seed).toBe(CONFIG.seed);
     expect(options.net?.transport).toBe(fake.session.transport);
     expect(options.net?.localPorts).toEqual([port]);
+    // The link monitor watches the other player of the two, and nobody else.
+    expect(only(mocks.monitors).options.peers).toEqual([otherPeer(role).id]);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -275,7 +290,8 @@ describe("the play page, online", () => {
    * leaving or going silent ends the match.
    */
   it("mounts an online match of four with ports 0-3", async () => {
-    goOnline("host");
+    const { fake } = goOnline("host");
+    for (const id of ["g2", "g3"]) fake.peers.set(id, { id, role: "guest", port: Number(id.slice(1)) });
     const four: OnlineMatchConfig = {
       ...CONFIG,
       rules: { ...CONFIG.rules, oneOnOne: false },
@@ -299,6 +315,39 @@ describe("the play page, online", () => {
     const result = useMatchConfig.getState().result;
     expect(result?.stats.map((s) => s.port)).toEqual([0, 1, 2, 3]);
     expect(result?.fighters).toEqual({ 0: "mario", 1: "fox", 2: "link", 3: "samus" });
+  });
+
+  /**
+   * Relayed, the link stays open while any other player is there, so a player
+   * who left while the fighters loaded would otherwise cost everyone the
+   * silence timeout: the room no longer seats them, and that is lost now.
+   */
+  it("ends a match of three as Connection Lost at once when a player left the room while it loaded", async () => {
+    goOnline("host");
+    useOnlineStore.getState().patch({
+      config: { ...CONFIG, fighters: ["mario", "fox", "link"], costumes: [3, 1, 0], controls: [0, 0, 0] },
+      seats: [
+        { peerId: "g1", port: 1, build: "ok" },
+        { peerId: "g2", port: 2, build: "ok" },
+      ],
+    });
+    // g2 left during loading: the room seats g1 alone, and the relay is still open to it.
+    await renderPage();
+    expect(mocks.monitors).toHaveLength(0);
+    expect(only(mocks.runners).runner.stop).toHaveBeenCalled();
+    expect(useMatchConfig.getState().result).toMatchObject({ kind: "connectionLost", fighters: { 0: "mario", 1: "fox", 2: "link" } });
+    act(() => vi.advanceTimersByTime(0));
+    expect(routerMock.push).toHaveBeenCalledWith("/results");
+  });
+
+  /** With nobody listed, no silence and no leave could ever end it: a match with nobody to watch never starts. */
+  it("ends the match as Connection Lost at once when it has no other player to watch", async () => {
+    goOnline("guest");
+    useOnlineStore.getState().patch({ seats: [] });
+    await renderPage();
+    expect(mocks.monitors).toHaveLength(0);
+    expect(only(mocks.runners).runner.stop).toHaveBeenCalled();
+    expect(useMatchConfig.getState().result).toMatchObject({ kind: "connectionLost" });
   });
 
   it("names all four fighters when a match of four is lost", async () => {
